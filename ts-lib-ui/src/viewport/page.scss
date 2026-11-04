@@ -1,0 +1,8 @@
+@use "./base";
+
+viewport-page {
+  display: block;
+  position: relative;
+  overflow: hidden;
+  background: base.$color_page_background;
+}

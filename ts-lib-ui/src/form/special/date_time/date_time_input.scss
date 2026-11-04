@@ -1,0 +1,69 @@
+@use "../../base";
+
+form-datetimeinput {
+  @include base.base;
+  border: base.$border;
+  height: base.$size_height;
+  box-shadow: base.$shadow_in;
+  border-radius: base.$size_cornerRadius;
+  background-color: base.$color_background;
+  box-sizing: border-box;
+  min-width: min-content;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  -webkit-user-select: none;
+  user-select: none;
+  outline: none;
+  overflow: hidden;
+  padding-inline: 0.2rem;
+  padding-top: 0.1rem;
+
+  &:focus-within {
+    box-shadow: base.$shadow_in_focus_out;
+  }
+
+  .touch & {
+    height: base.$size_touchHeight;
+  }
+
+  @media (pointer: fine) {
+    &:hover {
+      background-color: base.$color_background_hover;
+    }
+  }
+
+  > input {
+    @include base.value-font;
+    display: block;
+    outline: none;
+    appearance: none;
+    width: 100%;
+    height: 100%;
+    border: none;
+    background-color: transparent;
+    font-size: base.$font_size;
+
+    &::-webkit-calendar-picker-indicator {
+      display: none;
+    }
+
+    .touch & {
+      font-size: base.$touch_font_size;
+    }
+  }
+
+  > svg {
+    display: none;
+    fill: base.$color_text;
+    width: auto;
+    height: calc(base.$size_height / 1.3);
+  }
+
+  > input[type="date"] ~ svg[icon="material_action_calendar_month_rounded"],
+  > input[type="time"] ~ svg[icon="material_action_schedule_rounded"],
+  > input[type="datetime-local"]
+    ~ svg[icon="material_action_calendar_month_rounded"] {
+    display: block;
+  }
+}

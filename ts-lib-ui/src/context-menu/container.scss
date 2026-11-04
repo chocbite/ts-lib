@@ -1,0 +1,11 @@
+contextmenu-container {
+  display: block;
+  z-index: 999999999;
+  position: fixed;
+  pointer-events: none;
+  touch-action: none;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+}

@@ -1,0 +1,161 @@
+@use "../../base";
+@use "../number_base";
+
+form-slider {
+  @include base.base;
+  $textPadding: 0.2rem;
+  $thumbWidth: base.$unit_width + 0.4rem + $textPadding;
+  $touchThumbWidth: base.$touch_unit_width + 0.4rem + $textPadding;
+
+  border: base.$border;
+  height: base.$size_height;
+  box-shadow: base.$shadow_in;
+  border-radius: base.$size_cornerRadius;
+  background-color: base.$color_background;
+  -webkit-user-select: none;
+  user-select: none;
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-start;
+
+  .touch & {
+    height: base.$size_touchHeight;
+  }
+
+  > div {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 100%;
+    width: calc(
+      100% -
+        (($thumbWidth + (base.$size_height * 2)) - (base.$border_thickness * 4))
+    );
+    position: relative;
+    left: -(base.$border_thickness) * 2;
+    z-index: 1;
+
+    .touch & {
+      width: calc(
+        100% -
+          (
+            ($touchThumbWidth + (base.$size_touchHeight * 2)) -
+              (base.$border_thickness * 4)
+          )
+      );
+    }
+
+    > div {
+      top: -(base.$border_thickness);
+      width: $thumbWidth;
+      border: base.$border;
+      height: base.$size_height;
+      box-shadow: base.$shadow_out;
+      border-radius: base.$size_cornerRadius;
+      background-color: base.$color_background;
+      box-sizing: border-box;
+      left: 50%;
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding-inline: 0.2rem;
+      outline: none;
+      cursor: grab;
+      touch-action: pan-y;
+
+      &.active {
+        cursor: grabbing;
+      }
+
+      &:focus-within {
+        box-shadow: base.$shadow_out_focus_out;
+        z-index: 2;
+      }
+
+      @media (pointer: fine) {
+        &:hover {
+          background-color: base.$color_background_hover;
+        }
+      }
+
+      .touch & {
+        height: base.$size_touchHeight;
+        width: $touchThumbWidth;
+      }
+
+      > span:first-child {
+        @include base.value-font;
+        box-sizing: border-box;
+        line-height: base.$value_font_size - 0.1rem;
+        text-align: center;
+        max-width: $thumbWidth - $textPadding * 2;
+        overflow: hidden;
+
+        .touch & {
+          line-height: base.$touch_value_font_size;
+          max-width: $touchThumbWidth;
+        }
+      }
+
+      > span:last-child {
+        @include base.unit-container;
+        line-height: base.$unit_font_size - 0.2rem;
+        text-align: center;
+
+        .touch & {
+          line-height: base.$touch_unit_font_size;
+        }
+      }
+    }
+  }
+
+  > svg {
+    @include number_base.svg-stepper-button;
+    z-index: 1;
+
+    &:nth-child(1) {
+      left: -(base.$border_thickness);
+    }
+
+    &:nth-child(4) {
+      position: absolute;
+      right: -(base.$border_thickness);
+    }
+  }
+
+  > span {
+    position: absolute;
+    inset: 0;
+    padding-left: calc(base.$size_height + 0.4rem);
+    padding-right: calc(base.$size_height + 0.4rem);
+    padding-top: 0.1rem;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.4rem;
+    display: flex;
+
+    .touch & {
+      padding-left: calc(base.$size_touchHeight + 0.4rem);
+      padding-right: calc(base.$size_touchHeight + 0.4rem);
+      padding-top: 0.2rem;
+    }
+
+    > * {
+      @include base.limit-legend;
+      overflow: hidden;
+    }
+  }
+
+  > input {
+    all: unset;
+    visibility: hidden;
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    inset: 0;
+  }
+}

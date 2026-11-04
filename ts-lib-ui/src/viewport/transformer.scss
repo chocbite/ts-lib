@@ -1,0 +1,196 @@
+@use "sass:list";
+@use "./base";
+
+/**Size of the handles and width of the outline area that moves the widget, in mouse and touch input mode */
+$handle_size_mouse: 1.25rem;
+$handle_size_touch: $handle_size_mouse * 2.6;
+/**Current handle size, switched between the sizes above by input mode */
+$handle_size: var(--handle-size);
+/**Side handles are hidden when the outline is shorter than this many handles along their side, so they do not overlap the corner handles */
+$side_handle_min_handles: 3;
+/**Distance from the top of the outline to the rotate handle, kept far enough from the top side handle */
+$rotate_distance: calc(#{$handle_size} * 1.6);
+
+/**Resize cursors in 45 degree steps, starting from horizontal and turning clockwise */
+$cursors: ew-resize, nwse-resize, ns-resize, nesw-resize;
+/**Index in $cursors of the cursor each handle uses at 0 degrees rotation */
+$handle_cursors: (
+  e: 0,
+  w: 0,
+  rotate: 0,
+  se: 1,
+  nw: 1,
+  s: 2,
+  n: 2,
+  sw: 3,
+  ne: 3,
+);
+/**Rotation of the horizontal resize icon in each handle, so it points the way the handle resizes */
+$handle_icon_rotations: (
+  se: 45deg,
+  nw: 45deg,
+  s: 90deg,
+  n: 90deg,
+  sw: -45deg,
+  ne: -45deg,
+);
+
+/**Hides the side handles when the outline is too small for them, for the given handle size */
+@mixin hide_side_handles($size) {
+  @container (max-width: #{$size * $side_handle_min_handles}) {
+    > .n,
+    > .s {
+      display: none;
+    }
+  }
+  @container (max-height: #{$size * $side_handle_min_handles}) {
+    > .e,
+    > .w {
+      display: none;
+    }
+  }
+}
+
+viewport-transformer {
+  --handle-size: #{$handle_size_mouse};
+  display: block;
+  position: absolute;
+  box-sizing: border-box;
+  //The handles query the size of the outline, to hide side handles on small widgets
+  container-type: size;
+  outline: 1px dashed base.$transformer_color;
+  //Only the handles and sides take pointer events, so widgets under the outline can still be pressed
+  pointer-events: none;
+
+  //The theme sets the touch class on the document in touch input mode
+  .touch & {
+    --handle-size: #{$handle_size_touch};
+  }
+
+  &[hidden] {
+    display: none;
+  }
+
+  > * {
+    position: absolute;
+    pointer-events: auto;
+  }
+
+  //Invisible strips along the outline, used to move the widget
+  > .side {
+    cursor: move;
+  }
+  > .top,
+  > .bottom {
+    left: 0;
+    right: 0;
+    height: $handle_size;
+  }
+  > .left,
+  > .right {
+    top: 0;
+    bottom: 0;
+    width: $handle_size;
+  }
+  > .top {
+    top: calc(#{$handle_size} / -2);
+  }
+  > .bottom {
+    bottom: calc(#{$handle_size} / -2);
+  }
+  > .left {
+    left: calc(#{$handle_size} / -2);
+  }
+  > .right {
+    right: calc(#{$handle_size} / -2);
+  }
+
+  > .line {
+    left: 50%;
+    top: calc(#{$rotate_distance} * -1);
+    height: $rotate_distance;
+    border-left: 1px solid base.$transformer_color;
+    pointer-events: none;
+  }
+
+  > .handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    width: $handle_size;
+    height: $handle_size;
+    border: 1px solid base.$transformer_color;
+    border-radius: 50%;
+    background: base.$transformer_handle_background;
+    translate: -50% -50%;
+
+    //Icons must not take pointer events, the handle itself is the event target
+    > svg {
+      width: 100%;
+      height: 100%;
+      fill: base.$transformer_color;
+      pointer-events: none;
+    }
+  }
+
+  > .nw,
+  > .w,
+  > .sw {
+    left: 0;
+  }
+  > .n,
+  > .move,
+  > .s,
+  > .rotate {
+    left: 50%;
+  }
+  > .ne,
+  > .e,
+  > .se {
+    left: 100%;
+  }
+  > .nw,
+  > .n,
+  > .ne {
+    top: 0;
+  }
+  > .w,
+  > .move,
+  > .e {
+    top: 50%;
+  }
+  > .sw,
+  > .s,
+  > .se {
+    top: 100%;
+  }
+  > .rotate {
+    top: calc(#{$rotate_distance} * -1);
+  }
+  > .move {
+    cursor: move;
+  }
+
+  @each $name, $rotation in $handle_icon_rotations {
+    > .#{$name} > svg {
+      rotate: $rotation;
+    }
+  }
+
+  //The transformer sets cursor-step to the 45 degree step closest to the widget rotation
+  @for $step from 0 through 3 {
+    &[cursor-step="#{$step}"] {
+      @each $name, $index in $handle_cursors {
+        > .#{$name} {
+          cursor: list.nth($cursors, ($index + $step) % 4 + 1);
+        }
+      }
+    }
+  }
+
+  @include hide_side_handles($handle_size_mouse);
+  .touch & {
+    @include hide_side_handles($handle_size_touch);
+  }
+}

@@ -1,0 +1,94 @@
+@use "../base";
+@use "./group_base";
+
+form-group-collapser {
+  @include base.base;
+  display: flex;
+  flex-direction: column;
+  min-width: fit-content;
+
+  > :first-child {
+    margin: 0;
+    margin-bottom: -(base.$border_thickness);
+    border-radius: base.$size_cornerRadius base.$size_cornerRadius 0 0 !important;
+    padding-bottom: group_base.$padding;
+  }
+
+  &.collapsed {
+    > :first-child {
+      display: none;
+    }
+
+    > span {
+      border-radius: base.$size_cornerRadius !important;
+    }
+  }
+
+  > *.line + span,
+  > *.inset + span,
+  > *.outset + span {
+    border-radius: 0 0 base.$size_cornerRadius base.$size_cornerRadius;
+  }
+
+  > span {
+    z-index: 2;
+    border: base.$border;
+    min-height: base.$size_height;
+    box-shadow: base.$shadow_out;
+    border-radius: base.$size_cornerRadius;
+    background-color: base.$color_background;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    outline: none;
+
+    .touch & {
+      min-height: base.$size_touchHeight;
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background-color: base.$color_background_hover;
+      }
+    }
+
+    &:focus-visible {
+      box-shadow: base.$focus_out;
+
+      &.active {
+        box-shadow: base.$focus_out;
+      }
+    }
+
+    > span {
+      color: base.$color_text;
+      font-size: base.$font_size;
+      line-height: calc(base.$font_size + 0.2rem);
+      padding-left: 0.2rem;
+      flex-grow: 1;
+      text-align: center;
+
+      .touch & {
+        font-size: base.$touch_font_size;
+        line-height: calc(base.$touch_font_size + 0.2rem);
+      }
+    }
+
+    > svg {
+      fill: base.$color_text;
+      max-width: base.$size_height;
+      height: calc(base.$size_height - 2px);
+      box-sizing: border-box;
+      width: auto;
+      flex-shrink: 0;
+
+      .touch & {
+        height: base.$size_touchHeight;
+        max-width: base.$size_touchHeight + 1rem;
+        padding: 0.2rem;
+      }
+    }
+  }
+}

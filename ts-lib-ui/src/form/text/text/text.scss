@@ -1,0 +1,17 @@
+@use "../../base";
+
+form-text {
+  @include base.base;
+  display: block;
+  color: base.$color_text;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-inline: 0.2rem;
+  margin-bottom: 0.1rem;
+  font-size: 0.9rem;
+
+  .anim-all & {
+    transition: color base.$animation;
+  }
+}

@@ -1,0 +1,117 @@
+$menuMinWidth: 10rem;
+$menuMaxWidth: 30rem;
+$borderWidth: 1px;
+$padding: 0.25rem;
+$iconWidth: 1.8rem;
+$iconWidthTouch: 2.6rem;
+
+@mixin hover {
+  @media (hover) {
+    &:hover {
+      color: var(--contextmenu-hoverText);
+      fill: var(--contextmenu-hoverText);
+
+      &::after {
+        content: "";
+        display: block;
+        position: absolute;
+        inset: 0;
+        min-width: calc(
+          $menuMinWidth - $padding - $padding -
+            calc($borderWidth + $borderWidth)
+        );
+        border-radius: 0.4rem;
+        background-color: var(--contextmenu-hover);
+      }
+    }
+
+    &:focus-visible,
+    &:focus-within {
+      outline: none;
+
+      &::after {
+        content: "";
+        display: block;
+        position: absolute;
+        inset: 0;
+        min-width: calc(
+          $menuMinWidth - $padding - $padding -
+            calc($borderWidth + $borderWidth + 1px)
+        );
+        border-radius: 0.4rem;
+        outline: var(--contextmenu-hover) solid 0.2rem;
+      }
+    }
+  }
+}
+
+@mixin line {
+  display: table-row;
+  position: relative;
+  border-radius: 0.4rem;
+  -webkit-user-select: none;
+  user-select: none;
+  color: var(--contextmenu-text);
+  fill: var(--contextmenu-text);
+  outline: none;
+
+  @include hover;
+
+  > div {
+    display: table-cell;
+    box-sizing: border-box;
+    vertical-align: middle;
+    position: relative;
+    z-index: 1;
+    height: 1.8rem;
+    padding-block: 0.25rem;
+
+    .touch & {
+      height: 3.2rem;
+      padding-block: 0.4rem;
+    }
+  }
+
+  .icon {
+    padding-inline: 0.4rem;
+    padding-block: 0.1rem;
+    width: $iconWidth;
+
+    .touch & {
+      font-size: 1.1rem;
+      padding-block: 0.2rem;
+      width: $iconWidthTouch;
+    }
+
+    > svg {
+      display: block;
+      box-sizing: border-box;
+      height: 100%;
+      width: $iconWidth;
+
+      .touch & {
+        width: $iconWidthTouch;
+      }
+    }
+  }
+
+  .text {
+    font-size: 0.9rem;
+
+    &:last-child {
+      width: 1.8rem;
+      text-align: center;
+    }
+
+    .touch & {
+      font-size: 1.1rem;
+    }
+  }
+
+  .shortcut {
+    white-space: nowrap;
+    text-align: end;
+    padding-left: 1rem;
+    padding-right: 0.4rem;
+  }
+}

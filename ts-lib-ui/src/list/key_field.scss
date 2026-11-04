@@ -1,0 +1,157 @@
+@use "../icons/mixins" as icons;
+
+list-keyfield {
+  --list-row-size: var(--list-size-row_min);
+  .touch & {
+    --list-row-size: var(--list-size-touch_row_min);
+  }
+
+  position: sticky;
+  left: 0;
+  display: flex;
+  z-index: 2;
+  outline: none;
+  user-select: none;
+  border-right: 1px solid var(--list-colors-border-column);
+  background-color: var(--list-colors-background-row_odd);
+
+  &:focus-visible::before {
+    content: "";
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    outline: 2px solid var(--list-colors-focus-normal);
+    outline-offset: -2px;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  > div {
+    width: calc(var(--list-row-size) / 2);
+    margin-right: calc(var(--list-row-size) / 2 - 0.1rem);
+    height: 100%;
+    position: relative;
+    border-right: 1px solid;
+
+    .touch & {
+      width: calc(var(--list-row-size) / 2 - 0.3rem + 1.5px);
+      margin-right: calc(var(--list-row-size) / 2 - 0.4rem);
+    }
+  }
+
+  &.openable {
+    > span {
+      > div {
+        display: block;
+      }
+    }
+  }
+
+  > span {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    height: 100%;
+    min-height: var(--list-row-size);
+    background-color: inherit;
+    width: var(--list-row-size);
+
+    .touch & {
+      width: calc(var(--list-row-size) - 0.4rem);
+    }
+
+    &::before {
+      content: "";
+      display: block;
+      position: absolute;
+      height: 100%;
+      width: 50%;
+      left: 0;
+      top: 0;
+      border-right: 1px solid var(--list-colors-border-column);
+
+      list-addrow > &,
+      list-row:not(.addrow) > span > list-row:last-child > * > &,
+      div:not(.addrow) > div > list-row:last-child > * > & {
+        height: calc(var(--list-row-size) / 2);
+      }
+    }
+    &::after {
+      content: "";
+      display: block;
+      position: absolute;
+      height: calc(var(--list-row-size) / 2);
+      width: 50%;
+      top: 0;
+      left: 50%;
+      border-bottom: 1px solid var(--list-colors-border-column);
+    }
+
+    > div {
+      @include icons.material-symbols-rounded;
+      color: var(--list-colors-icon-sub_opener);
+      position: relative;
+      display: none;
+      height: calc(var(--list-row-size) - 0.5rem);
+      width: calc(var(--list-row-size) - 0.5rem);
+      margin-left: 0.25rem;
+      z-index: 1;
+      background-color: inherit;
+
+      .touch & {
+        height: calc(var(--list-row-size) - 1.2rem);
+        width: calc(var(--list-row-size) - 1.4rem);
+        margin-left: 0.6rem;
+      }
+
+      list-row.open > * > &::before {
+        content: "\e313";
+      }
+
+      &:hover::before {
+        background-color: var(--list-colors-focus-normal);
+      }
+
+      &::before {
+        @include icons.material-symbols-rounded;
+        content: "\e5cc";
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        inset: -0.15rem;
+        border-radius: 0.2rem;
+        cursor: pointer;
+        font-size: 1.2rem;
+        line-height: 0rem;
+
+        .touch & {
+          inset: -0.4rem;
+          font-size: 2rem;
+        }
+      }
+    }
+  }
+
+  svg {
+    position: relative;
+    fill: var(--list-colors-icon-key_icon);
+    padding: 0.25rem;
+    width: calc(var(--list-row-size) - 0.4rem);
+    height: auto;
+
+    .touch & {
+      width: calc(var(--list-row-size) - 1.1rem);
+      height: auto;
+    }
+  }
+
+  &::after {
+    content: "";
+    height: 50%;
+    border-bottom: 1px solid var(--list-colors-border-column);
+    flex-grow: 1;
+    height: calc(var(--list-row-size) / 2);
+  }
+}

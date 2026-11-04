@@ -1,0 +1,84 @@
+@use "../../base";
+
+form-textmultiline {
+  @include base.base;
+  display: block;
+  border: base.$border;
+  box-shadow: base.$shadow_in;
+  border-radius: base.$size_cornerRadius;
+  background-color: base.$color_background;
+  position: relative;
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
+
+  &:focus-within {
+    box-shadow: base.$shadow_in_focus_out;
+  }
+
+  > textarea {
+    all: unset;
+    @include base.value-font;
+    display: block;
+    padding-inline: 0.2rem;
+    padding-top: 0.2rem;
+    box-sizing: border-box;
+    outline: none;
+    width: 100%;
+    min-height: base.$size_height - 0.2rem;
+    height: base.$size_height - 0.2rem;
+    border-radius: base.$size_cornerRadius;
+
+    .touch & {
+      min-height: base.$size_touchHeight;
+    }
+
+    @media (pointer: fine) {
+      &:hover {
+        box-shadow: base.$shadow_in;
+        background-color: base.$color_background_hover;
+      }
+    }
+  }
+
+  > div {
+    touch-action: none;
+    height: calc(base.$size_height / 2);
+    border-radius: base.$size_cornerRadius;
+    border-top: base.$color_border solid base.$border_thickness;
+    display: flex;
+    cursor: ns-resize;
+    align-items: center;
+    justify-content: center;
+
+    .touch & {
+      height: calc(base.$size_touchHeight / 1.2);
+    }
+
+    @media (pointer: fine) {
+      &:hover {
+        background-color: base.$color_background_hover;
+      }
+    }
+
+    > svg {
+      fill: base.$color_text;
+      width: auto;
+      height: 1.6rem;
+
+      .touch & {
+        height: 2.6rem;
+      }
+    }
+  }
+
+  > input {
+    all: unset;
+    visibility: hidden;
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    inset: 0;
+  }
+}

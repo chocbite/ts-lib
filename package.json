@@ -1,0 +1,25 @@
+{
+  "name": "ts-lib-monorepo",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "ts-lib",
+    "ts-lib-ui"
+  ],
+  "scripts": {
+    "build": "npm run build -w @chocbite/ts-lib && npm run build -w @chocbite/ts-lib-ui",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "upgrades": "npx npm-check-updates --target semver --workspaces --root",
+    "upgrade": "npx npm-check-updates --target semver -u --workspaces --root && npm install"
+  },
+  "devDependencies": {
+    "eslint": "^10.12.0",
+    "typescript-eslint": "^8.58.2",
+    "tsdown": "^0.23.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.1"
+  }
+}

@@ -1,0 +1,141 @@
+@use "../../base";
+
+form-switch {
+  @include base.base;
+
+  position: relative;
+  display: flex;
+  align-items: center;
+  -webkit-user-select: none;
+  user-select: none;
+
+  @media (pointer: fine) {
+    &:hover > div::after {
+      background-color: base.$color_background_hover;
+    }
+  }
+
+  > input {
+    all: unset;
+    visibility: hidden;
+    position: absolute;
+    width: calc(base.$size_height * 2);
+    height: 100%;
+    inset: 0;
+  }
+
+  > div {
+    border: base.$border;
+    box-shadow: base.$shadow_in;
+    border-radius: base.$size_height;
+    width: calc(base.$size_height * 2);
+    height: base.$size_height;
+    touch-action: none;
+    flex-shrink: 0;
+    position: relative;
+    outline: none;
+    cursor: grab;
+    background-color: base.$color_basic_white;
+    @include base.form-colors(off-color, background-color);
+
+    &.on {
+      background-color: base.$color_basic_black;
+      @include base.form-colors(on-color, background-color);
+
+      &::after {
+        left: base.$size_height;
+
+        .touch & {
+          left: base.$size_touchHeight;
+        }
+      }
+    }
+
+    &.error {
+      background-color: base.$color_background;
+      @include base.form-colors(error-color, background-color);
+
+      &::after {
+        left: base.$size_height / 2;
+
+        .touch & {
+          left: base.$size_touchHeight / 2;
+        }
+      }
+    }
+
+    &.active {
+      cursor: grabbing;
+    }
+
+    &::after {
+      touch-action: none;
+      content: "";
+      left: 0rem;
+      position: absolute;
+      background-color: base.$color_background;
+      box-shadow:
+        inset 0 0 0px 2px base.$color_border,
+        base.$shadow_out;
+      width: base.$size_height;
+      height: base.$size_height;
+      border-radius: base.$size_height;
+
+      .touch & {
+        width: base.$size_touchHeight;
+        height: base.$size_touchHeight;
+      }
+    }
+
+    .touch & {
+      width: calc(base.$size_touchHeight * 2);
+      height: base.$size_touchHeight;
+    }
+
+    &:focus-visible {
+      box-shadow: base.$shadow_in_focus_out;
+      z-index: 2;
+    }
+  }
+
+  > svg {
+    box-sizing: border-box;
+    fill: base.$color_text;
+    height: base.$size_height;
+    max-width: base.$size_height;
+    width: auto;
+    padding: 0.2rem;
+    flex-shrink: 0;
+
+    .touch & {
+      height: base.$size_touchHeight;
+      max-width: base.$size_touchHeight;
+      padding: 0.4rem;
+    }
+
+    .anim-all & {
+      transition:
+        base.$animation,
+        height base.$animation,
+        max-width base.$animation;
+    }
+  }
+
+  > span {
+    display: block;
+    padding: 0.1rem 0.1rem 0.1rem 0.1rem;
+    color: base.$color_text;
+
+    &:empty {
+      display: none;
+    }
+
+    .anim-all & {
+      transition: color base.$animation;
+    }
+
+    .touch & {
+      font-size: 1.1rem;
+    }
+  }
+}

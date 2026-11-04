@@ -1,0 +1,34 @@
+@use "../base";
+
+@mixin svg-stepper-button {
+  top: -(base.$border_thickness);
+  fill: base.$color_text;
+  width: base.$size_height;
+  border: base.$border;
+  height: base.$size_height;
+  box-shadow: base.$shadow_out;
+  border-radius: base.$size_cornerRadius;
+  background-color: base.$color_background;
+  box-sizing: border-box;
+  position: relative;
+  padding: 0.14rem;
+  flex-shrink: 0;
+  pointer-events: all;
+  cursor: auto;
+
+  &.active {
+    box-shadow: base.$shadow_out_active;
+  }
+
+  .touch & {
+    height: base.$size_touchHeight;
+    width: base.$size_touchHeight;
+    padding: 0.2rem;
+  }
+
+  @media (pointer: fine) {
+    &:hover {
+      background-color: base.$color_background_hover;
+    }
+  }
+}

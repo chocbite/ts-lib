@@ -1,0 +1,87 @@
+onscreen-keyboard-keyboard-color {
+  z-index: 4294967296;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background-color: var(--keyboard-colors-background);
+  box-shadow: 0 0px 10px var(--keyboard-colors-border);
+  border-radius: 0.6rem 0.6rem 0rem 0rem;
+  color: var(--keyboard-colors-keytext);
+  user-select: none;
+  pointer-events: all;
+
+  > .keyboard-color-content {
+    width: min(32rem, 100%);
+    margin: 0 auto;
+    padding: 0.8rem;
+
+    > .keyboard-color-picker {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 7rem;
+      gap: 0.8rem;
+      > .keyboard-color-square {
+        position: relative;
+        aspect-ratio: 2 / 1;
+        border: 1px solid var(--keyboard-colors-border);
+        border-radius: 0.5rem;
+        background:
+          linear-gradient(to top, #000, transparent),
+          linear-gradient(to right, #fff, var(--keyboard-color-hue));
+        cursor: crosshair;
+        touch-action: none;
+
+        > .keyboard-color-marker {
+          position: absolute;
+          width: 1rem;
+          aspect-ratio: 1;
+          border: 2px solid #fff;
+          border-radius: 0.5rem;
+          box-shadow: 0 0 0 1px #000;
+          pointer-events: none;
+          transform: translate(-50%, -50%);
+        }
+      }
+      > .keyboard-color-sliders {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.35rem;
+        > label {
+          display: grid;
+          grid-template-rows: 1rem 1fr;
+          justify-items: center;
+          font-size: 0.7rem;
+        }
+        input {
+          width: 100%;
+          height: 100%;
+          margin: 0;
+          writing-mode: vertical-lr;
+          direction: rtl;
+          accent-color: var(--keyboard-colors-keytext);
+        }
+      }
+    }
+    > .keyboard-color-controls {
+      display: grid;
+      grid-template-columns: 2.5rem 1fr;
+      gap: 0.6rem;
+      align-items: center;
+      margin-top: 0.8rem;
+      > .keyboard-color-preview {
+        aspect-ratio: 1;
+        border: 1px solid var(--keyboard-colors-border);
+        border-radius: 0.4rem;
+      }
+      > input[type="text"] {
+        width: 100%;
+        border: 1px solid var(--keyboard-colors-border);
+        border-radius: 0.4rem;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        padding: 0.35rem;
+      }
+    }
+  }
+}

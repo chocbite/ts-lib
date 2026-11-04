@@ -1,0 +1,49 @@
+@use "../base";
+@use "./group_base";
+
+form-group {
+  @include base.base;
+  @include group_base.base;
+
+  --max_height: none;
+  background-color: inherit;
+  z-index: 0;
+  max-height: var(--max_height);
+  padding: group_base.$padding;
+  min-width: fit-content;
+  box-sizing: border-box;
+
+  &.grid-row {
+    display: grid;
+    gap: base.$element_spacing;
+    grid-auto-flow: column;
+
+    > * {
+      margin: 0;
+    }
+  }
+  &.grid-col {
+    display: grid;
+    gap: base.$element_spacing;
+    grid-auto-flow: row;
+
+    > * {
+      margin: 0;
+    }
+  }
+
+  &.flex-row {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  &.flex-col {
+    display: flex;
+    flex-direction: column;
+
+    > * {
+      flex-shrink: 0;
+    }
+  }
+}

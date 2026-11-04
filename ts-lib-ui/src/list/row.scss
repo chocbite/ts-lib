@@ -1,0 +1,58 @@
+list-container > div:not(.addrow) > div > :last-child,
+list-row:not(.addrow) > span > :last-child {
+  --c: transparent;
+}
+list-row {
+  display: contents;
+
+  --list-row-size: var(--list-size-row_min);
+  .touch & {
+    --list-row-size: var(--list-size-touch_row_min);
+  }
+  --c: var(--list-colors-border-column);
+
+  &:nth-child(even) > div > * {
+    background-color: var(--list-colors-background-row_even);
+  }
+  &:nth-child(odd) > div > * {
+    background-color: var(--list-colors-background-row_odd);
+  }
+
+  &:last-child {
+    > div > div > span::before {
+      height: 50%;
+    }
+  }
+
+  > div {
+    display: contents;
+
+    > * {
+      overflow: hidden;
+      border-top: 1px solid var(--list-colors-border-row);
+    }
+
+    list-container > div.sub-rows & > *:first-child {
+      border-top: none;
+    }
+
+    > *:not(:last-child) {
+      border-right: 1px solid var(--list-colors-border-column);
+    }
+
+    &:hover {
+      > * {
+        background-color: var(--list-colors-background-row_hover);
+      }
+    }
+  }
+  > span {
+    display: contents;
+  }
+
+  &:not(.open) {
+    > list-addrow {
+      display: none;
+    }
+  }
+}

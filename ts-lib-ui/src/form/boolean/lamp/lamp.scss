@@ -1,0 +1,91 @@
+@use "../../base";
+
+form-lamp {
+  @include base.base;
+
+  border: 1px solid base.$color_border;
+  min-height: base.$size_height;
+  box-shadow: base.$shadow_out;
+  border-radius: base.$size_height;
+  background-color: base.$color_background;
+  display: flex;
+  box-sizing: border-box;
+  min-width: min-content;
+  -webkit-user-select: none;
+  user-select: none;
+  align-items: center;
+
+  &.center {
+    justify-content: center;
+  }
+
+  .touch & {
+    min-height: base.$size_touchHeight;
+    border-radius: base.$size_touchHeight;
+  }
+
+  .anim-all & {
+    transition:
+      min-height base.$animation,
+      border-color base.$animation,
+      background-color base.$animation;
+  }
+
+  > svg {
+    fill: base.$color_text;
+    height: calc(base.$size_height - 2px);
+    box-sizing: border-box;
+    width: auto;
+    flex-shrink: 0;
+    background-color: initial;
+    padding: 0.1rem;
+    padding-left: 0.3rem;
+
+    .touch & {
+      height: calc(base.$size_touchHeight - 2px);
+      padding: 0.3rem;
+    }
+
+    .anim-all & {
+      transition:
+        fill base.$animation,
+        height base.$animation;
+    }
+  }
+
+  > span {
+    color: base.$color_text;
+    display: flex;
+    justify-content: center;
+    font-size: 0.9rem;
+    padding-inline: 0.4rem;
+
+    .touch & {
+      font-size: base.$touch_font_size;
+    }
+
+    &:empty {
+      display: none;
+    }
+
+    .anim-all & {
+      transition: color base.$animation;
+    }
+  }
+
+  > svg + span {
+    padding-left: 0.1rem !important;
+  }
+
+  @include base.form-colors(color, background-color);
+
+  &[color="black"] {
+    > span {
+      color: base.$color_text_black;
+    }
+
+    > svg {
+      fill: base.$color_text_black;
+    }
+  }
+}

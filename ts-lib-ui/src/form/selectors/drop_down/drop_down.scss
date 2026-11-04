@@ -1,0 +1,220 @@
+@use "../../base";
+
+$padding: 0.2rem;
+
+form-dropdown {
+  @include base.base;
+  background-color: base.$color_background;
+  border: base.$border;
+  border-radius: base.$size_cornerRadius;
+  box-shadow: base.$shadow_out;
+  min-height: base.$size_height;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  outline: none;
+  position: relative;
+  -webkit-user-select: none;
+  user-select: none;
+
+  .touch & {
+    min-height: base.$size_touchHeight;
+  }
+
+  &:focus-within {
+    box-shadow: base.$shadow_out_focus_out;
+  }
+
+  @media (pointer: fine) {
+    &:hover {
+      background-color: base.$color_background_hover;
+    }
+  }
+
+  > input {
+    all: unset;
+    visibility: hidden;
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    inset: 0;
+  }
+
+  > svg:first-child {
+    fill: base.$color_text;
+    height: calc(base.$size_height - 2px);
+    width: auto;
+    padding-inline: 0.2rem;
+    flex-shrink: 0;
+
+    .touch & {
+      height: calc(base.$size_touchHeight - 0.4rem);
+    }
+  }
+
+  > div {
+    color: base.$color_text;
+    padding-left: $padding;
+    line-height: calc(base.$font_size + 0.2rem);
+    box-sizing: border-box;
+    vertical-align: middle;
+    align-items: baseline;
+    flex-grow: 1;
+
+    .touch & {
+      font-size: base.$touch_font_size;
+      line-height: calc(base.$touch_font_size + 0.2rem);
+    }
+  }
+
+  > svg:nth-last-child(2) {
+    fill: base.$color_text;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    width: 1.6rem;
+  }
+}
+
+form-dropdownbox {
+  position: fixed;
+  display: none;
+  inset: 0;
+  z-index: 99999999;
+  -webkit-user-select: none;
+  user-select: none;
+
+  &.open {
+    display: block;
+  }
+
+  > div {
+    border: base.$border;
+    border-radius: base.$size_cornerRadius;
+    background-color: base.$color_background;
+    box-shadow: base.$shadow_out;
+    outline: none;
+    position: fixed;
+    display: flex;
+    box-sizing: border-box;
+    flex-direction: row;
+    overflow: hidden;
+
+    &:focus-visible {
+      box-shadow: base.$focus_out;
+    }
+
+    //Scroll
+    > div {
+      box-sizing: border-box;
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-width: thin;
+      overscroll-behavior: contain;
+      outline: none;
+      position: relative;
+
+      &.scroll {
+        touch-action: auto;
+      }
+
+      > div {
+        width: 100%;
+        display: table;
+        position: relative;
+
+        > div {
+          fill: base.$color_text_unselected;
+          color: base.$color_text_unselected;
+          display: table-row;
+          outline: none;
+          position: relative;
+
+          &:focus-visible::after {
+            content: "";
+            inset: 0;
+            z-index: 0;
+            position: absolute;
+            box-shadow: base.$focus_in;
+          }
+
+          &:first-child::after {
+            border-radius: base.$size_cornerRadius 0 0 0;
+          }
+          &:last-child::after {
+            border-radius: 0 0 0 base.$size_cornerRadius;
+          }
+
+          @media (pointer: fine) {
+            &:hover::after {
+              content: "";
+              inset: 0;
+              z-index: 0;
+              position: absolute;
+              background-color: base.$color_background_hover;
+            }
+          }
+
+          &.selected {
+            fill: base.$color_text_selected;
+            color: base.$color_text_selected;
+
+            &::after {
+              content: "";
+              inset: 0;
+              background-color: base.$color_background_hover;
+              position: absolute;
+              z-index: 0;
+            }
+          }
+
+          &:last-child {
+            padding-left: $padding;
+            padding-right: 0.4rem;
+          }
+
+          .touch & {
+            height: base.$size_touchHeight;
+          }
+
+          > div {
+            height: base.$size_height;
+            padding-block: $padding;
+            line-height: calc(base.$font_size + 0.2rem);
+            display: table-cell;
+            box-sizing: border-box;
+            vertical-align: middle;
+            position: relative;
+            z-index: 1;
+
+            .touch & {
+              font-size: base.$touch_font_size;
+              line-height: calc(base.$touch_font_size + 0.2rem);
+            }
+
+            &:first-child {
+              padding-inline: 0.3rem;
+              width: base.$size_height;
+
+              > svg {
+                height: base.$size_height - $padding * 2;
+                display: block;
+                box-sizing: border-box;
+
+                .touch & {
+                  height: base.$size_touchHeight - $padding * 4;
+                }
+              }
+
+              &:empty {
+                padding: 0;
+                padding-left: $padding;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

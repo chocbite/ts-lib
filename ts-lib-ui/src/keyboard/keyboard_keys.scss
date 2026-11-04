@@ -1,0 +1,48 @@
+onscreen-keyboard-keyboard-keys {
+  z-index: 4294967296;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background-color: var(--keyboard-colors-background);
+  box-shadow: 0 0px 10px var(--keyboard-colors-border);
+  border-radius: 0.6rem 0.6rem 0rem 0rem;
+  user-select: none;
+  pointer-events: all;
+}
+
+onscreen-keyboard-keyboard-keys > div {
+  display: flex;
+  justify-content: center;
+  padding: 0.4rem;
+}
+
+onscreen-keyboard-layer {
+  flex-grow: 1;
+  display: grid;
+  gap: 0.3rem;
+
+  &[hidden="true"] {
+    display: none;
+  }
+}
+
+onscreen-keyboard-key {
+  border: 1px solid var(--keyboard-colors-border);
+  font-size: clamp(1rem, 3vw, 2rem);
+  border-radius: 0.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 2px 5px var(--keyboard-colors-shadow);
+  color: var(--keyboard-colors-keytext);
+
+  &:active {
+    background-color: var(--keyboard-colors-active);
+    box-shadow: 0 0px 0px var(--keyboard-colors-shadow);
+  }
+
+  &[active="true"] {
+    background-color: var(--keyboard-colors-active);
+  }
+}

@@ -1,0 +1,68 @@
+@use "../../base";
+@use "../number_base";
+
+form-progress {
+  @include base.base;
+  height: base.$size_height;
+  border-radius: base.$size_cornerRadius;
+  background-color: base.$color_background;
+  position: relative;
+  -webkit-user-select: none;
+  user-select: none;
+  display: flex;
+  align-items: center;
+
+  .touch & {
+    height: base.$size_touchHeight;
+  }
+
+  .anim-all & {
+    transition:
+      height base.$animation,
+      background-color base.$animation;
+  }
+
+  > div {
+    position: absolute;
+    border-radius: base.$size_cornerRadius;
+    height: 100%;
+    left: 0px;
+    top: 0px;
+    width: 0%;
+    background-color: base.$color_basic_green;
+    z-index: 1;
+  }
+
+  > span {
+    padding-left: 0.3rem;
+    height: min-content;
+    position: relative;
+    z-index: 1;
+    color: base.$color_text;
+
+    &:nth-child(2) {
+      @include base.value-font;
+      min-width: 3rem;
+      text-align: end;
+      padding-left: 0.5rem;
+
+      .touch & {
+        min-width: 5rem;
+      }
+    }
+
+    &:last-child {
+      @include base.unit-container;
+    }
+  }
+
+  &::after {
+    content: "";
+    border: base.$border;
+    box-shadow: base.$shadow_in;
+    border-radius: base.$size_cornerRadius;
+    inset: 0;
+    position: absolute;
+    z-index: 1;
+  }
+}

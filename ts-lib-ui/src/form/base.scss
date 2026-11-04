@@ -1,0 +1,198 @@
+//      _______ _    _ ______ __  __ ______  __      __     _____   _____
+//     |__   __| |  | |  ____|  \/  |  ____| \ \    / /\   |  __ \ / ____|
+//        | |  | |__| | |__  | \  / | |__     \ \  / /  \  | |__) | (___
+//        | |  |  __  |  __| | |\/| |  __|     \ \/ / /\ \ |  _  / \___ \
+//        | |  | |  | | |____| |  | | |____     \  / ____ \| | \ \ ____) |
+//        |_|  |_|  |_|______|_|  |_|______|     \/_/    \_\_|  \_\_____/
+//Colors
+///Text
+$color_text: var(--form-colors-text-normal);
+$color_text_selected: var(--form-colors-text-selected);
+$color_text_unselected: var(--form-colors-text-unselected);
+///Text Black
+$color_text_black: var(--form-colors-textBlack-normal);
+$color_text_black_selected: var(--form-colors-textBlack-selected);
+$color_text_black_unselected: var(--form-colors-textBlack-unselected);
+///Icon
+$color_icon: var(--form-colors-icon-normal);
+$color_icon_selected: var(--form-colors-icon-selected);
+$color_icon_unselected: var(--form-colors-icon-unselected);
+///Background
+$color_background: var(--form-colors-background-normal);
+$color_background_hover: var(--form-colors-background-hover);
+$color_background_unselected: var(--form-colors-background-unselected);
+///Border
+$color_border: var(--form-colors-border-normal);
+$color_border_unselected: var(--form-colors-border-unselected);
+///Focus
+$color_focus: var(--form-colors-focus-normal);
+///Basic Colors
+$color_basic_black: var(--form-colors-basic-black);
+$color_basic_white: var(--form-colors-basic-white);
+$color_basic_green: var(--form-colors-basic-green);
+$color_basic_red: var(--form-colors-basic-red);
+$color_basic_blue: var(--form-colors-basic-blue);
+$color_basic_yellow: var(--form-colors-basic-yellow);
+
+//Sizes
+$size_cornerRadius: 0.4rem;
+$size_height: var(--form-size-height);
+$size_touchHeight: var(--form-size-touchHeight);
+
+//Font
+$font_size: var(--form-font-size);
+$touch_font_size: var(--form-font-touch_size);
+
+//     __      __     _____   _____
+//     \ \    / /\   |  __ \ / ____|
+//      \ \  / /  \  | |__) | (___
+//       \ \/ / /\ \ |  _  / \___ \
+//        \  / ____ \| | \ \ ____) |
+//         \/_/    \_\_|  \_\_____/
+$border_thickness: 0.0625rem;
+$border: $border_thickness solid $color_border;
+$min_width: 14rem;
+$min_width_touch: $min_width * 1.6;
+$scrollbar_width: 0.5rem;
+$element_spacing: 0.3rem;
+$animation: ease-in-out var(--animation-speed);
+
+//Mixins
+@mixin base {
+  margin-bottom: $element_spacing;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+
+  &:nth-last-child(1 of :not(:empty)) {
+    margin-bottom: 0;
+  }
+
+  &[inert] {
+    opacity: 0.6;
+    pointer-events: none;
+  }
+}
+
+//Shadows
+$shadow_out: 0 0.125rem 0.1875rem 0 $color_border;
+$shadow_out_active: 0 0 0.1875rem 0 $color_border;
+$shadow_in: inset 0 0.125rem 0.1875rem 0 $color_border;
+$focus_out: 0 0 0 0.2rem $color_focus;
+$focus_in: inset 0 0 0 0.2rem $color_focus;
+$shadow_out_focus_out: $shadow_out, $focus_out;
+$shadow_out_active_focus_out: $shadow_out_active, $focus_out;
+$shadow_in_focus_out: $focus_out, $shadow_in;
+$shadow_out_focus_in: $focus_in, $shadow_out;
+$shadow_in_focus_in: $focus_in, $shadow_in;
+
+//Mixins
+@mixin label {
+  display: block;
+  padding: 0rem 0.1rem 0.1rem 0.4rem;
+  color: $color_text;
+
+  &:empty {
+    display: none;
+  }
+
+  .anim-all & {
+    transition: color $animation;
+  }
+
+  .touch & {
+    font-size: 1.3rem;
+  }
+}
+
+$value_font_size: 0.9rem;
+$touch_value_font_size: $value_font_size * 1.4;
+$unit_font_size: 0.6rem;
+$touch_unit_font_size: $unit_font_size * 1.4;
+$value_unit_font_height: max($value_font_size, $unit_font_size) + 0.4rem;
+$touch_value_unit_font_height: max(
+    $touch_value_font_size,
+    $touch_unit_font_size
+  ) +
+  0.4rem;
+
+@mixin value-font {
+  color: $color_text;
+  font-size: $value_font_size;
+  line-height: $value_font_size;
+
+  .touch & {
+    font-size: $touch_value_font_size;
+    line-height: $touch_value_font_size;
+  }
+}
+
+@mixin unit-font {
+  color: $color_text;
+  font-size: $unit_font_size;
+  line-height: $unit_font_size;
+
+  .touch & {
+    font-size: $touch_unit_font_size;
+    line-height: $unit_font_size;
+  }
+}
+
+$unit_width: $unit_font_size * 5.6;
+$touch_unit_width: $touch_unit_font_size * 5.6;
+
+@mixin unit-container {
+  @include unit-font;
+  display: block;
+  max-width: $unit_width;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+
+  &:empty {
+    width: 0px !important;
+  }
+
+  .touch & {
+    max-width: $touch_unit_width;
+  }
+}
+
+@mixin limit-legend {
+  color: $color_text;
+  white-space: nowrap;
+  font-size: 0.6rem;
+  line-height: 0.6rem;
+
+  .touch & {
+    font-size: 0.8rem;
+    line-height: 0.8rem;
+  }
+}
+
+@mixin form-colors($attr, $var) {
+  &[#{$attr}="black"] {
+    #{$var}: $color_basic_black;
+  }
+
+  &[#{$attr}="white"] {
+    #{$var}: $color_basic_white;
+  }
+
+  &[#{$attr}="green"] {
+    #{$var}: $color_basic_green;
+  }
+
+  &[#{$attr}="red"] {
+    #{$var}: $color_basic_red;
+  }
+
+  &[#{$attr}="blue"] {
+    #{$var}: $color_basic_blue;
+  }
+
+  &[#{$attr}="yellow"] {
+    #{$var}: $color_basic_yellow;
+  }
+}

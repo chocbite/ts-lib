@@ -1,0 +1,141 @@
+onscreen-keyboard-keyboard-datetime {
+  z-index: 4294967296;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background-color: var(--keyboard-colors-background);
+  box-shadow: 0 0px 10px var(--keyboard-colors-border);
+  border-radius: 0.6rem 0.6rem 0rem 0rem;
+  user-select: none;
+  pointer-events: all;
+
+  > div {
+    width: min(30rem, 100%);
+    box-sizing: border-box;
+    margin: 0 auto;
+    padding: 0.8rem;
+
+    &.keyboard-datetime-local {
+      width: min(60rem, 100%);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      align-items: start;
+      gap: 0.8rem;
+
+      .keyboard-datetime-time {
+        margin-top: 0;
+      }
+    }
+  }
+
+  .keyboard-datetime-header {
+    display: grid;
+    grid-template-columns: 3rem 1fr 3rem 3rem;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
+  }
+
+  .keyboard-datetime-calendar {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.25rem;
+
+    > span {
+      padding: 0.2rem;
+      color: var(--keyboard-colors-keytext);
+      font-size: 0.75rem;
+      text-align: center;
+    }
+  }
+
+  .keyboard-datetime-months {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.4rem;
+  }
+
+  .keyboard-datetime-weeks {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .keyboard-datetime-week {
+    display: grid;
+    grid-template-columns: 4rem 1fr;
+    gap: 0.35rem;
+  }
+
+  .keyboard-datetime-week-dates {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    align-items: center;
+    border: 1px solid var(--keyboard-colors-border);
+    border-radius: 0.5rem;
+
+    span {
+      color: var(--keyboard-colors-keytext);
+      text-align: center;
+    }
+
+    .outside {
+      opacity: 0.4;
+    }
+  }
+
+  .keyboard-datetime-time {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    width: min(30rem, 100%);
+    margin: 0.8rem auto 0;
+    gap: 0.4rem;
+  }
+
+  .keyboard-datetime-time-navigation,
+  .keyboard-datetime-time-choices,
+  .keyboard-datetime-time-footer {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.3rem;
+  }
+
+  .keyboard-datetime-time-choices.minutes {
+    grid-template-columns: repeat(5, 1fr);
+  }
+
+  .keyboard-datetime-time-navigation {
+    grid-template-columns: 3rem 1fr 3rem;
+
+    strong {
+      color: var(--keyboard-colors-keytext);
+      text-align: center;
+    }
+  }
+
+  .keyboard-datetime-time-footer button {
+    grid-column: span 2;
+  }
+
+  button {
+    min-height: 2.6rem;
+    border: 1px solid var(--keyboard-colors-border);
+    border-radius: 0.5rem;
+    background: transparent;
+    box-shadow: 0 2px 5px var(--keyboard-colors-shadow);
+    color: var(--keyboard-colors-keytext);
+    font: inherit;
+
+    &:active,
+    &.selected {
+      background-color: var(--keyboard-colors-active);
+      box-shadow: 0 0 0 var(--keyboard-colors-shadow);
+    }
+
+    &.outside,
+    &:disabled {
+      opacity: 0.4;
+    }
+  }
+}

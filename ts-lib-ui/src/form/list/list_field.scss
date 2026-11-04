@@ -1,0 +1,6 @@
+@use "../base";
+
+form-listfield {
+  @include base.base;
+  padding: 0.2rem;
+}

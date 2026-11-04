@@ -1,0 +1,33 @@
+@use "../base";
+
+$padding: 0.4rem;
+
+@mixin base {
+  &.inset {
+    border: base.$border;
+    box-shadow: base.$shadow_in;
+    border-radius: base.$size_cornerRadius;
+  }
+  &.outset {
+    border: base.$border;
+    border-radius: base.$size_cornerRadius;
+    box-shadow: base.$shadow_out;
+  }
+  &.line {
+    border: base.$border;
+    border-radius: base.$size_cornerRadius;
+  }
+  &.embed {
+    padding: 0;
+  }
+  &.max_height {
+    overflow-y: auto;
+  }
+  &:empty {
+    display: none;
+  }
+
+  & + form-group-col {
+    padding-block: 0rem;
+  }
+}

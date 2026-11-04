@@ -1,0 +1,160 @@
+import { ok, type Option, type ResultOk } from "@chocbite/ts-lib/result";
+import st, { type StateROAW } from "@chocbite/ts-lib/state";
+
+let name_transformer: ((name: string) => string) | undefined;
+export const settings_set_name_transform = (
+  transform: (name: string) => string,
+) => {
+  name_transformer = transform;
+};
+
+const packages = localStorage["settings/packageVersions"] as string | undefined;
+let package_versions: { [key: string]: string } = {};
+try {
+  package_versions = packages
+    ? (JSON.parse(packages) as { [key: string]: string })
+    : {};
+} catch (_e) {}
+let store_package_versions_timeout: number | undefined;
+const BOTTOM_GROUPS: { [key: string]: SettingsGroup } = {};
+
+/**Initialises the settings for the package
+ * @param package_name use import {name} from ("../package.json")
+ * @param package_version use import {version} from ("../package.json")
+ * @param versionChanged function to call when the version of the package changed
+ * @param name name of group formatted for user reading
+ * @param description a description of what the setting group is about*/
+export const settings_init = (
+  package_name: string,
+  package_version: string,
+  name: string,
+  description: string,
+) => {
+  if (name_transformer) package_name = name_transformer(package_name);
+  let changed: string | undefined;
+  if (package_versions[package_name] !== package_version) {
+    changed = package_versions[package_name];
+    package_versions[package_name] = package_version;
+    if (store_package_versions_timeout)
+      clearTimeout(store_package_versions_timeout);
+    store_package_versions_timeout = window.setTimeout(() => {
+      localStorage["settings/packageVersions"] =
+        JSON.stringify(package_versions);
+    }, 1000);
+  }
+  return (BOTTOM_GROUPS[package_name] = new SettingsGroup(
+    package_name,
+    name,
+    description,
+    changed ? changed : undefined,
+  ));
+};
+
+class Setting {
+  readonly state: StateROAW<any>;
+  readonly name: string;
+  readonly description: string;
+  constructor(state: StateROAW<any>, name: string, description: string) {
+    this.state = state;
+    this.name = name;
+    this.description = description;
+  }
+}
+
+/**Group of settings should never be instantiated manually use initSettings*/
+export class SettingsGroup {
+  private path_id: string;
+  private settings: { [key: string]: Setting } = {};
+  private sub_groups: { [key: string]: SettingsGroup } = {};
+  readonly version_changed: string | undefined;
+  readonly name: string;
+  readonly description: string;
+
+  constructor(
+    path: string,
+    name: string,
+    description: string,
+    version_changed?: string,
+  ) {
+    this.version_changed = version_changed;
+    this.path_id = path;
+    this.name = name;
+    this.description = description;
+  }
+
+  /**Makes a settings subgroup for this group
+   * @param id unique identifier for this subgroup in the parent group
+   * @param name name of group formatted for user reading
+   * @param description a description of what the setting group is about formatted for user reading*/
+  make_sub_group(id: string, name: string, description: string) {
+    if (id in this.sub_groups)
+      throw new Error("Sub group already registered " + id);
+    return (this.sub_groups[id] = new SettingsGroup(
+      this.path_id + "/" + id,
+      name,
+      description,
+      this.version_changed,
+    ));
+  }
+
+  /**Gets value of setting or fallbacks to default
+   * @param id unique identifier for this setting in the parent group
+   * @param fallback value to use if no setting is stored
+   * @param check function to check if the stored value is valid, if not the fallback will be used
+   * @param version_changed function called when the version of the package changed to migrate old value to new formats */
+  get<T>(
+    id: string,
+    fallback: T,
+    check?: (parsed: unknown) => Option<T>,
+    version_changed?: (existing: string, oldVersion: string) => T,
+  ): ResultOk<T> {
+    const saved = localStorage.getItem(this.path_id + "/" + id);
+    if (saved === null) return ok(fallback);
+    try {
+      if (this.version_changed && version_changed) {
+        const changed_value = version_changed(saved, this.version_changed);
+        localStorage.setItem(
+          this.path_id + "/" + id,
+          JSON.stringify(changed_value),
+        );
+        return ok(changed_value);
+      }
+      if (check) return ok(check(JSON.parse(saved)).unwrap_or(fallback));
+      return ok(JSON.parse(saved) as T);
+    } catch (e) {
+      return ok(fallback);
+    }
+  }
+
+  /**Sets value of setting, that has not been registered to a state
+   * @param id unique identifier for this setting in the parent group
+   * @param value value to set*/
+  set(id: string, value: any) {
+    if (id in this.settings)
+      throw new Error("Settings is registered " + this.path_id + "/" + id);
+    localStorage[this.path_id + "/" + id] = JSON.stringify(value);
+  }
+
+  /**Registers a state to a setting
+   * @param id unique identifier for this setting in the parent group
+   * @param name name of setting formatted for user reading
+   * @param description a description of what the setting is about formatted for user reading
+   * @param state state object representing the setting's value */
+  register<READ, S extends StateROAW<READ>>(
+    id: string,
+    name: string,
+    description: string,
+    state: S,
+    transform?: (state: S) => PromiseLike<string>,
+  ): S {
+    if (id in this.settings)
+      throw new Error("Settings already registered " + this.path_id + "/" + id);
+    this.settings[id] = new Setting(state, name, description);
+    st.v.viewer(state, async () => {
+      localStorage[this.path_id + "/" + id] = await (transform
+        ? transform(state)
+        : state.to_json());
+    });
+    return state;
+  }
+}

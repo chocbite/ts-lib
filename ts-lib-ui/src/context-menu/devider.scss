@@ -1,0 +1,15 @@
+contextmenu-devider {
+  display: table-row;
+  height: calc(0.4rem + 1px);
+
+  &::before {
+    content: "";
+    display: block;
+    position: absolute;
+    left: 0;
+    width: 100%;
+    height: 1px;
+    margin-block: 0.2rem;
+    background-color: var(--contextmenu-border);
+  }
+}

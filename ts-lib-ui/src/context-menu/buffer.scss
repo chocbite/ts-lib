@@ -1,0 +1,33 @@
+@use "./line.scss" as line;
+
+contextmenu-buffer {
+  display: table-row;
+  height: 1.8rem;
+  text-align: center;
+  position: relative;
+
+  .touch & {
+    height: 3.2rem;
+  }
+
+  @include line.hover;
+
+  > * {
+    $spinnerPadding: 0.3rem;
+
+    box-sizing: border-box;
+    position: absolute;
+    height: 1.8rem;
+    z-index: 1;
+    padding: $spinnerPadding;
+    min-width: calc(10rem - line.$padding - $spinnerPadding);
+
+    .touch & {
+      height: 3.2rem;
+    }
+
+    > svg {
+      fill: var(--contextmenu-hoverText);
+    }
+  }
+}
