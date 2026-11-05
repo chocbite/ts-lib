@@ -20,8 +20,6 @@ export default defineConfig(
       "@typescript-eslint/no-floating-promises": "off",
       "@typescript-eslint/no-misused-promises": "off",
       "@typescript-eslint/no-array-delete": "off",
-      //state relied on noUncheckedIndexedAccess, which is off in the monorepo for now
-      "@typescript-eslint/no-unnecessary-type-assertion": "off",
     },
   },
   {

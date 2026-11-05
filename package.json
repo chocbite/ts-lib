@@ -3,14 +3,15 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "ts-lib",
-    "ts-lib-ui"
+    "core",
+    "ui"
   ],
   "scripts": {
     "build": "npm run build -w @chocbite/ts-lib && npm run build -w @chocbite/ts-lib-ui",
     "test": "npm run test --workspaces",
     "lint": "npm run lint --workspaces",
     "typecheck": "npm run typecheck --workspaces",
+    "release": "npm run typecheck && npm test && npm run build && node config/write-dist-package.js core ui && npm publish ./core/dist && npm publish ./ui/dist",
     "upgrades": "npx npm-check-updates --target semver --workspaces --root",
     "upgrade": "npx npm-check-updates --target semver -u --workspaces --root && npm install"
   },

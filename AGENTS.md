@@ -2,16 +2,16 @@
 
 Monorepo (npm workspaces) publishing two packages:
 
-| Package | Folder | Rule |
-|---|---|---|
-| `@chocbite/ts-lib` | `ts-lib` | Platform independent. **No browser features** (no DOM, no `window`, no `localStorage`). |
-| `@chocbite/ts-lib-ui` | `ts-lib-ui` | Browser UI. Depends on `@chocbite/ts-lib`. |
+| Package               | Folder | Rule                                                                                    |
+| --------------------- | ------ | --------------------------------------------------------------------------------------- |
+| `@chocbite/ts-lib`    | `core` | Platform independent. **No browser features** (no DOM, no `window`, no `localStorage`). |
+| `@chocbite/ts-lib-ui` | `ui`   | Browser UI. Depends on `@chocbite/ts-lib`.                                              |
 
 ts-lib-ui must never be imported from ts-lib.
 
 ## Layout
 
-Each module is a folder `<pkg>/src/<module>/` with an `index.ts` and its own `README.md`.
+Each module is a folder `<folder>/src/<module>/` with an `index.ts` and its own `README.md`.
 Every module is published as a subpath export, e.g. `@chocbite/ts-lib/state` and `@chocbite/ts-lib-ui/theme`. There is no root export.
 
 - ts-lib: `colors common depot event math parse result state string`
@@ -35,15 +35,20 @@ npm test                              # all
 npm test -w @chocbite/ts-lib          # node, fast
 npx vitest run src/state              # inside a package folder, one module
 npm run build                         # ts-lib first, then ts-lib-ui
+npm run release                       # typecheck, test, build, publish both dist folders
 ```
 
 ts-lib tests run in plain Node. ts-lib-ui tests run in Chromium via `@vitest/browser-playwright` (`npx playwright install chromium` once).
+
+## Publishing
+
+Packages are published from `dist`, never from the package folder (those are `"private": true`). Only `npm run release` publishes: it runs typecheck and all tests first, then builds and runs `config/write-dist-package.js`, which writes `dist/package.json` with only consumer facing fields (no scripts, devDependencies, `imports` or the `development` condition) and copies the package `README.md`. A plain build leaves `dist` without a `package.json`, so it cannot be published by hand without the tests. A new top level `package.json` field that consumers need must be added to the script's `KEEP` list.
 
 ## Conventions
 
 - `*.trials.ts` and `trials/` folders are manual demo code. Never export them from an `index.ts`, they must not end up in builds.
 - ts-lib enforces DOM-free code three ways: tsconfig `lib` has no `DOM`, eslint `no-restricted-globals`, and Node-only tests.
-- Enum icons in `state` are typed through the global `ChocbiteStateRegister` interface. ts-lib-ui augments it with `icon: SVGFunc` (see `ts-lib-ui/src/svg/index.ts`). Without ts-lib-ui no icon can be given.
-- ts-lib-ui settings groups are named `<package name>/<module>` so modules do not collide.
+- Enum icons in `state` are typed through the global `ChocbiteStateRegister` interface. ts-lib-ui augments it with `icon: SVGFunc` (see `ui/src/svg/index.ts`). Without ts-lib-ui no icon can be given.
+- ts-lib-ui settings groups are named `@chocbite/ts-lib-xxx` so modules do not collide.
 - ts-lib-ui CSS is one `dist/style.css`, imported by every built file.
 - Ask the user before modifying files unless they asked for the change.
