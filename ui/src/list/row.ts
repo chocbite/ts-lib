@@ -191,12 +191,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     if (!this.openable) return;
     if (open && this.#child_box.childElementCount === 0) {
       if (this.#sub_rows) this.rows = this.#sub_rows?.();
-      if (this.#child_box.childElementCount > 0 || this.#add_row)
-        this.classList.add("open");
-    } else if (!open && this.open) {
-      this.rows = [];
-      this.classList.remove("open");
-    }
+    } else if (!open && this.open) this.rows = [];
   }
   get open(): boolean {
     return this.classList.contains("open");
@@ -237,8 +232,10 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   #update_rows(rows: readonly R[]) {
     if (rows.length === 0) {
       this.#child_box.replaceChildren();
+      this.classList.remove("open");
       return;
-    }
+    } else this.classList.add("open");
+
     const read = state.a.read(rows);
     for (let i = 0; i < read.length; i++) {
       const row = read[i];
