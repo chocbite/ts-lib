@@ -171,7 +171,10 @@ class RXXX<
   #state: S;
   #subscriber = (value: SR<RIN>) => {
     const transformed = this.transform_read(value as StateInferResult<S>);
-    const changed = !this.#buffer?.compare(transformed);
+    //Objects and arrays can be changed in place, so they are always passed on
+    const changed =
+      !this.#buffer?.compare(transformed) ||
+      (transformed.ok && typeof transformed.value === "object");
     this.#buffer = transformed;
     if (changed) this.update_subs(transformed);
   };

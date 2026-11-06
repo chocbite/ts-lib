@@ -415,3 +415,20 @@ describe("Proxy features", function () {
     });
   });
 });
+
+describe("Proxy with in place changed values", { timeout: 100 }, function () {
+  it("Passes on every array change of the source", async function () {
+    const source = st.ok_w([1, 2]);
+    const proxy = st.p.ros(source);
+    const values: number[][] = [];
+    proxy.sub((val) => values.push([...val.value]));
+    source.array.push(3);
+    source.array.push(4);
+    source.array.pop();
+    expect(values).toEqual([
+      [1, 2, 3],
+      [1, 2, 3, 4],
+      [1, 2, 3],
+    ]);
+  });
+});

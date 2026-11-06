@@ -137,6 +137,20 @@ export class RXX<RT, IN extends State<any>[], WT, RRT extends SR<RT>>
     return values[0] as RRT;
   }
 
+  /**Runs the getter on the buffered values, if the getter throws the error is logged and the last value is kept
+   * @returns true if the getter succeeded*/
+  #compute(): boolean {
+    try {
+      this.#buffer = this.getter(
+        this.#state_buffers as StateCollectedTransVal<IN>,
+      );
+      return true;
+    } catch (e) {
+      console.error("Failed while calling collected getter ", e, this);
+      return false;
+    }
+  }
+
   /**Called when subscriber is added*/
   protected on_sub() {
     const subscription_id = ++this.#subscription_id;
@@ -161,11 +175,8 @@ export class RXX<RT, IN extends State<any>[], WT, RRT extends SR<RT>>
             calc = true;
             Promise.resolve().then(() => {
               if (subscription_id !== this.#subscription_id) return;
-              this.#buffer = this.getter(
-                this.#state_buffers as StateCollectedTransVal<IN>,
-              );
-              this.update_subs(this.#buffer);
               calc = false;
+              if (this.#compute()) this.update_subs(this.#buffer!);
             });
           }
         });
@@ -173,38 +184,33 @@ export class RXX<RT, IN extends State<any>[], WT, RRT extends SR<RT>>
     } else {
       //Correct size of buffer array
       this.#state_buffers.length = this.#states.length;
-      let count = 0;
-      const amount = this.#states.length - 1;
+      //Updates are only buffered until all states have a value
+      let initialized = false;
+      let filled = 0;
       Promise.all(this.#states).then((vals) => {
         if (subscription_id !== this.#subscription_id) return;
         for (let i = 0; i < this.#state_buffers.length; i++)
           this.#state_buffers[i] = this.#state_buffers[i]! ?? vals[i];
-        this.#buffer = this.getter(
-          this.#state_buffers as StateCollectedTransVal<IN>,
-        );
-        this.ful_r_prom(this.#buffer);
-        count = amount;
+        initialized = true;
+        if (this.#compute()) this.ful_r_prom(this.#buffer!);
       });
-      //Creates a new scope to hold count and amount variables
+      //Creates a new scope to hold the calc variable
       {
         let calc = false;
         this.#state_subscribers = this.#states.map((s, i) =>
           s.sub((value) => {
-            if (count < amount) {
-              if (!this.#state_buffers[i]) count++;
+            if (!initialized) {
+              if (this.#state_buffers[i] === undefined) filled++;
               this.#state_buffers[i] = value;
-              return;
-            }
-            this.#state_buffers[i] = value;
+              if (filled < this.#states.length) return;
+              initialized = true;
+            } else this.#state_buffers[i] = value;
             if (!calc) {
               calc = true;
               Promise.resolve().then(() => {
                 if (subscription_id !== this.#subscription_id) return;
-                this.#buffer = this.getter(
-                  this.#state_buffers as StateCollectedTransVal<IN>,
-                );
-                this.update_subs(this.#buffer);
                 calc = false;
+                if (this.#compute()) this.update_subs(this.#buffer!);
               });
             }
           }),

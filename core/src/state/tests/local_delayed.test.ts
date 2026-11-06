@@ -308,4 +308,41 @@ describe("Initialize delayed states", function () {
       await test_state_write(maker_write, false);
     });
   });
+
+  describe("Failing init", { timeout: 200 }, function () {
+    const failing = () =>
+      st.rea<number>(async () => {
+        throw new Error("Init failed");
+      });
+    it("Pending reads settle when the init function throws", async function () {
+      const state = failing();
+      const read = await Promise.race([
+        state.then((value) => value),
+        sleep(50, "pending" as const),
+      ]);
+      expect(read).not.toBe("pending");
+    });
+    it("Reads after a failed init give a result", async function () {
+      const state = failing();
+      state.then(() => {});
+      await sleep(10);
+      const read = await Promise.race([
+        state.then((value) => value),
+        sleep(50, "pending" as const),
+      ]);
+      expect(read).toHaveProperty("ok");
+    });
+    it("ROA: retries init on the next read after a failed init", async function () {
+      let attempts = 0;
+      const state = st.roa<number>(async () => {
+        if (attempts++ === 0) throw new Error("Init failed");
+        return ok(5);
+      });
+      const first = state.then((value) => value);
+      await sleep(10);
+      expect(await state.then((value) => value)).toEqual(ok(5));
+      expect(await first).toEqual(ok(5));
+      expect(attempts).toBe(2);
+    });
+  });
 });

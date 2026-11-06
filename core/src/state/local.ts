@@ -458,6 +458,13 @@ class RXXX<
                   e,
                   this,
                 );
+                //Ok states have no error value, reads wait for a set or retry init on next read
+                if (this.#rok) return void (initializing = false);
+                this.ful_r_prom(
+                  (this.#value = err(
+                    `Failed to initialize state: ${String(e)}`,
+                  ) as RRT),
+                );
               }
               this.#clean();
             })();
