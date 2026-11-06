@@ -11,12 +11,13 @@ ts-lib-ui must never be imported from ts-lib.
 
 ## Intended use
 
-ts-lib-ui is for single page applications that run offline. The following are deliberate, do not flag or change them:
+ts-lib-ui is for single page applications that run offline on low end hardware. Runtime performance wins over file size, download size is a one time cost. The following are deliberate, do not flag or change them:
 
 - Zoom and page panning are disabled (`touch-action: none` on `html`).
 - Global styling of `html` and scrollbars, and side effects at import (custom element definitions, observers, singletons).
 - No accessibility support (no `role` / `aria-*`).
 - Fonts and icons are bundled, fonts inlined into `style.css`, so nothing is fetched at runtime.
+- Icons exist both as SVGs (`SVGFunc`, lets library users pass custom icons) and as the Material icon font (`icons/mixins.scss`). The font is used where many icons are rendered, e.g. lists, because a glyph is cheaper than an svg subtree.
 
 Bundling is fine, but unused icons must still be tree-shakeable by the consumer's bundler.
 
