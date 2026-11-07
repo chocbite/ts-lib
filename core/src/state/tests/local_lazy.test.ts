@@ -212,4 +212,27 @@ describe("Initialize lazy states", function () {
       await test_state_write(maker_write, true);
     });
   });
+
+  describe("Flags before first read", function () {
+    it("ROS: lazy state reports sync without running the init function", function () {
+      let calls = 0;
+      const state = st.ros(() => {
+        calls++;
+        return ok(1);
+      });
+      expect(state.rsync).toBe(true);
+      expect(st.is.ros(state)).toBe(true);
+      expect(calls).toBe(0);
+    });
+    it("RES: lazy state reports sync without running the init function", function () {
+      let calls = 0;
+      const state = st.res(() => {
+        calls++;
+        return err("Not yet");
+      });
+      expect(state.rsync).toBe(true);
+      expect(st.is.res(state)).toBe(true);
+      expect(calls).toBe(0);
+    });
+  });
 });

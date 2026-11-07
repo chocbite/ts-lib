@@ -18,10 +18,16 @@ describe("State Number Min Max", async () => {
     expect((await state_inst).unwrap()).to.equal(5);
     expect((await state_inst.limit(11)).unwrap()).to.equal(10);
     expect((await state_inst.limit(-11)).unwrap()).to.equal(0);
-    await state_inst.write(11);
-    expect((await state_inst).unwrap()).to.equal(10);
-    await state_inst.write(-11);
-    expect((await state_inst).unwrap()).to.equal(0);
+    expect(await state_inst.write(11)).toEqual(
+      err("11 is bigger than the limit of 10"),
+    );
+    expect((await state_inst).unwrap()).to.equal(5);
+    expect(await state_inst.write(-11)).toEqual(
+      err("-11 is smaller than the limit of 0"),
+    );
+    expect((await state_inst).unwrap()).to.equal(5);
+    expect(await state_inst.write(7)).toEqual(ok(undefined));
+    expect((await state_inst).unwrap()).to.equal(7);
   });
   it("Checking checker min max", async () => {
     const state_inst = st.rosw(
@@ -67,9 +73,11 @@ describe("State Number decimals", async () => {
     expect((await state_inst).unwrap()).to.equal(5);
     expect((await state_inst.limit(11)).unwrap()).to.equal(11.1);
     expect((await state_inst.limit(-11)).unwrap()).to.equal(-11.1);
-    await state_inst.write(11);
+    expect((await state_inst.write(11)).ok).toBe(false);
+    expect((await state_inst).unwrap()).to.equal(5);
+    expect(await state_inst.write(11.1)).toEqual(ok(undefined));
     expect((await state_inst).unwrap()).to.equal(11.1);
-    await state_inst.write(-11);
+    expect(await state_inst.write(-11.1)).toEqual(ok(undefined));
     expect((await state_inst).unwrap()).to.equal(-11.1);
   });
   it("Checking limiter decimals step start", async () => {
@@ -84,10 +92,19 @@ describe("State Number decimals", async () => {
     expect((await state_inst).unwrap()).to.equal(5);
     expect((await state_inst.limit(11)).unwrap()).to.equal(10.999);
     expect((await state_inst.limit(-11)).unwrap()).to.equal(-11);
-    await state_inst.write(11);
+    expect((await state_inst.write(11)).ok).toBe(false);
+    expect((await state_inst).unwrap()).to.equal(5);
+    expect(await state_inst.write(10.999)).toEqual(ok(undefined));
     expect((await state_inst).unwrap()).to.equal(10.999);
-    await state_inst.write(-11);
+    expect(await state_inst.write(-11)).toEqual(ok(undefined));
     expect((await state_inst).unwrap()).to.equal(-11);
+  });
+  it("Checking checker decimals", async () => {
+    const state_inst = st.rosw(st.n.help(ok(5), { decimals: st.ok(2) }), true);
+    expect(await state_inst.check(5.12)).toEqual(ok(5.12));
+    expect(await state_inst.check(5.123)).toEqual(
+      err("5.123 has more than 2 decimals"),
+    );
   });
 });
 describe("State Number step start", async () => {
@@ -96,9 +113,13 @@ describe("State Number step start", async () => {
     expect((await state_inst).unwrap()).to.equal(5);
     expect((await state_inst.limit(11)).unwrap()).to.equal(11.05);
     expect((await state_inst.limit(-11)).unwrap()).to.equal(-11.05);
-    await state_inst.write(11);
+    expect(await state_inst.write(11)).toEqual(
+      err("11 is not on a step of 0.13"),
+    );
+    expect((await state_inst).unwrap()).to.equal(5);
+    expect(await state_inst.write(11.05)).toEqual(ok(undefined));
     expect((await state_inst).unwrap()).to.equal(11.05);
-    await state_inst.write(-11);
+    expect(await state_inst.write(-11.05)).toEqual(ok(undefined));
     expect((await state_inst).unwrap()).to.equal(-11.05);
   });
   it("Checking limiter step start", async () => {
@@ -111,10 +132,42 @@ describe("State Number step start", async () => {
     expect((await state_inst.limit(-11)).unwrap().toFixed(2)).to.equal(
       "-11.03",
     );
-    await state_inst.write(11);
+    expect(await state_inst.write(11)).toEqual(
+      err("11 is not on a step of 0.13 starting from 0.02"),
+    );
+    expect((await state_inst).unwrap()).to.equal(5);
+    expect(await state_inst.write(10.94)).toEqual(ok(undefined));
     expect((await state_inst).unwrap()).to.equal(10.94);
-    await state_inst.write(-11);
-    expect((await state_inst).unwrap().toFixed(2)).to.equal("-11.03");
+  });
+  it("Checking checker accepts floating point noise", async () => {
+    const state_inst = st.rosw(st.n.help(ok(0), { step: st.ok(0.1) }), true);
+    expect((await state_inst.check(0.1 + 0.2)).ok).toBe(true);
+    expect(await state_inst.write(0.1 + 0.2)).toEqual(ok(undefined));
+    expect((await state_inst).unwrap()).toBeCloseTo(0.3);
+  });
+  it("Checking checker accepts min and max when they are not on a step", async () => {
+    const state_inst = st.rosw(
+      st.n.help(ok(5), { min: st.ok(0.05), max: st.ok(10), step: st.ok(0.13) }),
+      true,
+    );
+    expect(await state_inst.check(10)).toEqual(ok(10));
+    expect(await state_inst.check(0.05)).toEqual(ok(0.05));
+  });
+  it("Checking checker accepts every value limit returns", async () => {
+    const state_inst = st.rosw(
+      st.n.help(ok(5), {
+        min: st.ok(-3),
+        max: st.ok(10),
+        step: st.ok(0.13),
+        start: st.ok(0.02),
+        decimals: st.ok(2),
+      }),
+      true,
+    );
+    for (let value = -5; value <= 12; value += 0.37) {
+      const limited = (await state_inst.limit(value)).unwrap();
+      expect(await state_inst.check(limited)).toEqual(ok(limited));
+    }
   });
 });
 //##################################################################################################################################################
@@ -135,7 +188,7 @@ describe("State String Max Len", async () => {
       "1234567890",
     );
     await state_inst.write("12345678901");
-    expect((await state_inst).unwrap()).to.equal("1234567890");
+    expect((await state_inst).unwrap()).to.equal("5");
   });
   it("Checking checker max len", async () => {
     const state_inst = st.rosw(
@@ -166,7 +219,7 @@ describe("State String Max Byte Len", async () => {
     expect((await state_inst).unwrap()).to.equal("5");
     expect((await state_inst.limit("1æøåæ01")).unwrap()).to.equal("1æøåæ0");
     await state_inst.write("1æøåæ01");
-    expect((await state_inst).unwrap()).to.equal("1æøåæ0");
+    expect((await state_inst).unwrap()).to.equal("5");
   });
   it("Checking checker max byte len", async () => {
     const state_inst = st.rosw(
@@ -185,5 +238,57 @@ describe("State String Max Byte Len", async () => {
     );
     const related = state_inst.related().unwrap();
     expect((await related.max_length_bytes!).unwrap()).to.equal(10);
+  });
+});
+
+describe("Helper writable option", async () => {
+  it("Array helper check fails when writable is false", async () => {
+    const state_inst = st.rosw(
+      st.a.help(ok([1]), { writable: st.ok(false) }),
+      true,
+    );
+    expect(await state_inst.check([2])).toEqual(err("not writable"));
+  });
+  it("Array helper check passes when writable is true", async () => {
+    const state_inst = st.rosw(
+      st.a.help(ok([1]), { writable: st.ok(true) }),
+      true,
+    );
+    expect(await state_inst.check([2])).toEqual(ok([2]));
+  });
+  it("Object helper check fails when writable is false", async () => {
+    const state_inst = st.rosw(
+      st.o.help(ok({ a: 1 }), { writable: st.ok(false) }),
+      true,
+    );
+    expect(await state_inst.check({ a: 2 })).toEqual(err("not writable"));
+  });
+  it("Boolean helper check fails when writable is false", async () => {
+    const state_inst = st.rosw(
+      st.b.help(ok(true), { writable: st.ok(false) }),
+      true,
+    );
+    expect(await state_inst.check(false)).toEqual(err("not writable"));
+  });
+});
+
+describe("Helper validation on write", async () => {
+  const list = st.e.list<"a" | "b">({ a: { name: "A" }, b: { name: "B" } });
+  it("Enum write with a value not in the list fails and keeps the value", async () => {
+    const state_inst = st.rosw(
+      st.e.help(ok<"a" | "b">("a"), { list: st.ok(list) }),
+      true,
+    );
+    const result = await state_inst.write("zzz" as "a");
+    expect(result.ok).toBe(false);
+    expect(state_inst.ok()).toBe("a");
+  });
+  it("Enum write with a value in the list works", async () => {
+    const state_inst = st.rosw(
+      st.e.help(ok<"a" | "b">("a"), { list: st.ok(list) }),
+      true,
+    );
+    expect(await state_inst.write("b")).toEqual(ok(undefined));
+    expect(state_inst.ok()).toBe("b");
   });
 });

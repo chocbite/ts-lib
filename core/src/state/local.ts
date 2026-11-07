@@ -424,6 +424,7 @@ class RXXX<
     super();
     if (helper) this.#helper = helper as unknown as SHB<any, any, any>;
     this.#rok = init[1];
+    this.#sync = init[0] !== 2;
     if (setter !== true) this.#setter = setter;
     if (init[0] === 0) {
       if (setter === true) this.#setter = this.#make_setter(init[2]);
@@ -441,6 +442,8 @@ class RXXX<
       const f = init[2];
       //Temporary override until first access
       let initializing = false;
+      //A value set before init finishes wins over the init result
+      let set_during_init = false;
       this.then = <TResult1 = RRT>(
         func: (value: RRT) => TResult1 | PromiseLike<TResult1>,
       ): Promise<TResult1> => {
@@ -450,6 +453,7 @@ class RXXX<
             (async () => {
               try {
                 const value = await f();
+                if (set_during_init) return;
                 this.ful_r_prom((this.#value = value));
                 this.#helper?.on_change(value);
               } catch (e) {
@@ -458,6 +462,7 @@ class RXXX<
                   e,
                   this,
                 );
+                if (set_during_init) return;
                 //Ok states have no error value, reads wait for a set or retry init on next read
                 if (this.#rok) return void (initializing = false);
                 this.ful_r_prom(
@@ -472,6 +477,7 @@ class RXXX<
         return this.append_r_prom(func);
       };
       this.set = (value) => {
+        set_during_init = true;
         this.#clean();
         this.set(this.ful_r_prom(value as RRT));
       };
@@ -496,7 +502,7 @@ class RXXX<
         if (old && !old.err && value === old.value)
           return sync_resolve(ok(undefined));
         if (this.#helper) {
-          return this.#helper.limit(value).then((e) => {
+          return this.#helper.check(value).then((e) => {
             if (e.err) return err(e.error);
             if (ARRAY.is_write(e.value))
               ARRAY.read_set(
@@ -534,7 +540,7 @@ class RXXX<
         if (old && !old.err && value === old.value)
           return sync_resolve(ok(undefined));
         if ((state as this).#helper)
-          return (state as this).#helper!.limit(value).then((e) => {
+          return (state as this).#helper!.check(value).then((e) => {
             if (e.err) return err(e.error);
             return ok(state.set_ok(e.value as RIOK<RRT>));
           });
@@ -545,7 +551,7 @@ class RXXX<
         if (old && !old.err && value === old.value)
           return sync_resolve(ok(undefined));
         if (this.#helper) {
-          return this.#helper.limit(value).then((e) => {
+          return this.#helper.check(value).then((e) => {
             if (e.err) return err(e.error);
             if (ARRAY.is_write(e.value))
               ARRAY.read_set(
@@ -569,7 +575,7 @@ class RXXX<
         if (old && !old.err && value === old.value)
           return sync_resolve(ok(undefined));
         if (this.#helper) {
-          return this.#helper.limit(value).then((e) => {
+          return this.#helper.check(value).then((e) => {
             if (e.err) return err(e.error);
             if (OBJECT.is_write(e.value))
               OBJECT.read_set(
@@ -657,8 +663,10 @@ class RXXX<
   get rok(): boolean {
     return this.#rok;
   }
+  //Lazy states are sync before their first read, delayed states once they have a value
+  #sync: boolean;
   get rsync(): boolean {
-    return Boolean(this.#value);
+    return this.#sync || Boolean(this.#value);
   }
   then<TResult1 = RRT, TResult2 = never>(
     on_fulfilled?: ((value: RRT) => TResult1 | PromiseLike<TResult1>) | null,

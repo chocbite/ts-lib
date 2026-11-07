@@ -13,11 +13,11 @@ Status: Fixed = fixed with a test, R = reproduced by running code, V = verified 
 3. [Fixed] `state/collected.ts:160-169,199-208` A throwing getter leaves `calc` true forever, the state never recomputes.
 4. [Fixed] `state/collected.ts:177,193` Same source firing twice before the others makes the getter run with an empty slot.
 5. [Fixed] `state/local.ts:450-463` If async init throws, pending awaits never resolve and later reads give `undefined`.
-6. [R] `state/local.ts:453` `set_ok` during async init is overwritten by the init result without notifying subscribers.
-7. [R] `state/local.ts:653` Lazy sync state reports `rsync === false` until first read.
-8. [R] `state/proxy.ts:226-231,271` Proxy copies `rok`/`rsync`/`writable` from the source, `p.ros` over `RES` reports `rok` false, `rosw` without write transform reports writable.
-9. [R] `array.ts:351`, `object.ts:262`, `boolean.ts:42` `!this.writable` tests a State object (always truthy), the `writable` option does nothing.
-10. [R] `state/local.ts:492-565` `write` calls `limit` but never `check`, an enum state accepts any value.
+6. [Fixed] `state/local.ts:453` `set_ok` during async init is overwritten by the init result without notifying subscribers.
+7. [Fixed] `state/local.ts:653` Lazy sync state reports `rsync === false` until first read.
+8. [Fixed] `state/proxy.ts:226-231,271` Proxy copies `rok`/`rsync`/`writable` from the source, `p.ros` over `RES` reports `rok` false, `rosw` without write transform reports writable.
+9. [Fixed] `array.ts:351`, `object.ts:262`, `boolean.ts:42` `!this.writable` tests a State object (always truthy), the `writable` option does nothing.
+10. [Fixed] `state/local.ts:492-565` `write` calls `limit` but never `check`, an enum state accepts any value.
 11. [R] `state/base.ts:52` `to_json` emits `undefined` (invalid JSON) and does not walk nested plain objects.
 12. [R] `state/util.ts:30` `await_value` ignores the current value and never clears its timer.
 13. [R] `event/simple.ts:85`, `event/sub.ts:118` Listeners stored in plain `{}`, event names like `"toString"` throw.
@@ -77,3 +77,9 @@ Status: Fixed = fixed with a test, R = reproduced by running code, V = verified 
 61. [A] `keyboard/base.ts:69,75` `body.style.transform` clobbers user styles and breaks `position: fixed`.
 62. [A] `base/define_element.ts:92` Duplicate define check sniffs a Chromium specific error message.
 63. [A] context-menu, list, svg text: labels set with `innerHTML`, only a problem if labels come from data.
+
+## Found while fixing
+
+64. [V] `math/index.ts:11` `number_step_start_decimal` returns early when there is no step, so `decimals` is ignored and number `limit` does not round with only `decimals` set.
+65. [V] Number, string and enum helpers ignore the `writable` option in `check` (array, object and boolean use `check_writable`).
+66. [V] `state/README.md` string helper example uses option `max_bytes`, the code calls it `max_length_bytes`.

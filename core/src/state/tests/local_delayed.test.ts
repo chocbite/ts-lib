@@ -345,4 +345,18 @@ describe("Initialize delayed states", function () {
       expect(attempts).toBe(2);
     });
   });
+
+  describe("Set during init", { timeout: 200 }, function () {
+    it("ROA: value set while init is running is not overwritten by init", async function () {
+      const state = st.roa<number>(() => sleep(20, ok(3)));
+      const values: number[] = [];
+      state.sub((value) => values.push(value.value));
+      const first = state.then((value) => value);
+      state.set_ok(5);
+      expect(await first).toEqual(ok(5));
+      await sleep(40);
+      expect(await state.then((value) => value)).toEqual(ok(5));
+      expect(values).toEqual([5]);
+    });
+  });
 });

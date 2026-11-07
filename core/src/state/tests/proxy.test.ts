@@ -382,11 +382,12 @@ describe("Proxy features", function () {
   });
   //##################################################################################################################################################
   describe("write without transform", { timeout: 100 }, function () {
-    it("returns error when write transform not set", async function () {
+    it("passes write through when write transform not set", async function () {
       const inner = st.rosw(ok(1), true);
       const proxy = st.p.rosw(inner);
       const result = await proxy.write(15);
-      expect(result).toEqual(err("not writable"));
+      expect(result).toEqual(ok(undefined));
+      expect(inner.ok()).toBe(15);
     });
   });
   //##################################################################################################################################################
@@ -430,5 +431,24 @@ describe("Proxy with in place changed values", { timeout: 100 }, function () {
       [1, 2, 3, 4],
       [1, 2, 3],
     ]);
+  });
+});
+
+describe("Proxy flags", { timeout: 100 }, function () {
+  it("ROS over an errorable source reports ok", function () {
+    const proxy = st.p.ros(st.from(1), (value) =>
+      ok(value.ok ? value.value : 0),
+    );
+    expect(proxy.rok).toBe(true);
+    expect(st.is.ros(proxy)).toBe(true);
+  });
+  it("ROS over a writable source reports not writable", function () {
+    const proxy = st.p.ros(st.ok_w(1));
+    expect(proxy.writable).toBe(false);
+  });
+  it("ROSW without write transform, writable matches whether write works", async function () {
+    const proxy = st.p.rosw(st.ok_w(1));
+    const result = await proxy.write(5);
+    expect(proxy.writable).toBe(result.ok);
   });
 });

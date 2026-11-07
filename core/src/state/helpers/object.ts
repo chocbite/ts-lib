@@ -1,6 +1,5 @@
 import { sync_resolve } from "#common";
 import {
-  err,
   ok,
   OptionSome,
   ResultInferOk as RIO,
@@ -259,9 +258,7 @@ export class StateObjectHelperBase<RT extends Record<PropertyKey, any>>
   }
 
   check(value: RT): PromiseLike<SR<RT>> {
-    if (this.writable !== undefined && !this.writable)
-      return sync_resolve(err("not writable"));
-    return sync_resolve(ok(value));
+    return this.check_writable(value);
   }
 
   related(): OptionSome<StateObjectRelated> {

@@ -1,5 +1,5 @@
 import { sync_resolve } from "#common";
-import { err, ok, OptionSome, some } from "#result";
+import { ok, OptionSome, some } from "#result";
 import { StateResult as SR } from "../types";
 import {
   StateInit as Init,
@@ -39,9 +39,7 @@ export class StateBoolHelperBase
   }
 
   check(value: boolean): PromiseLike<SR<boolean>> {
-    if (this.writable !== undefined && !this.writable)
-      return sync_resolve(err("not writable"));
-    return sync_resolve(ok(value));
+    return this.check_writable(value);
   }
 
   related(): OptionSome<StateBoolRelated> {
