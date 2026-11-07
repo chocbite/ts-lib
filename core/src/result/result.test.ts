@@ -1,5 +1,14 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import result, { err, none, ok, some, type Option, type Result } from ".";
+import result, {
+  err,
+  none,
+  ok,
+  some,
+  type Option,
+  type Result,
+  type ResultInferErr,
+  type ResultInferOk,
+} from ".";
 
 //###########################################################################################################################################################
 //      _____  ______  _____ _    _ _   _______    ____  _  __
@@ -446,5 +455,15 @@ describe("Helpers", function () {
     expect(result.is_option({})).equal(false);
     expect(result.is_option({ some: true, value: 42 })).equal(false);
     expect(result.is_option(40)).equal(false);
+  });
+});
+
+describe("Infer types", function () {
+  it("Infer ok and error types of any result", function () {
+    type MyResult = Result<number, string>;
+    expectTypeOf<ResultInferOk<MyResult>>().toEqualTypeOf<number>();
+    expectTypeOf<ResultInferErr<MyResult>>().toEqualTypeOf<string>();
+    expectTypeOf<ResultInferOk<Result<number, Error>>>().toEqualTypeOf<number>();
+    expectTypeOf<ResultInferErr<Result<number, Error>>>().toEqualTypeOf<Error>();
   });
 });

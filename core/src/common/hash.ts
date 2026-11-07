@@ -28,23 +28,24 @@ export function sha1(input: string | Uint8Array): string {
   let h2 = 0x98badcfe;
   let h3 = 0x10325476;
   let h4 = 0xc3d2e1f0;
+  //Message schedule, every index read is in range so ?? 0 never applies
   const words = new Uint32Array(80);
 
   for (let offset = 0; offset < padded.length; offset += 64) {
     for (let index = 0; index < 16; index++) {
       const byte_offset = offset + index * 4;
       words[index] =
-        (padded[byte_offset]! << 24) |
-        (padded[byte_offset + 1]! << 16) |
-        (padded[byte_offset + 2]! << 8) |
-        padded[byte_offset + 3]!;
+        ((padded[byte_offset] ?? 0) << 24) |
+        ((padded[byte_offset + 1] ?? 0) << 16) |
+        ((padded[byte_offset + 2] ?? 0) << 8) |
+        (padded[byte_offset + 3] ?? 0);
     }
     for (let index = 16; index < 80; index++) {
       const value =
-        words[index - 3]! ^
-        words[index - 8]! ^
-        words[index - 14]! ^
-        words[index - 16]!;
+        (words[index - 3] ?? 0) ^
+        (words[index - 8] ?? 0) ^
+        (words[index - 14] ?? 0) ^
+        (words[index - 16] ?? 0);
       words[index] = (value << 1) | (value >>> 31);
     }
 
@@ -71,7 +72,8 @@ export function sha1(input: string | Uint8Array): string {
             : index < 60
               ? 0x8f1bbcdc
               : 0xca62c1d6;
-      const temp = (((a << 5) | (a >>> 27)) + f + e + k + words[index]!) >>> 0;
+      const temp =
+        (((a << 5) | (a >>> 27)) + f + e + k + (words[index] ?? 0)) >>> 0;
       e = d;
       d = c;
       c = (b << 30) | (b >>> 2);

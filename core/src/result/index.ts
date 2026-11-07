@@ -386,10 +386,10 @@ export class ResultErr<E> implements ResultBase<never, E> {
 export type Result<T, E> = ResultOk<T> | ResultErr<E>;
 export type Option<T> = OptionSome<T> | OptionNone;
 
-export type ResultInferOk<T extends Result<any, string>> =
+export type ResultInferOk<T extends Result<any, any>> =
   T extends ResultOk<infer RT> ? RT : never;
 
-export type ResultInferErr<T extends Result<string, any>> =
+export type ResultInferErr<T extends Result<any, any>> =
   T extends ResultErr<infer RE> ? RE : never;
 
 export type OptionInfer<T extends Option<any>> =

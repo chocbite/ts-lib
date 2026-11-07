@@ -1,6 +1,3 @@
-Try fix ! core\src\common\hash.ts
-Try fix ! core\src\math\hash\md5.ts
-
 # Bugs from review
 
 Status: Fixed = fixed with a test, R = reproduced by running code, V = verified by reading, A = found by an agent reading, not verified yet.
@@ -34,11 +31,11 @@ Status: Fixed = fixed with a test, R = reproduced by running code, V = verified 
 22. [Fixed] `common/async.ts:57` `sync_reject(promise)` returns the promise unchanged, so it resolves.
 23. [Fixed] `common/async.ts:16-17` `sleep_lazy(ms)` without a function throws in the timer and never resolves.
 24. [Fixed] `common/throttle.ts:22-32` A call during the last tick starts a second interval that never stops.
-25. [R] `common/equals.ts:26` Key order matters, all Dates are equal, `[1]` equals `{0:1}`.
-26. [R] `common/ip.ts:41-47` IPv6 `::` not expanded, bad input throws RangeError, numbers above 2^32 accepted as IPv4.
-27. [R] `string/index.ts:36-43` Date formatter prints UTC time with the local offset.
-28. [R] `math/hash/md5.ts:13` Non-ASCII input hashes wrong, only the low byte of each char is used.
-29. [R] `result/index.ts:389,392` `ResultInferOk`/`ResultInferErr` constraints are wrong, README example does not compile.
+25. [Fixed] `common/equals.ts:26` Key order matters, all Dates are equal, `[1]` equals `{0:1}`.
+26. [Fixed] `common/ip.ts:41-47` IPv6 `::` not expanded, bad input throws RangeError, numbers above 2^32 accepted as IPv4.
+27. [Fixed] `string/index.ts:36-43` Date formatter prints UTC time with the local offset.
+28. [Fixed] `math/hash/md5.ts:13` Non-ASCII input hashes wrong, only the low byte of each char is used.
+29. [Fixed] `result/index.ts:389,392` `ResultInferOk`/`ResultInferErr` constraints are wrong, README example does not compile.
 30. [R] `parse/parse.ts:125` `"ok" in result` treats any object with an `ok` field as a Result.
 31. [A] `parse/fetch_parse.ts:277-313` Resubscribe during an in-flight fetch starts two polling loops, shared abort controller can miss requests.
 32. [A] `common/array.ts:46` `array_from_length(0, f, pre, post)` drops `pre` and `post`.
