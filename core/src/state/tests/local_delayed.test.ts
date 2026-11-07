@@ -359,4 +359,19 @@ describe("Initialize delayed states", function () {
       expect(values).toEqual([5]);
     });
   });
+
+  describe("Init types", function () {
+    it("Ok states only accept init functions giving ok results", function () {
+      //Only type checked, never called
+      const check = () => {
+        st.roa<number>(async () => ok(1));
+        // @ts-expect-error an ok state can not be initialized with an error
+        st.roa<number>(async () => err("Failed"));
+        st.roaw<number>(async () => ok(1));
+        // @ts-expect-error an ok state can not be initialized with an error
+        st.roaw<number>(async () => err("Failed"));
+      };
+      expect(check).toBeTypeOf("function");
+    });
+  });
 });

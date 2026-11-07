@@ -1,6 +1,12 @@
 import { err, ok, ResultOk } from "#result";
 import { assertType, describe, expect, expectTypeOf, it, vi } from "vitest";
-import { state as st, StateJsonCompatible, StateResult, StateROS } from "..";
+import {
+  state as st,
+  StateJsonCompatible,
+  StateREA,
+  StateResult,
+  StateROS,
+} from "..";
 import {
   test_state_get,
   test_state_get_ok,
@@ -235,5 +241,37 @@ describe("to_json", function () {
     expectTypeOf<StateJsonCompatible<Map<string, number>>>().toEqualTypeOf<false>();
     expectTypeOf<StateJsonCompatible<{ f: () => void }>>().toEqualTypeOf<false>();
     expectTypeOf<StateJsonCompatible<bigint>>().toEqualTypeOf<false>();
+  });
+});
+
+describe("Type declarations", function () {
+  it("Async errorable states read errors after narrowing", function () {
+    //Only type checked, never called
+    const check = (state: StateREA<number>) => {
+      if (!state.rok && !state.rsync)
+        expectTypeOf(state.then((value) => value)).toEqualTypeOf<
+          PromiseLike<StateResult<number>>
+        >();
+    };
+    expect(check).toBeTypeOf("function");
+  });
+  it("read_only and read_write keep the kind of state", function () {
+    //Only type checked, never called
+    const check = () => {
+      st.resw(ok(1), true).read_only.get();
+      // @ts-expect-error an errorable state has no ok()
+      st.resw(ok(1), true).read_only.ok();
+      // @ts-expect-error an errorable state has no ok()
+      st.resw(ok(1), true).read_write.ok();
+      // @ts-expect-error an async state has no get()
+      st.roaw<number>().read_only.get();
+      // @ts-expect-error an async state has no get()
+      st.roaw<number>().read_write.get();
+      // @ts-expect-error an async state has no get()
+      st.reaw<number>().read_only.get();
+      // @ts-expect-error an async state has no get()
+      st.reaw<number>().read_write.get();
+    };
+    expect(check).toBeTypeOf("function");
   });
 });

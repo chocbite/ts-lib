@@ -43,14 +43,16 @@ Run from the repo root for everything, or with `-w @chocbite/ts-lib` / `-w @choc
 npm install
 npm run typecheck
 npm run lint
-npm test                              # all
+npm test                              # all, typecheck then tests
 npm test -w @chocbite/ts-lib          # node, fast
-npx vitest run src/state              # inside a package folder, one module
+npx vitest run src/state              # inside a package folder, one module, no typecheck
 npm run build                         # ts-lib first, then ts-lib-ui
 npm run release                       # typecheck, test, build, publish both dist folders
 ```
 
 ts-lib tests run in plain Node. ts-lib-ui tests run in Chromium via `@vitest/browser-playwright` (`npx playwright install chromium` once).
+
+Vitest strips types without checking them, so type tests (`expectTypeOf`, `// @ts-expect-error`) only fail through `tsc`. That is why `npm test` runs `tsc --noEmit` first.
 
 ## Publishing
 

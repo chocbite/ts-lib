@@ -24,9 +24,9 @@ Status: Fixed = fixed with a test, R = reproduced by running code, V = verified 
 14. [Fixed] `state/remote.ts:254` `timeout` only resets the fetching flag, awaiters hang.
 15. [Fixed] `state/remote.ts:287` Rejected debounced `write_action` leaves write promises pending.
 16. [Fixed] `event/simple.ts:140`, `event/sub.ts:217` A throwing proxy listener stops delivery to normal listeners.
-17. [A] `state/types.ts:138-142,181-185` `REA`/`REAW` extend `StateBase<ResultOk<RT>>`, should be `Result`.
-18. [A] `state/local.ts:150-172` `read_only`/`read_write` on RESW/ROAW/REAW typed as ROS/ROSW.
-19. [A] `state/local.ts:782,798` `roa`/`roaw` accept `Promise<SR<RT>>`, an "always ok" state can hold an error.
+17. [Fixed] `state/types.ts:138-142,181-185` `REA`/`REAW` extend `StateBase<ResultOk<RT>>`, should be `Result`.
+18. [Fixed] `state/local.ts:150-172` `read_only`/`read_write` on RESW/ROAW/REAW typed as ROS/ROSW.
+19. [Fixed] `state/local.ts:782,798` `roa`/`roaw` accept `Promise<SR<RT>>`, an "always ok" state can hold an error.
 
 ## Core: other modules
 
@@ -83,3 +83,7 @@ Status: Fixed = fixed with a test, R = reproduced by running code, V = verified 
 64. [V] `math/index.ts:11` `number_step_start_decimal` returns early when there is no step, so `decimals` is ignored and number `limit` does not round with only `decimals` set.
 65. [V] Number, string and enum helpers ignore the `writable` option in `check` (array, object and boolean use `check_writable`).
 66. [V] `state/README.md` string helper example uses option `max_bytes`, the code calls it `max_length_bytes`.
+
+## User added
+
+xx. Investigate if double call of state check can be prevented

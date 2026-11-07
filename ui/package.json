@@ -127,7 +127,7 @@
   "scripts": {
     "build": "tsdown && node -e \"for (const m of ['icons','theme']) require('fs').cpSync('src/'+m+'/mixins.scss','dist/'+m+'/mixins.scss')\"",
     "lint": "eslint \"src/**/*.ts\"",
-    "test": "vitest run",
+    "test": "tsc --noEmit && vitest run",
     "typecheck": "tsc --noEmit",
     "check-deps": "npx depcheck"
   },

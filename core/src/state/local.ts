@@ -147,8 +147,8 @@ export type StateLocalRESW<
 > = StateRESW<RT, HELToREL<HEL>, WT> &
   Owner<StateResult<RT>, HEL, WT> & {
     set_err(error: string): void;
-    readonly read_only: StateROS<RT, HELToREL<HEL>, WT>;
-    readonly read_write: StateROSW<RT, HELToREL<HEL>, WT>;
+    readonly read_only: StateRES<RT, HELToREL<HEL>, WT>;
+    readonly read_write: StateRESW<RT, HELToREL<HEL>, WT>;
   };
 
 export type StateLocalROAW<
@@ -157,8 +157,8 @@ export type StateLocalROAW<
   WT = RT,
 > = StateROAW<RT, HELToREL<HEL>, WT> &
   Owner<RO<RT>, HEL, WT> & {
-    readonly read_only: StateROS<RT, HELToREL<HEL>, WT>;
-    readonly read_write: StateROSW<RT, HELToREL<HEL>, WT>;
+    readonly read_only: StateROA<RT, HELToREL<HEL>, WT>;
+    readonly read_write: StateROAW<RT, HELToREL<HEL>, WT>;
   };
 
 export type StateLocalREAW<
@@ -168,8 +168,8 @@ export type StateLocalREAW<
 > = StateREAW<RT, HELToREL<HEL>, WT> &
   Owner<StateResult<RT>, HEL, WT> & {
     set_err(error: string): void;
-    readonly read_only: StateROS<RT, HELToREL<HEL>, WT>;
-    readonly read_write: StateROSW<RT, HELToREL<HEL>, WT>;
+    readonly read_only: StateREA<RT, HELToREL<HEL>, WT>;
+    readonly read_write: StateREAW<RT, HELToREL<HEL>, WT>;
   };
 
 //##################################################################################################################################################
@@ -788,33 +788,33 @@ export function resw<
   ) as StateLocalRESW<RT, HEL, SWT<WT>>;
 }
 
-/**Creates a sync ok state from an initial result.
- * @param init initial result for state or helper.*/
+/**Creates an async ok state from an init function, called on first read.
+ * @param init init function giving an ok result, or init function and helper.*/
 export function roa<
   RT,
-  HEL extends Helper<SR<RT>, SWT<WT>, any> = NoHelper,
+  HEL extends Helper<RO<RT>, SWT<WT>, any> = NoHelper,
   WT = unknown,
->(init?: (() => Promise<SR<RT>>) | [() => Promise<SR<RT>>, HEL]) {
+>(init?: (() => Promise<RO<RT>>) | [() => Promise<RO<RT>>, HEL]) {
   const [i, h] = Array.isArray(init) ? [init[0], init[1]] : [init, undefined];
-  return new RXXX<SR<RT>, HEL, SWT<WT>>([2, true, i], h) as StateLocalROA<
+  return new RXXX<RO<RT>, HEL, SWT<WT>>([2, true, i], h) as StateLocalROA<
     RT,
     HEL,
     SWT<WT>
   >;
 }
 
-/**Creates a sync ok state from an initial result.
- * @param init initial result for state or helper.*/
+/**Creates a writable async ok state from an init function, called on first read.
+ * @param init init function giving an ok result, or init function and helper.*/
 export function roaw<
   RT,
   WT = RT,
-  HEL extends Helper<SR<RT>, SWT<WT>, any> = NoHelper,
+  HEL extends Helper<RO<RT>, SWT<WT>, any> = NoHelper,
 >(
-  init?: (() => Promise<SR<RT>>) | [() => Promise<SR<RT>>, HEL],
-  setter: Setter<SR<RT>, HEL, SWT<WT>> | true = true,
+  init?: (() => Promise<RO<RT>>) | [() => Promise<RO<RT>>, HEL],
+  setter: Setter<RO<RT>, HEL, SWT<WT>> | true = true,
 ) {
   const [i, h] = Array.isArray(init) ? [init[0], init[1]] : [init, undefined];
-  return new RXXX<SR<RT>, HEL, SWT<WT>>(
+  return new RXXX<RO<RT>, HEL, SWT<WT>>(
     [2, true, i],
     h,
     setter,

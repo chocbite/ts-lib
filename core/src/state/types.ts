@@ -160,7 +160,7 @@ export interface StateBase<
 }
 
 interface REA<RT, REL extends Option<StateRelated>, WT> extends StateBase<
-  ResultOk<RT>,
+  StateResult<RT>,
   REL,
   WT
 > {
@@ -203,7 +203,7 @@ interface ROS<RT, REL extends Option<StateRelated>, WT> extends StateBase<
 }
 
 interface REAW<RT, REL extends Option<StateRelated>, WT> extends StateBase<
-  ResultOk<RT>,
+  StateResult<RT>,
   REL,
   WT
 > {
