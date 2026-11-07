@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  expectTypeOf,
+  it,
+  vi,
+} from "vitest";
 import {
   deferrer,
   is_promise_like,
@@ -76,7 +84,7 @@ describe("Sync PromiseLike", () => {
     it("propagates errors if no onrejected is provided", () => {
       let caught = "";
       sync_reject("initial failure")
-        .then((v) => v + " ignored")
+        .then(() => "ignored")
         .then(null, (err) => {
           caught = err as string;
         });
@@ -173,6 +181,35 @@ describe("Sync PromiseLike", () => {
   });
 });
 
+describe("Sync PromiseLike behaves like Promise", () => {
+  it("sync_resolve: a throwing on_fulfilled rejects instead of calling on_rejected", async () => {
+    const on_rejected = vi.fn(() => "handled");
+    const result = sync_resolve(1).then(() => {
+      throw new Error("Failed");
+    }, on_rejected);
+    await expect(Promise.resolve(result)).rejects.toThrow("Failed");
+    expect(on_rejected).not.toHaveBeenCalled();
+  });
+
+  it("sync_resolve: matches a native promise", async () => {
+    const on_rejected = vi.fn(() => "handled");
+    const result = Promise.resolve(1).then(() => {
+      throw new Error("Failed");
+    }, on_rejected);
+    await expect(result).rejects.toThrow("Failed");
+    expect(on_rejected).not.toHaveBeenCalled();
+  });
+
+  it("sync_reject: rejects even when given a promise", async () => {
+    const inner = Promise.resolve(1);
+    await expect(Promise.resolve(sync_reject(inner))).rejects.toBe(inner);
+  });
+
+  it("sync_reject: is typed as never resolving with a value", () => {
+    expectTypeOf(sync_reject("Failed")).toEqualTypeOf<PromiseLike<never>>();
+  });
+});
+
 describe("sleep", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -239,6 +276,12 @@ describe("sleep_lazy", () => {
     const promise = sleep_lazy(50, () => ({ key: "value" }));
     vi.advanceTimersByTime(50);
     await expect(promise).resolves.toEqual({ key: "value" });
+  });
+
+  it("resolves with undefined when no function is given", async () => {
+    const promise = sleep_lazy(50);
+    expect(() => vi.advanceTimersByTime(50)).not.toThrow();
+    await expect(promise).resolves.toBeUndefined();
   });
 });
 

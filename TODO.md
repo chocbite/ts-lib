@@ -1,4 +1,3 @@
-Must be doable with a more itterative approach core\src\math\conversion\linearization.ts
 Try fix ! core\src\common\hash.ts
 Try fix ! core\src\math\hash\md5.ts
 
@@ -30,11 +29,11 @@ Status: Fixed = fixed with a test, R = reproduced by running code, V = verified 
 
 ## Core: other modules
 
-20. [R] `math/conversion/linearization.ts:16` NaN for input above the last x, loop reads the first y as an x.
-21. [R] `common/async.ts:39-45` `sync_resolve(...).then(f, r)` calls `r` when `f` throws.
-22. [R] `common/async.ts:57` `sync_reject(promise)` returns the promise unchanged, so it resolves.
-23. [A] `common/async.ts:16-17` `sleep_lazy(ms)` without a function throws in the timer and never resolves.
-24. [R] `common/throttle.ts:22-32` A call during the last tick starts a second interval that never stops.
+20. [Fixed] `math/conversion/linearization.ts:16` NaN for input above the last x, loop reads the first y as an x.
+21. [Fixed] `common/async.ts:39-45` `sync_resolve(...).then(f, r)` calls `r` when `f` throws.
+22. [Fixed] `common/async.ts:57` `sync_reject(promise)` returns the promise unchanged, so it resolves.
+23. [Fixed] `common/async.ts:16-17` `sleep_lazy(ms)` without a function throws in the timer and never resolves.
+24. [Fixed] `common/throttle.ts:22-32` A call during the last tick starts a second interval that never stops.
 25. [R] `common/equals.ts:26` Key order matters, all Dates are equal, `[1]` equals `{0:1}`.
 26. [R] `common/ip.ts:41-47` IPv6 `::` not expanded, bad input throws RangeError, numbers above 2^32 accepted as IPv4.
 27. [R] `string/index.ts:36-43` Date formatter prints UTC time with the local offset.

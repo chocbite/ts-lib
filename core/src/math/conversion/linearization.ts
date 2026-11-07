@@ -1,33 +1,21 @@
 /**Performs a linear conversion using the given values
  * @param xin value to linearize
  * @param ends set true to limit linearization to end values
- * @param xy numbers to use for linearization first x values then y values*/
+ * @param xy numbers to use for linearization first x values then y values, x values must be ascending
+ * @returns NaN when there are less than two points or the amount of values is odd*/
 export function linearise(xin: number, ends: boolean, ...xy: number[]) {
   const len = xy.length / 2;
-  if (xin <= xy[0]!) {
-    if (ends) {
-      return xy[len]!;
-    } else {
-      const d = (xy[len + 1]! - xy[len]!) / (xy[1]! - xy[0]!);
-      const b = xin - xy[0]!;
-      return b * d + xy[len]!;
-    }
-  } else {
-    for (let i = 0; i < len; i++) {
-      if (xin <= xy[i + 1]!) {
-        const d = (xy[len + i + 1]! - xy[len + i]!) / (xy[i + 1]! - xy[i]!);
-        const b = xin - xy[i]!;
-        return b * d + xy[len + i]!;
-      }
-    }
-    if (ends) {
-      return xy[xy.length - 1]!;
-    } else {
-      const d =
-        (xy[xy.length - 1]! - xy[xy.length - 2]!) /
-        (xy[len - 1]! - xy[len - 2]!);
-      const b = xin - xy[len - 2]!;
-      return b * d + xy[xy.length - 2]!;
-    }
+  if (len < 2 || !Number.isInteger(len)) return NaN;
+  if (ends) {
+    if (xin <= xy[0]!) return xy[len]!;
+    if (xin >= xy[len - 1]!) return xy[xy.length - 1]!;
   }
+  //Segment containing xin, values outside the range use the first or last segment
+  let i = 0;
+  while (i < len - 2 && xin > xy[i + 1]!) i++;
+  const x0 = xy[i]!;
+  const x1 = xy[i + 1]!;
+  const y0 = xy[len + i]!;
+  const y1 = xy[len + i + 1]!;
+  return y0 + ((xin - x0) * (y1 - y0)) / (x1 - x0);
 }

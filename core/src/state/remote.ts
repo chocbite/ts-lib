@@ -271,7 +271,7 @@ export abstract class StateRemote<
         if (is_promise_like(rejected_result)) return rejected_result;
         return sync_resolve(rejected_result);
       }
-      return sync_reject(error as any);
+      return sync_reject(error);
     }
   }
 

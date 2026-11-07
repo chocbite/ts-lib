@@ -84,4 +84,17 @@ describe("throttle", () => {
     expect(func).toHaveBeenNthCalledWith(2, "b");
     expect(func).toHaveBeenNthCalledWith(3, "c");
   });
+
+  it("should leave no timer running after a call during the last tick", () => {
+    const func = vi.fn();
+    const throttled = throttle(func, 100);
+
+    throttled(1);
+    vi.advanceTimersByTime(200); // state reaches 0, interval not cleared yet
+    throttled(2); // starts a new cycle
+
+    vi.advanceTimersByTime(2000);
+    expect(func).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });
