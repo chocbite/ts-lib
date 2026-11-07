@@ -36,14 +36,16 @@ export function array_from_range_inclusive<T>(
  * using a provided initialization function.
  * * @param len - The desired number of elements in the array.
  * @param init - A function that takes the current index (i) and returns a value of type T.
- * @returns An array of length 'len', or an empty array if 'len' is zero or negative. */
+ * @param prepend - Values put before the initialized values.
+ * @param append - Values put after the initialized values.
+ * @returns prepend, 'len' initialized values and append, no initialized values if 'len' is zero or negative. */
 export function array_from_length<T>(
   len: number,
   init: (i: number) => T,
   prepend: T[] = [],
   append: T[] = []
 ): T[] {
-  if (len <= 0) return [];
+  if (len <= 0) return [...prepend, ...append];
   const result: T[] = [];
   result.length = len;
   for (let i = 0; i < len; i++) result[i] = init(i);

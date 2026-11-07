@@ -36,12 +36,12 @@ Status: Fixed = fixed with a test, R = reproduced by running code, V = verified 
 27. [Fixed] `string/index.ts:36-43` Date formatter prints UTC time with the local offset.
 28. [Fixed] `math/hash/md5.ts:13` Non-ASCII input hashes wrong, only the low byte of each char is used.
 29. [Fixed] `result/index.ts:389,392` `ResultInferOk`/`ResultInferErr` constraints are wrong, README example does not compile.
-30. [R] `parse/parse.ts:125` `"ok" in result` treats any object with an `ok` field as a Result.
-31. [A] `parse/fetch_parse.ts:277-313` Resubscribe during an in-flight fetch starts two polling loops, shared abort controller can miss requests.
-32. [A] `common/array.ts:46` `array_from_length(0, f, pre, post)` drops `pre` and `post`.
-33. [A] `parse/parse.ts:180-334` Parser writes defaults/transforms into the caller's input, also on a failed union branch.
-34. [A] `result/index.ts:208,213` Interface overloads declare the wrong error/value types.
-35. [A] `common/async.ts:21-28` `deferrer` types `f` as `() => void` but calls it with an argument.
+30. [Fixed] `parse/parse.ts:125` `"ok" in result` treats any object with an `ok` field as a Result.
+31. [Fixed] `parse/fetch_parse.ts:277-313` Resubscribe during an in-flight fetch starts two polling loops, shared abort controller can miss requests.
+32. [Fixed] `common/array.ts:46` `array_from_length(0, f, pre, post)` drops `pre` and `post`.
+33. [Fixed] `parse/parse.ts:180-334` Parser writes defaults/transforms into the caller's input, also on a failed union branch.
+34. [Fixed] `result/index.ts:208,213` Interface overloads declare the wrong error/value types. Not a real bug, the classes have correct types and the interface is not exported, fixed for consistency.
+35. [Fixed] `common/async.ts:21-28` `deferrer` types `f` as `() => void` but calls it with an argument.
 
 ## UI
 

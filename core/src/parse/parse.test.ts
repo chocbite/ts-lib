@@ -588,7 +588,7 @@ describe("make_parser", () => {
 describe("make_parser edge cases", () => {
   it("passes on sub parser objects that have an ok field but are not results", () => {
     const parse = make_parser({
-      a: (value: unknown) => ({ ok: true as boolean, data: value }),
+      a: (value: unknown) => ({ ok: true, data: value }),
     });
     const result = parse({ a: 1 });
     expect(result.ok && result.value.a).toEqual({ ok: true, data: 1 });

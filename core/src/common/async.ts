@@ -22,11 +22,11 @@ export function sleep_lazy<T = void>(ms: number, arg?: () => T): Promise<T> {
 /**Returns a function that, when called, will execute the given function after the given number of milliseconds with the given argument (if any).*/
 export function deferrer<T = void>(
   ms: number,
-  f: () => void,
+  f: (arg: T) => void,
   arg?: T,
 ): () => void {
   return () => {
-    setTimeout(() => (f as (a?: T) => void)(arg), ms);
+    setTimeout(() => f(arg as T), ms);
   };
 }
 
