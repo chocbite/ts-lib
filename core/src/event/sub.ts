@@ -80,9 +80,9 @@ export interface EventSubProducer<Events extends object, Target>
   proxy_func(): ESubSubscriber<keyof Events, Target, Events[keyof Events]>;
 }
 
-/**Type for storage of listeners in event handler */
+/**Type for storage of listeners in event handler, Maps so names like "toString" do not collide with Object properties */
 interface ListenerStorage<K, Handler, Type> {
-  subs: { [key: string]: ListenerStorage<K, Handler, Type> };
+  subs: Map<string, ListenerStorage<K, Handler, Type>>;
   funcs: Set<ESubSubscriber<K, Handler, Type>>;
 }
 
@@ -91,9 +91,7 @@ export class EventHandlerSub<Events extends object, Target>
   implements EventSubProducer<Events, Target>
 {
   target: Target;
-  #sub_storage: {
-    [K in keyof Events]?: ListenerStorage<K, Target, Events[K]>;
-  } = {};
+  #sub_storage = new Map<keyof Events, ListenerStorage<any, Target, any>>();
   #proxies?: Set<ESubSubscriber<keyof Events, Target, Events[keyof Events]>>;
 
   constructor(target: Target) {
@@ -107,20 +105,22 @@ export class EventHandlerSub<Events extends object, Target>
     subscriber: ESubSubscriber<K, Target, Events[K]>,
     sub?: SubPath
   ): typeof subscriber {
-    let sub_level = this.#sub_storage[event_name];
-    if (!sub_level)
-      sub_level = this.#sub_storage[event_name] = {
-        subs: {},
-        funcs: new Set(),
-      };
+    let sub_level = this.#sub_storage.get(event_name);
+    if (!sub_level) {
+      sub_level = { subs: new Map(), funcs: new Set() };
+      this.#sub_storage.set(event_name, sub_level);
+    }
     if (sub)
       for (const key of sub) {
-        const sub_level_buffer = sub_level!.subs[key];
-        if (sub_level_buffer) sub_level = sub_level_buffer;
-        else
-          sub_level = sub_level!.subs[key] = { subs: {}, funcs: new Set() };
+        let sub_level_buffer: ListenerStorage<any, Target, any> | undefined =
+          sub_level.subs.get(key);
+        if (!sub_level_buffer) {
+          sub_level_buffer = { subs: new Map(), funcs: new Set() };
+          sub_level.subs.set(key, sub_level_buffer);
+        }
+        sub_level = sub_level_buffer;
       }
-    const type_listeners = sub_level!.funcs;
+    const type_listeners = sub_level.funcs;
     if (type_listeners.has(subscriber))
       console.error("Subscriber already in handler");
     else type_listeners.add(subscriber);
@@ -132,18 +132,18 @@ export class EventHandlerSub<Events extends object, Target>
     subscriber: ESubSubscriber<K, Target, Events[K]>,
     sub?: SubPath
   ): typeof subscriber {
-    let sub_level = this.#sub_storage[event_name];
+    let sub_level = this.#sub_storage.get(event_name);
     if (sub_level) {
       if (sub)
         for (const key of sub) {
-          const sub_level_buffer = sub_level!.subs[key];
+          const sub_level_buffer: ListenerStorage<any, Target, any> | undefined = sub_level.subs.get(key);
           if (sub_level_buffer) sub_level = sub_level_buffer;
           else {
             console.error("Subscriber not in handler");
             return subscriber;
           }
         }
-      if (sub_level!.funcs.delete(subscriber) === false)
+      if (sub_level.funcs.delete(subscriber) === false)
         console.error("Subscriber not in handler");
     }
     return subscriber;
@@ -178,10 +178,10 @@ export class EventHandlerSub<Events extends object, Target>
   ): void {
     let funcs: Set<ESubSubscriber<K, Target, Events[K]>> | undefined;
     if (sub) {
-      let sub_level = this.#sub_storage[event_name];
+      let sub_level = this.#sub_storage.get(event_name);
       if (sub_level)
         for (const key of sub) {
-          const sub_level_buffer = sub_level!.subs[key];
+          const sub_level_buffer: ListenerStorage<any, Target, any> | undefined = sub_level.subs.get(key);
           if (sub_level_buffer) sub_level = sub_level_buffer;
           else if (this.#proxies?.size)
             return this.#emit_e(
@@ -200,7 +200,7 @@ export class EventHandlerSub<Events extends object, Target>
           else return;
         }
       funcs = sub_level?.funcs;
-    } else funcs = this.#sub_storage[event_name]?.funcs;
+    } else funcs = this.#sub_storage.get(event_name)?.funcs;
     if (funcs?.size || this.#proxies?.size)
       this.#emit_e(
         Object.freeze(
@@ -231,26 +231,29 @@ export class EventHandlerSub<Events extends object, Target>
     sub?: SubPath,
     any_level?: boolean
   ): void {
-    let type_buff = this.#sub_storage[event_name];
+    let type_buff = this.#sub_storage.get(event_name);
     if (type_buff) {
       if (any_level) {
         if (sub?.length) {
           let sub_level = type_buff;
           for (const key of sub.slice(0, -1)) {
-            const sub_level_buffer = sub_level.subs[key];
+            const sub_level_buffer: ListenerStorage<any, Target, any> | undefined = sub_level.subs.get(key);
             if (sub_level_buffer) sub_level = sub_level_buffer;
             else return;
           }
-          sub_level.subs[sub[sub.length - 1]!] = { subs: {}, funcs: new Set() };
-        } else
-          this.#sub_storage[event_name] = {
-            subs: {},
+          sub_level.subs.set(sub[sub.length - 1]!, {
+            subs: new Map(),
             funcs: new Set(),
-          };
+          });
+        } else
+          this.#sub_storage.set(event_name, {
+            subs: new Map(),
+            funcs: new Set(),
+          });
       } else {
         if (sub)
           for (const key of sub) {
-            const sub_level_buffer = type_buff!.subs[key];
+            const sub_level_buffer: ListenerStorage<any, Target, any> | undefined = type_buff.subs.get(key);
             if (sub_level_buffer) type_buff = sub_level_buffer;
             else return;
           }
@@ -260,11 +263,11 @@ export class EventHandlerSub<Events extends object, Target>
   }
 
   in_use<K extends keyof Events>(event_name: K, sub?: SubPath): boolean {
-    let type_buff = this.#sub_storage[event_name];
+    let type_buff = this.#sub_storage.get(event_name);
     if (type_buff) {
       if (sub)
         for (const key of sub) {
-          const sub_level_buffer = type_buff!.subs[key];
+          const sub_level_buffer: ListenerStorage<any, Target, any> | undefined = type_buff.subs.get(key);
           if (sub_level_buffer) type_buff = sub_level_buffer;
           else return false;
         }
@@ -277,11 +280,11 @@ export class EventHandlerSub<Events extends object, Target>
     subscriber: ESubSubscriber<K, Target, Events[K]>,
     sub?: SubPath
   ): boolean {
-    let type_buff = this.#sub_storage[event_name];
+    let type_buff = this.#sub_storage.get(event_name);
     if (type_buff) {
       if (sub)
         for (const key of sub) {
-          const sub_level_buffer = type_buff!.subs[key];
+          const sub_level_buffer: ListenerStorage<any, Target, any> | undefined = type_buff.subs.get(key);
           if (sub_level_buffer) type_buff = sub_level_buffer;
           else return false;
         }
@@ -290,11 +293,11 @@ export class EventHandlerSub<Events extends object, Target>
   }
 
   amount<K extends keyof Events>(event_name: K, sub?: SubPath): number {
-    let type_buff = this.#sub_storage[event_name];
+    let type_buff = this.#sub_storage.get(event_name);
     if (type_buff) {
       if (sub)
         for (const key of sub) {
-          const sub_level_buffer = type_buff!.subs[key];
+          const sub_level_buffer: ListenerStorage<any, Target, any> | undefined = type_buff.subs.get(key);
           if (sub_level_buffer) type_buff = sub_level_buffer;
           else return 0;
         }
@@ -308,15 +311,15 @@ export class EventHandlerSub<Events extends object, Target>
         | Set<ESubSubscriber<keyof Events, Target, Events[keyof Events]>>
         | undefined;
       if (e.sub) {
-        let sub_level = this.#sub_storage[e.type];
+        let sub_level = this.#sub_storage.get(e.type);
         if (sub_level)
           for (const key of e.sub) {
-            const sub_level_buffer = sub_level!.subs[key];
+            const sub_level_buffer: ListenerStorage<any, Target, any> | undefined = sub_level.subs.get(key);
             if (sub_level_buffer) sub_level = sub_level_buffer;
             else return;
           }
         funcs = sub_level?.funcs;
-      } else funcs = this.#sub_storage[e.type]?.funcs;
+      } else funcs = this.#sub_storage.get(e.type)?.funcs;
       if (funcs && funcs.size) this.#emit_e(e, funcs);
     };
   }

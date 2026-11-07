@@ -18,9 +18,9 @@ Status: Fixed = fixed with a test, R = reproduced by running code, V = verified 
 8. [Fixed] `state/proxy.ts:226-231,271` Proxy copies `rok`/`rsync`/`writable` from the source, `p.ros` over `RES` reports `rok` false, `rosw` without write transform reports writable.
 9. [Fixed] `array.ts:351`, `object.ts:262`, `boolean.ts:42` `!this.writable` tests a State object (always truthy), the `writable` option does nothing.
 10. [Fixed] `state/local.ts:492-565` `write` calls `limit` but never `check`, an enum state accepts any value.
-11. [R] `state/base.ts:52` `to_json` emits `undefined` (invalid JSON) and does not walk nested plain objects.
-12. [R] `state/util.ts:30` `await_value` ignores the current value and never clears its timer.
-13. [R] `event/simple.ts:85`, `event/sub.ts:118` Listeners stored in plain `{}`, event names like `"toString"` throw.
+11. [Fixed] `state/base.ts:52` `to_json` emits `undefined` (invalid JSON) and does not walk nested plain objects.
+12. [Fixed] `state/util.ts:30` `await_value` ignores the current value and never clears its timer.
+13. [Fixed] `event/simple.ts:85`, `event/sub.ts:118` Listeners stored in plain `{}`, event names like `"toString"` throw.
 14. [A] `state/remote.ts:254` `timeout` only resets the fetching flag, awaiters hang.
 15. [A] `state/remote.ts:287` Rejected debounced `write_action` leaves write promises pending.
 16. [A] `event/simple.ts:140`, `event/sub.ts:217` A throwing proxy listener stops delivery to normal listeners.

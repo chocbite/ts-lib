@@ -1,5 +1,5 @@
 import { err, ok } from "#result";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { state as st } from "..";
 
 //##################################################################################################################################################
@@ -290,5 +290,32 @@ describe("Helper validation on write", async () => {
     );
     expect(await state_inst.write("b")).toEqual(ok(undefined));
     expect(state_inst.ok()).toBe("b");
+  });
+});
+
+describe("Util await_value", async () => {
+  it("Resolves true when the state already has the value", async () => {
+    expect(await st.u.await_value(5, st.ok(5), 100)).toBe(true);
+  });
+  it("Resolves true when the state changes to the value", async () => {
+    const state_inst = st.ok_w(1);
+    const result = st.u.await_value(2, state_inst, 100);
+    state_inst.set_ok(2);
+    expect(await result).toBe(true);
+  });
+  it("Resolves false when the timeout is reached", async () => {
+    expect(await st.u.await_value(2, st.ok(1), 20)).toBe(false);
+  });
+  it("Clears its timeout when the value arrives", async () => {
+    vi.useFakeTimers();
+    try {
+      const state_inst = st.ok_w(1);
+      const result = st.u.await_value(2, state_inst, 1000);
+      state_inst.set_ok(2);
+      expect(await result).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

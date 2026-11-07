@@ -24,14 +24,15 @@ async function await_value<T>(
   timeout: number = 500,
 ): Promise<boolean> {
   let func: StateSub<SR<T>> = () => {};
-  const res = await Promise.race([
-    new Promise<false>((a) => setTimeout(a, timeout, false)),
-    new Promise<true>((a) => {
-      func = state.sub((res) => {
-        if (res.ok && res.value === value) a(true);
-      });
-    }),
-  ]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const res = await new Promise<boolean>((a) => {
+    timer = setTimeout(a, timeout, false);
+    //Subscribing with update also checks the current value
+    func = state.sub((res) => {
+      if (res.ok && res.value === value) a(true);
+    }, true);
+  });
+  clearTimeout(timer);
   state.unsub(func);
   return res;
 }

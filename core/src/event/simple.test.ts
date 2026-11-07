@@ -213,3 +213,27 @@ describe("Proxy Event Handler", { timeout: 50 }, function () {
     expect(f).equal(999);
   });
 });
+
+describe("Event names matching Object properties", { timeout: 50 }, function () {
+  it("Can listen to and emit events named toString and constructor", function () {
+    const handler = new EventHandler<
+      { toString: number; constructor: number },
+      undefined
+    >(undefined);
+    const received: number[] = [];
+    handler.on("toString", (e) => received.push(e.data));
+    handler.on("constructor", (e) => received.push(e.data));
+    handler.emit("toString", 1);
+    handler.emit("constructor", 2);
+    expect(received).toEqual([1, 2]);
+  });
+  it("Emitting an unused event named toString reaches proxies", function () {
+    const handler = new EventHandler<{ toString: number }, undefined>(
+      undefined,
+    );
+    const received: number[] = [];
+    handler.proxy_on((e) => received.push(e.data));
+    handler.emit("toString", 1);
+    expect(received).toEqual([1]);
+  });
+});

@@ -215,6 +215,7 @@ export type {
   StateInferResult,
   StateInferSub,
   StateInferType,
+  StateJsonCompatible,
   StateREA,
   StateReadType,
   StateREAW,

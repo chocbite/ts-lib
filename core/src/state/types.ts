@@ -82,6 +82,28 @@ export type HelperRelated<HEL extends StateHelper<any, any, any>> = ReturnType<
 
 export const STATE_KEY = Symbol("state");
 
+/**true for types JSON can represent, states holding such types included, false otherwise*/
+type StateJsonPart<T> = 0 extends 1 & T
+  ? true
+  : T extends string | number | boolean | null
+    ? true
+    : T extends StateBase<infer R, any, any>
+      ? StateJsonPart<ResultInferOk<R>>
+      : T extends (...args: any[]) => any
+        ? false
+        : T extends { toJSON(): any }
+          ? true
+          : T extends readonly (infer E)[]
+            ? StateJsonPart<E>
+            : T extends object
+              ? //Optional fields are allowed, undefined values are left out of the JSON
+                StateJsonPart<Exclude<T[Exclude<keyof T, symbol>], undefined>>
+              : false;
+
+/**true when a value of type T can be stored as JSON, states holding such values included*/
+export type StateJsonCompatible<T> =
+  false extends StateJsonPart<T> ? false : true;
+
 export interface StateBase<
   RRT extends StateResult<any>,
   REL extends Option<StateRelated>,
@@ -95,6 +117,8 @@ export interface StateBase<
     on_fulfilled?: ((value: RRT) => TResult1 | PromiseLike<TResult1>) | null,
     on_rejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
   ): PromiseLike<TResult1 | TResult2>;
+  /**Returns the value as JSON, use StateJsonCompatible to require a value type JSON can represent.
+   * States in error, NaN and Infinity are written as null and logged with console.error*/
   to_json(): PromiseLike<string>;
 
   /**Is state guarenteed sync*/

@@ -1,5 +1,8 @@
 import { ok, type Option, type ResultOk } from "@chocbite/ts-lib/result";
-import st, { type StateROAW } from "@chocbite/ts-lib/state";
+import st, {
+  type StateJsonCompatible,
+  type StateROAW,
+} from "@chocbite/ts-lib/state";
 
 let name_transformer: ((name: string) => string) | undefined;
 export const settings_set_name_transform = (
@@ -135,11 +138,30 @@ export class SettingsGroup {
     localStorage[this.path_id + "/" + id] = JSON.stringify(value);
   }
 
-  /**Registers a state to a setting
+  /**Registers a state to a setting, the value is stored as JSON so its type must be JSON compatible
    * @param id unique identifier for this setting in the parent group
    * @param name name of setting formatted for user reading
    * @param description a description of what the setting is about formatted for user reading
    * @param state state object representing the setting's value */
+  register<READ, S extends StateROAW<READ>>(
+    id: string,
+    name: string,
+    description: string,
+    state: S & (StateJsonCompatible<S> extends true ? unknown : never),
+  ): S;
+  /**Registers a state to a setting, with a transform to store values JSON can not represent
+   * @param id unique identifier for this setting in the parent group
+   * @param name name of setting formatted for user reading
+   * @param description a description of what the setting is about formatted for user reading
+   * @param state state object representing the setting's value
+   * @param transform converts the state value to the stored string */
+  register<READ, S extends StateROAW<READ>>(
+    id: string,
+    name: string,
+    description: string,
+    state: S,
+    transform: (state: S) => PromiseLike<string>,
+  ): S;
   register<READ, S extends StateROAW<READ>>(
     id: string,
     name: string,
