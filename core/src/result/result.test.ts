@@ -466,4 +466,27 @@ describe("Infer types", function () {
     expectTypeOf<ResultInferOk<Result<number, Error>>>().toEqualTypeOf<number>();
     expectTypeOf<ResultInferErr<Result<number, Error>>>().toEqualTypeOf<Error>();
   });
+
+  it("and_then keeps the error of self, or_else keeps the value of self", function () {
+    //Only type checked, never called
+    const check = (r: Result<number, "a">) => {
+      const to_err = r.and_then(() => err("b" as const));
+      expectTypeOf<ResultInferErr<typeof to_err>>().toEqualTypeOf<"a" | "b">();
+      const to_result = r.and_then((v): Result<string, "b"> => ok(String(v)));
+      expectTypeOf<ResultInferOk<typeof to_result>>().toEqualTypeOf<string>();
+      expectTypeOf<ResultInferErr<typeof to_result>>().toEqualTypeOf<
+        "a" | "b"
+      >();
+      const recovered = r.or_else(() => ok("x"));
+      expectTypeOf<ResultInferOk<typeof recovered>>().toEqualTypeOf<
+        number | string
+      >();
+      const recovered_result = r.or_else((): Result<string, "b"> => ok("x"));
+      expectTypeOf<ResultInferOk<typeof recovered_result>>().toEqualTypeOf<
+        number | string
+      >();
+      expectTypeOf<ResultInferErr<typeof recovered_result>>().toEqualTypeOf<"b">();
+    };
+    expect(check).toBeTypeOf("function");
+  });
 });

@@ -325,4 +325,14 @@ describe("defer", () => {
 
     expect(callback).toHaveBeenCalledWith("value");
   });
+
+  it("is typed to take a function that receives the argument", () => {
+    //Only type checked, never called
+    const check = () => {
+      deferrer(100, (value: number) => value + 1, 5);
+      // @ts-expect-error the argument must match the function parameter
+      deferrer(100, (value: number) => value + 1, "5");
+    };
+    expect(check).toBeTypeOf("function");
+  });
 });

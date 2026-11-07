@@ -584,3 +584,37 @@ describe("make_parser", () => {
     });
   });
 });
+
+describe("make_parser edge cases", () => {
+  it("passes on sub parser objects that have an ok field but are not results", () => {
+    const parse = make_parser({
+      a: (value: unknown) => ({ ok: true as boolean, data: value }),
+    });
+    const result = parse({ a: 1 });
+    expect(result.ok && result.value.a).toEqual({ ok: true, data: 1 });
+    expectTypeOf<Parsed<typeof parse>["a"]>().toEqualTypeOf<{
+      ok: boolean;
+      data: unknown;
+    }>();
+  });
+
+  it("does not change the input object", () => {
+    const parse = make_parser({
+      a: ["?", "n", () => 5],
+      b: (value: unknown) => String(value),
+      list: [0, (value: unknown) => String(value)],
+    });
+    const input = { b: 1, list: [1, 2] };
+    const result = parse(input);
+    expect(result.ok && result.value).toEqual({ a: 5, b: "1", list: ["1", "2"] });
+    expect(input).toEqual({ b: 1, list: [1, 2] });
+  });
+
+  it("leaves nothing behind from a union branch that failed", () => {
+    const parse = make_parser({
+      v: [{ a: ["?", "n", () => 1], b: "s" }, { c: "n" }],
+    });
+    const result = parse({ v: { c: 2 } });
+    expect(result.ok && result.value.v).toEqual({ c: 2 });
+  });
+});

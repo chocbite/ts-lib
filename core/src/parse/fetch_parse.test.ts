@@ -1,3 +1,4 @@
+import { sleep } from "#common";
 import state, {
   type StateREA,
   type StateREAW,
@@ -233,5 +234,60 @@ describe("make_fetch_parser", () => {
 
     expect(result.ok).toBe(true);
     expect(send).toHaveBeenCalledWith({ scores: { alice: 5 } });
+  });
+});
+
+describe("make_fetch_parser resubscribe while fetching", () => {
+  /**Fetch mock where the first n fetches never answer until aborted*/
+  const fetch_hanging_first = (hanging: number, signals: AbortSignal[]) =>
+    vi.fn((_url: string, init: RequestInit) => {
+      const signal = init.signal as AbortSignal;
+      signals.push(signal);
+      if (signals.length <= hanging)
+        return new Promise<Response>((_resolve, reject) =>
+          signal.addEventListener("abort", () => reject(new Error("aborted"))),
+        );
+      return Promise.resolve(new Response('{"name":"Ada"}'));
+    });
+
+  it("does not report the aborted fetch or start a second polling loop", async () => {
+    vi.useFakeTimers();
+    const fetch_mock = fetch_hanging_first(1, []);
+    vi.stubGlobal("fetch", fetch_mock);
+    try {
+      const user = make_fetch_parser(() => "/user", 100, { name: "s" });
+      const first = () => {};
+      user.name.sub(first);
+      user.name.unsub(first);
+      const results: StateResult<string>[] = [];
+      const second = (result: StateResult<string>) => results.push(result);
+      user.name.sub(second);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(results.filter((result) => !result.ok)).toEqual([]);
+      //Two initial fetches, then one every 100ms from a single polling loop
+      expect(fetch_mock.mock.calls.length).toBeLessThanOrEqual(12);
+      user.name.unsub(second);
+    } finally {
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("unsubscribing aborts the running fetch after a resubscribe", async () => {
+    const signals: AbortSignal[] = [];
+    vi.stubGlobal("fetch", fetch_hanging_first(2, signals));
+    try {
+      const user = make_fetch_parser(() => "/user", 100, { name: "s" });
+      const sub = () => {};
+      user.name.sub(sub);
+      user.name.unsub(sub);
+      user.name.sub(sub);
+      await sleep(5);
+      user.name.unsub(sub);
+      expect(signals.length).toBe(2);
+      expect(signals[1]?.aborted).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
