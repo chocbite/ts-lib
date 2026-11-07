@@ -251,10 +251,14 @@ export abstract class StateRemote<
         );
         if (!this.#fetching) {
           this.#fetching = true;
-          this.#timeout_timout = setTimeout(
-            () => (this.#fetching = false),
-            this.timeout,
-          );
+          this.#timeout_timout = setTimeout(() => {
+            this.#fetching = false;
+            //Ok states have no error value, their reads wait and the next read retries
+            if (!this.rok)
+              this.ful_r_prom(
+                err(`No response within ${this.timeout}ms`) as RRT,
+              );
+          }, this.timeout);
           if (this.debounce > 0)
             setTimeout(() => this.single_get(this), this.debounce);
           else this.single_get(this);
@@ -276,7 +280,7 @@ export abstract class StateRemote<
 
   write(value: WT): PromiseLike<SR<void>> {
     this.#write_buffer = value;
-    if (this.write_debounce === 0) return this.write_action(value, this);
+    if (this.write_debounce === 0) return this.#write_action_safe(value);
     else if (this.#write_debounce_timout === 0)
       this.#write_debounce_timout = setTimeout(async () => {
         this.#write_debounce_timout = 0;
@@ -284,12 +288,21 @@ export abstract class StateRemote<
         this.#write_buffer = undefined;
         const promises = this.#write_promises;
         this.#write_promises = [];
-        const res = await this.write_action(write_buffer!, this);
+        const res = await this.#write_action_safe(write_buffer!);
         promises.forEach((a) => a(res));
       }, this.write_debounce);
     return new Promise<SR<void>>((a) => {
       this.#write_promises.push(a);
     });
+  }
+
+  /**Runs write_action, a throwing write_action gives an error result as write never rejects*/
+  async #write_action_safe(value: WT): Promise<SR<void>> {
+    try {
+      return await this.write_action(value, this);
+    } catch (e) {
+      return err(`Write failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 }
 

@@ -325,7 +325,7 @@ Timing options control debounce, validity caching, and retention:
 
 ```typescript
 state.r.rea.from(once, setup, teardown, {
-  timeout: 1000, // ms before a generic error if no response
+  timeout: 1000, // ms before waiting reads get an error if no response, ok states (roa/roaw) keep waiting and the next read retries
   debounce: 50, // ms to batch multiple awaits into one fetch
   validity: 5000, // ms the buffered value stays fresh (or true = until unsubscribe)
   retention: 200, // ms to keep the connection after last unsubscribe

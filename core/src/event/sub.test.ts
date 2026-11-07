@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ESub, EventHandlerSub } from "./sub";
 
 describe("Init", { timeout: 50 }, function () {
@@ -367,5 +367,25 @@ describe("Event names and sub paths matching Object properties", { timeout: 50 }
     handler.on("test", (e) => received.push(e.data), ["toString"]);
     handler.emit("test", 1, ["toString"]);
     expect(received).toEqual([1]);
+  });
+});
+
+describe("Throwing proxy", { timeout: 50 }, function () {
+  it("Does not stop delivery to listeners or other proxies", function () {
+    const handler = new EventHandlerSub<{ test: number }, undefined>(undefined);
+    const received: string[] = [];
+    handler.proxy_on(() => {
+      throw new Error("Proxy failed");
+    });
+    handler.proxy_on(() => received.push("proxy"));
+    handler.on("test", () => received.push("listener"));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(() => handler.emit("test", 1)).not.toThrow();
+      expect(received).toEqual(["proxy", "listener"]);
+      expect(error).toHaveBeenCalledTimes(1);
+    } finally {
+      error.mockRestore();
+    }
   });
 });

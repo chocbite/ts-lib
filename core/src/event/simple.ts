@@ -143,7 +143,11 @@ export class EventHandler<Events extends { [key: string]: any }, Target>
     funcs?: Set<ESubscriber<keyof Events, Target, Events[keyof Events]>>
   ) {
     this.#proxies?.forEach((proxy) => {
-      proxy(e);
+      try {
+        proxy(e);
+      } catch (e) {
+        console.error("Failed while dispatching event to proxy", e);
+      }
     });
     funcs?.forEach((func) => {
       try {

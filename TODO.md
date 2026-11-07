@@ -21,9 +21,9 @@ Status: Fixed = fixed with a test, R = reproduced by running code, V = verified 
 11. [Fixed] `state/base.ts:52` `to_json` emits `undefined` (invalid JSON) and does not walk nested plain objects.
 12. [Fixed] `state/util.ts:30` `await_value` ignores the current value and never clears its timer.
 13. [Fixed] `event/simple.ts:85`, `event/sub.ts:118` Listeners stored in plain `{}`, event names like `"toString"` throw.
-14. [A] `state/remote.ts:254` `timeout` only resets the fetching flag, awaiters hang.
-15. [A] `state/remote.ts:287` Rejected debounced `write_action` leaves write promises pending.
-16. [A] `event/simple.ts:140`, `event/sub.ts:217` A throwing proxy listener stops delivery to normal listeners.
+14. [Fixed] `state/remote.ts:254` `timeout` only resets the fetching flag, awaiters hang.
+15. [Fixed] `state/remote.ts:287` Rejected debounced `write_action` leaves write promises pending.
+16. [Fixed] `event/simple.ts:140`, `event/sub.ts:217` A throwing proxy listener stops delivery to normal listeners.
 17. [A] `state/types.ts:138-142,181-185` `REA`/`REAW` extend `StateBase<ResultOk<RT>>`, should be `Result`.
 18. [A] `state/local.ts:150-172` `read_only`/`read_write` on RESW/ROAW/REAW typed as ROS/ROSW.
 19. [A] `state/local.ts:782,798` `roa`/`roaw` accept `Promise<SR<RT>>`, an "always ok" state can hold an error.

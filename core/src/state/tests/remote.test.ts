@@ -1,5 +1,6 @@
+import { sleep } from "#common";
 import { ok, ResultOk } from "#result";
-import { assertType, describe, it } from "vitest";
+import { assertType, describe, expect, it } from "vitest";
 import {
   state as st,
   StateREA,
@@ -169,5 +170,69 @@ describe("Resource states", function () {
     describe("Then", async function () {
       await test_state_then(maker, 50);
     });
+  });
+});
+
+describe("Resource state failures", { timeout: 500 }, function () {
+  it("REA: read resolves to an error when the timeout is reached", async function () {
+    const state = st.r.rea.from<number>(
+      () => {},
+      () => {},
+      () => {},
+      { timeout: 30 },
+    );
+    const read = await Promise.race([
+      state.then((value) => value),
+      sleep(100, "pending" as const),
+    ]);
+    expect(read).not.toBe("pending");
+    expect((read as StateResult<number>).ok).toBe(false);
+  });
+  it("ROA: a read after the timeout retries and resolves all pending reads", async function () {
+    let attempts = 0;
+    const state = st.r.roa.from<number>(
+      (state) => {
+        if (attempts++ > 0) state.update_single(ok(5));
+      },
+      () => {},
+      () => {},
+      { timeout: 30 },
+    );
+    const first = state.then((value) => value);
+    await sleep(50);
+    expect(await state.then((value) => value)).toEqual(ok(5));
+    expect(await first).toEqual(ok(5));
+    expect(attempts).toBe(2);
+  });
+  it("REAW: debounced write resolves to an error when write_action rejects", async function () {
+    const state = st.r.reaw.from<number>(
+      () => {},
+      () => {},
+      () => {},
+      async () => {
+        throw new Error("Connection lost");
+      },
+      { write_debounce: 10 },
+    );
+    const result = await Promise.race([
+      state.write(5),
+      sleep(100, "pending" as const),
+    ]);
+    expect(result).not.toBe("pending");
+    expect((result as StateResult<void>).ok).toBe(false);
+  });
+  it("REAW: write without debounce resolves to an error when write_action rejects", async function () {
+    const state = st.r.reaw.from<number>(
+      () => {},
+      () => {},
+      () => {},
+      async () => {
+        throw new Error("Connection lost");
+      },
+    );
+    await expect(Promise.resolve(state.write(5))).resolves.toHaveProperty(
+      "ok",
+      false,
+    );
   });
 });
