@@ -411,7 +411,7 @@ Options: `min`, `max`, `step`, `start`, `decimals`, `unit` — each is itself a 
 const name = state.rosw(
   state.s.help(ok("hello"), {
     max_length: state.ok(10),
-    max_bytes: state.ok(10),
+    max_length_bytes: state.ok(10),
   }),
   true,
 );

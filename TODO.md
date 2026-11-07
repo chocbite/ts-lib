@@ -76,9 +76,9 @@ Status: Fixed = fixed with a test, R = reproduced by running code, V = verified 
 
 ## Found while fixing
 
-64. [V] `math/index.ts:11` `number_step_start_decimal` returns early when there is no step, so `decimals` is ignored and number `limit` does not round with only `decimals` set.
-65. [V] Number, string and enum helpers ignore the `writable` option in `check` (array, object and boolean use `check_writable`).
-66. [V] `state/README.md` string helper example uses option `max_bytes`, the code calls it `max_length_bytes`.
+64. [Fixed] `math/index.ts:11` `number_step_start_decimal` returns early when there is no step, so `decimals` is ignored and number `limit` does not round with only `decimals` set.
+65. [Fixed] Number, string and enum helpers ignore the `writable` option in `check` (array, object and boolean use `check_writable`).
+66. [Fixed] `state/README.md` string helper example uses option `max_bytes`, the code calls it `max_length_bytes`.
 
 ## User added
 

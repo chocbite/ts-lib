@@ -323,6 +323,8 @@ export class StateNumberHelperBase
   }
 
   async check(value: number): Promise<SR<number>> {
+    const writable = await this.check_writable(value);
+    if (writable.err) return writable;
     const [min, max, step, start, decimals] = await Promise.all([
       this.min,
       this.max,
@@ -340,9 +342,12 @@ export class StateNumberHelperBase
     const step_val = step?.unwrap_or(undefined);
     const start_val = start?.unwrap_or(undefined);
     const decimals_val = decimals?.unwrap_or(undefined);
-    let snapped = number_step_start_decimal(value, step_val, start_val, decimals_val);
-    if (decimals_val !== undefined)
-      snapped = parseFloat(snapped.toFixed(decimals_val));
+    const snapped = number_step_start_decimal(
+      value,
+      step_val,
+      start_val,
+      decimals_val,
+    );
     //Tiny differences are floating point noise, like 0.1 + 0.2, so they are accepted
     if (Math.abs(snapped - value) > 1e-9 * Math.max(1, Math.abs(value))) {
       if (step_val)

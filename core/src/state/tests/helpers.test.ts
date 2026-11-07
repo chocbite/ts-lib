@@ -270,6 +270,37 @@ describe("Helper writable option", async () => {
     );
     expect(await state_inst.check(false)).toEqual(err("not writable"));
   });
+  it("Number helper check and write fail when writable is false", async () => {
+    const state_inst = st.rosw(
+      st.n.help(ok(5), { min: st.ok(0), writable: st.ok(false) }),
+      true,
+    );
+    expect(await state_inst.check(6)).toEqual(err("not writable"));
+    expect(await state_inst.write(6)).toEqual(err("not writable"));
+    expect(state_inst.ok()).toBe(5);
+  });
+  it("String helper check fails when writable is false", async () => {
+    const state_inst = st.rosw(
+      st.s.help(ok("a"), { writable: st.ok(false) }),
+      true,
+    );
+    expect(await state_inst.check("b")).toEqual(err("not writable"));
+  });
+  it("Enum helper check fails when writable is false", async () => {
+    const list = st.e.list<"a" | "b">({ a: { name: "A" }, b: { name: "B" } });
+    const state_inst = st.rosw(
+      st.e.help(ok<"a" | "b">("a"), {
+        list: st.ok(list),
+        writable: st.ok(false),
+      }),
+      true,
+    );
+    expect(await state_inst.check("b")).toEqual(err("not writable"));
+  });
+  it("Number helper limit rounds with only decimals", async () => {
+    const state_inst = st.rosw(st.n.help(ok(5), { decimals: st.ok(2) }), true);
+    expect(await state_inst.limit(5.126)).toEqual(ok(5.13));
+  });
 });
 
 describe("Helper validation on write", async () => {

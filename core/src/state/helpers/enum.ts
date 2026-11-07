@@ -76,12 +76,13 @@ export class StateEnumHelperBase<
     return sync_resolve(ok(value));
   }
 
-  check(value: K): PromiseLike<SR<K>> {
-    return this.list.then((list) => {
-      if (list.err) return err("list is not available");
-      if (value in list.value) return ok(value);
-      return err(String(value) + " is not in list");
-    });
+  async check(value: K): Promise<SR<K>> {
+    const writable = await this.check_writable(value);
+    if (writable.err) return writable;
+    const list = await this.list;
+    if (list.err) return err("list is not available");
+    if (value in list.value) return ok(value);
+    return err(String(value) + " is not in list");
   }
 
   related(): OptionSome<R> {
