@@ -1,85 +1,54 @@
-import { none, type Option } from "@chocbite/ts-lib/result";
-import st, { type State } from "@chocbite/ts-lib/state";
+import { define_element } from "#base";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { viewport as viewport_module, ViewportElement } from ".";
-import { create_viewport, Viewport } from "./viewport";
+import { Page } from "./page";
+import { Transformer } from "./transformer";
+import { Viewport } from "./viewport";
+import { WIDGET_TRANSFORM_EVENT, WidgetBase } from "./widget";
 
-type Call = [string, unknown, ...unknown[]];
-
-/**True when every listener added was also removed again*/
-const all_removed = (added: Call[], removed: Call[]) =>
-  added.every(([type, listener]) =>
-    removed.some(([t, l]) => t === type && l === listener),
-  );
-
-describe("Canvas viewport", () => {
-  it("removes its document and window listeners when removed from the page", () => {
-    const doc_add = vi.spyOn(document, "addEventListener");
-    const doc_remove = vi.spyOn(document, "removeEventListener");
-    const win_add = vi.spyOn(window, "addEventListener");
-    const win_remove = vi.spyOn(window, "removeEventListener");
-    try {
-      const viewport = create_viewport(100, 100);
-      document.body.appendChild(viewport);
-      viewport.remove();
-      expect(doc_add.mock.calls.length + win_add.mock.calls.length).toBeGreaterThan(0);
-      expect(all_removed(doc_add.mock.calls as Call[], doc_remove.mock.calls as Call[])).toBe(true);
-      expect(all_removed(win_add.mock.calls as Call[], win_remove.mock.calls as Call[])).toBe(true);
-    } finally {
-      vi.restoreAllMocks();
-    }
-  });
-});
-
-//      _    _ ______ _      _____  ______ _____   _____
-//     | |  | |  ____| |    |  __ \|  ____|  __ \ / ____|
-//     | |__| | |__  | |    | |__) | |__  | |__) | (___
-//     |  __  |  __| | |    |  ___/|  __| |  _  / \___ \
-//     | |  | | |____| |____| |    | |____| | \ \ ____) |
-//     |_|  |_|______|______|_|    |______|_|  \_\_____/
-class Box extends ViewportElement {
-  protected element_name(): string {
-    return "box";
+class TestWidget extends WidgetBase {
+  static element_name() {
+    return "testwidget";
   }
-  protected element_name_space(): string {
-    return "canvastest";
+  /**Size the content is laid out at, undefined to not stretch*/
+  layout: [number, number] | undefined;
+  connects = 0;
+  protected connectedCallback(): void {
+    super.connectedCallback();
+    this.connects++;
   }
-  default_width(): number {
-    return 40;
+  get original_width(): number {
+    return this.layout ? this.layout[0] : this.width;
   }
-  default_height(): number {
-    return 20;
+  get original_height(): number {
+    return this.layout ? this.layout[1] : this.height;
   }
 }
-
-/**Element without an optimal ratio, which re-lays out on resize*/
-class FreeBox extends Box {
-  resizes: [number, number][] = [];
-  optimal_ratio(): Option<number> {
-    return none();
-  }
-  protected on_resize(width: number, height: number): void {
-    this.resizes.push([width, height]);
-  }
-}
+define_element(TestWidget);
 
 const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const frames = async () => {
+  await frame();
+  await frame();
+};
 
-/**Reads the value of one of the viewport states*/
-const value = (state: State<number> | undefined) =>
-  (state as unknown as { ok(): number }).ok();
+const widget = (x: number, y: number, width: number, height: number) => {
+  const w = new TestWidget();
+  w.x = x;
+  w.y = y;
+  w.width = width;
+  w.height = height;
+  return w;
+};
 
 /**Stubs pointer capture, synthetic pointers can not be captured*/
 const stub_capture = (element: Element) => {
-  const captured = new Set<number>();
-  element.setPointerCapture = (id) => void captured.add(id);
-  element.releasePointerCapture = (id) => void captured.delete(id);
-  element.hasPointerCapture = (id) => captured.has(id);
+  element.setPointerCapture = () => {};
+  element.releasePointerCapture = () => {};
+  element.hasPointerCapture = () => false;
 };
 
 const pointer = (
-  target: Element,
+  target: EventTarget,
   type: string,
   init: PointerEventInit = {},
 ) =>
@@ -89,550 +58,540 @@ const pointer = (
       cancelable: true,
       pointerType: "mouse",
       pointerId: 1,
+      button: 0,
       ...init,
     }),
   );
 
-const wheel = (target: Element, init: WheelEventInit) =>
-  target.dispatchEvent(
-    new WheelEvent("wheel", { bubbles: true, cancelable: true, ...init }),
-  );
-
-/**400 by 200 pixel viewport of a 200 by 100 canvas, connected and sized*/
-const make_viewport = async (infinite = false) => {
-  const viewport = create_viewport(200, 100, infinite);
-  viewport.style.cssText = "display:block;width:400px;height:200px;";
-  document.body.appendChild(viewport);
+/**400 by 300 pixel viewport showing a 200 by 100 page, so the page is scaled by 2 and centered vertically*/
+const make_viewport = async () => {
+  const viewport = new Viewport();
+  viewport.style.cssText = "width:400px;height:300px;";
   stub_capture(viewport);
-  await frame();
-  await frame();
-  const root = viewport.firstElementChild as SVGSVGElement;
-  const panner = root.querySelector(":scope > svg") as SVGSVGElement;
-  const zoomer = panner.firstElementChild as SVGSVGElement;
-  const canvas = zoomer.querySelector(":scope > svg") as SVGSVGElement;
-  const elements = canvas.firstElementChild as SVGGElement;
-  return { viewport, root, panner, zoomer, canvas, elements };
-};
-
-/**Center of the viewport in client coordinates*/
-const center = (viewport: Viewport) => {
+  const page = new Page();
+  page.width = 200;
+  page.height = 100;
+  viewport.page = page;
+  document.body.appendChild(viewport);
+  await frames();
+  const container = viewport.querySelector(":scope > .container") as HTMLDivElement;
+  const transformer = viewport.querySelector(
+    ":scope > viewport-transformer",
+  ) as Transformer;
   const box = viewport.getBoundingClientRect();
-  return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  /**Client coordinates of a point on the page*/
+  const client = (x: number, y: number) => ({
+    clientX: box.left + x * 2,
+    clientY: box.top + 50 + y * 2,
+  });
+  return { viewport, page, container, transformer, client, box };
 };
 
-//      _______ ______  _____ _______ _____
-//     |__   __|  ____|/ ____|__   __/ ____|
-//        | |  | |__  | (___    | | | (___
-//        | |  |  __|  \___ \   | |  \___ \
-//        | |  | |____ ____) |  | |  ____) |
-//        |_|  |______|_____/   |_| |_____/
-describe("Canvas viewport structure", () => {
+//The module index exports nothing yet, so the files are imported directly
+describe("Page", () => {
   afterEach(() => {
     document.body.replaceChildren();
   });
 
-  it("module exports create_viewport", () => {
-    expect(viewport_module.create_viewport(10, 10)).toBeInstanceOf(Viewport);
+  it("defaults to full HD", () => {
+    const page = new Page();
+    expect(page.width).toBe(1920);
+    expect(page.height).toBe(1080);
+    expect(page.style.width).toBe("1920px");
+    expect(page.style.height).toBe("1080px");
   });
 
-  it("builds a canvas of the given size", async () => {
-    const { canvas, zoomer } = await make_viewport();
-    expect(canvas.getAttribute("width")).toBe("200");
-    expect(canvas.getAttribute("height")).toBe("100");
-    expect(canvas.getAttribute("viewBox")).toBe("0 0 200 100");
-    expect(zoomer.querySelector(":scope > rect")).not.toBeNull();
+  it("width and height size the element", () => {
+    const page = new Page();
+    page.width = 300;
+    page.height = 200;
+    expect(page.style.width).toBe("300px");
+    expect(page.style.height).toBe("200px");
   });
 
-  it("puts the background behind everything for an infinite canvas", async () => {
-    const { root, zoomer } = await make_viewport(true);
-    expect(root.querySelector(":scope > rect")).not.toBeNull();
-    expect(zoomer.querySelector(":scope > rect")).toBeNull();
+  it("widgets are children in drawing order", () => {
+    const page = document.body.appendChild(new Page());
+    const [a, b, c] = [widget(0, 0, 1, 1), widget(0, 0, 1, 1), widget(0, 0, 1, 1)];
+    page.widgets = [a, b, c];
+    expect([...page.children]).toEqual([a, b, c]);
+    expect(page.widgets).toEqual([a, b, c]);
   });
 
-  it("sizes the root view box to the element", async () => {
-    const { root } = await make_viewport();
-    expect(root.getAttribute("viewBox")).toBe("0 0 400 200");
+  it("removes widgets no longer listed and keeps the others connected", () => {
+    const page = document.body.appendChild(new Page());
+    const [a, b, c] = [widget(0, 0, 1, 1), widget(0, 0, 1, 1), widget(0, 0, 1, 1)];
+    page.widgets = [a, b, c];
+    page.widgets = [a, c];
+    expect([...page.children]).toEqual([a, c]);
+    expect(b.isConnected).toBe(false);
+    expect(a.connects).toBe(1);
+    expect(c.connects).toBe(1);
   });
 
-  it("canvas_width and canvas_height resize the canvas", async () => {
-    const { viewport, canvas, zoomer } = await make_viewport();
-    viewport.canvas_width = 300;
-    viewport.canvas_height = 150;
-    expect(viewport.canvas_width).toBe(300);
-    expect(viewport.canvas_height).toBe(150);
-    expect(canvas.getAttribute("width")).toBe("300");
-    expect(canvas.getAttribute("height")).toBe("150");
-    expect(canvas.getAttribute("viewBox")).toBe("0 0 300 150");
-    expect(zoomer.getAttribute("width")).toBe("300");
-    expect(zoomer.getAttribute("height")).toBe("150");
+  it("reorders widgets", () => {
+    const page = document.body.appendChild(new Page());
+    const [a, b, c] = [widget(0, 0, 1, 1), widget(0, 0, 1, 1), widget(0, 0, 1, 1)];
+    page.widgets = [a, b, c];
+    page.widgets = [c, a, b];
+    expect([...page.children]).toEqual([c, a, b]);
+    page.widgets = [b, c, a, widget(0, 0, 1, 1)];
+    expect(page.children.length).toBe(4);
+    expect(page.children[0]).toBe(b);
+    expect(page.children[1]).toBe(c);
+    expect(page.children[2]).toBe(a);
+  });
+
+  it("does not remove a widget that moved to another page", () => {
+    const first = document.body.appendChild(new Page());
+    const second = document.body.appendChild(new Page());
+    const a = widget(0, 0, 1, 1);
+    first.widgets = [a];
+    second.widgets = [a];
+    first.widgets = [];
+    expect(a.parentElement).toBe(second);
   });
 });
 
-describe("Canvas viewport panning and zooming", () => {
+describe("Widget", () => {
   afterEach(() => {
     document.body.replaceChildren();
   });
 
-  it("pan states move the canvas relative to the center", async () => {
-    const { viewport, panner } = await make_viewport();
-    await viewport.pan_x.write(10);
-    await viewport.pan_y.write(-20);
-    expect(value(viewport.pan_x)).toBe(10);
-    expect(value(viewport.pan_y)).toBe(-20);
-    expect(panner.getAttribute("x")).toBe("210");
-    expect(panner.getAttribute("y")).toBe("80");
+  it("positions and sizes itself", () => {
+    const w = document.body.appendChild(widget(10, 20, 30, 40));
+    expect(w.style.left).toBe("10px");
+    expect(w.style.top).toBe("20px");
+    expect(w.style.width).toBe("30px");
+    expect(w.style.height).toBe("40px");
+    expect(w.getBoundingClientRect().width).toBeCloseTo(30);
+    expect(w.getBoundingClientRect().height).toBeCloseTo(40);
   });
 
-  it("starts without pan, the canvas at the center", async () => {
-    const { viewport, panner } = await make_viewport();
-    expect(value(viewport.pan_x)).toBe(0);
-    expect(value(viewport.pan_y)).toBe(0);
-    expect(panner.getAttribute("x")).toBe("200");
-    expect(panner.getAttribute("y")).toBe("100");
+  it("stretches content laid out at the original size", () => {
+    const w = widget(0, 0, 100, 20);
+    w.layout = [50, 10];
+    document.body.appendChild(w);
+    expect(w.style.width).toBe("50px");
+    expect(w.getBoundingClientRect().width).toBeCloseTo(100);
+    expect(w.getBoundingClientRect().height).toBeCloseTo(20);
   });
 
-  it("keeps the pan relative to the center when the element resizes", async () => {
-    const { viewport, panner } = await make_viewport();
-    await viewport.pan_x.write(10);
-    viewport.style.width = "600px";
-    await frame();
-    await frame();
-    expect(value(viewport.pan_x)).toBe(10);
-    expect(panner.getAttribute("x")).toBe("310");
+  it("rotates around its center", () => {
+    const w = widget(0, 0, 100, 20);
+    w.rotation = 90;
+    document.body.appendChild(w);
+    const box = w.getBoundingClientRect();
+    const body = document.body.getBoundingClientRect();
+    expect(box.width).toBeCloseTo(20);
+    expect(box.height).toBeCloseTo(100);
+    expect(box.left - body.left + box.width / 2).toBeCloseTo(50);
+    expect(box.top - body.top + box.height / 2).toBeCloseTo(10);
   });
 
-  it("zoom state scales the canvas around the center", async () => {
-    const { viewport, zoomer } = await make_viewport();
-    await viewport.pan_x.write(10);
-    await viewport.pan_y.write(4);
-    await viewport.zoom.write(2);
-    expect(value(viewport.zoom)).toBe(2);
-    expect(zoomer.style.scale).toBe("2");
-    expect(value(viewport.pan_x)).toBe(20);
-    expect(value(viewport.pan_y)).toBe(8);
+  it("dispatches the transform event for every change", () => {
+    const w = widget(0, 0, 1, 1);
+    const listener = vi.fn();
+    w.addEventListener(WIDGET_TRANSFORM_EVENT, listener);
+    w.x = 1;
+    w.y = 1;
+    w.width = 2;
+    w.height = 2;
+    w.rotation = 5;
+    expect(listener).toHaveBeenCalledTimes(5);
+    expect([w.x, w.y, w.width, w.height, w.rotation]).toEqual([1, 1, 2, 2, 5]);
+  });
+});
+
+describe("Viewport", () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it("fits and centers the page", async () => {
+    const { viewport, container } = await make_viewport();
+    expect(viewport.scale).toBe(2);
+    expect(container.style.transform).toBe("translate(0px, 50px) scale(2)");
+  });
+
+  it("refits when the viewport resizes", async () => {
+    const { viewport, container } = await make_viewport();
+    viewport.style.width = "200px";
+    await frames();
+    expect(viewport.scale).toBe(1);
+    expect(container.style.transform).toBe("translate(0px, 100px) scale(1)");
+  });
+
+  it("refits when the page resizes", async () => {
+    const { viewport, page } = await make_viewport();
+    page.width = 400;
+    page.height = 300;
+    await frames();
+    expect(viewport.scale).toBe(1);
+  });
+
+  it("replacing the page removes the old one and clears the selection", async () => {
+    const { viewport, page } = await make_viewport();
+    const w = widget(0, 0, 10, 10);
+    page.widgets = [w];
+    viewport.selected = w;
+    const next = new Page();
+    viewport.page = next;
+    expect(page.isConnected).toBe(false);
+    expect(next.isConnected).toBe(true);
+    expect(viewport.selected).toBeUndefined();
+    viewport.page = undefined;
+    expect(viewport.page).toBeUndefined();
+    expect(next.isConnected).toBe(false);
+  });
+
+  it("does not pan or zoom outside edit mode", async () => {
+    const { viewport, container } = await make_viewport();
+    const before = container.style.transform;
+    const event = new WheelEvent("wheel", { deltaY: 100, cancelable: true, bubbles: true });
+    viewport.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(container.style.transform).toBe(before);
+  });
+
+  it("edit sets the edit attribute", async () => {
+    const { viewport } = await make_viewport();
+    viewport.edit = true;
+    expect(viewport.edit).toBe(true);
+    expect(viewport.hasAttribute("edit")).toBe(true);
+    viewport.edit = false;
+    expect(viewport.hasAttribute("edit")).toBe(false);
+  });
+
+  it("wheel pans in edit mode, shift pans horizontally", async () => {
+    const { viewport, container } = await make_viewport();
+    viewport.edit = true;
+    viewport.dispatchEvent(new WheelEvent("wheel", { deltaX: 10, deltaY: 20, cancelable: true }));
+    expect(container.style.transform).toBe("translate(-5px, 40px) scale(2)");
+    viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: 20, shiftKey: true, cancelable: true }));
+    expect(container.style.transform).toBe("translate(-15px, 40px) scale(2)");
+  });
+
+  it("wheel in lines pans by line height", async () => {
+    const { viewport, container } = await make_viewport();
+    viewport.edit = true;
+    viewport.dispatchEvent(
+      new WheelEvent("wheel", { deltaY: 1, deltaMode: WheelEvent.DOM_DELTA_LINE, cancelable: true }),
+    );
+    expect(container.style.transform).toBe("translate(0px, 42px) scale(2)");
+  });
+
+  it("alt makes the wheel slower", async () => {
+    const { viewport, container } = await make_viewport();
+    viewport.edit = true;
+    viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: 20, altKey: true, cancelable: true }));
+    expect(container.style.transform).toBe("translate(0px, 49px) scale(2)");
+  });
+
+  it("ctrl wheel zooms keeping the point under the cursor in place", async () => {
+    const { viewport, client } = await make_viewport();
+    viewport.edit = true;
+    window.dispatchEvent(new KeyboardEvent("keydown", { ctrlKey: true }));
+    const point = client(50, 25);
+    viewport.dispatchEvent(
+      new WheelEvent("wheel", { deltaY: -100, ctrlKey: true, cancelable: true, ...point }),
+    );
+    expect(viewport.scale).toBeCloseTo(2 * Math.exp(0.2));
+    //The page point 50,25 stays at the same client position
+    const container = viewport.querySelector(":scope > .container") as HTMLElement;
+    const box = viewport.getBoundingClientRect();
+    const match = /translate\((.+)px, (.+)px\)/.exec(container.style.transform)!;
+    expect(box.left + Number(match[1]) + 50 * viewport.scale).toBeCloseTo(point.clientX);
+    expect(box.top + Number(match[2]) + 25 * viewport.scale).toBeCloseTo(point.clientY);
   });
 
   it("zoom is limited", async () => {
     const { viewport } = await make_viewport();
-    await viewport.zoom.write(0);
-    expect(value(viewport.zoom)).toBe(0.001);
-    await viewport.zoom.write(1e9);
-    expect(value(viewport.zoom)).toBe(10000);
+    viewport.edit = true;
+    for (let i = 0; i < 20; i++)
+      viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: -1000, ctrlKey: true, cancelable: true }));
+    expect(viewport.scale).toBeCloseTo(2 * 20);
+    for (let i = 0; i < 40; i++)
+      viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: 1000, ctrlKey: true, cancelable: true }));
+    expect(viewport.scale).toBeCloseTo(2 * 0.1);
   });
 
-  it("wheel zooms out around the pointer", async () => {
+  it("leaving edit mode resets the view and the selection", async () => {
+    const { viewport, page, container } = await make_viewport();
+    const w = widget(0, 0, 10, 10);
+    page.widgets = [w];
+    viewport.edit = true;
+    viewport.selected = w;
+    viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: 100, ctrlKey: true, cancelable: true }));
+    viewport.edit = false;
+    expect(viewport.scale).toBe(2);
+    expect(container.style.transform).toBe("translate(0px, 50px) scale(2)");
+    expect(viewport.selected).toBeUndefined();
+  });
+
+  it("middle and right mouse drag pan", async () => {
+    const { viewport, container } = await make_viewport();
+    viewport.edit = true;
+    for (const button of [1, 2]) {
+      pointer(viewport, "pointerdown", { button, clientX: 100, clientY: 100 });
+      pointer(viewport, "pointermove", { clientX: 110, clientY: 90 });
+      pointer(viewport, "pointerup", { button, clientX: 110, clientY: 90 });
+      pointer(viewport, "pointermove", { clientX: 200, clientY: 200 });
+    }
+    expect(container.style.transform).toBe("translate(20px, 30px) scale(2)");
+  });
+
+  it("prevents the context menu in edit mode only", async () => {
     const { viewport } = await make_viewport();
-    await viewport.pan_x.write(0);
-    await viewport.pan_y.write(0);
-    const c = center(viewport);
-    wheel(viewport, { deltaY: 100, clientX: c.x + 100, clientY: c.y });
-    expect(value(viewport.zoom)).toBeCloseTo(0.9);
-    //The point under the pointer, 100px right of center, stays in place
-    expect(value(viewport.pan_x)).toBeCloseTo(100 * (1 - 0.9));
-    expect(value(viewport.pan_y)).toBeCloseTo(0);
-  });
-
-  it("wheel prevents the page from scrolling", async () => {
-    const { viewport } = await make_viewport();
-    expect(wheel(viewport, { deltaY: 10 })).toBe(false);
-  });
-
-  it("ctrl wheel pans vertically without zooming", async () => {
-    const { viewport } = await make_viewport();
-    await viewport.pan_y.write(0);
-    wheel(viewport, { deltaY: 100, ctrlKey: true });
-    expect(value(viewport.zoom)).toBe(1);
-    expect(value(viewport.pan_y)).toBe(-50);
-  });
-
-  it("horizontal wheel pans horizontally", async () => {
-    const { viewport } = await make_viewport();
-    await viewport.pan_x.write(0);
-    wheel(viewport, { deltaX: 100 });
-    expect(value(viewport.pan_x)).toBe(-50);
-    wheel(viewport, { deltaX: 100, shiftKey: true });
-    expect(value(viewport.pan_x)).toBe(-55);
-  });
-
-  it("dragging with the mouse pans", async () => {
-    const { viewport } = await make_viewport();
-    await viewport.pan_x.write(0);
-    await viewport.pan_y.write(0);
-    const c = center(viewport);
-    pointer(viewport, "pointerdown", { clientX: c.x, clientY: c.y });
-    pointer(viewport, "pointermove", { clientX: c.x + 30, clientY: c.y - 10 });
-    expect(value(viewport.pan_x)).toBe(30);
-    expect(value(viewport.pan_y)).toBe(-10);
-    pointer(viewport, "pointerup", { clientX: c.x + 30, clientY: c.y - 10 });
-    pointer(viewport, "pointermove", { clientX: c.x + 60, clientY: c.y });
-    expect(value(viewport.pan_x)).toBe(30);
-  });
-
-  it("ignores pen input", async () => {
-    const { viewport } = await make_viewport();
-    await viewport.pan_x.write(0);
-    const c = center(viewport);
-    pointer(viewport, "pointerdown", { clientX: c.x, clientY: c.y, pointerType: "pen" });
-    pointer(viewport, "pointermove", { clientX: c.x + 30, clientY: c.y, pointerType: "pen" });
-    expect(value(viewport.pan_x)).toBe(0);
-  });
-
-  it("a cancelled drag does not affect the next drag", async () => {
-    const { viewport } = await make_viewport();
-    await viewport.pan_x.write(0);
-    const c = center(viewport);
-    pointer(viewport, "pointerdown", { clientX: c.x, clientY: c.y, pointerType: "touch", pointerId: 1 });
-    //The browser takes over the touch, for example for a system gesture, no pointerup follows
-    pointer(viewport, "pointercancel", { clientX: c.x, clientY: c.y, pointerType: "touch", pointerId: 1 });
-    viewport.dispatchEvent(new PointerEvent("lostpointercapture", { pointerId: 1 }));
-    //Outside the double press time
-    await wait(350);
-    const start = value(viewport.pan_x);
-    pointer(viewport, "pointerdown", { clientX: c.x, clientY: c.y, pointerType: "touch", pointerId: 2 });
-    pointer(viewport, "pointermove", { clientX: c.x + 40, clientY: c.y, pointerType: "touch", pointerId: 2 });
-    expect(value(viewport.pan_x)).toBe(start + 40);
-  });
-
-  it("a double press resets pan and fits the canvas", async () => {
-    const { viewport } = await make_viewport();
-    await viewport.pan_x.write(50);
-    await viewport.zoom.write(3);
-    const c = center(viewport);
-    pointer(viewport, "pointerdown", { clientX: c.x, clientY: c.y });
-    pointer(viewport, "pointerup", { clientX: c.x, clientY: c.y });
-    pointer(viewport, "pointerdown", { clientX: c.x, clientY: c.y });
-    expect(value(viewport.pan_x)).toBe(0);
-    expect(value(viewport.pan_y)).toBe(0);
-    //400x200 element showing a 200x100 canvas
-    expect(value(viewport.zoom)).toBe(2);
-  });
-});
-
-describe("Canvas viewport elements", () => {
-  afterEach(() => {
-    document.body.replaceChildren();
-  });
-
-  /**Index in the boxes of every shown canvas, compared by identity as all canvases look the same*/
-  const canvases = (elements: SVGGElement, boxes: ViewportElement[]) =>
-    [...elements.children].map((canvas) =>
-      boxes.findIndex((box) => box.canvas === canvas),
-    );
-
-  it("shows the canvases of an element array", async () => {
-    const { viewport, elements } = await make_viewport();
-    const boxes = [new Box(), new Box()];
-    viewport.elements = boxes;
-    expect(canvases(elements, boxes)).toEqual([0, 1]);
-    viewport.elements = [];
-    expect(elements.children.length).toBe(0);
-  });
-
-  it("follows an array state", async () => {
-    const { viewport, elements } = await make_viewport();
-    const boxes = [new Box(), new Box(), new Box(), new Box()];
-    const [a, b, c, d] = boxes;
-    const state = st.ok_w<ViewportElement[]>([a, b]);
-    viewport.elements = state;
-    expect(canvases(elements, boxes)).toEqual([0, 1]);
-    state.array.push(c);
-    state.array.unshift(d);
-    expect(canvases(elements, boxes)).toEqual([3, 0, 1, 2]);
-    state.array.splice(1, 2);
-    expect(canvases(elements, boxes)).toEqual([3, 2]);
-    state.array.change(0, a);
-    expect(canvases(elements, boxes)).toEqual([0, 2]);
-    state.array.move(0, 1);
-    expect(canvases(elements, boxes)).toEqual([2, 0]);
-  });
-
-  it("follows moves of several elements", async () => {
-    const { viewport, elements } = await make_viewport();
-    const boxes = [new Box(), new Box(), new Box(), new Box()];
-    const state = st.ok_w<ViewportElement[]>([...boxes]);
-    viewport.elements = state;
-    state.array.move(0, 2, 2);
-    expect(canvases(elements, boxes)).toEqual([2, 3, 0, 1]);
-  });
-
-  it("replacing a state unsubscribes the old one", async () => {
-    const { viewport, elements } = await make_viewport();
-    const first = st.ok_w<ViewportElement[]>([new Box()]);
-    const second = st.ok_w<ViewportElement[]>([new Box(), new Box()]);
-    viewport.elements = first;
-    viewport.elements = second;
-    expect(first.amount()).toBe(0);
-    expect(elements.children.length).toBe(2);
-    viewport.elements = [];
-    expect(second.amount()).toBe(0);
-  });
-
-  it("pressing an element attaches the mover, pressing outside removes it", async () => {
-    const { viewport, canvas } = await make_viewport();
-    const box = new Box();
-    viewport.elements = [box];
-    pointer(box.canvas, "pointerdown");
-    const mover = canvas.querySelector(".viewport-mover");
-    expect(mover).not.toBeNull();
-    pointer(document.body, "pointerdown");
-    expect(mover!.isConnected).toBe(false);
-  });
-
-  it("pressing the empty canvas removes the mover", async () => {
-    const { viewport, canvas } = await make_viewport();
-    const box = new Box();
-    viewport.elements = [box];
-    viewport.attach_mover(box);
-    pointer(viewport, "pointerdown");
-    expect(canvas.querySelector(".viewport-mover")).toBeNull();
-  });
-
-  it("the window losing focus removes the mover", async () => {
-    const { viewport, canvas } = await make_viewport();
-    const box = new Box();
-    viewport.elements = [box];
-    viewport.attach_mover(box);
-    window.dispatchEvent(new Event("blur"));
-    expect(canvas.querySelector(".viewport-mover")).toBeNull();
-  });
-});
-
-describe("Canvas viewport mover", () => {
-  afterEach(() => {
-    document.body.replaceChildren();
-  });
-
-  /**Viewport with one box at 20,10 and the mover attached*/
-  const with_mover = async () => {
-    const parts = await make_viewport();
-    const box = new Box();
-    box.position_x = 20;
-    box.position_y = 10;
-    parts.viewport.elements = [box];
-    parts.viewport.attach_mover(box);
-    const mover = parts.canvas.querySelector(".viewport-mover") as SVGSVGElement;
-    const handle = (name: string) => {
-      const element = mover.querySelector(":scope > svg." + name) as SVGSVGElement;
-      stub_capture(element);
-      return element;
+    const menu = () => {
+      const event = new MouseEvent("contextmenu", { cancelable: true });
+      viewport.dispatchEvent(event);
+      return event.defaultPrevented;
     };
-    return { ...parts, box, mover, handle };
+    expect(menu()).toBe(false);
+    viewport.edit = true;
+    expect(menu()).toBe(true);
+  });
+
+  it("two finger touch pinch zooms around the fingers", async () => {
+    const { viewport, client } = await make_viewport();
+    viewport.edit = true;
+    const touch = (type: string, id: number, x: number, y: number) =>
+      pointer(viewport, type, { pointerType: "touch", pointerId: id, ...client(x, y) });
+    touch("pointerdown", 1, 40, 50);
+    touch("pointerdown", 2, 60, 50);
+    touch("pointermove", 2, 80, 50);
+    expect(viewport.scale).toBeCloseTo(4);
+    touch("pointerup", 1, 40, 50);
+    touch("pointerup", 2, 80, 50);
+    touch("pointermove", 2, 100, 50);
+    expect(viewport.scale).toBeCloseTo(4);
+  });
+
+  it("one finger touch does not pan", async () => {
+    const { viewport, container, client } = await make_viewport();
+    viewport.edit = true;
+    const before = container.style.transform;
+    pointer(viewport, "pointerdown", { pointerType: "touch", ...client(40, 50) });
+    pointer(viewport, "pointermove", { pointerType: "touch", ...client(80, 50) });
+    expect(container.style.transform).toBe(before);
+  });
+
+  it("pressing a widget selects it, pressing the page clears the selection", async () => {
+    const { viewport, page, transformer } = await make_viewport();
+    const w = widget(10, 10, 20, 20);
+    const inner = w.appendChild(document.createElement("span"));
+    page.widgets = [w];
+    viewport.edit = true;
+    pointer(inner, "pointerdown");
+    expect(viewport.selected).toBe(w);
+    expect(transformer.hidden).toBe(false);
+    pointer(page, "pointerdown");
+    expect(viewport.selected).toBeUndefined();
+    expect(transformer.hidden).toBe(true);
+  });
+
+  it("does not select outside edit mode", async () => {
+    const { viewport, page } = await make_viewport();
+    const w = widget(10, 10, 20, 20);
+    page.widgets = [w];
+    pointer(w, "pointerdown");
+    expect(viewport.selected).toBeUndefined();
+  });
+
+  it("listens to the keyboard only while connected in edit mode", async () => {
+    const { viewport } = await make_viewport();
+    const add = vi.spyOn(window, "addEventListener");
+    const remove = vi.spyOn(window, "removeEventListener");
+    try {
+      viewport.edit = true;
+      viewport.remove();
+      const added = add.mock.calls.map(([type, l]) => [type, l]);
+      const removed = remove.mock.calls.map(([type, l]) => [type, l]);
+      expect(added.length).toBeGreaterThan(0);
+      for (const call of added) expect(removed).toContainEqual(call);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+});
+
+describe("Transformer", () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  /**Viewport in edit mode with a 40 by 20 widget at 50,25 selected*/
+  const with_selection = async () => {
+    const parts = await make_viewport();
+    const w = widget(50, 25, 40, 20);
+    parts.page.widgets = [w];
+    parts.viewport.edit = true;
+    parts.viewport.selected = w;
+    const handle = (name: string) =>
+      parts.transformer.querySelector(":scope > ." + name.split(" ").join(".")) as HTMLElement;
+    /**Drags the handle by the given amount of client pixels*/
+    const drag = (
+      name: string,
+      dx: number,
+      dy: number,
+      keys: { shiftKey?: boolean; altKey?: boolean } = {},
+    ) => {
+      const element = handle(name);
+      const box = element.getBoundingClientRect();
+      const x = box.left + box.width / 2;
+      const y = box.top + box.height / 2;
+      pointer(element, "pointerdown", { clientX: x, clientY: y });
+      pointer(window, "pointermove", { clientX: x + dx, clientY: y + dy, ...keys });
+      pointer(window, "pointerup", { clientX: x + dx, clientY: y + dy });
+    };
+    return { ...parts, w, handle, drag };
   };
 
-  it("is placed on the element", async () => {
-    const { mover } = await with_mover();
-    expect(mover.getAttribute("x")).toBe("20");
-    expect(mover.getAttribute("y")).toBe("10");
-    expect(mover.querySelector(":scope > svg.se")!.getAttribute("x")).toBe("40");
-    expect(mover.querySelector(":scope > svg.se")!.getAttribute("y")).toBe("20");
+  it("is hidden without a widget", () => {
+    const transformer = document.body.appendChild(new Transformer());
+    expect(transformer.hidden).toBe(true);
+    expect(getComputedStyle(transformer).display).toBe("none");
   });
 
-  it("dragging the move handle moves the element on the grid", async () => {
-    const { box, handle } = await with_mover();
-    const move = handle("move");
-    const start = move.getBoundingClientRect();
-    const x = start.left + 2;
-    const y = start.top + 2;
-    pointer(move, "pointerdown", { clientX: x, clientY: y });
-    pointer(move, "pointermove", { clientX: x + 12, clientY: y + 9 });
-    expect(box.position_x).toBe(30);
-    expect(box.position_y).toBe(20);
-    pointer(move, "pointermove", { clientX: x + 21, clientY: y + 19 });
-    expect(box.position_x).toBe(40);
-    expect(box.position_y).toBe(30);
-    pointer(move, "pointerup", { clientX: x + 21, clientY: y + 19 });
+  it("covers the selected widget in viewport pixels", async () => {
+    const { transformer } = await with_selection();
+    expect(transformer.style.left).toBe("100px");
+    expect(transformer.style.top).toBe("100px");
+    expect(transformer.style.width).toBe("80px");
+    expect(transformer.style.height).toBe("40px");
   });
 
-  it("dragging the move handle with shift does not snap", async () => {
-    const { box, handle } = await with_mover();
-    const move = handle("move");
-    const start = move.getBoundingClientRect();
-    const x = start.left + 2;
-    const y = start.top + 2;
-    pointer(move, "pointerdown", { clientX: x, clientY: y });
-    pointer(move, "pointermove", { clientX: x + 3, clientY: y + 4, shiftKey: true });
-    expect(box.position_x).toBe(23);
-    expect(box.position_y).toBe(14);
+  it("follows changes of the widget", async () => {
+    const { transformer, w } = await with_selection();
+    w.x = 0;
+    w.rotation = 90;
+    expect(transformer.style.left).toBe("0px");
+    expect(transformer.style.transform).toBe("rotate(90deg)");
+    expect(transformer.getAttribute("cursor-step")).toBe("2");
   });
 
-  it("dragging the south east corner resizes the element", async () => {
-    const { box, handle, mover } = await with_mover();
-    const se = handle("se");
-    pointer(se, "pointerdown", { clientX: 100, clientY: 100 });
-    pointer(se, "pointermove", { clientX: 120, clientY: 105 });
-    expect(box.width).toBe(60);
-    expect(box.height).toBe(25);
-    expect(box.position_x).toBe(20);
-    expect(box.position_y).toBe(10);
-    expect(box.canvas.getAttribute("width")).toBe("60");
-    expect(mover.querySelector(":scope > rect")!.getAttribute("width")).toBe("62");
-    pointer(se, "pointerup", { clientX: 120, clientY: 105 });
-    pointer(se, "pointermove", { clientX: 200, clientY: 200 });
-    expect(box.width).toBe(60);
+  it("stops following a widget it is no longer attached to", async () => {
+    const { transformer, w, viewport } = await with_selection();
+    viewport.selected = undefined;
+    w.x = 0;
+    expect(transformer.hidden).toBe(true);
+    expect(transformer.style.left).toBe("100px");
   });
 
-  it("dragging the north west corner resizes and keeps the opposite corner", async () => {
-    const { box, handle } = await with_mover();
-    const nw = handle("nw");
-    pointer(nw, "pointerdown", { clientX: 100, clientY: 100 });
-    pointer(nw, "pointermove", { clientX: 90, clientY: 95 });
-    expect(box.width).toBe(50);
-    expect(box.height).toBe(25);
-    expect(box.position_x).toBe(10);
-    expect(box.position_y).toBe(5);
+  it("the move handle moves the widget on a 5 unit grid", async () => {
+    const { w, drag } = await with_selection();
+    //13 page units
+    drag("handle move", 26, -8);
+    expect(w.x).toBe(65);
+    expect(w.y).toBe(20);
   });
 
-  it("does not resize below one unit", async () => {
-    const { box, handle } = await with_mover();
-    const se = handle("se");
-    pointer(se, "pointerdown", { clientX: 100, clientY: 100 });
-    pointer(se, "pointermove", { clientX: 0, clientY: 0 });
-    expect(box.width).toBe(1);
-    expect(box.height).toBe(1);
+  it("alt snaps to 1 unit and shift does not snap", async () => {
+    const { w, drag } = await with_selection();
+    drag("handle move", 3, 0, { altKey: true });
+    expect(w.x).toBe(52);
+    drag("handle move", 3, 0, { shiftKey: true });
+    expect(w.x).toBe(53.5);
   });
 
-  it("resizing follows the zoom", async () => {
-    const { viewport, box, handle } = await with_mover();
-    await viewport.zoom.write(2);
-    const se = handle("se");
-    pointer(se, "pointerdown", { clientX: 100, clientY: 100 });
-    pointer(se, "pointermove", { clientX: 120, clientY: 100 });
-    expect(box.width).toBe(50);
+  it("the sides move the widget", async () => {
+    const { w, drag } = await with_selection();
+    drag("side top", 20, 20);
+    expect(w.x).toBe(60);
+    expect(w.y).toBe(35);
   });
 
-  it("after detaching, dragging does not change the element", async () => {
-    const { viewport, box, handle } = await with_mover();
-    const se = handle("se");
-    pointer(viewport, "pointerdown");
-    pointer(se, "pointerdown", { clientX: 100, clientY: 100 });
-    pointer(se, "pointermove", { clientX: 150, clientY: 150 });
-    expect(box.width).toBe(40);
+  it("the east handle resizes the width only", async () => {
+    const { w, drag } = await with_selection();
+    drag("handle e", 20, 30);
+    expect([w.x, w.y, w.width, w.height]).toEqual([50, 25, 50, 20]);
   });
 
-  it("attaching to another element does not change the first element", async () => {
-    const { viewport, box } = await with_mover();
-    const other = new Box();
-    other.width = 80;
-    other.position_x = 100;
-    viewport.elements = [box, other];
-    viewport.attach_mover(other);
-    expect(box.width).toBe(40);
-    expect(box.position_x).toBe(20);
+  it("the north west handle keeps the south east corner in place", async () => {
+    const { w, drag } = await with_selection();
+    drag("handle nw", -20, -10);
+    expect([w.x, w.y, w.width, w.height]).toEqual([40, 20, 50, 25]);
   });
 
-  it("a grid of 0 does not snap, instead of giving NaN", async () => {
-    const { viewport, box, handle } = await with_mover();
-    await viewport.grid_x.write(0);
-    await viewport.grid_y.write(0);
-    const move = handle("move");
-    const start = move.getBoundingClientRect();
-    const x = start.left + 2;
-    const y = start.top + 2;
-    pointer(move, "pointerdown", { clientX: x, clientY: y });
-    pointer(move, "pointermove", { clientX: x + 3, clientY: y + 4 });
-    expect(box.position_x).toBe(23);
-    expect(box.position_y).toBe(14);
+  it("does not resize below 1 unit", async () => {
+    const { w, drag } = await with_selection();
+    drag("handle se", -500, -500);
+    expect(w.width).toBe(1);
+    expect(w.height).toBe(1);
   });
 
-  it("a rotation grid of 0 does not snap, instead of giving NaN", async () => {
-    const { viewport, box, handle } = await with_mover();
-    await viewport.grid_rotate.write(0);
-    const rotate = handle("rotate");
+  it("resizing a rotated widget keeps the opposite side in place", async () => {
+    const { w, drag } = await with_selection();
+    w.rotation = 90;
+    //The east handle points down when rotated 90 degrees clockwise
+    drag("handle e", 0, 20);
+    expect(w.width).toBe(50);
+    expect(w.height).toBe(20);
+    //The west edge center, rotated around the center, stays at 70,15
+    const cx = w.x + w.width / 2;
+    const cy = w.y + w.height / 2;
+    expect(cx).toBeCloseTo(70);
+    expect(cy - w.width / 2).toBeCloseTo(15);
+  });
+
+  it("the rotate handle rotates in 15 degree steps", async () => {
+    const { w, transformer, handle } = await with_selection();
+    const rotate = handle("handle rotate");
+    const box = transformer.getBoundingClientRect();
+    const cx = box.left + box.width / 2;
+    const cy = box.top + box.height / 2;
     const start = rotate.getBoundingClientRect();
     const x = start.left + start.width / 2;
     const y = start.top + start.height / 2;
     pointer(rotate, "pointerdown", { clientX: x, clientY: y });
-    pointer(rotate, "pointermove", { clientX: x + 7, clientY: y + 3 });
-    expect(Number.isNaN(box.rotation)).toBe(false);
-    expect(box.rotation).not.toBe(0);
+    //A quarter turn clockwise around the center
+    pointer(window, "pointermove", { clientX: cx + (cy - y), clientY: cy + (x - cx) });
+    expect(w.rotation).toBe(90);
+    //A quarter turn counter clockwise from the start wraps to 270
+    pointer(window, "pointermove", { clientX: cx - (cy - y), clientY: cy - (x - cx) });
+    expect(w.rotation).toBe(270);
+    pointer(window, "pointerup", { clientX: x, clientY: y });
+    expect(w.rotation).toBe(270);
   });
 
-  it("handles stop following the pointer after a pointercancel", async () => {
-    for (const name of ["move", "se", "rotate"]) {
-      const { box, handle } = await with_mover();
-      const element = handle(name);
-      const start = element.getBoundingClientRect();
-      const x = start.left + 2;
-      const y = start.top + 2;
-      pointer(element, "pointerdown", { clientX: x, clientY: y });
-      pointer(element, "pointercancel", { clientX: x, clientY: y });
-      pointer(element, "pointermove", { clientX: x + 50, clientY: y + 50 });
-      expect([name, box.position_x, box.position_y]).toEqual([name, 20, 10]);
-      expect([name, box.width, box.height]).toEqual([name, 40, 20]);
-      expect([name, box.rotation]).toEqual([name, 0]);
-      document.body.replaceChildren();
-    }
+  it("is dragging between press and release only", async () => {
+    const { transformer, handle } = await with_selection();
+    const move = handle("handle move");
+    expect(transformer.dragging).toBe(false);
+    pointer(move, "pointerdown", { clientX: 0, clientY: 0 });
+    expect(transformer.dragging).toBe(true);
+    pointer(window, "pointerup", { pointerId: 2 });
+    expect(transformer.dragging).toBe(true);
+    pointer(window, "pointercancel");
+    expect(transformer.dragging).toBe(false);
   });
 
-  it("is removed when its element is removed from the viewport", async () => {
-    const { viewport, box, canvas } = await with_mover();
-    const other = new Box();
-    viewport.elements = [box, other];
-    expect(canvas.querySelector(".viewport-mover")).not.toBeNull();
-    viewport.elements = [other];
-    expect(canvas.querySelector(".viewport-mover")).toBeNull();
+  it("ignores other pointers and buttons", async () => {
+    const { w, transformer, handle } = await with_selection();
+    const move = handle("handle move");
+    pointer(move, "pointerdown", { button: 1, clientX: 0, clientY: 0 });
+    expect(transformer.dragging).toBe(false);
+    pointer(move, "pointerdown", { clientX: 0, clientY: 0 });
+    pointer(window, "pointermove", { pointerId: 2, clientX: 100, clientY: 100 });
+    expect(w.x).toBe(50);
   });
 
-  it("is removed when its element is removed from an element state", async () => {
-    const { viewport, box, canvas } = await with_mover();
-    const state = st.ok_w<ViewportElement[]>([box, new Box()]);
-    viewport.elements = state;
-    viewport.attach_mover(box);
-    state.array.splice(1, 1);
-    expect(canvas.querySelector(".viewport-mover")).not.toBeNull();
-    state.array.splice(0, 1);
-    expect(canvas.querySelector(".viewport-mover")).toBeNull();
-  });
-});
-
-describe("Canvas viewport element", () => {
-  it("sizes its canvas to the default size and keeps the ratio by stretching", () => {
-    const box = new Box();
-    expect(box.width).toBe(40);
-    expect(box.height).toBe(20);
-    expect(box.canvas.getAttribute("viewBox")).toBe("0 0 40 20");
-    expect(box.canvas.getAttribute("preserveAspectRatio")).toBe("none");
-    expect(box.canvas.classList.contains("viewport-element")).toBe(true);
-    expect(box.canvas.classList.contains("canvastest-box")).toBe(true);
-    expect(box.optimal_ratio().unwrap()).toBe(2);
+  it("stops dragging when removed or when the widget changes", async () => {
+    const { viewport, transformer, handle, page } = await with_selection();
+    pointer(handle("handle move"), "pointerdown", { clientX: 0, clientY: 0 });
+    const other = widget(0, 0, 10, 10);
+    page.widgets = [...page.widgets, other];
+    viewport.selected = other;
+    expect(transformer.dragging).toBe(false);
+    pointer(handle("handle move"), "pointerdown", { clientX: 0, clientY: 0 });
+    viewport.remove();
+    expect(transformer.dragging).toBe(false);
   });
 
-  it("position sets the canvas coordinates", () => {
-    const box = new Box();
-    box.position_x = 5;
-    box.position_y = 7;
-    expect(box.canvas.getAttribute("x")).toBe("5");
-    expect(box.canvas.getAttribute("y")).toBe("7");
-    expect(box.canvas.hasAttribute("transform")).toBe(false);
-  });
-
-  it("rotation rotates around the center of the element", () => {
-    const box = new Box();
-    box.position_x = 10;
-    box.position_y = 10;
-    box.rotation = 45;
-    expect(box.canvas.getAttribute("transform")).toBe("rotate(45 30 20)");
-    box.rotation_center_x = 0;
-    box.rotation_center_y = 0;
-    expect(box.canvas.getAttribute("transform")).toBe("rotate(45 10 10)");
-    box.rotation = 0;
-    expect(box.canvas.hasAttribute("transform")).toBe(false);
-  });
-
-  it("resizing with an optimal ratio stretches and keeps the view box", () => {
-    const box = new Box();
-    box.width = 80;
-    box.height = 80;
-    expect(box.canvas.getAttribute("width")).toBe("80");
-    expect(box.canvas.getAttribute("height")).toBe("80");
-    expect(box.canvas.getAttribute("viewBox")).toBe("0 0 40 20");
-  });
-
-  it("resizing without an optimal ratio changes the view box and calls on_resize", () => {
-    const box = new FreeBox();
-    expect(box.canvas.hasAttribute("preserveAspectRatio")).toBe(false);
-    box.width = 80;
-    expect(box.canvas.getAttribute("viewBox")).toBe("0 0 80 20");
-    expect(box.resizes).toEqual([[80, 20]]);
+  it("a press on a handle does not change the selection", async () => {
+    const { viewport, w, handle } = await with_selection();
+    pointer(handle("handle se"), "pointerdown", { clientX: 0, clientY: 0 });
+    pointer(window, "pointerup");
+    expect(viewport.selected).toBe(w);
   });
 });

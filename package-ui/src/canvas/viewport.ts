@@ -1,414 +1,309 @@
 import { Base, define_element } from "#base";
-import { sync_resolve } from "@chocbite/ts-lib/common";
-import { ok } from "@chocbite/ts-lib/result";
-import type { State, StateInferSub } from "@chocbite/ts-lib/state";
-import { state } from "@chocbite/ts-lib/state";
-import state_ui from "#state";
-import { svg } from "#svg";
+import type { Page } from "./page";
+import "./shared";
+import { Transformer } from "./transformer";
 import "./viewport.scss";
-import type { ViewportElement } from "./viewport_element";
-import { ViewportMover } from "./viewport_mover";
+import type { WidgetBase } from "./widget";
 
+const ZOOM_MIN = 0.1;
+const ZOOM_MAX = 20;
+/**Zoom factor per wheel pixel */
+const WHEEL_ZOOM_SPEED = 0.002;
+/**Zoom factor per wheel pixel for touchpad pinch, which reports much smaller deltas than a mouse wheel */
+const PINCH_ZOOM_SPEED = 0.01;
+/**Screen pixels panned per wheel pixel */
+const WHEEL_PAN_SPEED = 0.5;
+/**Pixels per line, for wheel events reported in lines */
+const WHEEL_LINE_HEIGHT = 16;
+/**Speed multiplier for wheel zoom and pan while alt is held */
+const WHEEL_SLOW = 0.1;
+
+/**Viewport showing a page of widgets
+ * The page is scaled to fit inside the viewport element while keeping its aspect ratio, and centered
+ *
+ * When edit is true the page can be zoomed and panned, and a checkerboard is shown behind it
+ * Wheel and touchpad two finger swipe pans, ctrl + wheel or swipe zooms toward the cursor
+ * Shift + vertical wheel pans horizontally
+ * Touchpad pinch zooms toward the cursor
+ * Holding alt makes wheel zoom and pan 10 times slower
+ * Two finger touch pinch zooms and pans, middle or right mouse drag pans
+ *
+ * Pressing a widget in edit mode selects it and attaches a transformer to move, resize and rotate it
+ * Pressing outside any widget clears the selection*/
 export class Viewport extends Base {
-  static element_name(): string {
+  /**Returns the name used to define the element */
+  static element_name() {
     return "viewport";
   }
-  static element_name_space(): string {
-    return "editor";
+  /**Returns the namespace override for the element*/
+  static element_name_space() {
+    return "viewport";
   }
 
-  #viewport_width: number = 0;
-  #viewport_width_half: number = 0;
-  #viewport_height: number = 0;
-  #viewport_height_half: number = 0;
-  #resize_observer = new ResizeObserver((a) => {
-    this.#viewport_width = a[0].contentRect.width;
-    this.#viewport_width_half = this.#viewport_width / 2;
-    this.#viewport_height = a[0].contentRect.height;
-    this.#viewport_height_half = this.#viewport_height / 2;
-    //The pan is relative to the center, so the canvas stays centered
-    this.#pan_coordinates(this.#pan_x.ok(), this.#pan_y.ok());
-    this.#root.setAttribute(
-      "viewBox",
-      `0 0 ${this.#viewport_width} ${this.#viewport_height}`,
-    );
-  });
-  #root = this.appendChild(svg.create("svg").elem);
-  #panner;
-  #zoomer;
-
-  /**Detaches the mover when clicking outside the viewport*/
-  #outside_pointerdown = (e: PointerEvent) => {
-    if (!this.contains(e.target as Node)) this.#detach_mover();
-  };
-  /**Detaches the mover when the browser window loses focus*/
-  #window_blur = () => this.#detach_mover();
-  /**Document the listeners are attached to, while connected*/
-  #listening_document?: Document;
-
-  protected connectedCallback() {
-    super.connectedCallback();
-    this.#listening_document = this.ownerDocument;
-    this.#listening_document.addEventListener(
-      "pointerdown",
-      this.#outside_pointerdown,
-    );
-    this.#listening_document.defaultView?.addEventListener(
-      "blur",
-      this.#window_blur,
-    );
-  }
-
-  protected disconnectedCallback() {
-    super.disconnectedCallback();
-    this.#listening_document?.removeEventListener(
-      "pointerdown",
-      this.#outside_pointerdown,
-    );
-    this.#listening_document?.defaultView?.removeEventListener(
-      "blur",
-      this.#window_blur,
-    );
-    this.#listening_document = undefined;
-  }
-
-  constructor(
-    canvas_width: number,
-    canvas_height: number,
-    infinite_canvas: boolean = false,
-  ) {
-    super();
-    this.#resize_observer.observe(this);
-    this.#canvas_width = canvas_width;
-    this.#canvas_height = canvas_height;
-    //Panning
-    this.#panner = this.#root.appendChild(
-      svg
-        .create("svg")
-        .a("width", canvas_width.toString())
-        .a("height", canvas_height.toString()).elem,
-    );
-    //Zoomer
-    this.#zoomer = this.#panner.appendChild(
-      svg
-        .create("svg")
-        .a("x", "-50%")
-        .a("y", "-50%")
-        .a("width", canvas_width.toString())
-        .a("height", canvas_height.toString()).elem,
-    );
-    //Background
-    (infinite_canvas ? this.#root : this.#zoomer).prepend(
-      svg
-        .create("rect")
-        .attribute("x", "0")
-        .attribute("y", "0")
-        .attribute("width", "100%")
-        .attribute("height", "100%")
-        .fill("white").elem,
-    );
-    //Canvas
-    this.#canvas = this.#zoomer.appendChild(
-      svg.svg(
-        canvas_width,
-        canvas_height,
-        `0 0 ${canvas_width} ${canvas_height}`,
-      ).elem,
-    );
-    this.#canvas_elements = this.#canvas.appendChild(svg.create("g").elem);
-
-    //      _____ _   _ _______ ______ _____            _____ _______ _____ ____  _   _
-    //     |_   _| \ | |__   __|  ____|  __ \     /\   / ____|__   __|_   _/ __ \| \ | |
-    //       | | |  \| |  | |  | |__  | |__) |   /  \ | |       | |    | || |  | |  \| |
-    //       | | | . ` |  | |  |  __| |  _  /   / /\ \| |       | |    | || |  | | . ` |
-    //      _| |_| |\  |  | |  | |____| | \ \  / ____ \ |____   | |   _| || |__| | |\  |
-    //     |_____|_| \_|  |_|  |______|_|  \_\/_/    \_\_____|  |_|  |_____\____/|_| \_|
-
-    let count = 0;
-    let mover_x = 0;
-    let mover_y = 0;
-    let initial_x = 0;
-    let initial_y = 0;
-    let initial_id = 0;
-    // let second_initial_x = 0;
-    // let second_initial_y = 0;
-    let second_initial_id = 0;
-
-    //Middle Mouse
-    let double_click = 0;
-    this.addEventListener("pointerdown", (e) => {
-      if (e.pointerType === "mouse" || e.pointerType === "touch") {
-        e.preventDefault();
-        e.stopPropagation();
-
-        // Element selection: detect clicks on the mover or viewport elements
-        const target = e.target as Element;
-        if (target.closest(".viewport-mover")) return;
-        const elementCanvas = target.closest(".viewport-element");
-        if (elementCanvas) {
-          const element = this.#elements.find(
-            (el) => el.canvas === elementCanvas,
-          );
-          if (element) {
-            this.attach_mover(element);
-            return;
-          }
-        }
-        this.#detach_mover();
-
-        //Double Click Reset Position
-        const now = performance.now();
-        if (now - double_click < 300) {
-          this.#pan_coordinates(0, 0);
-          this.#zoom_coordinates(
-            Math.min(
-              this.#viewport_height / this.#canvas_height,
-              this.#viewport_width / this.#canvas_width,
-            ),
-            0,
-            0,
-          );
-          return;
-        }
-        double_click = now;
-        //Dragging
-        this.setPointerCapture(e.pointerId);
-        if (count === 0) {
-          mover_x = this.#pan_x.ok();
-          mover_y = this.#pan_y.ok();
-          initial_x = e.offsetX;
-          initial_y = e.offsetY;
-          initial_id = e.pointerId;
-        } else if (count === 1) {
-          // second_initial_x = e.offsetX;
-          // second_initial_y = e.offsetY;
-          second_initial_id = e.pointerId;
-        }
-        count++;
-      }
-    });
-    this.onpointermove = (ev) => {
-      if (count === 0) return;
-      if (ev.pointerId === initial_id) {
-        this.#pan_coordinates(
-          mover_x + (ev.offsetX - initial_x) / count,
-          mover_y + (ev.offsetY - initial_y) / count,
-        );
-      } else if (ev.pointerId === second_initial_id) {
-        if (count < 2) return;
-        this.#pan_coordinates(
-          mover_x + (ev.offsetX - initial_x) / count,
-          mover_y + (ev.offsetY - initial_y) / count,
-        );
-      }
-    };
-    this.onpointerup = (ev) => {
-      if (this.hasPointerCapture(ev.pointerId)) {
-        this.releasePointerCapture(ev.pointerId);
-        count--;
-      }
-    };
-    //The browser can take over a touch, for example for a system gesture, which ends it without pointerup
-    this.onpointercancel = this.onpointerup;
-    //Wheel
-    this.addEventListener(
-      "wheel",
-      (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const move_scale = e.shiftKey
-          ? e.altKey
-            ? 0.01
-            : 0.05
-          : e.altKey
-            ? 2
-            : 0.5;
-        if (e.ctrlKey) {
-          this.#pan_coordinates(
-            undefined,
-            this.#pan_y.ok() - e.deltaY * move_scale,
-          );
-        } else {
-          const scale_scale = e.shiftKey
-            ? e.altKey
-              ? 0.00005
-              : 0.0001
-            : e.altKey
-              ? 0.005
-              : 0.001;
-          const scale = this.#zoom.ok() * (1 - e.deltaY * scale_scale);
-          this.#zoom_coordinates(
-            scale,
-            e.offsetX - this.#viewport_width / 2,
-            e.offsetY - this.#viewport_height / 2,
-          );
-        }
-        this.#pan_coordinates(
-          this.#pan_x.ok() - e.deltaX * move_scale,
-          undefined,
-        );
-      },
-      { capture: true },
-    );
-  }
-
-  #pan_coordinates(x?: number, y?: number) {
-    if (x !== undefined) {
-      this.#panner.setAttribute(
-        "x",
-        (this.#viewport_width_half + x).toFixed(0),
-      );
-      this.#pan_x.set_ok(x);
-    }
-    if (y !== undefined) {
-      this.#panner.setAttribute(
-        "y",
-        (this.#viewport_height_half + y).toFixed(0),
-      );
-      this.#pan_y.set_ok(y);
-    }
-  }
-
-  /**Zooms coordinate aware to offset canvas position so hover position stays
-   * coordinates are relative to the center */
-  #zoom_coordinates(scale: number, x: number, y: number) {
-    scale = Math.max(0.001, Math.min(10000, scale));
-    const zoom_factor = scale / this.#zoom.ok();
-    this.#pan_coordinates(
-      this.#pan_x.ok() * zoom_factor + x * (1 - zoom_factor),
-      this.#pan_y.ok() * zoom_factor + y * (1 - zoom_factor),
-    );
-    this.#zoomer.style.scale = scale.toString();
-    this.#zoom.set_ok(scale);
-  }
-
-  //       _____          _   ___      __      _____
-  //      / ____|   /\   | \ | \ \    / /\    / ____|
-  //     | |       /  \  |  \| |\ \  / /  \  | (___
-  //     | |      / /\ \ | . ` | \ \/ / /\ \  \___ \
-  //     | |____ / ____ \| |\  |  \  / ____ \ ____) |
-  //      \_____/_/    \_\_| \_|   \/_/    \_\_____/
-  #canvas;
-  #canvas_width;
-  #canvas_height;
-  #canvas_elements;
-
-  set canvas_width(value: number) {
-    this.#canvas.setAttribute("width", value.toString());
-    this.#canvas.setAttribute("viewBox", `0 0 ${value} ${this.#canvas_height}`);
-    this.#zoomer.setAttribute("width", value.toString());
-    this.#canvas_width = value;
-  }
-  get canvas_width(): number {
-    return this.#canvas_width;
-  }
-  set canvas_height(value: number) {
-    this.#canvas.setAttribute("height", value.toString());
-    this.#canvas.setAttribute("viewBox", `0 0 ${this.#canvas_width} ${value}`);
-    this.#zoomer.setAttribute("height", value.toString());
-    this.#canvas_height = value;
-  }
-  get canvas_height(): number {
-    return this.#canvas_height;
-  }
-
-  #pan_x = state.rosw(ok(0), (value) => {
-    return sync_resolve(ok(this.#pan_coordinates(value, undefined)));
-  });
-  readonly pan_x = this.#pan_x.read_write;
-
-  #pan_y = state.rosw(ok(0), (value) => {
-    return sync_resolve(ok(this.#pan_coordinates(undefined, value)));
-  });
-  readonly pan_y = this.#pan_y.read_write;
-
-  #zoom = state.rosw(ok(1), (value) =>
-    sync_resolve(ok(this.#zoom_coordinates(value, 0, 0))),
+  #background: HTMLDivElement = this.appendChild(
+    document.createElement("div"),
   );
-  readonly zoom = this.#zoom.read_write;
-
-  //       _____ _____  _____ _____
-  //      / ____|  __ \|_   _|  __ \
-  //     | |  __| |__) | | | | |  | |
-  //     | | |_ |  _  /  | | | |  | |
-  //     | |__| | | \ \ _| |_| |__| |
-  //      \_____|_|  \_\_____|_____/
-  #grid_x = state.rosw(ok(10), (value) => {
-    this.#grid_x.set_ok(value);
-    return sync_resolve(ok(undefined));
+  #container: HTMLDivElement = this.appendChild(document.createElement("div"));
+  #transformer: Transformer = this.appendChild(new Transformer());
+  #page: Page | undefined;
+  #page_observer = new ResizeObserver(() => {
+    this.#update_view();
   });
-  readonly grid_x = this.#grid_x.read_write;
+  #scale: number = 1;
+  #fit_x: number = 0;
+  #fit_y: number = 0;
+  #edit: boolean = false;
+  #zoom: number = 1;
+  #pan_x: number = 0;
+  #pan_y: number = 0;
+  #touches = new Map<number, { x: number; y: number }>();
+  #pan_pointer_id: number | undefined;
+  #pan_pointer_last = { x: 0, y: 0 };
+  /**Whether the ctrl key is physically held, to tell touchpad pinch from ctrl + wheel */
+  #ctrl_held: boolean = false;
 
-  #grid_y = state.rosw(ok(10), (value) => {
-    this.#grid_y.set_ok(value);
-    return sync_resolve(ok(undefined));
-  });
-  readonly grid_y = this.#grid_y.read_write;
+  constructor() {
+    super();
+    this.#background.className = "checkerboard";
+    this.#container.className = "container";
+    this.attach_to_resize_observer();
+  }
 
-  #grid_rotate = state.rosw(ok(15), (value) => {
-    this.#grid_rotate.set_ok(value);
-    return sync_resolve(ok(undefined));
-  });
-  readonly grid_rotate = this.#grid_rotate.read_write;
-
-  //      ______ _      ______ __  __ ______ _   _ _______ _____
-  //     |  ____| |    |  ____|  \/  |  ____| \ | |__   __/ ____|
-  //     | |__  | |    | |__  | \  / | |__  |  \| |  | | | (___
-  //     |  __| | |    |  __| | |\/| |  __| | . ` |  | |  \___ \
-  //     | |____| |____| |____| |  | | |____| |\  |  | |  ____) |
-  //     |______|______|______|_|  |_|______|_| \_|  |_| |_____/
-  #elements: readonly ViewportElement[] = [];
-  #state_sub?: StateInferSub<State<ViewportElement[]>>;
-
-  set elements(elements: ViewportElement[] | State<ViewportElement[]>) {
-    if (this.#state_sub) {
-      this.detach_state(this.#state_sub);
-      this.#state_sub = undefined;
+  /**Sets the page shown in the viewport */
+  set page(page: Page | undefined) {
+    if (this.#page === page) return;
+    this.selected = undefined;
+    if (this.#page) {
+      this.#page_observer.unobserve(this.#page);
+      if (this.#page.parentElement === this.#container) this.#page.remove();
     }
-    if (state.is.state(elements)) {
-      this.#state_sub = this.attach_state(elements, (r) =>
-        this.#update_rows(r.ok ? r.value : []),
-      );
-    } else this.#update_rows(elements);
+    this.#page = page;
+    if (page) {
+      this.#container.appendChild(page);
+      this.#page_observer.observe(page);
+    }
+    this.#update_view();
+  }
+  /**Returns the page shown in the viewport */
+  get page(): Page | undefined {
+    return this.#page;
   }
 
-  #update_rows(rows: readonly ViewportElement[]) {
-    this.#elements = rows;
-    //Each element owns its canvas node, so changed elements replace their node
-    state_ui.a.apply(this.#canvas_elements, rows, {
-      create: (element) => element.canvas,
-    });
-    const moved = this.#mover?.element;
-    if (moved && !rows.includes(moved)) this.#detach_mover();
+  /**Sets edit mode, which enables zooming and panning and shows a checkerboard background
+   * Leaving edit mode resets the view to fit the page */
+  set edit(edit: boolean) {
+    if (this.#edit === edit) return;
+    this.#edit = edit;
+    this.toggleAttribute("edit", edit);
+    this.#listen_keys(edit && this.isConnected);
+    if (edit) {
+      this.addEventListener("wheel", this.#on_wheel, { passive: false });
+      this.addEventListener("pointerdown", this.#on_pointer_down);
+      this.addEventListener("pointermove", this.#on_pointer_move);
+      this.addEventListener("pointerup", this.#on_pointer_up);
+      this.addEventListener("pointercancel", this.#on_pointer_up);
+      this.addEventListener("mousedown", this.#on_mouse_down);
+      this.addEventListener("contextmenu", this.#on_context_menu);
+    } else {
+      this.removeEventListener("wheel", this.#on_wheel);
+      this.removeEventListener("pointerdown", this.#on_pointer_down);
+      this.removeEventListener("pointermove", this.#on_pointer_move);
+      this.removeEventListener("pointerup", this.#on_pointer_up);
+      this.removeEventListener("pointercancel", this.#on_pointer_up);
+      this.removeEventListener("mousedown", this.#on_mouse_down);
+      this.removeEventListener("contextmenu", this.#on_context_menu);
+      this.#touches.clear();
+      this.#pan_pointer_id = undefined;
+      this.selected = undefined;
+      this.#zoom = 1;
+      this.#pan_x = 0;
+      this.#pan_y = 0;
+      this.#update_view();
+    }
+  }
+  /**Returns whether edit mode is enabled */
+  get edit(): boolean {
+    return this.#edit;
   }
 
-  //      __  __  ______      ________ _____
-  //     |  \/  |/ __ \ \    / /  ____|  __ \
-  //     | \  / | |  | \ \  / /| |__  | |__) |
-  //     | |\/| | |  | |\ \/ / |  __| |  _  /
-  //     | |  | | |__| | \  /  | |____| | \ \
-  //     |_|  |_|\____/   \/   |______|_|  \_\
-  #mover?: ViewportMover;
-
-  attach_mover(move: ViewportElement) {
-    (this.#mover ??= new ViewportMover(
-      this.#zoom,
-      this.#grid_x,
-      this.#grid_y,
-      this.#grid_rotate,
-    )).attach_to_element(move, this.#canvas);
+  /**Sets the selected widget, which the transformer is attached to, selection is cleared when leaving edit mode */
+  set selected(widget: WidgetBase | undefined) {
+    this.#transformer.widget = widget;
+  }
+  /**Returns the selected widget */
+  get selected(): WidgetBase | undefined {
+    return this.#transformer.widget;
   }
 
-  #detach_mover() {
-    this.#mover?.detach_from_element();
+  /**Returns the current scale from page units to screen pixels */
+  get scale(): number {
+    return this.#scale;
   }
+
+  protected on_resize(): void {
+    this.#update_view();
+  }
+
+  protected connectedCallback(): void {
+    super.connectedCallback();
+    if (this.#edit) this.#listen_keys(true);
+  }
+
+  protected disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#listen_keys(false);
+  }
+
+  /**Adds or removes the window listeners tracking the ctrl key */
+  #listen_keys(listen: boolean) {
+    if (listen) {
+      window.addEventListener("keydown", this.#on_key);
+      window.addEventListener("keyup", this.#on_key);
+      window.addEventListener("blur", this.#on_blur);
+    } else {
+      window.removeEventListener("keydown", this.#on_key);
+      window.removeEventListener("keyup", this.#on_key);
+      window.removeEventListener("blur", this.#on_blur);
+      this.#ctrl_held = false;
+    }
+  }
+
+  #update_view() {
+    if (!this.#page) return;
+    const width = this.#page.width;
+    const height = this.#page.height;
+    if (width <= 0 || height <= 0) return;
+    const rect = this.actual_size;
+    const fit = Math.min(rect.width / width, rect.height / height);
+    this.#fit_x = (rect.width - width * fit) / 2;
+    this.#fit_y = (rect.height - height * fit) / 2;
+    this.#scale = fit * this.#zoom;
+    this.#container.style.transform = `translate(${this.#fit_x + this.#pan_x}px, ${this.#fit_y + this.#pan_y}px) scale(${this.#scale})`;
+    this.#transformer.view(
+      this.#fit_x + this.#pan_x,
+      this.#fit_y + this.#pan_y,
+      this.#scale,
+    );
+  }
+
+  /**Zooms by the factor, keeping the given point in viewport coordinates in place */
+  #zoom_at(x: number, y: number, factor: number) {
+    const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, this.#zoom * factor));
+    const ratio = zoom / this.#zoom;
+    this.#pan_x += (x - this.#fit_x - this.#pan_x) * (1 - ratio);
+    this.#pan_y += (y - this.#fit_y - this.#pan_y) * (1 - ratio);
+    this.#zoom = zoom;
+  }
+
+  /**Returns the position of the event in viewport coordinates */
+  #local(e: MouseEvent): { x: number; y: number } {
+    const rect = this.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+
+  /**Selects the widget under the pointer, or clears the selection if there is none */
+  #select_at(e: PointerEvent) {
+    const page = this.#page;
+    let element = e.target instanceof Element ? e.target : null;
+    while (element && element.parentElement !== page)
+      element = element.parentElement;
+    this.selected = page?.widgets.find((widget) => widget === element);
+  }
+
+  /**Returns center and distance of the first two touches */
+  #pinch(): { x: number; y: number; distance: number } | undefined {
+    if (this.#touches.size < 2) return undefined;
+    const [a, b] = this.#touches.values();
+    return {
+      x: (a.x + b.x) / 2,
+      y: (a.y + b.y) / 2,
+      distance: Math.hypot(a.x - b.x, a.y - b.y),
+    };
+  }
+
+  #on_wheel = (e: WheelEvent) => {
+    e.preventDefault();
+    const unit =
+      e.deltaMode === WheelEvent.DOM_DELTA_LINE
+        ? WHEEL_LINE_HEIGHT
+        : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
+          ? this.actual_size.height
+          : 1;
+    const delta_x = e.deltaX * unit;
+    const delta_y = e.deltaY * unit;
+    const speed = e.altKey ? WHEEL_SLOW : 1;
+    if (e.ctrlKey) {
+      //Browsers report touchpad pinch as ctrl + wheel, without the ctrl key being held
+      const zoom_speed = this.#ctrl_held ? WHEEL_ZOOM_SPEED : PINCH_ZOOM_SPEED;
+      const point = this.#local(e);
+      this.#zoom_at(point.x, point.y, Math.exp(-delta_y * zoom_speed * speed));
+    } else {
+      //Shift makes the vertical wheel pan horizontally, some browsers already swap the deltas themselves
+      const swap = e.shiftKey && delta_x === 0;
+      this.#pan_x -= (swap ? delta_y : delta_x) * speed * WHEEL_PAN_SPEED;
+      this.#pan_y -= (swap ? 0 : delta_y) * speed * WHEEL_PAN_SPEED;
+    }
+    this.#update_view();
+  };
+
+  #on_pointer_down = (e: PointerEvent) => {
+    if (e.pointerType === "touch") {
+      //Only the first touch selects, so a second finger can pinch without changing the selection
+      if (this.#touches.size === 0 && !this.#transformer.dragging)
+        this.#select_at(e);
+      this.#touches.set(e.pointerId, this.#local(e));
+      this.setPointerCapture(e.pointerId);
+    } else if (e.button === 0) {
+      this.#select_at(e);
+    } else if (e.button === 1 || e.button === 2) {
+      e.preventDefault();
+      this.#pan_pointer_id = e.pointerId;
+      this.#pan_pointer_last = this.#local(e);
+      this.setPointerCapture(e.pointerId);
+    }
+  };
+
+  #on_pointer_move = (e: PointerEvent) => {
+    this.#ctrl_held = e.ctrlKey;
+    if (this.#touches.has(e.pointerId)) {
+      const before = this.#pinch();
+      this.#touches.set(e.pointerId, this.#local(e));
+      const after = this.#pinch();
+      if (!before || !after || before.distance <= 0) return;
+      this.#pan_x += after.x - before.x;
+      this.#pan_y += after.y - before.y;
+      this.#zoom_at(after.x, after.y, after.distance / before.distance);
+      this.#update_view();
+    } else if (e.pointerId === this.#pan_pointer_id) {
+      const point = this.#local(e);
+      this.#pan_x += point.x - this.#pan_pointer_last.x;
+      this.#pan_y += point.y - this.#pan_pointer_last.y;
+      this.#pan_pointer_last = point;
+      this.#update_view();
+    }
+  };
+
+  #on_pointer_up = (e: PointerEvent) => {
+    this.#touches.delete(e.pointerId);
+    if (e.pointerId === this.#pan_pointer_id) this.#pan_pointer_id = undefined;
+  };
+
+  /**Prevents the browser autoscroll on middle mouse button */
+  #on_mouse_down = (e: MouseEvent) => {
+    if (e.button === 1) e.preventDefault();
+  };
+
+  /**Prevents the context menu, as the right mouse button pans in edit mode */
+  #on_context_menu = (e: MouseEvent) => {
+    e.preventDefault();
+  };
+
+  #on_key = (e: KeyboardEvent) => {
+    this.#ctrl_held = e.ctrlKey;
+  };
+
+  #on_blur = () => {
+    this.#ctrl_held = false;
+  };
 }
 define_element(Viewport);
-
-export function create_viewport(
-  canvas_width: number,
-  canvas_height: number,
-  infinite_canvas: boolean = false,
-): Viewport {
-  return new Viewport(canvas_width, canvas_height, infinite_canvas);
-}
