@@ -1,12 +1,10 @@
 import { ok, type Option, type ResultOk } from "@chocbite/ts-lib/result";
-import st, { type StateROAW } from "@chocbite/ts-lib/state";
+import st, {
+  type StateJsonCompatible,
+  type StateROAW,
+} from "@chocbite/ts-lib/state";
 
 let name_transformer: ((name: string) => string) | undefined;
-export const settings_set_name_transform = (
-  transform: (name: string) => string,
-) => {
-  name_transformer = transform;
-};
 
 const packages = localStorage["settings/packageVersions"] as string | undefined;
 let package_versions: { [key: string]: string } = {};
@@ -17,6 +15,24 @@ try {
 } catch (_e) {}
 let store_package_versions_timeout: number | undefined;
 const BOTTOM_GROUPS: { [key: string]: SettingsGroup } = {};
+
+/**Renames the settings groups of every package, the group name is the start of every stored key,
+ * so an app can keep the library names, like @chocbite/ts-lib-theme, out of the local storage.
+ *
+ * Groups are made and read their stored values when their module is imported, so this must be called
+ * in a module imported before any other module of @chocbite/ts-lib-ui
+ * @param transform gets the package name of a group and returns the name to store it under*/
+export const settings_set_name_transform = (
+  transform: (name: string) => string,
+) => {
+  const existing = Object.keys(BOTTOM_GROUPS);
+  if (existing.length)
+    console.error(
+      "settings_set_name_transform must be called before any settings group is made, call it in a module imported before any other module of @chocbite/ts-lib-ui, these groups already use their name: " +
+        existing.join(", "),
+    );
+  name_transformer = transform;
+};
 
 /**Initialises the settings for the package
  * @param package_name use import {name} from ("../package.json")
@@ -31,6 +47,12 @@ export const settings_init = (
   description: string,
 ) => {
   if (name_transformer) package_name = name_transformer(package_name);
+  if (package_name in BOTTOM_GROUPS)
+    throw new Error(
+      "Settings group already registered " +
+        package_name +
+        ", by another package or by this library being loaded twice",
+    );
   let changed: string | undefined;
   if (package_versions[package_name] !== package_version) {
     changed = package_versions[package_name];
@@ -50,6 +72,15 @@ export const settings_init = (
   ));
 };
 
+/**Values JSON can store, Map, Set, Date, class instances, functions and undefined are not accepted*/
+export type SettingsJson =
+  | string
+  | number
+  | boolean
+  | null
+  | readonly SettingsJson[]
+  | { readonly [key: string]: SettingsJson | undefined };
+
 class Setting {
   readonly state: StateROAW<any>;
   readonly name: string;
@@ -66,6 +97,8 @@ export class SettingsGroup {
   private path_id: string;
   private settings: { [key: string]: Setting } = {};
   private sub_groups: { [key: string]: SettingsGroup } = {};
+  /**Ids already migrated for the version change, a migration runs once per id*/
+  #migrated = new Set<string>();
   readonly version_changed: string | undefined;
   readonly name: string;
   readonly description: string;
@@ -111,8 +144,9 @@ export class SettingsGroup {
     const saved = localStorage.getItem(this.path_id + "/" + id);
     if (saved === null) return ok(fallback);
     try {
-      if (this.version_changed && version_changed) {
+      if (this.version_changed && version_changed && !this.#migrated.has(id)) {
         const changed_value = version_changed(saved, this.version_changed);
+        this.#migrated.add(id);
         localStorage.setItem(
           this.path_id + "/" + id,
           JSON.stringify(changed_value),
@@ -128,18 +162,37 @@ export class SettingsGroup {
 
   /**Sets value of setting, that has not been registered to a state
    * @param id unique identifier for this setting in the parent group
-   * @param value value to set*/
-  set(id: string, value: any) {
+   * @param value value to set, must be a value JSON can store*/
+  set(id: string, value: SettingsJson) {
     if (id in this.settings)
       throw new Error("Settings is registered " + this.path_id + "/" + id);
     localStorage[this.path_id + "/" + id] = JSON.stringify(value);
   }
 
-  /**Registers a state to a setting
+  /**Registers a state to a setting, the value is stored as JSON so its type must be JSON compatible
    * @param id unique identifier for this setting in the parent group
    * @param name name of setting formatted for user reading
    * @param description a description of what the setting is about formatted for user reading
    * @param state state object representing the setting's value */
+  register<READ, S extends StateROAW<READ>>(
+    id: string,
+    name: string,
+    description: string,
+    state: S & (StateJsonCompatible<S> extends true ? unknown : never),
+  ): S;
+  /**Registers a state to a setting, with a transform to store values JSON can not represent
+   * @param id unique identifier for this setting in the parent group
+   * @param name name of setting formatted for user reading
+   * @param description a description of what the setting is about formatted for user reading
+   * @param state state object representing the setting's value
+   * @param transform converts the state value to the stored string */
+  register<READ, S extends StateROAW<READ>>(
+    id: string,
+    name: string,
+    description: string,
+    state: S,
+    transform: (state: S) => PromiseLike<string>,
+  ): S;
   register<READ, S extends StateROAW<READ>>(
     id: string,
     name: string,

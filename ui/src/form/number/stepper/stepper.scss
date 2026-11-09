@@ -18,6 +18,7 @@ form-stepper {
   cursor: ew-resize;
   outline: none;
   touch-action: pan-y;
+  position: relative;
 
   .touch & {
     min-width: 14rem;
@@ -97,6 +98,7 @@ form-stepper {
       right: -(base.$border_thickness);
     }
   }
+
   > input {
     all: unset;
     visibility: hidden;

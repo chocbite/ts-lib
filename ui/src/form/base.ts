@@ -63,7 +63,7 @@ export abstract class FormValue<
     options: FormValueOptions<RT, ID>,
   ) {
     if (options.description) element.description = options.description;
-    else if (options.value !== undefined) element.value = options.value;
+    if (options.value !== undefined) element.value = options.value;
     super.apply_options(element, options);
   }
 
@@ -75,9 +75,11 @@ export abstract class FormValue<
   }
 
   protected _description?: string;
-  /**Sets the current label of the element*/
+  /**Sets the description of the element, shown as a tooltip*/
   set description(text: string) {
     this._description = text;
+    if (text) this.title = text;
+    else this.removeAttribute("title");
   }
   get description(): string {
     return this._description || "";
@@ -92,16 +94,20 @@ export abstract class FormValue<
   #func?: StateSub<Result<RT, string>>;
 
   bind(opts: { value: StateREAW<RT, Option<{}>, RT> }): this {
-    if (this.#func) this.detach_state(this.#func);
+    if (this.#func) {
+      this.detach_state(this.#func);
+      this.#func = undefined;
+    }
     if (opts.value) {
-      this.attach_state(opts.value, (val) => {
+      //Related first, so the first value is shown with them, like decimals
+      const related = opts.value.related();
+      this.state_related(related.some ? related.value : {});
+      this.#func = this.attach_state(opts.value, (val) => {
         if (val.ok) {
           this.value = val.value;
           if (this.#error) this.error = undefined;
         } else this.error = val.error;
       });
-      const related = opts.value.related();
-      if (related.some) this.state_related(related.value);
     } else this.state_related({});
     this._state = opts.value;
 
@@ -141,6 +147,7 @@ export abstract class FormValue<
     this._buffer = undefined;
     this.clear_value();
     this.clear_error();
+    this.#error = false;
   }
 
   /**Called when value is set by value setter or state*/
@@ -242,12 +249,11 @@ export abstract class FormValueWrite<
     } else return sync_resolve(ok(val));
   }
 
-  /**Function to check value */
+  /**Function to check value, a state checks the value itself when it is written, so it is not checked here*/
   protected check_value(val: RT): PromiseLike<Result<RT, string>> {
-    if (this._state) {
-      if (this._state.writable) return this._state.check(val);
-      else return sync_resolve(err("Not writable"));
-    } else return sync_resolve(ok(val));
+    if (this._state && !this._state.writable)
+      return sync_resolve(err("Not writable"));
+    return sync_resolve(ok(val));
   }
 
   /**Function to update value*/
@@ -257,8 +263,7 @@ export abstract class FormValueWrite<
       this.warn(limited.error);
       return limited;
     }
-    this.#set_value(limited.value);
-    return limited;
+    return this.#set_value(limited.value);
   }
 
   /**Function to update value*/
@@ -268,30 +273,44 @@ export abstract class FormValueWrite<
       this.warn(checked.error);
       return checked;
     }
-    this.#set_value(checked.value);
-    return checked;
+    return this.#set_value(checked.value);
   }
 
-  #set_value(val: RT) {
-    if (this._buffer === val) return;
+  /**Shows the value and writes it to the state, a value the state rejects is reverted and warned about.
+   * The change listener is only called with accepted values*/
+  async #set_value(val: RT): Promise<Result<RT, string>> {
+    //Shown even when unchanged, the shown text can differ, like a typed value rounding to the current value
     this.new_value(val);
+    if (this._buffer === val) return ok(val);
     if (this._state) {
       const buff = this._buffer;
-      this._state.write!(val).then((err) => {
-        if (err.err) {
-          if (buff !== undefined) this.new_value(buff);
-          this.warn(err.error);
-        }
-      });
+      const written = await this._state.write!(val);
+      if (written.err) {
+        if (buff !== undefined) this.new_value(buff);
+        this.warn(written.error);
+        return err(written.error);
+      }
     } else {
       this._buffer = val;
       this.#changed = true;
     }
+    this.call_change(val);
+    return ok(val);
+  }
+
+  /**Calls the change listener with a value the user changed, and lets a parent group know*/
+  protected call_change(val: RT): void {
     if (this.#change)
       try {
         this.#change(val);
       } catch (e) {
         console.error("Failed while updating change listener", e);
       }
+    const parent = this.parentElement;
+    if (this.form_id !== undefined && parent instanceof FormValueWrite)
+      parent.child_changed(this);
   }
+
+  /**Called when a child value element with a form id was changed by the user*/
+  protected child_changed(_child: FormValueWrite<any, any>): void {}
 }

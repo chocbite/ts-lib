@@ -1,6 +1,5 @@
 {
   "name": "@chocbite/ts-lib-ui",
-  "version": "1.0.1",
   "author": "chocolateandmilkwin",
   "license": "MIT",
   "type": "module",
@@ -86,6 +85,12 @@
       "import": "./dist/spinner/index.mjs",
       "style": "./dist/style.css"
     },
+    "./state": {
+      "development": "./src/state/index.ts",
+      "types": "./dist/state/index.d.mts",
+      "import": "./dist/state/index.mjs",
+      "style": "./dist/style.css"
+    },
     "./svg": {
       "development": "./src/svg/index.ts",
       "types": "./dist/svg/index.d.mts",
@@ -120,6 +125,7 @@
     "#selection": "./src/selection/index.ts",
     "#settings": "./src/settings/index.ts",
     "#spinner": "./src/spinner/index.ts",
+    "#state": "./src/state/index.ts",
     "#svg": "./src/svg/index.ts",
     "#theme": "./src/theme/index.ts",
     "#viewport": "./src/viewport/index.ts"
@@ -127,12 +133,12 @@
   "scripts": {
     "build": "tsdown && node -e \"for (const m of ['icons','theme']) require('fs').cpSync('src/'+m+'/mixins.scss','dist/'+m+'/mixins.scss')\"",
     "lint": "eslint \"src/**/*.ts\"",
-    "test": "vitest run",
+    "test": "tsc --noEmit && vitest run",
     "typecheck": "tsc --noEmit",
     "check-deps": "npx depcheck"
   },
   "dependencies": {
-    "@chocbite/ts-lib": "^1.0.0"
+    "@chocbite/ts-lib": "*"
   },
   "devDependencies": {
     "@tsdown/css": "^0.23.0",

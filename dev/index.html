@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ts-lib dev</title>
+    <link rel="stylesheet" href="./shell.css" />
+  </head>
+  <body>
+    <nav id="sidebar">
+      <input id="filter" type="search" placeholder="Filter pages" />
+      <div id="pages"></div>
+    </nav>
+    <header id="bar">
+      <button id="toggle-sidebar" title="Toggle sidebar">☰</button>
+      <span id="title"></span>
+      <label>Theme <select id="theme"></select></label>
+      <label>Input <select id="input"></select></label>
+      <label>Scale <select id="scale"></select></label>
+      <label>Size <select id="size"></select></label>
+      <button id="reload" title="Reload the trial">⟳</button>
+      <a id="open" target="_blank" title="Open the trial in its own tab">↗</a>
+    </header>
+    <main id="stage">
+      <iframe id="frame"></iframe>
+    </main>
+    <script type="module" src="./shell.ts"></script>
+  </body>
+</html>

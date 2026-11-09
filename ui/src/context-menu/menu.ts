@@ -26,6 +26,8 @@ export class ContextMenu extends Base {
   #x: number | undefined;
   #y: number | undefined;
   #element: Element | undefined;
+  /**Spinner shown while promised lines load, cleared when the menu closes*/
+  #loading: Buffer | undefined;
   #focus_out_handler = (e: FocusEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -82,14 +84,21 @@ export class ContextMenu extends Base {
     super.connectedCallback();
     const lines =
       typeof this.#lines === "function" ? this.#lines() : this.#lines;
+    this.#loading?.remove();
     if (lines instanceof Promise) {
-      const buffer = this.appendChild(new Buffer());
+      const buffer = (this.#loading = this.appendChild(new Buffer()));
       lines.then((line) => {
+        //Closed or opened again before the lines arrived
+        if (this.#loading !== buffer) return;
+        this.#loading = undefined;
         buffer.remove();
         this.lines = line;
         this.set_position(this.#x, this.#y, this.#element);
       });
-    } else this.lines = lines;
+    } else {
+      this.#loading = undefined;
+      this.lines = lines;
+    }
     this.addEventListener("focusout", this.#focus_out_handler, {
       capture: true,
     });
@@ -102,6 +111,9 @@ export class ContextMenu extends Base {
 
   protected disconnectedCallback(): void {
     super.disconnectedCallback();
+    //Lines arriving after the menu closed are not shown
+    this.#loading?.remove();
+    this.#loading = undefined;
     this.ownerDocument.defaultView?.removeEventListener(
       "resize",
       this.#window_resize_handler,
@@ -121,8 +133,9 @@ export class ContextMenu extends Base {
   /**Changes focus to the next line
    * @param direction false is first child, true is last child */
   focus_next(direction: boolean) {
-    if (direction) (this.lastChild as MenuLine)?.do_focus();
-    else (this.firstChild as MenuLine)?.do_focus(true);
+    //The direction is passed on, so a divider skips to the line after it, toward the middle
+    if (direction) (this.lastChild as MenuLine)?.do_focus(true);
+    else (this.firstChild as MenuLine)?.do_focus(false);
   }
 
   set closer(closer: boolean) {
@@ -201,14 +214,14 @@ export class ContextMenu extends Base {
         x = sub_box.x;
         if (box.width < x) right = window.innerWidth - x;
         else right = window.innerWidth - (sub_box.x + sub_box.width);
-      } else x = sub_box.x + sub_box.width;
+      } else left = sub_box.x + sub_box.width;
 
       y = sub_box.y + sub_box.height;
 
-      if (y + box.height >= window.innerHeight) {
-        if (y >= box.height) bottom = window.innerHeight - sub_box.y;
-        else top = window.innerHeight - box.height;
-      } else top = y;
+      //Below the element, else above it, else as low as the window allows
+      if (y + box.height < window.innerHeight) top = y;
+      else if (sub_box.y >= box.height) bottom = window.innerHeight - sub_box.y;
+      else top = Math.max(0, window.innerHeight - box.height);
     } else {
       if (y + box.height >= window.innerHeight) {
         if (y >= box.height) bottom = window.innerHeight - y;

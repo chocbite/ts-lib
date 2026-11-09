@@ -16,21 +16,26 @@ export abstract class MenuLine extends Base implements ContextMenuLine {
 
   abstract do_focus(dir?: boolean): void;
 
-  /**Changes focus to the next line
+  /**True for lines that can not take focus, like dividers, focus moves past them*/
+  get skips_focus() {
+    return false;
+  }
+
+  /**Changes focus to the next line, wrapping around and skipping lines that can not take focus
    * @param direction false is next sibling, true is previous */
   focus_next(direction?: boolean) {
-    if (direction) {
-      if (this.previousElementSibling) {
-        (this.previousElementSibling as MenuLine).do_focus(true);
-      } else if (this.parentElement?.lastElementChild !== this) {
-        (this.parentElement?.lastElementChild as MenuLine).do_focus(true);
-      }
-    } else {
-      if (this.nextElementSibling) {
-        (this.nextElementSibling as MenuLine).do_focus();
-      } else if (this.parentElement?.firstElementChild !== this) {
-        (this.parentElement?.firstElementChild as MenuLine).do_focus();
-      }
+    const parent = this.parentElement;
+    if (!parent) return;
+    let line = direction
+      ? this.previousElementSibling
+      : this.nextElementSibling;
+    for (;;) {
+      line ??= direction ? parent.lastElementChild : parent.firstElementChild;
+      //Back at the start, there is no other line to focus
+      if (!line || line === this) return;
+      if (!(line as MenuLine).skips_focus)
+        return (line as MenuLine).do_focus(direction);
+      line = direction ? line.previousElementSibling : line.nextElementSibling;
     }
   }
 }

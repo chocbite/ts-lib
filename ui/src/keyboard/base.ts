@@ -25,6 +25,7 @@ export abstract class KeyboardBase extends Base {
     });
   }
 
+  /**Closes on a press or focus outside the keyboard and the edited element*/
   #listener = (e: Event) => {
     if (e.target === this || this.contains(e.target as Node)) return;
     if (
@@ -34,30 +35,40 @@ export abstract class KeyboardBase extends Base {
       return;
     this.close();
   };
+  /**The document the listeners are on, the element can move to another document*/
+  #listening?: Document;
 
   protected connectedCallback(): void {
     super.connectedCallback();
-    this.elem?.ownerDocument.addEventListener("pointerdown", this.#listener, {
+    this.#listening = this.ownerDocument;
+    this.#listening.addEventListener("pointerdown", this.#listener, {
       capture: true,
     });
-    this.elem?.ownerDocument.addEventListener("blur", this.#listener, {
+    this.#listening.addEventListener("focusin", this.#listener, {
       capture: true,
     });
   }
 
   protected disconnectedCallback(): void {
     super.disconnectedCallback();
-    this.elem?.ownerDocument.removeEventListener(
-      "pointerdown",
-      this.#listener,
-      { capture: true },
-    );
-    this.elem?.ownerDocument.removeEventListener("blur", this.#listener, {
+    this.#listening?.removeEventListener("pointerdown", this.#listener, {
       capture: true,
     });
+    this.#listening?.removeEventListener("focusin", this.#listener, {
+      capture: true,
+    });
+    this.#listening = undefined;
   }
 
+  /**The page's own body transform, kept while the page is shifted so it can be restored*/
+  #body_transform?: string;
+
+  /**Only one keyboard is open at a time, focus can move to another input without a pointer*/
+  static #open?: KeyboardBase;
+
   open(element: HTMLElement): void {
+    if (KeyboardBase.#open !== this) KeyboardBase.#open?.close();
+    KeyboardBase.#open = this;
     this.elem = element;
     this.elem.ownerDocument.documentElement.appendChild(this);
     const erect = element.getBoundingClientRect();
@@ -66,12 +77,23 @@ export abstract class KeyboardBase extends Base {
     if (erect.top + erect.height > krect.top) {
       element.scrollIntoView({ behavior: "instant", block: "center" });
       const erect = element.getBoundingClientRect();
-      element.ownerDocument.body.style.transform = `translateY(${krect.top - (erect.top + erect.height)}px)`;
+      //Moves the page up until the element is above the keyboard, but never so far that its top leaves the screen
+      const shift = Math.max(krect.top - (erect.top + erect.height), -erect.top);
+      if (shift < 0) {
+        const body = element.ownerDocument.body;
+        this.#body_transform ??= body.style.transform;
+        body.style.transform =
+          `${this.#body_transform} translateY(${shift}px)`.trim();
+      }
     }
   }
 
   close(): void {
+    if (KeyboardBase.#open === this) KeyboardBase.#open = undefined;
     this.remove();
-    if (this.elem) this.elem.ownerDocument.body.style.transform = "";
+    if (this.elem && this.#body_transform !== undefined) {
+      this.elem.ownerDocument.body.style.transform = this.#body_transform;
+      this.#body_transform = undefined;
+    }
   }
 }

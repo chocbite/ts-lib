@@ -57,6 +57,14 @@ export class FormButton<ID extends string | undefined> extends FormValueWrite<
           if (this.#toggle) this.set_value_check(!this.buffer);
           else this.set_value_check(false);
           this.onpointerup = null;
+          this.onpointercancel = null;
+        };
+        //A cancelled press releases a momentary button and does not toggle a toggle button
+        this.onpointercancel = (ev) => {
+          this.releasePointerCapture(ev.pointerId);
+          if (!this.#toggle) this.set_value_check(false);
+          this.onpointerup = null;
+          this.onpointercancel = null;
         };
       }
     };
@@ -69,7 +77,13 @@ export class FormButton<ID extends string | undefined> extends FormValueWrite<
           if (this.#toggle) this.set_value_check(!this.buffer);
           else this.set_value_check(false);
           this.ontouchend = null;
+          this.ontouchcancel = null;
         }
+      };
+      this.ontouchcancel = () => {
+        if (!this.#toggle) this.set_value_check(false);
+        this.ontouchend = null;
+        this.ontouchcancel = null;
       };
     };
     this.onkeydown = (e) => {
@@ -85,13 +99,13 @@ export class FormButton<ID extends string | undefined> extends FormValueWrite<
               case " ": {
                 e.stopPropagation();
                 e.preventDefault();
+                this.onkeyup = null;
                 if (this.#toggle) this.set_value_check(!this.buffer);
                 else this.set_value_check(false);
                 if (this.#on_click) this.#on_click();
                 break;
               }
             }
-            this.onkeyup = null;
           };
           break;
         }
@@ -113,11 +127,8 @@ export class FormButton<ID extends string | undefined> extends FormValueWrite<
 
   /**Changes the icon of the button*/
   set icon(icon: SVGFunc | undefined) {
-    if (icon) this.#icon = this.insertBefore(icon(), this.#text);
-    else if (this.#icon) {
-      this.removeChild(this.#icon);
-      this.#icon = undefined;
-    }
+    if (this.#icon) this.removeChild(this.#icon);
+    this.#icon = icon ? this.insertBefore(icon(), this.#text) : undefined;
   }
 
   /**Function to call on button click*/

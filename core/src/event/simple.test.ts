@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { E, EventHandler } from "./simple";
 
 describe("Init", { timeout: 50 }, function () {
@@ -211,5 +211,49 @@ describe("Proxy Event Handler", { timeout: 50 }, function () {
       new Promise<999>((a) => setTimeout(a, 20, 999)),
     ]);
     expect(f).equal(999);
+  });
+});
+
+describe("Event names matching Object properties", { timeout: 50 }, function () {
+  it("Can listen to and emit events named toString and constructor", function () {
+    const handler = new EventHandler<
+      { toString: number; constructor: number },
+      undefined
+    >(undefined);
+    const received: number[] = [];
+    handler.on("toString", (e) => received.push(e.data));
+    handler.on("constructor", (e) => received.push(e.data));
+    handler.emit("toString", 1);
+    handler.emit("constructor", 2);
+    expect(received).toEqual([1, 2]);
+  });
+  it("Emitting an unused event named toString reaches proxies", function () {
+    const handler = new EventHandler<{ toString: number }, undefined>(
+      undefined,
+    );
+    const received: number[] = [];
+    handler.proxy_on((e) => received.push(e.data));
+    handler.emit("toString", 1);
+    expect(received).toEqual([1]);
+  });
+});
+
+describe("Throwing proxy", { timeout: 50 }, function () {
+  it("Does not stop delivery to listeners or other proxies", function () {
+    const handler = new EventHandler<{ test: number }, undefined>(undefined);
+    const received: string[] = [];
+    handler.proxy_on(() => {
+      throw new Error("Proxy failed");
+    });
+    handler.proxy_on(() => received.push("proxy"));
+    handler.on("test", () => received.push("listener"));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(() => handler.emit("test", 1)).not.toThrow();
+      expect(received).toEqual(["proxy", "listener"]);
+      expect(error).toHaveBeenCalledTimes(1);
+    } finally {
+      error.mockRestore();
+    }
   });
 });

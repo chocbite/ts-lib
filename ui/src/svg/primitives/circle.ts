@@ -22,8 +22,8 @@ export function circle(
  * @param center_x the center point on the x axis
  * @param center_y the center point on the y axis
  * @param radius radius in x axis
- * @param start_angle start angle in radians
- * @param end_angle end anglein  radians*/
+ * @param start_angle start angle in degrees
+ * @param end_angle end angle in degrees, a sweep of 360 degrees or more draws the whole circle*/
 export function circle_arc(
   center_x: number,
   center_y: number,

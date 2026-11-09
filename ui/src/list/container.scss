@@ -19,7 +19,7 @@ list-container {
         position: sticky;
         border-bottom: 1px solid var(--list-colors-border-header);
         background-color: var(--list-colors-background-row_even);
-        z-index: 1;
+        z-index: 999;
 
         &:first-child {
           left: 0;

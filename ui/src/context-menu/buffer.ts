@@ -14,6 +14,10 @@ export class Buffer extends MenuLine {
     this.appendChild(new Spinner());
   }
 
+  get skips_focus() {
+    return true;
+  }
+
   do_focus(dir: boolean) {
     this.focus_next(dir);
   }

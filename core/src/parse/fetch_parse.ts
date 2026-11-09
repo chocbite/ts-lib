@@ -275,47 +275,49 @@ export function make_fetch_parser<const S extends FetchSchema>(
     strip_writable(schema) as RuntimeSchema & Record<string, never>,
   );
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let controller: AbortController | undefined;
-  let active = false;
-  const fetch_result = async (): Promise<StateResult<unknown>> => {
+  //Each subscription gets its own controller, ending it aborts its fetches and stops its polling
+  let subscription: AbortController | undefined;
+  const fetch_result = async (
+    signal?: AbortSignal,
+  ): Promise<StateResult<unknown>> => {
     try {
-      controller = new AbortController();
       const [url, init] = request_parts(request());
-      const response = await fetch(url, { ...init, signal: controller.signal });
+      const response = await fetch(url, { ...init, signal });
       if (!response.ok) return err(`Fetch failed: HTTP ${response.status}`);
       return parse(await response.text());
     } catch (cause) {
       // fetch, response.text and request can reject, convert to a result here
       return err(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      controller = undefined;
     }
   };
 
-  // Always answer so pending reads resolve, only notify subscribers while subscribed
-  const load = async (owner: RemoteOwner, update: boolean) => {
-    owner.update_single(await fetch_result(), update && active);
+  // One-shot reads always answer so pending reads resolve, subscription fetches only notify while that subscription lasts
+  const load = async (owner: RemoteOwner, signal?: AbortSignal) => {
+    const result = await fetch_result(signal);
+    if (signal?.aborted) return;
+    owner.update_single(result, Boolean(signal));
   };
 
-  const schedule = (owner: RemoteOwner) => {
-    if (!active) return;
+  const schedule = (owner: RemoteOwner, signal: AbortSignal) => {
+    if (signal.aborted) return;
     timer = setTimeout(async () => {
-      await load(owner, true);
-      schedule(owner);
+      await load(owner, signal);
+      schedule(owner, signal);
     }, update_rate);
   };
 
   const root = state.r.reaw.from<unknown, any, unknown>(
-    (owner) => void load(owner, false),
+    (owner) => void load(owner),
     (owner) => {
-      active = true;
-      void load(owner, true).then(() => schedule(owner));
+      subscription = new AbortController();
+      const signal = subscription.signal;
+      void load(owner, signal).then(() => schedule(owner, signal));
     },
     () => {
-      active = false;
+      subscription?.abort();
+      subscription = undefined;
       if (timer) clearTimeout(timer);
       timer = undefined;
-      controller?.abort();
     },
     async (payload) => {
       try {

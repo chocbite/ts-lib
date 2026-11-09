@@ -34,6 +34,26 @@ function date_from_value(value: string): Date | undefined {
   return date_value(date) === match[0] ? date : undefined;
 }
 
+/**Date to show for the value of an input of the given type*/
+function view_from_value(value: string, type: string): Date | undefined {
+  if (type === "month") {
+    const match = /^(\d{4})-(\d{2})$/.exec(value);
+    if (!match) return undefined;
+    return new Date(Number(match[1]), Number(match[2]) - 1, 1);
+  }
+  if (type === "week") {
+    const match = /^(\d{4})-W(\d{2})$/.exec(value);
+    if (!match) return undefined;
+    //The 4th of january is always in week 1, the week starts on monday
+    const date = new Date(Number(match[1]), 0, 4);
+    date.setDate(
+      date.getDate() - ((date.getDay() + 6) % 7) + (Number(match[2]) - 1) * 7,
+    );
+    return date;
+  }
+  return date_from_value(value);
+}
+
 function week_value(date: Date): string {
   const utc = new Date(
     Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()),
@@ -77,7 +97,7 @@ export class Keyboard_DateTime extends KeyboardBase {
     )
       return;
     this.#input = element;
-    this.#view = date_from_value(element.value) ?? new Date();
+    this.#view = view_from_value(element.value, element.type) ?? new Date();
     this.#view.setDate(1);
     this.#selected_datetime_date =
       element.type === "datetime-local"

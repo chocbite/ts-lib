@@ -308,4 +308,70 @@ describe("Initialize delayed states", function () {
       await test_state_write(maker_write, false);
     });
   });
+
+  describe("Failing init", { timeout: 200 }, function () {
+    const failing = () =>
+      st.rea<number>(async () => {
+        throw new Error("Init failed");
+      });
+    it("Pending reads settle when the init function throws", async function () {
+      const state = failing();
+      const read = await Promise.race([
+        state.then((value) => value),
+        sleep(50, "pending" as const),
+      ]);
+      expect(read).not.toBe("pending");
+    });
+    it("Reads after a failed init give a result", async function () {
+      const state = failing();
+      state.then(() => {});
+      await sleep(10);
+      const read = await Promise.race([
+        state.then((value) => value),
+        sleep(50, "pending" as const),
+      ]);
+      expect(read).toHaveProperty("ok");
+    });
+    it("ROA: retries init on the next read after a failed init", async function () {
+      let attempts = 0;
+      const state = st.roa<number>(async () => {
+        if (attempts++ === 0) throw new Error("Init failed");
+        return ok(5);
+      });
+      const first = state.then((value) => value);
+      await sleep(10);
+      expect(await state.then((value) => value)).toEqual(ok(5));
+      expect(await first).toEqual(ok(5));
+      expect(attempts).toBe(2);
+    });
+  });
+
+  describe("Set during init", { timeout: 200 }, function () {
+    it("ROA: value set while init is running is not overwritten by init", async function () {
+      const state = st.roa<number>(() => sleep(20, ok(3)));
+      const values: number[] = [];
+      state.sub((value) => values.push(value.value));
+      const first = state.then((value) => value);
+      state.set_ok(5);
+      expect(await first).toEqual(ok(5));
+      await sleep(40);
+      expect(await state.then((value) => value)).toEqual(ok(5));
+      expect(values).toEqual([5]);
+    });
+  });
+
+  describe("Init types", function () {
+    it("Ok states only accept init functions giving ok results", function () {
+      //Only type checked, never called
+      const check = () => {
+        st.roa<number>(async () => ok(1));
+        // @ts-expect-error an ok state can not be initialized with an error
+        st.roa<number>(async () => err("Failed"));
+        st.roaw<number>(async () => ok(1));
+        // @ts-expect-error an ok state can not be initialized with an error
+        st.roaw<number>(async () => err("Failed"));
+      };
+      expect(check).toBeTypeOf("function");
+    });
+  });
 });

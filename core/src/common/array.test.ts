@@ -138,4 +138,13 @@ describe("array_from_length", () => {
     const result = array_from_length(2, (i) => ({ id: i }));
     expect(result).toEqual([{ id: 0 }, { id: 1 }]);
   });
+
+  it("should put prepend before and append after the values", () => {
+    expect(array_from_length(2, (i) => i, [-1], [99])).toEqual([-1, 0, 1, 99]);
+  });
+
+  it("should keep prepend and append when the length is 0 or negative", () => {
+    expect(array_from_length(0, (i) => i, [-1], [99])).toEqual([-1, 99]);
+    expect(array_from_length(-2, (i) => i, [-1], [99])).toEqual([-1, 99]);
+  });
 });

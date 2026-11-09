@@ -35,6 +35,9 @@ export class FormTextMultiline<
   #filter?: RegExp;
   #max_length?: number;
   #max_bytes?: number;
+  //True while the limit comes from the bound state
+  #related_length = false;
+  #related_bytes = false;
   #value_box: HTMLTextAreaElement = this.appendChild(
     document.createElement("textarea"),
   );
@@ -47,6 +50,9 @@ export class FormTextMultiline<
     };
     this.#value_box.onblur = () => {
       this.selected = false;
+      //Shows a state change that arrived while focused
+      if (this._buffer !== undefined && this.#value_box.value !== this._buffer)
+        this.new_value(this._buffer);
     };
     this.appendChild(this.warn_input);
     this.#resizer.appendChild(material_drag_handle_rounded());
@@ -65,30 +71,32 @@ export class FormTextMultiline<
         this.#resizer.onpointerup = null;
       };
     };
-    this.#value_box.onkeydown = (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.stopPropagation();
-      }
-    };
     this.#value_box.onchange = () => this.#set();
     this.#value_box.onbeforeinput = (e) => {
       this.warn("");
       const data = e.data || e.dataTransfer?.getData("text/plain");
       if (data) {
+        if (this.#filter) this.#filter.lastIndex = 0;
         if (this.#filter && !this.#filter.test(data)) {
           e.preventDefault();
           this.warn("Invalid character entered");
-        } else {
+        } else if (this.#max_length || this.#max_bytes) {
+          //The selected text is replaced by the typed text
+          const box = this.#value_box;
+          const value = box.value;
+          const start = box.selectionStart;
+          const end = box.selectionEnd;
           if (
             this.#max_length &&
-            this.#value_box.value.length + data.length > this.#max_length
+            value.length - (end - start) + data.length > this.#max_length
           ) {
             e.preventDefault();
             this.warn(`A maximum of ${this.#max_length} characters is allowed`);
           }
           if (
             this.#max_bytes &&
-            string_byte_length(this.#value_box.value) +
+            string_byte_length(value) -
+              string_byte_length(value.slice(start, end)) +
               string_byte_length(data) >
               this.#max_bytes
           ) {
@@ -104,9 +112,13 @@ export class FormTextMultiline<
         e.stopPropagation();
         if (this.buffer) this.new_value(this.buffer);
         else this.clear_value();
-      } else if (e.key === "Enter" && e.ctrlKey) {
-        e.preventDefault();
-        this.#set();
+      } else if (e.key === "Enter") {
+        //Enter is a new line, it must not reach parent elements
+        if (!e.shiftKey) e.stopPropagation();
+        if (e.ctrlKey) {
+          e.preventDefault();
+          this.#set();
+        }
       }
     };
   }
@@ -139,7 +151,8 @@ export class FormTextMultiline<
 
   set max_length(val: number | undefined) {
     this.#max_length = val;
-    this.#value_box.maxLength = val ?? -1;
+    if (val === undefined) this.#value_box.removeAttribute("maxlength");
+    else this.#value_box.maxLength = val;
   }
   get max_length(): number | undefined {
     return this.#max_length;
@@ -186,12 +199,16 @@ export class FormTextMultiline<
   protected state_related(related: Partial<StateStringRelated>): void {
     if (related.max_length)
       this.attach_state_to_prop("max_length", related.max_length, () => none());
-    else this.detach_state_from_prop("max_length");
+    else if (this.#related_length)
+      this.detach_state_from_prop("max_length").max_length = undefined;
+    this.#related_length = !!related.max_length;
     if (related.max_length_bytes)
       this.attach_state_to_prop("max_bytes", related.max_length_bytes, () =>
         none(),
       );
-    else this.detach_state_from_prop("max_bytes");
+    else if (this.#related_bytes)
+      this.detach_state_from_prop("max_bytes").max_bytes = undefined;
+    this.#related_bytes = !!related.max_length_bytes;
   }
 }
 define_element(FormTextMultiline);
@@ -202,6 +219,7 @@ export function form_text_multiline<ID extends string | undefined>(
 ): FormTextMultiline<ID> {
   const input = new FormTextMultiline<ID>(options?.id);
   if (options) {
+    if (options.filter) input.filter = options.filter;
     if (options.placeholder) input.placeholder = options.placeholder;
     if (options.max_length) input.max_length = options.max_length;
     if (options.max_bytes) input.max_bytes = options.max_bytes;

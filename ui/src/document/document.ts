@@ -45,6 +45,9 @@ class DocumentHandler {
       for (let i = 0; i < head_elements.length; i++) {
         switch (head_elements[i].nodeName) {
           case "LINK":
+            //Built apps load their css through a stylesheet link
+            if ((head_elements[i] as HTMLLinkElement).rel === "stylesheet")
+              document.head.appendChild(head_elements[i].cloneNode(true));
             break;
           case "STYLE":
             document.head.appendChild(head_elements[i].cloneNode(true));

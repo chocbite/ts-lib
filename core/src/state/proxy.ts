@@ -152,6 +152,8 @@ class RXXX<
   implements Owner<S, WIN, ROUT, WOUT, RROUT>
 {
   constructor(
+    rok: boolean,
+    writable: boolean,
     state: S,
     transform_read?: (value: StateInferResult<S>) => RROUT,
     transform_write?: {
@@ -160,6 +162,8 @@ class RXXX<
     },
   ) {
     super();
+    this.#rok = rok;
+    this.#writable = writable;
     this.#state = state;
     if (transform_read) this.transform_read = transform_read;
     if (transform_write) {
@@ -168,10 +172,15 @@ class RXXX<
     }
   }
 
+  #rok: boolean;
+  #writable: boolean;
   #state: S;
   #subscriber = (value: SR<RIN>) => {
     const transformed = this.transform_read(value as StateInferResult<S>);
-    const changed = !this.#buffer?.compare(transformed);
+    //Objects and arrays can be changed in place, so they are always passed on
+    const changed =
+      !this.#buffer?.compare(transformed) ||
+      (transformed.ok && typeof transformed.value === "object");
     this.#buffer = transformed;
     if (changed) this.update_subs(transformed);
   };
@@ -180,8 +189,12 @@ class RXXX<
   private transform_read(value: StateInferResult<S>): RROUT {
     return value as unknown as RROUT;
   }
-  private transform_wout_win?: (value: WOUT) => WIN;
-  private transform_win_wout?: (value: WIN) => WOUT;
+  private transform_wout_win(value: WOUT): WIN {
+    return value as unknown as WIN;
+  }
+  private transform_win_wout(value: WIN): WOUT {
+    return value as unknown as WOUT;
+  }
   protected on_sub(run: boolean = false): void {
     this.#state.sub(this.#subscriber, run);
   }
@@ -224,7 +237,7 @@ class RXXX<
 
   //#Reader Context
   get rok(): boolean {
-    return this.#state.rok;
+    return this.#rok;
   }
   get rsync(): boolean {
     return this.#state.rsync;
@@ -253,7 +266,7 @@ class RXXX<
         if (is_promise_like(rejected_result)) return rejected_result;
         return sync_resolve(rejected_result);
       }
-      return sync_reject(error as any);
+      return sync_reject(error);
     }
   }
   get(): RROUT {
@@ -269,11 +282,11 @@ class RXXX<
 
   //#Writer Context
   get writable(): boolean {
-    return this.#state.writable;
+    return this.#writable && this.#state.writable;
   }
   write(value: WOUT): PromiseLike<SR<void>> {
-    if (!this.#state.write) return sync_resolve(err("not writable"));
-    if (!this.transform_wout_win) return sync_resolve(err("not writable"));
+    if (!this.#writable || !this.#state.write)
+      return sync_resolve(err("not writable"));
     return this.#state.write(this.transform_wout_win(value));
   }
 
@@ -282,10 +295,8 @@ class RXXX<
     const limit = this.#state.limit?.bind(this.#state);
     return limit
       ? (value) => {
-          if (!this.transform_wout_win)
-            return sync_resolve(err("not writable"));
+          if (!this.#writable) return sync_resolve(err("not writable"));
           return limit(this.transform_wout_win(value)).then((res) => {
-            if (!this.transform_win_wout) return err("not writable");
             if (res.err) return err(res.error);
             return ok(this.transform_win_wout(res.value));
           });
@@ -297,10 +308,8 @@ class RXXX<
     const check = this.#state.check?.bind(this.#state);
     return check
       ? (value) => {
-          if (!this.transform_wout_win)
-            return sync_resolve(err("not writable"));
+          if (!this.#writable) return sync_resolve(err("not writable"));
           return check(this.transform_wout_win(value)).then((res) => {
-            if (!this.transform_win_wout) return err("not writable");
             if (res.err) return err(res.error);
             return ok(this.transform_win_wout(res.value));
           });
@@ -330,6 +339,8 @@ function roa_from<
   transform?: (value: StateInferResult<S>) => ResultOk<ROUT>,
 ): StateProxyROA<S, RIN, WIN, ROUT, WOUT> {
   return new RXXX<S, RIN, WIN, ROUT, WOUT, ResultOk<ROUT>>(
+    true,
+    false,
     state,
     transform,
   ) as StateProxyROA<S, RIN, WIN, ROUT, WOUT>;
@@ -361,6 +372,8 @@ function roaw_from<
   },
 ): StateProxyROAW<S, RIN, WIN, ROUT, WOUT> {
   return new RXXX<S, RIN, WIN, ROUT, WOUT, ResultOk<ROUT>>(
+    true,
+    true,
     state,
     transform_read,
     transform_write,
@@ -388,6 +401,8 @@ function ros_from<
   transform?: (value: StateInferResult<S>) => ResultOk<ROUT>,
 ): StateProxyROS<S, RIN, WIN, ROUT, WOUT> {
   return new RXXX<S, RIN, WIN, ROUT, WOUT, ResultOk<ROUT>>(
+    true,
+    false,
     state,
     transform,
   ) as StateProxyROS<S, RIN, WIN, ROUT, WOUT>;
@@ -418,6 +433,8 @@ function rosw_from<
   },
 ): StateProxyROSW<S, RIN, WIN, ROUT, WOUT> {
   return new RXXX<S, RIN, WIN, ROUT, WOUT, ResultOk<ROUT>>(
+    true,
+    true,
     state,
     transform_read,
     transform_write,
@@ -445,6 +462,8 @@ function rea_from<
   transform?: (value: StateInferResult<S>) => SR<ROUT>,
 ): StateProxyREA<S, RIN, WIN, ROUT, WOUT> {
   return new RXXX<S, RIN, WIN, ROUT, WOUT, SR<ROUT>>(
+    false,
+    false,
     state,
     transform,
   ) as StateProxyREA<S, RIN, WIN, ROUT, WOUT>;
@@ -475,6 +494,8 @@ function reaw_from<
   },
 ): StateProxyREAW<S, RIN, WIN, ROUT, WOUT> {
   return new RXXX<S, RIN, WIN, ROUT, WOUT, SR<ROUT>>(
+    false,
+    true,
     state,
     transform_read,
     transform_write,
@@ -503,6 +524,8 @@ function res_from<
   transform?: (value: StateInferResult<S>) => SR<ROUT>,
 ): StateProxyRES<S, RIN, WIN, ROUT, WOUT> {
   return new RXXX<S, RIN, WIN, ROUT, WOUT, SR<ROUT>>(
+    false,
+    false,
     state,
     transform,
   ) as StateProxyRES<S, RIN, WIN, ROUT, WOUT>;
@@ -534,6 +557,8 @@ function resw_from<
   },
 ): StateProxyRESW<S, RIN, WIN, ROUT, WOUT> {
   return new RXXX<S, RIN, WIN, ROUT, WOUT, SR<ROUT>>(
+    false,
+    true,
     state,
     transform_read,
     transform_write,

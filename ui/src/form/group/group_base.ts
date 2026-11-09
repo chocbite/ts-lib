@@ -64,6 +64,7 @@ export abstract class FormGroupBase<
     this.classList.remove(
       FormGroupBorderStyle.Inset,
       FormGroupBorderStyle.Outset,
+      FormGroupBorderStyle.Line,
     );
     if (border && border !== FormGroupBorderStyle.None)
       this.classList.add(border);
@@ -99,13 +100,23 @@ export abstract class FormGroupBase<
   /**Returns partial value of the group, containing all values of components that have values*/
   get value_partial(): Result<Partial<RT>, string> {
     if (this._state) return err("State based component");
+    return ok(this.#partial());
+  }
+
+  #partial(): Partial<RT> {
     const result: Partial<RT> = {};
     for (const [key, comp] of this._value_elements) {
       const val = comp.get_value;
       if (val.err) continue;
       result[key as keyof RT] = val.value as RT[keyof RT];
     }
-    return ok(result);
+    return result;
+  }
+
+  /**The change listener of the group gets the values of all components that have values*/
+  protected child_changed(child: FormValueWrite<any, any>): void {
+    if (this._value_elements.get(child.form_id as string) === child)
+      this.call_change(this.#partial());
   }
 
   /**Returns partial value of the group, only containing values of components where value has changed*/

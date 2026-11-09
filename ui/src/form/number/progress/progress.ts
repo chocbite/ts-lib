@@ -28,22 +28,30 @@ export class FormProgress<ID extends string | undefined> extends FormValue<
   set min(min: number) {
     this.#min = min;
     this.#span = this.#max - this.#min;
+    this.#redraw();
   }
 
   /**Set the minimum value*/
   set max(max: number) {
     this.#max = max;
     this.#span = this.#max - this.#min;
+    this.#redraw();
   }
 
   /**Sets the amount of decimals the element can have*/
   set decimals(dec: number | undefined) {
     this.#decimals = Math.max(dec ?? 0, 0);
+    this.#redraw();
   }
 
   /**Sets the unit of the element*/
   set unit(unit: string | undefined) {
     this.#unit.textContent = unit ?? "";
+  }
+
+  /**Shows the value again, after a change to how it is shown*/
+  #redraw(): void {
+    if (this._buffer !== undefined) this.new_value(this._buffer);
   }
 
   protected new_value(value: number): void {
@@ -64,19 +72,25 @@ export class FormProgress<ID extends string | undefined> extends FormValue<
 
   protected clear_error(): void {}
 
+  /**Related states of the last bound state, a prop is only reset when it followed one of them*/
+  #related: Partial<StateNumberRelated> = {};
+
   protected state_related(related: Partial<StateNumberRelated>): void {
+    const old = this.#related;
+    this.#related = related;
     if (related.min)
       this.attach_state_to_prop("min", related.min, () => none());
-    else this.detach_state_from_prop("min");
+    else if (old.min) this.detach_state_from_prop("min").min = 0;
     if (related.max)
       this.attach_state_to_prop("max", related.max, () => none());
-    else this.detach_state_from_prop("max");
+    else if (old.max) this.detach_state_from_prop("max").max = 100;
     if (related.decimals)
       this.attach_state_to_prop("decimals", related.decimals, () => none());
-    else this.detach_state_from_prop("decimals");
+    else if (old.decimals)
+      this.detach_state_from_prop("decimals").decimals = undefined;
     if (related.unit)
       this.attach_state_to_prop("unit", related.unit, () => none());
-    else this.detach_state_from_prop("unit");
+    else if (old.unit) this.detach_state_from_prop("unit").unit = undefined;
   }
 }
 define_element(FormProgress);

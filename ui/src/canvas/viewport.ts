@@ -3,6 +3,7 @@ import { sync_resolve } from "@chocbite/ts-lib/common";
 import { ok } from "@chocbite/ts-lib/result";
 import type { State, StateInferSub } from "@chocbite/ts-lib/state";
 import { state } from "@chocbite/ts-lib/state";
+import state_ui from "#state";
 import { svg } from "#svg";
 import "./viewport.scss";
 import type { ViewportElement } from "./viewport_element";
@@ -25,10 +26,8 @@ export class Viewport extends Base {
     this.#viewport_width_half = this.#viewport_width / 2;
     this.#viewport_height = a[0].contentRect.height;
     this.#viewport_height_half = this.#viewport_height / 2;
-    this.#pan_coordinates(
-      this.#pan_x.ok() + (a[0].contentRect.width - this.#viewport_width) / 2,
-      this.#pan_y.ok() + (a[0].contentRect.height - this.#viewport_height) / 2,
-    );
+    //The pan is relative to the center, so the canvas stays centered
+    this.#pan_coordinates(this.#pan_x.ok(), this.#pan_y.ok());
     this.#root.setAttribute(
       "viewBox",
       `0 0 ${this.#viewport_width} ${this.#viewport_height}`,
@@ -37,6 +36,41 @@ export class Viewport extends Base {
   #root = this.appendChild(svg.create("svg").elem);
   #panner;
   #zoomer;
+
+  /**Detaches the mover when clicking outside the viewport*/
+  #outside_pointerdown = (e: PointerEvent) => {
+    if (!this.contains(e.target as Node)) this.#detach_mover();
+  };
+  /**Detaches the mover when the browser window loses focus*/
+  #window_blur = () => this.#detach_mover();
+  /**Document the listeners are attached to, while connected*/
+  #listening_document?: Document;
+
+  protected connectedCallback() {
+    super.connectedCallback();
+    this.#listening_document = this.ownerDocument;
+    this.#listening_document.addEventListener(
+      "pointerdown",
+      this.#outside_pointerdown,
+    );
+    this.#listening_document.defaultView?.addEventListener(
+      "blur",
+      this.#window_blur,
+    );
+  }
+
+  protected disconnectedCallback() {
+    super.disconnectedCallback();
+    this.#listening_document?.removeEventListener(
+      "pointerdown",
+      this.#outside_pointerdown,
+    );
+    this.#listening_document?.defaultView?.removeEventListener(
+      "blur",
+      this.#window_blur,
+    );
+    this.#listening_document = undefined;
+  }
 
   constructor(
     canvas_width: number,
@@ -174,6 +208,8 @@ export class Viewport extends Base {
         count--;
       }
     };
+    //The browser can take over a touch, for example for a system gesture, which ends it without pointerup
+    this.onpointercancel = this.onpointerup;
     //Wheel
     this.addEventListener(
       "wheel",
@@ -214,16 +250,6 @@ export class Viewport extends Base {
       },
       { capture: true },
     );
-    // Detach mover when clicking outside the viewport
-    document.addEventListener("pointerdown", (e) => {
-      if (!this.contains(e.target as Node)) {
-        this.#detach_mover();
-      }
-    });
-    // Detach mover when the browser window loses focus
-    window.addEventListener("blur", () => {
-      this.#detach_mover();
-    });
   }
 
   #pan_coordinates(x?: number, y?: number) {
@@ -286,12 +312,12 @@ export class Viewport extends Base {
     return this.#canvas_height;
   }
 
-  #pan_x = state.rosw(ok(1), (value) => {
+  #pan_x = state.rosw(ok(0), (value) => {
     return sync_resolve(ok(this.#pan_coordinates(value, undefined)));
   });
   readonly pan_x = this.#pan_x.read_write;
 
-  #pan_y = state.rosw(ok(1), (value) => {
+  #pan_y = state.rosw(ok(0), (value) => {
     return sync_resolve(ok(this.#pan_coordinates(undefined, value)));
   });
   readonly pan_y = this.#pan_y.read_write;
@@ -348,51 +374,12 @@ export class Viewport extends Base {
 
   #update_rows(rows: readonly ViewportElement[]) {
     this.#elements = rows;
-    if (rows.length === 0) {
-      this.#canvas_elements.replaceChildren();
-      return;
-    }
-    const read = state.a.read(rows);
-    for (let i = 0; i < read.length; i++) {
-      const row = read[i];
-      if (row.type === "fresh")
-        this.#canvas_elements.replaceChildren(
-          ...row.items.map((i) => i.canvas),
-        );
-      else if (row.type === "added") {
-        const child = this.#canvas_elements.children[row.index] as
-          | SVGSVGElement
-          | undefined;
-        const rows = row.items.map((i) => i.canvas);
-        if (child) child.before(...rows);
-        else this.#canvas_elements.append(...rows);
-      } else if (row.type === "removed")
-        for (let i = 0; i < row.items.length; i++)
-          this.#canvas_elements.children[row.index].remove();
-      else if (row.type === "changed")
-        for (let i = 0; i < row.items.length; i++)
-          this.#canvas_elements.replaceChild(
-            row.items[i].canvas,
-            this.#canvas_elements.children[row.index + i],
-          );
-      else if (row.type === "moved") {
-        const extracted = [];
-        for (let i = 0; i < row.items.length; i++) {
-          const child = this.#canvas_elements.children[
-            row.from_index + i
-          ] as SVGSVGElement;
-          if (child) extracted.push(child);
-          child.remove();
-        }
-        const child = this.#canvas_elements.children[row.to_index] as
-          | SVGSVGElement
-          | undefined;
-        for (let i = 0; i < extracted.length; i++) {
-          if (child) child.before(extracted[i]);
-          else this.#canvas_elements.append(extracted[i]);
-        }
-      }
-    }
+    //Each element owns its canvas node, so changed elements replace their node
+    state_ui.a.apply(this.#canvas_elements, rows, {
+      create: (element) => element.canvas,
+    });
+    const moved = this.#mover?.element;
+    if (moved && !rows.includes(moved)) this.#detach_mover();
   }
 
   //      __  __  ______      ________ _____

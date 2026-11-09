@@ -35,6 +35,25 @@ export const FormDateTimeMode = {
 export type FormDateTimeMode =
   (typeof FormDateTimeMode)[keyof typeof FormDateTimeMode];
 
+const TIME_ONLY = /^\d{2}:\d{2}/;
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+//Strings the input of each type shows as they are, without milliseconds
+const INPUT_FORMAT: { [K in FormDateTimeType]: RegExp } = {
+  date: DATE_ONLY,
+  time: /^\d{2}:\d{2}(:\d{2})?$/,
+  datetime: /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/,
+};
+
+/**Returns the wall clock time of a string as UTC milliseconds, like the input uses
+ * Time only strings give the time since midnight, strings without time zone are local*/
+const string_wall_time = (value: string): number => {
+  if (TIME_ONLY.test(value)) return Date.parse("1970-01-01T" + value + "Z");
+  //Date only strings are parsed as UTC midnight, which is the wall clock
+  if (DATE_ONLY.test(value)) return Date.parse(value);
+  const date = new Date(value);
+  return date.getTime() - date.getTimezoneOffset() * 60000;
+};
+
 type FormDateTimeResult<MODE extends FormDateTimeMode> =
   MODE extends typeof FormDateTimeMode.DATE
     ? Date
@@ -65,6 +84,8 @@ export class FormDateTime<
     };
     this.warn_input.onblur = () => {
       this.selected = false;
+      //Shows a state change that arrived while focused
+      if (this._buffer !== undefined) this.new_value(this._buffer);
     };
 
     this.warn_input.type = "datetime-local";
@@ -77,14 +98,23 @@ export class FormDateTime<
       this.warn_input.showPicker();
     this.warn_input.onchange = () => {
       if (this.warn_input.value) {
-        if (this.#mode === FormDateTimeMode.DATE)
-          this.set_value_check(
-            new Date(
-              this.warn_input.valueAsNumber +
-                new Date().getTimezoneOffset() * 60000,
-            ) as FormDateTimeResult<MODE>,
+        if (this.#mode === FormDateTimeMode.DATE) {
+          //The input gives the local wall clock as UTC, the offset of the entered date is used
+          const wall = new Date(this.warn_input.valueAsNumber);
+          const date = new Date(0);
+          date.setFullYear(
+            wall.getUTCFullYear(),
+            wall.getUTCMonth(),
+            wall.getUTCDate(),
           );
-        else if (this.#mode === FormDateTimeMode.STRING)
+          date.setHours(
+            wall.getUTCHours(),
+            wall.getUTCMinutes(),
+            wall.getUTCSeconds(),
+            wall.getUTCMilliseconds(),
+          );
+          this.set_value_check(date as FormDateTimeResult<MODE>);
+        } else if (this.#mode === FormDateTimeMode.STRING)
           this.set_value_check(
             this.warn_input.value as FormDateTimeResult<MODE>,
           );
@@ -135,8 +165,11 @@ export class FormDateTime<
     let time: number;
     if (typeof value === "number") time = value;
     else if (typeof value === "string") {
-      const date = new Date(value);
-      time = date.getTime() - date.getTimezoneOffset() * 60000;
+      if (INPUT_FORMAT[this.#type].test(value)) {
+        this.warn_input.value = value;
+        return;
+      }
+      time = string_wall_time(value);
     } else time = value.getTime() - value.getTimezoneOffset() * 60000;
     this.warn_input.valueAsNumber = this.#milliseconds
       ? time

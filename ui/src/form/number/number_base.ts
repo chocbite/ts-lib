@@ -80,24 +80,47 @@ export abstract class FormNumberWrite<
   /**Sets the unit of the element*/
   abstract set unit(unit: string | undefined);
 
+  /**Related states of the last bound state, a prop is only reset when it followed one of them*/
+  #related: Partial<StateNumberRelated> = {};
+
   protected state_related(related: Partial<StateNumberRelated>): void {
+    const old = this.#related;
+    this.#related = related;
     if (related.min)
       this.attach_state_to_prop("min", related.min, () => none());
-    else this.detach_state_from_prop("min");
+    else if (old.min) this.detach_state_from_prop("min").min = undefined;
     if (related.max)
       this.attach_state_to_prop("max", related.max, () => none());
-    else this.detach_state_from_prop("max");
+    else if (old.max) this.detach_state_from_prop("max").max = undefined;
     if (related.step)
       this.attach_state_to_prop("step", related.step, () => none());
-    else this.detach_state_from_prop("step");
+    else if (old.step) this.detach_state_from_prop("step").step = undefined;
     if (related.start)
       this.attach_state_to_prop("start", related.start, () => none());
-    else this.detach_state_from_prop("start");
+    else if (old.start) this.detach_state_from_prop("start").start = undefined;
     if (related.decimals)
       this.attach_state_to_prop("decimals", related.decimals, () => none());
-    else this.detach_state_from_prop("decimals");
+    else if (old.decimals)
+      this.detach_state_from_prop("decimals").decimals = undefined;
     if (related.unit)
       this.attach_state_to_prop("unit", related.unit, () => none());
-    else this.detach_state_from_prop("unit");
+    else if (old.unit) this.detach_state_from_prop("unit").unit = undefined;
   }
+}
+
+/**Decimals to show and round to, the given decimals, or without them enough for the step and start*/
+export function number_decimals(
+  decimals: number | undefined,
+  step: number,
+  start: number,
+): number {
+  return decimals ?? Math.max(fraction_digits(step), fraction_digits(start));
+}
+
+/**Amount of decimals needed to show a number, at most 10*/
+function fraction_digits(val: number): number {
+  let dec = 0;
+  for (let scaled = val; dec < 10; dec++, scaled = val * 10 ** dec)
+    if (Math.abs(scaled - Math.round(scaled)) < 1e-9) break;
+  return dec;
 }

@@ -83,30 +83,30 @@ export async function test_state_sub(
     count += 100000000;
   };
   let count = 0;
-  const sub1 = state.sub(() => {
+  const sub1 = state.sub<StateSub<SR<number>>>(() => {
     count++;
   }, true);
   expect(state.in_use()).equal(state);
-  expect(state.has(sub1 as StateSub<SR<number>>)).equal(state);
+  expect(state.has(sub1)).equal(state);
   expect(state.amount()).equal(1);
   await sleep(wait ?? 1);
   expect(count).equal(1);
-  const sub2 = state.sub(() => {
+  const sub2 = state.sub<StateSub<SR<number>>>(() => {
     count += 10;
   });
   expect(state.in_use()).equal(state);
-  expect(state.has(sub2 as StateSub<SR<number>>)).equal(state);
+  expect(state.has(sub2)).equal(state);
   expect(state.amount()).equal(2);
   expect(count).equal(1);
   set(ok(8));
   await sleep(1);
   expect(count).equal(12);
-  const sub3 = state.sub(() => {
+  const sub3 = state.sub<StateSub<SR<number>>>(() => {
     count += 100;
     throw new Error("Gaurded against crash");
   });
   expect(state.in_use()).equal(state);
-  expect(state.has(sub3 as StateSub<SR<number>>)).equal(state);
+  expect(state.has(sub3)).equal(state);
   expect(state.amount()).equal(3);
   set(ok(12));
   await sleep(1);
@@ -114,7 +114,7 @@ export async function test_state_sub(
   state.unsub(sub1);
   state.unsub(sub2);
   expect(state.in_use()).equal(state);
-  expect(state.has(sub3 as StateSub<SR<number>>)).equal(state);
+  expect(state.has(sub3)).equal(state);
   expect(state.amount()).equal(1);
   set(ok(13));
   await sleep(1);

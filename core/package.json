@@ -1,6 +1,5 @@
 {
   "name": "@chocbite/ts-lib",
-  "version": "1.0.1",
   "author": "chocolateandmilkwin",
   "license": "MIT",
   "type": "module",
@@ -74,7 +73,7 @@
   "scripts": {
     "build": "tsdown",
     "lint": "eslint \"src/**/*.ts\"",
-    "test": "vitest run",
+    "test": "tsc --noEmit && vitest run",
     "typecheck": "tsc --noEmit",
     "check-deps": "npx depcheck"
   },

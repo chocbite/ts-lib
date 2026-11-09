@@ -2,13 +2,6 @@ import { theme_engine } from "./engine";
 import { Themes } from "./settings";
 import { BOTTOM_GROUPS } from "./shared";
 
-let name_transformer: ((name: string) => string) | undefined;
-export const theme_set_name_transform = (
-  transform: (name: string) => string
-) => {
-  name_transformer = transform;
-};
-
 /**Initialises the settings for the package
  * @param package_name use import {name} from "../package.json"
  * @param name name of group formatted for user reading
@@ -20,7 +13,12 @@ export const theme_init_variable_root = (
 ) => {
   if (package_name.includes("-"))
     throw new Error("Dash not permitted in package name " + package_name);
-  if (name_transformer) package_name = name_transformer(package_name);
+  if (package_name in BOTTOM_GROUPS)
+    throw new Error(
+      "Theme variable group already registered " +
+        package_name +
+        ", by another package or by this library being loaded twice",
+    );
   BOTTOM_GROUPS[package_name] = new ThemeVariableGroup(
     package_name,
     name,

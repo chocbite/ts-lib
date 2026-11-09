@@ -34,6 +34,9 @@ export class FormTextInput<
   #filter?: RegExp;
   #max_length?: number;
   #max_bytes?: number;
+  //True while the limit comes from the bound state
+  #related_length = false;
+  #related_bytes = false;
 
   constructor(id?: ID) {
     super(id);
@@ -42,6 +45,9 @@ export class FormTextInput<
     };
     this.warn_input.onblur = () => {
       this.selected = false;
+      //Shows a state change that arrived while focused
+      if (this._buffer !== undefined && this.warn_input.value !== this._buffer)
+        this.new_value(this._buffer);
     };
     this.warn_input.type = "text";
     this.appendChild(this.warn_input);
@@ -50,20 +56,27 @@ export class FormTextInput<
       this.warn("");
       const data = e.data || e.dataTransfer?.getData("text/plain");
       if (data) {
+        if (this.#filter) this.#filter.lastIndex = 0;
         if (this.#filter && !this.#filter.test(data)) {
           e.preventDefault();
           this.warn("Invalid character entered");
-        } else {
+        } else if (this.#max_length || this.#max_bytes) {
+          //The selected text is replaced by the typed text
+          const input = this.warn_input;
+          const value = input.value;
+          const start = input.selectionStart ?? value.length;
+          const end = input.selectionEnd ?? start;
           if (
             this.#max_length &&
-            this.warn_input.value.length + data.length > this.#max_length
+            value.length - (end - start) + data.length > this.#max_length
           ) {
             e.preventDefault();
             this.warn(`A maximum of ${this.#max_length} characters is allowed`);
           }
           if (
             this.#max_bytes &&
-            string_byte_length(this.warn_input.value) +
+            string_byte_length(value) -
+              string_byte_length(value.slice(start, end)) +
               string_byte_length(data) >
               this.#max_bytes
           ) {
@@ -107,7 +120,8 @@ export class FormTextInput<
 
   set max_length(val: number | undefined) {
     this.#max_length = val;
-    this.warn_input.maxLength = val ?? -1;
+    if (val === undefined) this.warn_input.removeAttribute("maxlength");
+    else this.warn_input.maxLength = val;
   }
   get max_length(): number | undefined {
     return this.#max_length;
@@ -154,12 +168,16 @@ export class FormTextInput<
   protected state_related(related: Partial<StateStringRelated>): void {
     if (related.max_length)
       this.attach_state_to_prop("max_length", related.max_length, () => none());
-    else this.detach_state_from_prop("max_length");
+    else if (this.#related_length)
+      this.detach_state_from_prop("max_length").max_length = undefined;
+    this.#related_length = !!related.max_length;
     if (related.max_length_bytes)
       this.attach_state_to_prop("max_bytes", related.max_length_bytes, () =>
         none(),
       );
-    else this.detach_state_from_prop("max_bytes");
+    else if (this.#related_bytes)
+      this.detach_state_from_prop("max_bytes").max_bytes = undefined;
+    this.#related_bytes = !!related.max_length_bytes;
   }
 }
 define_element(FormTextInput);

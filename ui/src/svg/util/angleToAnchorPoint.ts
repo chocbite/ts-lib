@@ -1,10 +1,10 @@
 import { SVGAnchorPoint } from "./anchorPoint";
 
 /**Converts an angle to an anchor point
- * @param angle angle in radians*/
+ * @param angle angle in radians, any angle outside 0 to 2PI is wrapped around*/
 export const angle_to_anchor_point = (angle: number) => {
-  const sec =
-    angle >= 0 ? angle % 6.283185307179586 : -(angle % 6.283185307179586);
+  const full = 6.283185307179586;
+  const sec = ((angle % full) + full) % full;
   if (sec > 5.93411945678072) {
     return SVGAnchorPoint.middleRight;
   } else if (sec > 4.974188368183839) {

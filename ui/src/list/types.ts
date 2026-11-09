@@ -13,6 +13,11 @@ export type ListTypeExtract<A extends ListType<any>> = A extends (infer U)[]
     ? U
     : never;
 
+/**Rows of a row parent, the top level rows or sub rows, which can be an array or a state regardless of the top level rows */
+export type ListParentRows<A extends ListType<any>> =
+  | A
+  | ListType<ListTypeExtract<A>>;
+
 export const ListDataType = {
   number: "number",
   string: "string",
@@ -25,7 +30,8 @@ export interface ListColumnOptions<V, C extends ListField> {
   init_width?: number;
   /**If the column has a fixed width in rem, overrides init_width and disables resizing*/
   fixed_width?: number | "min" | "max";
-  /**Initial order of the column, lower numbers appear first, will order by column object if undefined*/
+  /**Initial order of the column, lower numbers appear first, will order by column object if undefined
+   * A column without order uses its position in the column object as order*/
   order?: number;
   /**Whether the column is reorderable by the user*/
   reorderable?: boolean;
@@ -64,10 +70,12 @@ export type ListRowTransformer<
   A extends ListType<any>,
   S extends boolean,
 > = (
-  /**Test */
+  /**Data of the row */
   data: R,
+  /**The row the options are for */
   row: ListRow<R, T, A, S>,
-  state: A,
+  /**Rows the data is from, sub rows can come from an array or a state regardless of the top level rows */
+  state: S extends true ? A | ListType<R> : A,
 ) => ListRowOptions<R, T, S>;
 
 export interface ListRoot<
@@ -98,6 +106,6 @@ export interface ListRowParent<A extends ListType<any>> {
     direction: "next" | "previous" | "p_next" | "p_previous" | "last",
     field: Option<number>,
   ): void;
-  /**State associated with the row parent, if state is used */
-  state: A;
+  /**Rows of the parent, the rows of the container or the sub rows of a row */
+  state: ListParentRows<A>;
 }

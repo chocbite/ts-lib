@@ -78,7 +78,13 @@ export class Keyboard_Color extends KeyboardBase {
   #sliders: Record<"hue" | keyof RGB, HTMLInputElement>;
   #hsv: HSV = { hue: 0, saturation: 0, value: 0 };
   #rgb: RGB = { red: 0, green: 0, blue: 0 };
-  #on_input = () => this.#sync_from_input();
+  /**Set while the keyboard dispatches input, so its own writes are not read back, a grey would lose the hue*/
+  #writing = false;
+  /**Values were written since the last change event*/
+  #uncommitted = false;
+  #on_input = () => {
+    if (!this.#writing) this.#sync_from_input();
+  };
 
   constructor() {
     super();
@@ -155,6 +161,7 @@ export class Keyboard_Color extends KeyboardBase {
   open(element: HTMLElement): void {
     if (!(element instanceof HTMLInputElement) || element.type !== "color")
       return;
+    if (element !== this.#input) this.#commit();
     this.#input?.removeEventListener("input", this.#on_input);
     this.#input = element;
     this.#input.addEventListener("input", this.#on_input);
@@ -163,6 +170,7 @@ export class Keyboard_Color extends KeyboardBase {
   }
 
   close(): void {
+    this.#commit();
     this.#input?.removeEventListener("input", this.#on_input);
     this.#input = undefined;
     super.close();
@@ -189,9 +197,20 @@ export class Keyboard_Color extends KeyboardBase {
     const changed = input.value !== color;
     input.value = color;
     this.#sync_controls(color);
-    if (changed) input.dispatchEvent(new Event("input", { bubbles: true }));
-    if (commit && changed)
-      input.dispatchEvent(new Event("change", { bubbles: true }));
+    if (changed) {
+      this.#uncommitted = true;
+      this.#writing = true;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      this.#writing = false;
+    }
+    if (commit) this.#commit();
+  }
+
+  /**Emits change when values were written since the last change*/
+  #commit(): void {
+    if (this.#input && this.#uncommitted)
+      this.#input.dispatchEvent(new Event("change", { bubbles: true }));
+    this.#uncommitted = false;
   }
 
   #sync_from_input(): void {

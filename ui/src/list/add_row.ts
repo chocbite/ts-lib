@@ -4,7 +4,12 @@ import { state, type State } from "@chocbite/ts-lib/state";
 import type { SVGFunc } from "#svg";
 import "./add_row.scss";
 import { ListKeyField } from "./key_field";
-import type { ListRoot, ListRowParent, ListType } from "./types";
+import type {
+  ListParentRows,
+  ListRoot,
+  ListRowParent,
+  ListType,
+} from "./types";
 
 export interface ListAddRowOptions {
   text: string | State<string>;
@@ -30,14 +35,19 @@ export class ListAddRow<
   }
 
   #button: HTMLSpanElement;
+  #text: Text;
+  #icon?: SVGSVGElement;
+  #parent: ListRowParent<A>;
   readonly depth: number;
 
   constructor(root: ListRoot<R, T, A, S>, parent: ListRowParent<A>) {
     super();
+    this.#parent = parent;
     this.depth = parent.depth + 1;
     if (root.sub_rows) this.appendChild(new ListKeyField(this));
     this.#button = this.appendChild(document.createElement("span"));
     this.#button.tabIndex = 0;
+    this.#text = this.#button.appendChild(document.createTextNode(""));
   }
 
   set options(options: ListAddRowOptions) {
@@ -45,16 +55,26 @@ export class ListAddRow<
 
     if (state.is.state(options.text))
       this.attach_state_to_prop("text", options.text, (e) => some(e));
-    else this.text = options.text;
+    else this.detach_state_from_prop("text").text = options.text;
     if (state.is.state(options.disabled))
       this.attach_state_to_prop("disabled", options.disabled, () =>
         some(false),
       );
-    else if (options.disabled) this.disabled = options.disabled;
+    else this.detach_state_from_prop("disabled").disabled = Boolean(
+      options.disabled,
+    );
+    if (state.is.state(options.icon))
+      this.attach_state_to_prop("icon", options.icon, () => some(undefined));
+    else this.detach_state_from_prop("icon").icon = options.icon;
   }
 
   set text(value: string) {
-    this.#button.innerHTML = value;
+    this.#text.data = value;
+  }
+
+  set icon(value: SVGFunc | undefined) {
+    this.#icon?.remove();
+    this.#icon = value ? this.#button.insertBefore(value(), this.#text) : undefined;
   }
 
   set disabled(value: boolean) {
@@ -72,9 +92,10 @@ export class ListAddRow<
     return 0;
   }
 
-  set state(_value: A) {}
-  get state(): A {
-    throw new Error("Method not implemented.");
+  /**Rows the add row adds to, the state of its parent */
+  set state(_value: ListParentRows<A>) {}
+  get state(): ListParentRows<A> {
+    return this.#parent.state;
   }
 
   get global_amount(): number {

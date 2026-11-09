@@ -4,6 +4,7 @@ import {
   type BaseIntersectObserver,
 } from "#base";
 import { state, type State, type StateInferSub } from "@chocbite/ts-lib/state";
+import state_ui from "#state";
 import { px_to_rem } from "#theme";
 import { ListAddRow, type ListAddRowOptions } from "./add_row";
 import "./container.scss";
@@ -37,7 +38,7 @@ class HeaderField extends Base {
   }
 
   set text(value: string) {
-    this.#text.innerHTML = value;
+    this.#text.textContent = value;
   }
 
   sizable(sizeable: boolean, sizer: (width: number | undefined) => void) {
@@ -144,9 +145,7 @@ class Container<
       columns: new Map(),
       columns_visible: [],
       transform,
-      observer: options?.observer
-        ? this.intersect_observer(options.observer)
-        : undefined,
+      observer: options?.observer,
     };
     this.#parent = {
       depth: -1,
@@ -167,25 +166,32 @@ class Container<
 
   set columns(columns: { [K in keyof T]: ListColumnOptions<T[K], any> }) {
     this.#root.columns.clear();
-    this.#root.columns_visible = [];
-
-    const fields: HeaderField[] = [];
+    const order = new Map<keyof T, number>();
+    let index = 0;
     for (const key in columns) {
-      this.#root.columns.set(key, columns[key as keyof T]);
-      this.#root.columns_visible.push(key);
-      const header = new HeaderField(columns[key].title);
-      fields.push(header);
-      header.sizable(
-        typeof columns[key].fixed_width === "undefined",
-        (width) => {
-          this.#root.columns.get(key)!.init_width = width;
-          this.#update_column_widths();
-        },
-      );
+      //Copied, so resizing does not write into the callers options
+      this.#root.columns.set(key, { ...columns[key as keyof T] });
+      order.set(key, columns[key].order ?? index);
+      index++;
     }
+    this.#root.columns_visible = [...order.keys()].sort(
+      (a, b) => order.get(a)! - order.get(b)!,
+    );
 
+    if (this.#header)
+      this.#header.fields = this.#root.columns_visible.map((key) => {
+        const column = this.#root.columns.get(key)!;
+        const header = new HeaderField(column.title);
+        header.sizable(typeof column.fixed_width === "undefined", (width) => {
+          column.init_width = width;
+          this.#update_column_widths();
+        });
+        return header;
+      });
     this.#update_column_widths();
-    if (this.#header) this.#header.fields = fields;
+
+    for (let i = 0; i < this.#child_box.childElementCount; i++)
+      (this.#child_box.children[i] as ListRow<R, T, A, S>).columns_changed();
   }
 
   #update_column_widths() {
@@ -248,75 +254,10 @@ class Container<
   }
 
   #update_rows(rows: readonly R[]) {
-    if (rows.length === 0) {
-      this.#child_box.replaceChildren();
-      return;
-    }
-    const read = state.a.read(rows);
-    for (let i = 0; i < read.length; i++) {
-      const row = read[i];
-      if (row.type === "fresh") {
-        const min = Math.min(
-          this.#child_box.childElementCount,
-          row.items.length,
-        );
-        for (let i = 0; i < min; i++)
-          (this.#child_box.children[i] as ListRow<R, T, A, S>).data =
-            row.items[i];
-        if (row.items.length > this.#child_box.childElementCount)
-          this.#child_box.append(
-            ...row.items
-              .slice(this.#child_box.childElementCount)
-              .map(
-                (row) => new ListRow<R, T, A, S>(this.#root, this.#parent, row),
-              ),
-          );
-        else if (row.items.length < this.#child_box.childElementCount) {
-          for (
-            let i = this.#child_box.childElementCount - 1;
-            i >= row.items.length;
-            i--
-          )
-            (this.#child_box.children[i] as ListRow<R, T, A, S>).remove();
-        }
-      } else if (row.type === "added") {
-        const child = this.#child_box.children[row.index] as
-          | ListRow<R, T, A, S>
-          | undefined;
-        const rows = row.items.map(
-          (row) => new ListRow<R, T, A, S>(this.#root, this.#parent, row),
-        );
-        if (child) child.before(...rows);
-        else this.#child_box.append(...rows);
-      } else if (row.type === "removed")
-        for (let i = 0; i < row.items.length; i++)
-          this.#child_box.children[row.index].remove();
-      else if (row.type === "changed")
-        for (let i = 0; i < row.items.length; i++)
-          (
-            this.#child_box.children[row.index + i] as ListRow<R, T, A, S>
-          ).data = row.items[i];
-      else if (row.type === "moved") {
-        const extracted = [];
-        for (let i = 0; i < row.items.length; i++) {
-          const child = this.#child_box.children[row.from_index + i] as ListRow<
-            R,
-            T,
-            A,
-            S
-          >;
-          extracted.push(child);
-          child.remove();
-        }
-        const child = this.#child_box.children[row.to_index] as
-          | ListRow<R, T, A, S>
-          | undefined;
-        for (let i = 0; i < extracted.length; i++) {
-          if (child) child.before(extracted[i]);
-          else this.#child_box.append(extracted[i]);
-        }
-      }
-    }
+    state_ui.a.apply(this.#child_box, rows, {
+      create: (row) => new ListRow<R, T, A, S>(this.#root, this.#parent, row),
+      update: (element, row) => (element.data = row),
+    });
   }
 }
 define_element(Container);

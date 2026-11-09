@@ -10,6 +10,10 @@ export class Devider extends MenuLine implements ContextMenuDevider {
     return "devider";
   }
 
+  get skips_focus() {
+    return true;
+  }
+
   do_focus(dir?: boolean) {
     this.focus_next(dir);
   }

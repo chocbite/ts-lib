@@ -1,5 +1,14 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import result, { err, none, ok, some, type Option, type Result } from ".";
+import result, {
+  err,
+  none,
+  ok,
+  some,
+  type Option,
+  type Result,
+  type ResultInferErr,
+  type ResultInferOk,
+} from ".";
 
 //###########################################################################################################################################################
 //      _____  ______  _____ _    _ _   _______    ____  _  __
@@ -446,5 +455,38 @@ describe("Helpers", function () {
     expect(result.is_option({})).equal(false);
     expect(result.is_option({ some: true, value: 42 })).equal(false);
     expect(result.is_option(40)).equal(false);
+  });
+});
+
+describe("Infer types", function () {
+  it("Infer ok and error types of any result", function () {
+    type MyResult = Result<number, string>;
+    expectTypeOf<ResultInferOk<MyResult>>().toEqualTypeOf<number>();
+    expectTypeOf<ResultInferErr<MyResult>>().toEqualTypeOf<string>();
+    expectTypeOf<ResultInferOk<Result<number, Error>>>().toEqualTypeOf<number>();
+    expectTypeOf<ResultInferErr<Result<number, Error>>>().toEqualTypeOf<Error>();
+  });
+
+  it("and_then keeps the error of self, or_else keeps the value of self", function () {
+    //Only type checked, never called
+    const check = (r: Result<number, "a">) => {
+      const to_err = r.and_then(() => err("b" as const));
+      expectTypeOf<ResultInferErr<typeof to_err>>().toEqualTypeOf<"a" | "b">();
+      const to_result = r.and_then((v): Result<string, "b"> => ok(String(v)));
+      expectTypeOf<ResultInferOk<typeof to_result>>().toEqualTypeOf<string>();
+      expectTypeOf<ResultInferErr<typeof to_result>>().toEqualTypeOf<
+        "a" | "b"
+      >();
+      const recovered = r.or_else(() => ok("x"));
+      expectTypeOf<ResultInferOk<typeof recovered>>().toEqualTypeOf<
+        number | string
+      >();
+      const recovered_result = r.or_else((): Result<string, "b"> => ok("x"));
+      expectTypeOf<ResultInferOk<typeof recovered_result>>().toEqualTypeOf<
+        number | string
+      >();
+      expectTypeOf<ResultInferErr<typeof recovered_result>>().toEqualTypeOf<"b">();
+    };
+    expect(check).toBeTypeOf("function");
   });
 });

@@ -23,13 +23,13 @@ export function throttle<T extends (...args: any[]) => any>(
       func(...(args ?? []));
       state = 2;
       interval = setInterval(() => {
-        if (state > 0) {
-          state--;
-          if (has_args) {
-            func(...(args_buffer ?? []));
-            has_args = false;
-          }
-        } else clearInterval(interval);
+        state--;
+        if (has_args) {
+          func(...(args_buffer ?? []));
+          has_args = false;
+        }
+        //Cleared right away, a call before the next tick would otherwise start a second interval
+        if (state === 0) clearInterval(interval);
       }, wait);
     }
   };

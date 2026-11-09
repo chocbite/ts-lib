@@ -39,6 +39,9 @@ export abstract class FormSelectorBase<
     super.apply_options(element, options);
   }
 
+  //True while the selections come from the list of the bound state
+  #related_list = false;
+
   protected state_related(related: Partial<StateEnumRelated>): void {
     if (related.list) {
       this.attach_state_to_prop_map(
@@ -57,6 +60,8 @@ export abstract class FormSelectorBase<
           );
         },
       );
-    }
+    } else if (this.#related_list)
+      this.detach_state_from_prop("selections").selections = undefined;
+    this.#related_list = !!related.list;
   }
 }

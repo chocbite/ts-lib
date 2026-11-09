@@ -48,6 +48,18 @@ rotation_center_indicator.appendChild(svg.line(0, -6, 0, 6).elem);
 
 const DEG_TO_RAD = Math.PI / 180;
 
+/**Rounds the value to the grid, a grid of 0 does not snap*/
+const snap = (value: number, grid: number) =>
+  grid ? Math.round(value / grid) * grid : value;
+
+/**Stops a handle following the pointer, for pointerup and pointercancel*/
+const handle_release = (ev: PointerEvent) => {
+  const handle = ev.currentTarget as SVGSVGElement;
+  if (handle.hasPointerCapture(ev.pointerId))
+    handle.releasePointerCapture(ev.pointerId);
+  handle.onpointermove = null;
+};
+
 export class ViewportMover {
   #canvas: SVGSVGElement = svg.create("svg").cl("viewport-mover").elem;
   #outline = this.#canvas.appendChild(
@@ -114,6 +126,10 @@ export class ViewportMover {
   }
 
   #element?: ViewportElement;
+  /**Element the mover is attached to*/
+  get element(): ViewportElement | undefined {
+    return this.#element;
+  }
   attach_to_element(element: ViewportElement, canvas: SVGSVGElement) {
     // Clear the old element reference first so the property setters below
     // don't propagate the new element's values back to the previous element.
@@ -158,18 +174,16 @@ export class ViewportMover {
           const pos_x = (ev.offsetX - offset_x) / this.#scale_buffer + x;
           this.position_x = ev.shiftKey
             ? pos_x
-            : Math.round(pos_x / this.#grid_x_buffer) * this.#grid_x_buffer;
+            : snap(pos_x, this.#grid_x_buffer);
           const pos_y = (ev.offsetY - offset_y) / this.#scale_buffer + y;
           this.position_y = ev.shiftKey
             ? pos_y
-            : Math.round(pos_y / this.#grid_y_buffer) * this.#grid_y_buffer;
+            : snap(pos_y, this.#grid_y_buffer);
         }
       };
-      this.#move.onpointerup = (ev) => {
-        this.#move.releasePointerCapture(ev.pointerId);
-        this.#move.onpointermove = null;
-      };
     };
+    this.#move.onpointerup = handle_release;
+    this.#move.onpointercancel = handle_release;
   }
 
   #position_x = 0;
@@ -223,14 +237,11 @@ export class ViewportMover {
           initial_rotation + (current_angle - initial_angle) / DEG_TO_RAD;
         this.rotation = ev.shiftKey
           ? raw_rotation
-          : Math.round(raw_rotation / this.#grid_rotate_buffer) *
-            this.#grid_rotate_buffer;
-      };
-      this.#rotate.onpointerup = (ev) => {
-        this.#rotate.releasePointerCapture(ev.pointerId);
-        this.#rotate.onpointermove = null;
+          : snap(raw_rotation, this.#grid_rotate_buffer);
       };
     };
+    this.#rotate.onpointerup = handle_release;
+    this.#rotate.onpointercancel = handle_release;
   }
   #update_rc_indicator() {
     this.#rc_indicator.setAttribute("x", String(this.#rotation_center_x));
@@ -320,11 +331,9 @@ export class ViewportMover {
         this.position_x = new_px;
         this.position_y = new_py;
       };
-      handle.onpointerup = (ev) => {
-        handle.releasePointerCapture(ev.pointerId);
-        handle.onpointermove = null;
-      };
     };
+    handle.onpointerup = handle_release;
+    handle.onpointercancel = handle_release;
   }
 
   #width = 0;

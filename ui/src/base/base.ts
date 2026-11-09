@@ -32,6 +32,9 @@ const base_resize_observer = new ResizeObserver((e) => {
 /**Shared class for elements to extend
  * All none abstract elements must use the define_element function to declare itself
  *
+ * Elements are only created in code, with new or a factory function, HTML is not supported,
+ * constructors add children and attributes, which document.createElement and the HTML parser do not allow
+ *
  * All none abstracts classes must override the static method element_name to return the name of the element
  * Abstract classes should return @abstract@
  *
@@ -70,21 +73,21 @@ export abstract class Base extends HTMLElement {
   /**Runs when element is attached to document*/
   protected connectedCallback() {
     for (const [f, [s, v]] of this.#states) if (!v) s.sub(f, true);
-    if (this.#attached_int_observer) this.#attached_int_observer.observe(this);
-    else this.internal_set_visible(true);
+    //Set after subscribing, so states attached by the subscribers are not subscribed twice,
+    //but before visibility, so states attached from on_visible are subscribed
     //@ts-expect-error Change readonly, in same class, why is there no way to do this without ts-ignore?
     this.is_connected = true;
+    if (this.#attached_int_observer) this.#attached_int_observer.observe(this);
+    else this.internal_set_visible(true);
   }
 
   /**Runs when element is dettached from document*/
   protected disconnectedCallback() {
-    for (const [f, [s, v]] of this.#states) if (!v) s.unsub(f);
-    if (this.#attached_int_observer) {
-      this.#attached_int_observer.unobserve(this);
-      this.internal_set_visible(false);
-    }
     //@ts-expect-error Change readonly, in same class
     this.is_connected = false;
+    for (const [f, [s, v]] of this.#states) if (!v) s.unsub(f);
+    if (this.#attached_int_observer) this.#attached_int_observer.unobserve(this);
+    this.internal_set_visible(false);
   }
 
   /**Sets any attribute on the base element, to either a fixed value or a state value */
@@ -92,7 +95,7 @@ export abstract class Base extends HTMLElement {
     for (const key in opts) {
       const opt = opts[key] as this[typeof key] | StateROA<this[typeof key]>;
       if (state.is.roa(opt)) this.attach_state_ROA_to_prop(key, opt);
-      else this[key] = opt;
+      else this.detach_state_from_prop(key)[key] = opt;
     }
     return this;
   }
@@ -140,8 +143,11 @@ export abstract class Base extends HTMLElement {
       }
       this.#attached_int_observer = observer;
     } else if (this.#attached_int_observer) {
-      if (this.is_connected) this.#attached_int_observer.unobserve(this);
-      if (!this.is_visible) this.internal_set_visible(true);
+      //Without an observer a connected element counts as visible
+      if (this.is_connected) {
+        this.#attached_int_observer.unobserve(this);
+        this.internal_set_visible(true);
+      }
       this.#attached_int_observer = undefined;
     }
     return this;
@@ -500,7 +506,10 @@ export abstract class Base extends HTMLElement {
   /**Detaches the state from the property */
   detach_state_from_attribute(qualified_name: string): this {
     const pro = this.#attr.get(qualified_name);
-    if (pro) this.detach_state(pro);
+    if (pro) {
+      this.detach_state(pro);
+      this.#attr.delete(qualified_name);
+    }
     return this;
   }
 }

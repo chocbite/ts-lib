@@ -19,7 +19,7 @@ export function text(
     .a("x", String(x))
     .a("y", String(y))
     .a("font-size", String(size));
-  text_elem.elem.innerHTML = text;
+  text_elem.elem.textContent = text;
   switch (anchor) {
     case SVGAnchorPoint.bottomLeft:
     case SVGAnchorPoint.middleLeft:
@@ -90,7 +90,7 @@ export function multi_line_text(
   text_div.style.width = "100%";
   text_div.style.height = "100%";
   text_div.style.display = "flex";
-  text_div.innerHTML = text;
+  text_div.textContent = text;
   switch (anchor) {
     case SVGAnchorPoint.bottomLeft:
     case SVGAnchorPoint.middleLeft:

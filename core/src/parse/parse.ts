@@ -1,5 +1,5 @@
-import type { Result, ResultOk } from "#result";
-import { err, ok } from "#result";
+import type { Result, ResultErr, ResultOk } from "#result";
+import { err, ok, result as results } from "#result";
 
 type CharMap = {
   n: number;
@@ -98,7 +98,7 @@ type SchemaQNSBL =
 type ParsedReturn<T> =
   T extends ResultOk<infer Value>
     ? Value
-    : T extends { ok: boolean }
+    : T extends ResultErr<unknown>
       ? never
       : T;
 
@@ -115,21 +115,24 @@ const char_display: Record<string, string> = {
   l: "null",
 };
 
+/**Validates a value against a spec.
+ * The value is never changed, when a default or transform applies the changed containers are copied and returned as transformed,
+ * so a union branch that fails leaves nothing behind.
+ * @returns an error message, null when valid and unchanged, or the transformed value*/
 function validate(
   value: unknown,
   spec: SchemaQNSBL,
   path: string,
 ): string | null | Transform {
   if (typeof spec === "function") {
-    const result = spec(value);
-    if (typeof result === "object" && result !== null && "ok" in result) {
-      const parsed = result as Result<unknown, unknown>;
-      if (!parsed.ok) {
-        return `Failed to parse due to member ${path}: Subparser Failed to parse: "${String(parsed.error)}"`;
+    const output = spec(value);
+    if (results.is_result(output)) {
+      if (!output.ok) {
+        return `Failed to parse due to member ${path}: Subparser Failed to parse: "${String(output.error)}"`;
       }
-      return parsed.value === value ? null : { transformed: parsed.value };
+      return output.value === value ? null : { transformed: output.value };
     }
-    return result === value ? null : { transformed: result };
+    return output === value ? null : { transformed: output };
   }
 
   if (typeof spec === "string") {
@@ -168,6 +171,7 @@ function validate(
         return `Failed to parse due to member ${path} being wrong type (expected object)`;
       }
       const record = value as Record<string, unknown>;
+      let copy: Record<string, unknown> | undefined;
       for (const key of Object.keys(record)) {
         const result = validate(
           record[key],
@@ -177,9 +181,11 @@ function validate(
         if (typeof result === "string") return result;
         // defineProperty avoids triggering the __proto__ setter for an own "__proto__" key
         if (result)
-          Object.defineProperty(record, key, { value: result.transformed });
+          Object.defineProperty((copy ??= { ...record }), key, {
+            value: result.transformed,
+          });
       }
-      return null;
+      return copy ? { transformed: copy } : null;
     }
 
     if (typeof spec[0] === "number") {
@@ -190,24 +196,16 @@ function validate(
         return `Failed to parse due to member ${path} being wrong type (expected array)`;
       }
 
-      if (count === 0) {
-        for (let i = 0; i < value.length; i++) {
-          const result = validate(value[i], sub_spec, `${path}[${i}]`);
-          if (typeof result === "string") return result;
-          if (result) value[i] = result.transformed;
-        }
-        return null;
-      }
-
-      if (value.length !== count) {
+      if (count !== 0 && value.length !== count) {
         return `Failed to parse due to member ${path} having wrong length (expected ${count}, got ${value.length})`;
       }
-      for (let i = 0; i < count; i++) {
+      let copy: unknown[] | undefined;
+      for (let i = 0; i < value.length; i++) {
         const result = validate(value[i], sub_spec, `${path}[${i}]`);
         if (typeof result === "string") return result;
-        if (result) value[i] = result.transformed;
+        if (result) (copy ??= [...(value as unknown[])])[i] = result.transformed;
       }
-      return null;
+      return copy ? { transformed: copy } : null;
     }
 
     if (!spec.every((sub_spec) => typeof sub_spec === "string")) {
@@ -224,6 +222,7 @@ function validate(
     if (value.length !== spec.length) {
       return `Failed to parse due to member ${path} having wrong length (expected ${spec.length}, got ${value.length})`;
     }
+    let copy: unknown[] | undefined;
     for (let i = 0; i < spec.length; i++) {
       const result = validate(
         value[i],
@@ -231,23 +230,36 @@ function validate(
         `${path}[${i}]`,
       );
       if (typeof result === "string") return result;
-      if (result) value[i] = result.transformed;
+      if (result) (copy ??= [...(value as unknown[])])[i] = result.transformed;
     }
-    return null;
+    return copy ? { transformed: copy } : null;
   }
 
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return `Failed to parse due to member ${path} being wrong type (expected object)`;
   }
-  const record = value as Record<string, unknown>;
+  return validate_object(value as Record<string, unknown>, spec, path);
+}
+
+/**Validates the members of an object against an object spec, copying the object when a member changes*/
+function validate_object(
+  record: Record<string, unknown>,
+  spec: SchemaQNSBL,
+  path: string | undefined,
+): string | null | Transform {
+  let copy: Record<string, unknown> | undefined;
   for (const [key, sub_spec] of Object.entries(
     spec as Record<string, SchemaQNSBL>,
   )) {
-    const result = validate(record[key], sub_spec, `${path}.${key}`);
+    const result = validate(
+      record[key],
+      sub_spec,
+      path === undefined ? key : `${path}.${key}`,
+    );
     if (typeof result === "string") return result;
-    if (result) record[key] = result.transformed;
+    if (result) (copy ??= { ...record })[key] = result.transformed;
   }
-  return null;
+  return copy ? { transformed: copy } : null;
 }
 
 /** Creates a parser function from a schema definition.
@@ -324,14 +336,13 @@ export function make_parser(
         obj = default_value();
       }
 
-      const record = obj as Record<string, unknown>;
-      for (const [key, spec] of Object.entries(
-        schema as Record<string, SchemaQNSBL>,
-      )) {
-        const result = validate(record[key], spec, key);
-        if (typeof result === "string") return err(result);
-        if (result) record[key] = result.transformed;
-      }
+      const result = validate_object(
+        obj as Record<string, unknown>,
+        schema as SchemaQNSBL,
+        undefined,
+      );
+      if (typeof result === "string") return err(result);
+      if (result) obj = result.transformed;
     } else {
       const result = validate(obj, schema as SchemaQNSBL, "root");
       if (typeof result === "string") return err(result);

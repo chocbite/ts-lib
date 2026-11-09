@@ -24,37 +24,8 @@ export abstract class StateBase<
     on_rejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
   ): PromiseLike<TResult1 | TResult2>;
 
-  async to_json() {
-    const v = await this;
-    if (v.err) return "null";
-    const val = v.value as unknown;
-    if (!(val instanceof Object)) return JSON.stringify(val);
-    const value = val[STATE_VIEWER_OVERRIDE_KEY]?.() ?? val;
-    if (IS.state(value)) return await value.to_json();
-    if (Array.isArray(value)) {
-      let str = "[";
-      for (let i = 0; i < value.length; i++) {
-        if (i > 0) str += ",";
-        const e = (value as unknown[])[i];
-        if (IS.state(e)) str += await e.to_json();
-        else str += JSON.stringify(e);
-      }
-      str += "]";
-      return str;
-    } else if (Object.getPrototypeOf(value) === Object.prototype) {
-      let str = "{";
-      let i = 0;
-      for (const key in value) {
-        if (i++ > 0) str += ",";
-        const e = (value as { [key: string]: unknown })[key];
-        str += JSON.stringify(key) + ":";
-        if (IS.state(e)) str += await e.to_json();
-        else str += JSON.stringify(e);
-      }
-      str += "}";
-      return str;
-    }
-    return JSON.stringify(value);
+  async to_json(): Promise<string> {
+    return result_to_json(await this, "state");
   }
 
   abstract readonly rsync: boolean;
@@ -133,4 +104,62 @@ export abstract class StateBase<
     this.#read_promises = [];
     return value;
   }
+}
+
+//##################################################################################################################################################
+//          _  _____  ____  _   _
+//         | |/ ____|/ __ \| \ | |
+//         | | (___ | |  | |  \| |
+//     _   | |\___ \| |  | | . ` |
+//    | |__| |____) | |__| | |\  |
+//     \____/|_____/ \____/|_| \_|
+
+/**Values JSON can not represent are written as null, with an error logged, the types should prevent this from happening*/
+function json_invalid(path: string, reason: string): string {
+  console.error(`${path} ${reason}, written as null in JSON`);
+  return "null";
+}
+
+/**Converts a state result to JSON, states in error are written as null*/
+async function result_to_json(result: SR<unknown>, path: string) {
+  if (result.err) return json_invalid(path, `is in error "${result.error}"`);
+  return value_to_json(result.value, path);
+}
+
+/**Converts a value to JSON, including states nested in plain objects and arrays*/
+async function value_to_json(val: unknown, path: string): Promise<string> {
+  const value =
+    val instanceof Object
+      ? ((val as { [STATE_VIEWER_OVERRIDE_KEY]?: () => unknown })[
+          STATE_VIEWER_OVERRIDE_KEY
+        ]?.() ?? val)
+      : val;
+  if (IS.state(value)) return result_to_json(await value, path);
+  if (Array.isArray(value)) {
+    const items: string[] = [];
+    for (let i = 0; i < value.length; i++)
+      items.push(await value_to_json(value[i], `${path}[${i}]`));
+    return "[" + items.join(",") + "]";
+  }
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { toJSON?: unknown }).toJSON !== "function"
+  ) {
+    const entries: string[] = [];
+    for (const [key, entry] of Object.entries(value)) {
+      //Optional fields are left out like JSON.stringify does, reading them back gives undefined again
+      if (entry === undefined) continue;
+      entries.push(
+        JSON.stringify(key) + ":" + (await value_to_json(entry, `${path}.${key}`)),
+      );
+    }
+    return "{" + entries.join(",") + "}";
+  }
+  if (typeof value === "number" && !Number.isFinite(value))
+    return json_invalid(path, `is ${value}`);
+  if (typeof value === "bigint") return json_invalid(path, "is a bigint");
+  const json = JSON.stringify(value);
+  if (json === undefined) return json_invalid(path, `is ${typeof value}`);
+  return json;
 }

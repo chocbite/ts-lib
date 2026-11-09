@@ -77,9 +77,9 @@ These methods are only guaranteed on certain state types. TypeScript will error 
 | -------------- | ---------------------------- | ------------------------------------------------ |
 | `get()`        | Sync (`rsync: true`)         | Synchronously read the current `Result` value.   |
 | `ok()`         | Sync + OK-only (`rok: true`) | Synchronously read the unwrapped value directly. |
-| `write(value)` | Writable (`writable: true`)  | Request a value change for the state.            |
-| `limit(value)` | Writable                     | Clamp a value to the valid range via the helper. |
-| `check(value)` | Writable                     | Validate a value without applying it.            |
+| `write(value)` | Writable (`writable: true`)  | Request a value change, rejected if `check` fails. |
+| `limit(value)` | Writable                     | Clamp a value to the valid range via the helper.   |
+| `check(value)` | Writable                     | Validate a value without applying it.              |
 
 ### Per-Type Narrowing
 
@@ -211,7 +211,7 @@ const state = counter.state; // Returns as State<number>
 const state_type: State<number> = counter.state;
 ```
 
-`set` and `set_ok` bypass the setter/validation pipeline — they directly replace the state value and notify subscribers. In contrast, `.write()` is the public API that goes through the setter function (which may apply helpers like `limit`).
+`set` and `set_ok` bypass the setter/validation pipeline — they directly replace the state value and notify subscribers. In contrast, `.write()` is the public API that goes through the setter function, the default setter rejects values the helper's `check` fails. `write` never clamps, call `limit` first when clamping is wanted, like a slider does.
 
 You can also provide a custom setter to control how writes are applied:
 
@@ -279,7 +279,8 @@ const doubled = state.p.ros(source, (val) => ok(val.value * 2));
 // doubled.ok() === 10
 
 // Writable proxy
-// A proxy can also be writable, but this requires two transform functions to convert both ways, this is to support the write helper methods limit and check
+// A proxy can also be writable, without write transforms values are passed to the source unchanged,
+// with a transform both directions are needed, this is to support the write helper methods limit and check
 const offset = state.p.rosw(
   source,
   (val) => ok(val.value + 10), // read: add 10
@@ -324,7 +325,7 @@ Timing options control debounce, validity caching, and retention:
 
 ```typescript
 state.r.rea.from(once, setup, teardown, {
-  timeout: 1000, // ms before a generic error if no response
+  timeout: 1000, // ms before waiting reads get an error if no response, ok states (roa/roaw) keep waiting and the next read retries
   debounce: 50, // ms to batch multiple awaits into one fetch
   validity: 5000, // ms the buffered value stays fresh (or true = until unsubscribe)
   retention: 200, // ms to keep the connection after last unsubscribe
@@ -396,12 +397,13 @@ const temperature = state.rosw(
   true,
 );
 
-await temperature.write(150); // limited to 100 by the helper
-await temperature.check(150); // returns err("150 is bigger than the limit of 100")
+await temperature.write(150); // returns err("150 is bigger than the limit of 100"), value unchanged
+await temperature.limit(150); // returns ok(100)
+await temperature.check(20.3); // returns err("20.3 is not on a step of 0.5")
 temperature.related().unwrap().min; // state holding 0
 ```
 
-Options: `min`, `max`, `step`, `start`, `decimals`, `unit` — each is itself a `State`, so limits can be reactive.
+Options: `min`, `max`, `step`, `start`, `decimals`, `unit` — each is itself a `State`, so limits can be reactive. `check` rejects values outside `min`/`max` and values not on `step`/`start`/`decimals`, except `min` and `max` themselves.
 
 ### String
 
@@ -409,20 +411,21 @@ Options: `min`, `max`, `step`, `start`, `decimals`, `unit` — each is itself a 
 const name = state.rosw(
   state.s.help(ok("hello"), {
     max_length: state.ok(10),
-    max_bytes: state.ok(10),
+    max_length_bytes: state.ok(10),
   }),
   true,
 );
 
-await name.write("this is too long"); // limited to 10 characters by the helper
-await name.check("this is too long"); // returns err("the text is longer than the limit of 10 characters")
-await name.write("this is ææ"); // limited to 10 bytes by the helper
+await name.write("this is too long"); // returns err("the text is longer than the limit of 10 characters"), value unchanged
+await name.limit("this is too long"); // returns ok("this is to")
 await name.check("this is ææ"); // returns err("the text is longer than the limit of 10 bytes")
 ```
 
 Options: `max_length`, `max_length_bytes`.
 
 ### Enum
+
+Enum values are strings. The list is an object, which turns number keys into strings, so number keys are rejected by the types.
 
 ```typescript
 export const Color = {

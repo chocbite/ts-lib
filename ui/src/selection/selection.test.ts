@@ -124,3 +124,123 @@ describe("selection", () => {
     expect(document.activeElement).toBe(element);
   });
 });
+
+/**Contenteditable with "Hello" in a bold element followed by ", world!" */
+function create_nested(): HTMLDivElement {
+  const element = create_contenteditable();
+  const bold = document.createElement("b");
+  bold.textContent = "Hello";
+  element.replaceChildren(bold, ", world!");
+  return element;
+}
+
+describe("selection edge cases", () => {
+  it("returns -1 when there is no selection", () => {
+    const element = create_contenteditable();
+    window.getSelection()?.removeAllRanges();
+    expect(get_cursor_position(element)).toBe(-1);
+  });
+
+  it("returns -1 when the selection is in another element", () => {
+    const element = create_contenteditable();
+    const other = create_contenteditable();
+    const range = document.createRange();
+    range.setStart(other.firstChild as Text, 2);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    expect(get_cursor_position(element)).toBe(-1);
+  });
+
+  it("returns the start of a backwards selection", () => {
+    const element = create_contenteditable();
+    const node = element.firstChild as Text;
+    window.getSelection()?.setBaseAndExtent(node, 8, node, 3);
+    expect(get_cursor_position(element)).toBe(3);
+  });
+
+  it("counts text in nested elements before the cursor", () => {
+    const element = create_nested();
+    const range = document.createRange();
+    range.setStart(element.lastChild as Text, 2);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    expect(get_cursor_position(element)).toBe(7);
+  });
+
+  it("sets the cursor inside nested text nodes", () => {
+    const element = create_nested();
+    set_cursor_position(element, 7);
+    const range = window.getSelection()!.getRangeAt(0);
+    expect(range.startContainer).toBe(element.lastChild);
+    expect(range.startOffset).toBe(2);
+    expect(get_cursor_position(element)).toBe(7);
+  });
+
+  it("sets the cursor at a text node boundary to the end of the first node", () => {
+    const element = create_nested();
+    set_cursor_position(element, 5);
+    const range = window.getSelection()!.getRangeAt(0);
+    expect(range.startContainer).toBe(element.firstChild!.firstChild);
+    expect(range.startOffset).toBe(5);
+  });
+
+  it("sets the cursor at the start with offset 0", () => {
+    const element = create_contenteditable();
+    set_cursor_position(element, 0);
+    expect(get_cursor_position(element)).toBe(0);
+    expect(document.activeElement).toBe(element);
+  });
+
+  it("clamps an offset past the end of a contenteditable to the end", () => {
+    const element = create_contenteditable();
+    set_cursor_position(element, 100);
+    expect(document.activeElement).toBe(element);
+    expect(get_cursor_position(element)).toBe(text.length);
+  });
+
+  it("clamps an offset past the end of an input to the end", () => {
+    const element = create_input();
+    set_cursor_position(element, 100);
+    expect(element.selectionStart).toBe(text.length);
+  });
+
+  it("focuses an empty contenteditable when setting the cursor position", () => {
+    const element = create_contenteditable();
+    element.replaceChildren();
+    set_cursor_position(element, 0);
+    expect(document.activeElement).toBe(element);
+  });
+
+  it("sets the cursor at the end when the last child is an element", () => {
+    const element = create_contenteditable();
+    const bold = document.createElement("b");
+    bold.textContent = "!!";
+    element.append(bold);
+    set_cursor_end(element);
+    expect(get_cursor_position(element)).toBe(text.length + 2);
+    expect(window.getSelection()?.getRangeAt(0).collapsed).toBe(true);
+  });
+
+  it("focuses an empty contenteditable when setting the cursor at the end", () => {
+    const element = create_contenteditable();
+    element.replaceChildren();
+    set_cursor_end(element);
+    expect(document.activeElement).toBe(element);
+  });
+
+  it("selects all nested content", () => {
+    const element = create_nested();
+    set_selection_all(element);
+    expect(window.getSelection()?.toString()).toBe(text);
+    expect(get_cursor_position(element)).toBe(0);
+  });
+
+  it("replaces an existing selection elsewhere", () => {
+    const other = create_input();
+    const element = create_contenteditable();
+    set_selection_all(other);
+    set_cursor_position(element, 3);
+    expect(document.activeElement).toBe(element);
+    expect(get_cursor_position(element)).toBe(3);
+  });
+});

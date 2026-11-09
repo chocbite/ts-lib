@@ -45,11 +45,8 @@ export class FormLamp<
 
   /**Changes the icon of the lamp*/
   set icon(icon: SVGFunc | undefined) {
-    if (icon) this.#icon = this.insertBefore(icon(), this.#text);
-    else if (this.#icon) {
-      this.removeChild(this.#icon);
-      this.#icon = undefined;
-    }
+    if (this.#icon) this.removeChild(this.#icon);
+    this.#icon = icon ? this.insertBefore(icon(), this.#text) : undefined;
   }
 
   /** Sets the background color of the lamp*/

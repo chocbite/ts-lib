@@ -27,12 +27,13 @@ type EnumHelperEntry = {
   icon?: StateEnumIcon;
 };
 
-type StateEnumHelperList<T extends PropertyKey> = {
+/**Keys are strings only, object keys are always strings at runtime, a number key would come back as a string*/
+type StateEnumHelperList<T extends string> = {
   [P in T]: EnumHelperEntry;
 };
 
 export interface StateEnumRelated<
-  L extends StateEnumHelperList<PropertyKey> = StateEnumHelperList<PropertyKey>,
+  L extends StateEnumHelperList<string> = StateEnumHelperList<string>,
 > extends StateRelatedBase {
   readonly [STATE_ENUM_RELATED_KEY]: true;
   list: State<L, any, any>;
@@ -45,14 +46,14 @@ export interface StateEnumHelperOptions<
 }
 
 export interface StateEnumHelper<
-  L extends StateEnumHelperList<PropertyKey> = StateEnumHelperList<PropertyKey>,
-  K extends PropertyKey = keyof L,
+  L extends StateEnumHelperList<string> = StateEnumHelperList<string>,
+  K extends string = keyof L & string,
   R extends StateRelatedBase = StateEnumRelated<L>,
 > extends StateHelperBase<SR<K>, K, OptionSome<R>> {}
 
 export class StateEnumHelperBase<
-  L extends StateEnumHelperList<PropertyKey> = StateEnumHelperList<PropertyKey>,
-  K extends PropertyKey = keyof L,
+  L extends StateEnumHelperList<string> = StateEnumHelperList<string>,
+  K extends string = keyof L & string,
   R extends StateRelatedBase = StateEnumRelated<L>,
 >
   extends StateHelperBase<SR<K>, K, OptionSome<R>>
@@ -76,12 +77,13 @@ export class StateEnumHelperBase<
     return sync_resolve(ok(value));
   }
 
-  check(value: K): PromiseLike<SR<K>> {
-    return this.list.then((list) => {
-      if (list.err) return err("list is not available");
-      if (value in list.value) return ok(value);
-      return err(String(value) + " is not in list");
-    });
+  async check(value: K): Promise<SR<K>> {
+    const writable = await this.check_writable(value);
+    if (writable.err) return writable;
+    const list = await this.list;
+    if (list.err) return err("list is not available");
+    if (value in list.value) return ok(value);
+    return err(String(value) + " is not in list");
   }
 
   related(): OptionSome<R> {
@@ -110,7 +112,7 @@ export const ENUM = {
   help<
     L extends StateEnumHelperList<any>,
     I extends Init<K>,
-    K extends PropertyKey = keyof L,
+    K extends string = keyof L & string,
     R extends StateRelatedBase = StateEnumRelated<L>,
   >(
     init: I,
@@ -119,14 +121,14 @@ export const ENUM = {
     return [init, new StateEnumHelperBase<L, K, R>(options)];
   },
   /**Creates an enum description list, passing the enum as a generic type to this function makes things look a bit nicer */
-  list<K extends PropertyKey>(list: StateEnumHelperList<K>): typeof list {
+  list<K extends string>(list: StateEnumHelperList<K>): typeof list {
     return list;
   },
   /**Maps over an enum description list
    * @param list enum description list
    * @param func function to apply to each entry
    * @returns array of results*/
-  map<K extends PropertyKey, R>(
+  map<K extends string, R>(
     list: StateEnumHelperList<K>,
     func: (key: K, val: EnumHelperEntry) => R,
   ): R[] {

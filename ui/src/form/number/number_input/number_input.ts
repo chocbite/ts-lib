@@ -3,7 +3,11 @@ import { sync_resolve } from "@chocbite/ts-lib/common";
 import { get_cursor_position, set_cursor_end, set_cursor_position, set_selection_all } from "#selection";
 import { number_step_start_decimal } from "@chocbite/ts-lib/math";
 import { err, type Result } from "@chocbite/ts-lib/result";
-import { FormNumberWrite, type FormNumberWriteOptions } from "../number_base";
+import {
+  FormNumberWrite,
+  number_decimals,
+  type FormNumberWriteOptions,
+} from "../number_base";
 import "./number_input.scss";
 
 export class FormNumberInput<
@@ -21,7 +25,11 @@ export class FormNumberInput<
   #max: number = Infinity;
   #step: number = 0;
   #start: number = 0;
+  #decimals_set?: number;
   #decimals: number = 0;
+  /**Text last drawn from a value, and whether the user typed since*/
+  #shown: string = "";
+  #edited: boolean = false;
 
   #value_box = this.appendChild(document.createElement("span"));
   #unit_box = this.appendChild(document.createElement("span"));
@@ -52,6 +60,7 @@ export class FormNumberInput<
         this.#set(false);
       }, 0);
     };
+    this.#value_box.oninput = () => (this.#edited = true);
     this.onkeydown = (e) => {
       if (e.key === "Enter") this.#set(true);
       else if (e.key === "Escape") {
@@ -75,13 +84,16 @@ export class FormNumberInput<
   }
 
   async #set(cur: boolean) {
+    const text = this.#value_box.textContent || "";
+    //Not edited, a value that arrived while focused is shown instead of writing the old text back
+    if (!this.#edited && text === this.#shown) {
+      const shown = this.buffer?.toFixed(this.#decimals);
+      if (shown !== undefined && shown !== text) this.new_value(this.buffer!);
+      return;
+    }
     const sel = get_cursor_position(this.#value_box);
     const buff = this.buffer;
-    (
-      await this.set_value_check(
-        parseFloat(this.#value_box.textContent?.replace(",", ".") || "") || 0,
-      )
-    )
+    (await this.set_value_check(parseFloat(text.replace(",", ".")) || 0))
       .map_err(() => {
         this.new_value(buff || Math.max(Math.min(0, this.#max), this.#min));
         set_cursor_end(this.#value_box);
@@ -102,9 +114,19 @@ export class FormNumberInput<
   }
 
   set decimals(dec: number | undefined) {
-    this.#decimals = dec || 0;
+    this.#decimals_set = dec;
+    this.#update_decimals();
+  }
+
+  /**Updates the decimals from the set decimals, step and start, and redraws with them*/
+  #update_decimals() {
+    const dec = number_decimals(this.#decimals_set, this.#step, this.#start);
+    if (dec === this.#decimals) return;
+    this.#decimals = dec;
     this.#update_min_legend();
     this.#update_max_lengend();
+    if (this.buffer !== undefined && !this.selected)
+      this.new_value(this.buffer);
   }
 
   set min(min: number | undefined) {
@@ -127,18 +149,22 @@ export class FormNumberInput<
 
   set step(step: number | undefined) {
     this.#step = step || 0;
+    this.#update_decimals();
   }
 
   set start(step: number | undefined) {
     this.#start = step || 0;
+    this.#update_decimals();
   }
 
   protected new_value(val: number): void {
-    this.#value_box.textContent = val.toFixed(this.#decimals);
+    this.#value_box.textContent = this.#shown = val.toFixed(this.#decimals);
+    this.#edited = false;
   }
 
   protected clear_value(): void {
-    this.#value_box.textContent = "";
+    this.#value_box.textContent = this.#shown = "";
+    this.#edited = false;
   }
 
   protected new_error(_val: string): void {}
@@ -181,7 +207,7 @@ export class FormNumberInput<
     const step =
       this.#step ||
       Math.max(
-        this.#decimals ? 1 / this.#decimals : 1,
+        this.#decimals ? 10 ** -this.#decimals : 1,
         Math.floor(Math.abs(this.buffer || 0) / 150),
       );
     return this.set_value_check((this.buffer || 0) + (dir ? step : -step));

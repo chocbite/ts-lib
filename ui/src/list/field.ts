@@ -20,7 +20,7 @@ export class ListTextField extends ListField {
   }
 
   set text(value: string) {
-    this.innerHTML = value;
+    this.textContent = value;
   }
 }
 define_element(ListTextField);
@@ -35,7 +35,7 @@ export class ListNumberField extends ListField {
   }
 
   set number(value: number) {
-    this.innerHTML = value.toString();
+    this.textContent = value.toString();
   }
 }
 define_element(ListNumberField);

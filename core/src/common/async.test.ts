@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  expectTypeOf,
+  it,
+  vi,
+} from "vitest";
 import {
   deferrer,
   is_promise_like,
@@ -76,7 +84,7 @@ describe("Sync PromiseLike", () => {
     it("propagates errors if no onrejected is provided", () => {
       let caught = "";
       sync_reject("initial failure")
-        .then((v) => v + " ignored")
+        .then(() => "ignored")
         .then(null, (err) => {
           caught = err as string;
         });
@@ -173,6 +181,35 @@ describe("Sync PromiseLike", () => {
   });
 });
 
+describe("Sync PromiseLike behaves like Promise", () => {
+  it("sync_resolve: a throwing on_fulfilled rejects instead of calling on_rejected", async () => {
+    const on_rejected = vi.fn(() => "handled");
+    const result = sync_resolve(1).then(() => {
+      throw new Error("Failed");
+    }, on_rejected);
+    await expect(Promise.resolve(result)).rejects.toThrow("Failed");
+    expect(on_rejected).not.toHaveBeenCalled();
+  });
+
+  it("sync_resolve: matches a native promise", async () => {
+    const on_rejected = vi.fn(() => "handled");
+    const result = Promise.resolve(1).then(() => {
+      throw new Error("Failed");
+    }, on_rejected);
+    await expect(result).rejects.toThrow("Failed");
+    expect(on_rejected).not.toHaveBeenCalled();
+  });
+
+  it("sync_reject: rejects even when given a promise", async () => {
+    const inner = Promise.resolve(1);
+    await expect(Promise.resolve(sync_reject(inner))).rejects.toBe(inner);
+  });
+
+  it("sync_reject: is typed as never resolving with a value", () => {
+    expectTypeOf(sync_reject("Failed")).toEqualTypeOf<PromiseLike<never>>();
+  });
+});
+
 describe("sleep", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -240,6 +277,12 @@ describe("sleep_lazy", () => {
     vi.advanceTimersByTime(50);
     await expect(promise).resolves.toEqual({ key: "value" });
   });
+
+  it("resolves with undefined when no function is given", async () => {
+    const promise = sleep_lazy(50);
+    expect(() => vi.advanceTimersByTime(50)).not.toThrow();
+    await expect(promise).resolves.toBeUndefined();
+  });
 });
 
 describe("defer", () => {
@@ -281,5 +324,15 @@ describe("defer", () => {
     vi.advanceTimersByTime(100);
 
     expect(callback).toHaveBeenCalledWith("value");
+  });
+
+  it("is typed to take a function that receives the argument", () => {
+    //Only type checked, never called
+    const check = () => {
+      deferrer(100, (value: number) => value + 1, 5);
+      // @ts-expect-error the argument must match the function parameter
+      deferrer(100, (value: number) => value + 1, "5");
+    };
+    expect(check).toBeTypeOf("function");
   });
 });

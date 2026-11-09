@@ -7,7 +7,11 @@ import {
 import { number_step_start_decimal } from "@chocbite/ts-lib/math";
 import { err, type Result } from "@chocbite/ts-lib/result";
 import type { SVGFunc } from "#svg";
-import { FormNumberWrite, type FormStepperBaseOptions } from "../number_base";
+import {
+  FormNumberWrite,
+  number_decimals,
+  type FormStepperBaseOptions,
+} from "../number_base";
 import "./slider.scss";
 
 /**Slide Selector, displays all options in a slider*/
@@ -23,6 +27,7 @@ export class FormSlider<ID extends string | undefined> extends FormNumberWrite<
   }
 
   #unit: string = "";
+  #decimals_set?: number;
   #decimals: number = 0;
   #min: number = -Infinity;
   #max: number = Infinity;
@@ -94,6 +99,8 @@ export class FormSlider<ID extends string | undefined> extends FormNumberWrite<
           this.#slider.releasePointerCapture(e.pointerId);
           this.#slider.onpointermove = null;
           this.#slider.onpointerup = null;
+          this.#slider.onpointercancel = null;
+          this.#slider.onkeydown = null;
           this.#move_slide(50);
           clearInterval(interval);
         };
@@ -101,6 +108,12 @@ export class FormSlider<ID extends string | undefined> extends FormNumberWrite<
           ev.stopPropagation();
           reset();
           if (!this.#live) this.set_value_limit(value);
+        };
+        //A cancelled drag, like a touch turning into a scroll, is undone like Escape
+        this.#slider.onpointercancel = () => {
+          reset();
+          if (this.buffer !== undefined) this.new_value(this.buffer);
+          else this.clear_value();
         };
         this.#slider.onkeydown = (e) => {
           if (e.key === "Escape") {
@@ -125,11 +138,19 @@ export class FormSlider<ID extends string | undefined> extends FormNumberWrite<
           this.#slider.releasePointerCapture(e.pointerId);
           this.#slider.onpointermove = null;
           this.#slider.onpointerup = null;
+          this.#slider.onpointercancel = null;
+          this.#slider.onkeydown = null;
         };
         this.#slider.onpointerup = (ev) => {
           ev.stopPropagation();
           reset();
           this.#move_absolute(ev.clientX + offset, value);
+        };
+        //A cancelled drag, like a touch turning into a scroll, is undone like Escape
+        this.#slider.onpointercancel = () => {
+          reset();
+          if (this.buffer !== undefined) this.new_value(this.buffer);
+          else this.clear_value();
         };
         this.#slider.onkeydown = (e) => {
           if (e.key === "Escape") {
@@ -188,17 +209,29 @@ export class FormSlider<ID extends string | undefined> extends FormNumberWrite<
   }
 
   set decimals(dec: number | undefined) {
-    this.#decimals = dec || 0;
-    this.#update_min_legend();
-    this.#update_max_legend();
+    this.#decimals_set = dec;
+    this.#update_decimals();
   }
 
   set step(step: number | undefined) {
     this.#step = step || 0;
+    this.#update_decimals();
   }
 
   set start(step: number | undefined) {
     this.#start = step || 0;
+    this.#update_decimals();
+  }
+
+  /**Updates the decimals from the set decimals, step and start, and redraws with them*/
+  #update_decimals() {
+    const dec = number_decimals(this.#decimals_set, this.#step, this.#start);
+    if (dec === this.#decimals) return;
+    this.#decimals = dec;
+    this.#update_min_legend();
+    this.#update_max_legend();
+    if (this.buffer !== undefined && !this.selected)
+      this.new_value(this.buffer);
   }
 
   /**Set wether the slider is in live mode*/
@@ -207,23 +240,30 @@ export class FormSlider<ID extends string | undefined> extends FormNumberWrite<
   }
 
   set icon_decrease(icon: SVGFunc | undefined) {
-    this.replaceChild(
-      this.#icon_dec,
-      this.#stepper_func(icon ? icon() : material_remove_rounded(), false),
+    const old = this.#icon_dec;
+    this.#icon_dec = this.#stepper_func(
+      icon ? icon() : material_remove_rounded(),
+      false,
     );
+    this.replaceChild(this.#icon_dec, old);
   }
 
   set icon_increase(icon: SVGFunc | undefined) {
-    this.replaceChild(
-      this.#icon_inc,
-      this.#stepper_func(icon ? icon() : material_add_rounded(), true),
+    const old = this.#icon_inc;
+    this.#icon_inc = this.#stepper_func(
+      icon ? icon() : material_add_rounded(),
+      true,
     );
+    this.replaceChild(this.#icon_inc, old);
   }
 
   protected new_value(value: number): void {
     this.#move_value(value);
+    //Without both limits the handle stays centered
     this.#move_slide(
-      Math.min(Math.max(((-this.#min + value) / this.#span) * 100, 0), 100),
+      this.#span === Infinity
+        ? 50
+        : Math.min(Math.max(((-this.#min + value) / this.#span) * 100, 0), 100),
     );
   }
 
@@ -308,6 +348,7 @@ export class FormSlider<ID extends string | undefined> extends FormNumberWrite<
           clearInterval(scaler_interval);
           clearTimeout(timeout);
           icon.onpointerup = null;
+          icon.onpointercancel = null;
           icon.releasePointerCapture(e.pointerId);
           icon.classList.remove("active");
         };
@@ -326,6 +367,7 @@ export class FormSlider<ID extends string | undefined> extends FormNumberWrite<
           if (interval === 0) this.#step_value(dir);
           release();
         };
+        icon.onpointercancel = release;
       }
     };
     return icon;
@@ -335,7 +377,7 @@ export class FormSlider<ID extends string | undefined> extends FormNumberWrite<
     const step =
       this.#step ||
       Math.max(
-        this.#decimals ? 1 / this.#decimals : 1,
+        this.#decimals ? 10 ** -this.#decimals : 1,
         Math.floor(Math.abs(this.buffer || 0) / 150),
       );
     return this.set_value_check((this.buffer || 0) + (dir ? step : -step));

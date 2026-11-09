@@ -6,8 +6,9 @@ import {
   material_touch_app_rounded,
 } from "#icons";
 import { settings_init } from "#settings";
+import { none, ok, some, type Option } from "@chocbite/ts-lib/result";
 import { state as st } from "@chocbite/ts-lib/state";
-import { version } from "../../package.json";
+import { version } from "../../../package.json";
 
 const SETTINGS = settings_init(
   "@chocbite/ts-lib-theme",
@@ -15,6 +16,20 @@ const SETTINGS = settings_init(
   "Theme/UI",
   "Settings for UI elements and color themes",
 );
+
+/**Accepts a stored setting only when it is one of the given values, otherwise the default is used*/
+const one_of =
+  <T>(values: { [key: string]: T }) =>
+  (stored: unknown): Option<T> =>
+    Object.values(values).includes(stored as T) ? some(stored as T) : none();
+
+/**Accepts a stored setting only when it is a number within the range, otherwise the default is used*/
+const in_range =
+  (min: number, max: number) =>
+  (stored: unknown): Option<number> =>
+    typeof stored === "number" && stored >= min && stored <= max
+      ? some(stored)
+      : none();
 
 //      _______ _    _ ______ __  __ ______
 //     |__   __| |  | |  ____|  \/  |  ____|
@@ -25,48 +40,80 @@ const SETTINGS = settings_init(
 export const Themes = {
   Light: "light",
   Dark: "dark",
+  /**Follows the light or dark mode of the operating system, only offered when theme_init enables system*/
+  System: "system",
 } as const;
 export type Themes = (typeof Themes)[keyof typeof Themes];
+/**Themes that can be applied to the page, System is resolved to one of these*/
+export type AppliedThemes = typeof Themes.Light | typeof Themes.Dark;
 
-const THEMES = st.ok(
-  st.e.list<Themes>({
-    [Themes.Light]: {
-      name: "Light",
-      description: "Theme optimized for daylight",
-      icon: material_light_mode_rounded,
-    },
-    [Themes.Dark]: {
-      name: "Dark",
-      description: "Theme optimized for night time",
-      icon: material_dark_mode_rounded,
-    },
-  }),
-);
+type ThemeList = Parameters<typeof st.e.list<Themes>>[0];
+const LIGHT = {
+  name: "Light",
+  description: "Theme optimized for daylight",
+  icon: material_light_mode_rounded,
+};
+const DARK = {
+  name: "Dark",
+  description: "Theme optimized for night time",
+  icon: material_dark_mode_rounded,
+};
+/**Theme choices, the System choice shows the theme the operating system currently uses
+ * @param system theme of the operating system, undefined when the System choice is not offered*/
+const theme_list = (system?: AppliedThemes): ThemeList => {
+  const list: Partial<ThemeList> = {
+    [Themes.Light]: LIGHT,
+    [Themes.Dark]: DARK,
+  };
+  if (system) {
+    const active = system === Themes.Dark ? DARK : LIGHT;
+    list[Themes.System] = {
+      name: "System (" + active.name + ")",
+      description: "Follows the light or dark mode of the operating system",
+      icon: active.icon,
+    };
+  }
+  return list as ThemeList;
+};
+const THEMES = st.ok_w(theme_list());
 
 const THEME_ID = "theme";
+/**Theme the user chose, undefined when nothing has been chosen yet*/
+const STORED_THEME = SETTINGS.get<Themes | undefined>(
+  THEME_ID,
+  undefined,
+  one_of(Themes),
+).value;
 const PRIVATE_THEME = st.rosw(
-  st.e.help(
-    SETTINGS.get(
-      THEME_ID,
-      window.matchMedia &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? (Themes.Dark as Themes)
-        : (Themes.Light as Themes),
-    ),
-    { list: THEMES },
-  ),
+  st.e.help(ok(STORED_THEME ?? (Themes.Light as Themes)), { list: THEMES }),
   true,
 );
-SETTINGS.register(THEME_ID, "Theme", "Theme to use for the UI", PRIVATE_THEME);
 
 export const THEME = PRIVATE_THEME.read_write;
 
-//Sets up automatic theme change based on operating system
-window
-  .matchMedia("(prefers-color-scheme: dark)")
-  .addEventListener("change", (e) => {
-    PRIVATE_THEME.write(e.matches ? Themes.Dark : Themes.Light);
-  });
+/**Sets up the theme setting, called once by theme_init
+ * @param system theme of the operating system, undefined when the System choice is not offered
+ * @param default_theme theme used when the user has not chosen one*/
+export function theme_setting_init(
+  system: AppliedThemes | undefined,
+  default_theme: Themes,
+) {
+  if (system) THEMES.set_ok(theme_list(system));
+  //Set before registering, so the default is not stored as if the user chose it
+  if (STORED_THEME === undefined || (STORED_THEME === Themes.System && !system))
+    PRIVATE_THEME.set_ok(default_theme);
+  SETTINGS.register(
+    THEME_ID,
+    "Theme",
+    "Theme to use for the UI",
+    PRIVATE_THEME,
+  );
+}
+
+/**Updates the System choice to show the theme the operating system uses*/
+export function theme_setting_system(system: AppliedThemes) {
+  THEMES.set_ok(theme_list(system));
+}
 
 //       _____  _____          _      ______
 //      / ____|/ ____|   /\   | |    |  ____|
@@ -76,7 +123,7 @@ window
 //     |_____/ \_____/_/    \_\______|______|
 const SCALE_ID = "scale";
 const PRIVATE_SCALE = st.rosw(
-  st.n.help(SETTINGS.get(SCALE_ID, 100), {
+  st.n.help(SETTINGS.get(SCALE_ID, 100, in_range(50, 400)), {
     min: st.ok(50),
     max: st.ok(400),
     unit: st.ok("%"),
@@ -121,9 +168,14 @@ const SCROLLBAR_MODES = st.ok(
 
 const SCROLLBAR_ID = "scrollbar";
 const PRIVATE_SCROLLBAR_MODE = st.rosw(
-  st.e.help(SETTINGS.get(SCROLLBAR_ID, ScrollbarModes.Thin as ScrollbarModes), {
-    list: SCROLLBAR_MODES,
-  }),
+  st.e.help(
+    SETTINGS.get(
+      SCROLLBAR_ID,
+      ScrollbarModes.Thin as ScrollbarModes,
+      one_of(ScrollbarModes),
+    ),
+    { list: SCROLLBAR_MODES },
+  ),
   true,
 );
 SETTINGS.register(
@@ -176,6 +228,7 @@ const PRIVATE_INPUT_MODE = st.rosw(
       matchMedia("(pointer: coarse)").matches
         ? InputModes.Touch
         : (InputModes.Mouse as InputModes),
+      one_of(InputModes),
     ),
     { list: INPUT_MODES },
   ),
@@ -218,7 +271,11 @@ const ANIMATION_LEVELS = st.ok(
 const ANIMATION_LEVEL_ID = "animation_level";
 const PRIVATE_ANIMATION_LEVEL = st.rosw(
   st.e.help(
-    SETTINGS.get(ANIMATION_LEVEL_ID, AnimationLevels.None as AnimationLevels),
+    SETTINGS.get(
+      ANIMATION_LEVEL_ID,
+      AnimationLevels.None as AnimationLevels,
+      one_of(AnimationLevels),
+    ),
     { list: ANIMATION_LEVELS },
   ),
   true,
@@ -240,7 +297,7 @@ export const ANIMATION_LEVEL = PRIVATE_ANIMATION_LEVEL.read_write;
 //     /_/    \_\_| \_|_____|_|  |_/_/    \_\_|  |_____\____/|_| \_| |_____/|_|    |______|______|_____/
 const ANIMATION_SPEED_ID = "animation_speed";
 const PRIVATE_ANIMATION_SPEED = st.rosw(
-  st.n.help(SETTINGS.get(ANIMATION_SPEED_ID, 200), {
+  st.n.help(SETTINGS.get(ANIMATION_SPEED_ID, 200, in_range(50, 1000)), {
     min: st.ok(50),
     max: st.ok(1000),
     unit: st.ok("ms"),

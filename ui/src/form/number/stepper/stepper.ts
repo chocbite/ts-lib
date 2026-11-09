@@ -6,8 +6,13 @@ import {
 } from "#icons";
 import { number_step_start_decimal } from "@chocbite/ts-lib/math";
 import { err, type Result } from "@chocbite/ts-lib/result";
+import { set_cursor_end } from "#selection";
 import type { SVGFunc } from "#svg";
-import { FormNumberWrite, type FormStepperBaseOptions } from "../number_base";
+import {
+  FormNumberWrite,
+  number_decimals,
+  type FormStepperBaseOptions,
+} from "../number_base";
 import "./stepper.scss";
 
 /**Slide Selector, displays all options in a slider*/
@@ -23,7 +28,11 @@ export class FormStepper<ID extends string | undefined> extends FormNumberWrite<
   }
 
   #unit: string = "";
+  #decimals_set?: number;
   #decimals: number = 0;
+  /**Text last drawn from a value, and whether the user typed since*/
+  #shown: string = "";
+  #edited: boolean = false;
   #min: number = -Infinity;
   #max: number = Infinity;
   #step: number = 0;
@@ -57,10 +66,13 @@ export class FormStepper<ID extends string | undefined> extends FormNumberWrite<
     this.#value_box.onblur = async () => {
       this.selected = false;
       await sleep(0);
-      this.set_value_check(
-        parseFloat(this.#value_box.textContent?.replace(",", ".") || "") || 0,
-      );
+      const text = this.#value_box.textContent || "";
+      //Not edited, a value that arrived while focused is shown instead of writing the old text back
+      if (!this.#edited && text === this.#shown) {
+        if (this.buffer !== undefined) this.new_value(this.buffer);
+      } else this.set_value_check(parseFloat(text.replace(",", ".")) || 0);
     };
+    this.#value_box.oninput = () => (this.#edited = true);
     this.#value_box.onpointerdown = () => {
       this.selected = true;
     };
@@ -68,9 +80,13 @@ export class FormStepper<ID extends string | undefined> extends FormNumberWrite<
     const reset = () => {
       this.selected = false;
       this.#value_box.contentEditable = "true";
-      if (pointer_id) this.#text.releasePointerCapture(pointer_id);
+      if (pointer_id !== undefined) {
+        this.#text.releasePointerCapture(pointer_id);
+        pointer_id = undefined;
+      }
       this.#text.onpointermove = null;
       this.#text.onpointerup = null;
+      this.#text.onpointercancel = null;
     };
     this.#text.onpointerdown = (e) => {
       if (e.button === 0 && !this.selected) {
@@ -95,14 +111,7 @@ export class FormStepper<ID extends string | undefined> extends FormNumberWrite<
           ev.stopPropagation();
           reset();
           if (!moving && e.target !== this.#value_box) {
-            this.#value_box.focus();
-            const range = document.createRange();
-            range.setStartAfter(this.#value_box.firstChild!);
-            const selection = this.ownerDocument?.defaultView?.getSelection();
-            if (selection) {
-              selection.removeAllRanges();
-              selection.addRange(range);
-            }
+            set_cursor_end(this.#value_box);
           } else if (moving) {
             this.#move_diff(
               initial_val + ((ev.clientX - e.clientX) / 10) * (this.#step || 1),
@@ -110,6 +119,12 @@ export class FormStepper<ID extends string | undefined> extends FormNumberWrite<
             );
             moving = false;
           }
+        };
+        //A cancelled drag, like a touch turning into a scroll, is undone like Escape
+        this.#text.onpointercancel = () => {
+          reset();
+          if (this.buffer !== undefined) this.new_value(this.buffer);
+          else this.clear_value();
         };
       }
     };
@@ -153,8 +168,8 @@ export class FormStepper<ID extends string | undefined> extends FormNumberWrite<
         else if (/[,.]/g.test(e.data) && this.#decimals === 0)
           e.preventDefault();
         else if (
-          (this.#min >= 0 && /-/g.test(e.data)) ||
-          this.#value_box.textContent?.includes("-")
+          /-/g.test(e.data) &&
+          (this.#min >= 0 || this.#value_box.textContent?.includes("-"))
         )
           e.preventDefault();
       }
@@ -171,9 +186,19 @@ export class FormStepper<ID extends string | undefined> extends FormNumberWrite<
   }
 
   set decimals(dec: number | undefined) {
-    this.#decimals = dec || 0;
+    this.#decimals_set = dec;
+    this.#update_decimals();
+  }
+
+  /**Updates the decimals from the set decimals, step and start, and redraws with them*/
+  #update_decimals() {
+    const dec = number_decimals(this.#decimals_set, this.#step, this.#start);
+    if (dec === this.#decimals) return;
+    this.#decimals = dec;
     this.#update_min_legend();
     this.#update_max_lengend();
+    if (this.buffer !== undefined && !this.selected)
+      this.new_value(this.buffer);
   }
 
   set min(min: number | undefined) {
@@ -196,10 +221,12 @@ export class FormStepper<ID extends string | undefined> extends FormNumberWrite<
 
   set step(step: number | undefined) {
     this.#step = step || 0;
+    this.#update_decimals();
   }
 
   set start(step: number | undefined) {
     this.#start = step || 0;
+    this.#update_decimals();
   }
 
   /**Set wether the slider is in live mode*/
@@ -208,25 +235,31 @@ export class FormStepper<ID extends string | undefined> extends FormNumberWrite<
   }
 
   set icon_decrease(icon: SVGFunc | undefined) {
-    this.replaceChild(
-      this.#icon_dec,
-      this.#stepper_func(icon ? icon() : material_remove_rounded(), false),
+    const old = this.#icon_dec;
+    this.#icon_dec = this.#stepper_func(
+      icon ? icon() : material_remove_rounded(),
+      false,
     );
+    this.replaceChild(this.#icon_dec, old);
   }
 
   set icon_increase(icon: SVGFunc | undefined) {
-    this.replaceChild(
-      this.#icon_inc,
-      this.#stepper_func(icon ? icon() : material_add_rounded(), true),
+    const old = this.#icon_inc;
+    this.#icon_inc = this.#stepper_func(
+      icon ? icon() : material_add_rounded(),
+      true,
     );
+    this.replaceChild(this.#icon_inc, old);
   }
 
   protected new_value(value: number) {
-    this.#move_value(value);
+    this.#value_box.textContent = this.#shown = value.toFixed(this.#decimals);
+    this.#edited = false;
   }
 
   protected clear_value(): void {
-    this.#value_box.textContent = "";
+    this.#value_box.textContent = this.#shown = "";
+    this.#edited = false;
   }
 
   protected new_error(err: string): void {
@@ -297,6 +330,7 @@ export class FormStepper<ID extends string | undefined> extends FormNumberWrite<
           clearInterval(scaler_interval);
           clearTimeout(timeout);
           icon.onpointerup = null;
+          icon.onpointercancel = null;
           icon.releasePointerCapture(e.pointerId);
           icon.classList.remove("active");
         };
@@ -315,6 +349,7 @@ export class FormStepper<ID extends string | undefined> extends FormNumberWrite<
           if (interval === 0) this.#step_value(dir);
           release();
         };
+        icon.onpointercancel = release;
       }
     };
     return icon;
@@ -324,7 +359,7 @@ export class FormStepper<ID extends string | undefined> extends FormNumberWrite<
     const step =
       this.#step ||
       Math.max(
-        this.#decimals ? 1 / this.#decimals : 1,
+        this.#decimals ? 10 ** -this.#decimals : 1,
         Math.floor(Math.abs(this.buffer || 0) / 150),
       );
     return this.set_value_check((this.buffer || 0) + (dir ? step : -step));

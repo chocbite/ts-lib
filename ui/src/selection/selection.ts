@@ -63,7 +63,8 @@ export function set_cursor_position(
     }
     return false;
   };
-  set_caret(element);
+  //Past the end or without text, the caret goes to the end
+  if (!set_caret(element)) set_cursor_end(element);
 }
 
 /**Sets the cursor (caret) position at the very end of a contenteditable element, input, or textarea.
@@ -80,17 +81,15 @@ export function set_cursor_end(element: HTMLElement): void {
   if (selection) {
     const range = document.createRange();
     const last_node = element.lastChild;
-    if (last_node) {
-      if (last_node.nodeType === Node.TEXT_NODE) {
-        range.setStart(last_node, (last_node as Text).length);
-        range.setEnd(last_node, (last_node as Text).length);
-      } else {
-        range.selectNodeContents(element);
-        range.collapse(false);
-      }
-      selection.removeAllRanges();
-      selection.addRange(range);
+    if (last_node?.nodeType === Node.TEXT_NODE) {
+      range.setStart(last_node, (last_node as Text).length);
+      range.setEnd(last_node, (last_node as Text).length);
+    } else {
+      range.selectNodeContents(element);
+      range.collapse(false);
     }
+    selection.removeAllRanges();
+    selection.addRange(range);
   }
 }
 

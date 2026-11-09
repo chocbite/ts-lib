@@ -33,13 +33,17 @@ export class FormPassword<ID extends string | undefined> extends FormValueWrite<
     };
     this.warn_input.onblur = () => {
       this.selected = false;
+      //Restores the password when nothing new was entered, or shows a state change made while focused
+      if (this._buffer !== undefined && this.warn_input.value !== this._buffer)
+        this.new_value(this._buffer);
     };
     this.warn_input.onchange = () => {
       this.set_value_check(this.warn_input.value);
     };
     this.warn_input.onbeforeinput = (ev) => {
-      if (ev.data) {
-        if (this.#filter && !this.#filter.test(ev.data)) {
+      if (ev.data && this.#filter) {
+        this.#filter.lastIndex = 0;
+        if (!this.#filter.test(ev.data)) {
           ev.preventDefault();
           this.warn("Invalid character entered");
         }

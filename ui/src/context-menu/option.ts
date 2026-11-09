@@ -27,19 +27,19 @@ export class MenuOption extends MenuLine implements ContextMenuOption {
     icon_box.className = "icon";
     if (icon) icon_box.appendChild(icon);
     const text_box = this.appendChild(document.createElement("div"));
-    text_box.innerHTML = text;
+    text_box.textContent = text;
     text_box.className = "text";
     const shortcut_box = this.appendChild(document.createElement("div"));
-    if (shortcut) shortcut_box.innerHTML = shortcut;
+    if (shortcut) shortcut_box.textContent = shortcut;
     shortcut_box.className = "shortcut";
     const check_mark_box = this.appendChild(document.createElement("div"));
-    if (checkmark) check_mark_box.innerHTML = "✓";
+    if (checkmark) check_mark_box.textContent = "✓";
     check_mark_box.className = "checkmark";
 
     this.onclick = (e) => {
       e.stopPropagation();
       this.func();
-      navigator?.vibrate(25);
+      navigator.vibrate?.(25);
       (this.parentElement as ContextMenu).close_up();
     };
 

@@ -68,13 +68,18 @@ export class EventHandler<Events extends { [key: string]: any }, Target>
   implements EventProducer<Events, Target>
 {
   target: Target;
-  #subscribers: {
-    [K in keyof Events]?: Set<ESubscriber<K, Target, Events[K]>>;
-  } = {};
+  //A Map, so event names like "toString" do not collide with Object properties
+  #subscribers = new Map<keyof Events, Set<ESubscriber<any, Target, any>>>();
   #proxies?: Set<ESubscriber<keyof Events, Target, Events[keyof Events]>>;
 
   constructor(target: Target) {
     this.target = target;
+  }
+
+  #subs<K extends keyof Events>(
+    event_name: K
+  ): Set<ESubscriber<K, Target, Events[K]>> | undefined {
+    return this.#subscribers.get(event_name);
   }
 
   //# Consumer
@@ -82,12 +87,12 @@ export class EventHandler<Events extends { [key: string]: any }, Target>
     event_name: K,
     subscriber: ESubscriber<K, Target, Events[K]>
   ): typeof subscriber {
-    const type_listeners = this.#subscribers[event_name];
+    const type_listeners = this.#subs(event_name);
     if (type_listeners) {
       if (type_listeners.has(subscriber))
         console.error("Subscriber already in handler");
       else type_listeners.add(subscriber);
-    } else this.#subscribers[event_name] = new Set([subscriber]);
+    } else this.#subscribers.set(event_name, new Set([subscriber]));
     return subscriber;
   }
 
@@ -95,7 +100,7 @@ export class EventHandler<Events extends { [key: string]: any }, Target>
     event_name: K,
     subscriber: ESubscriber<K, Target, Events[K]>
   ) {
-    if (this.#subscribers[event_name]?.delete(subscriber) === false)
+    if (this.#subs(event_name)?.delete(subscriber) === false)
       console.error("Subscriber not in handler");
     return subscriber;
   }
@@ -123,7 +128,7 @@ export class EventHandler<Events extends { [key: string]: any }, Target>
   }
 
   emit<K extends keyof Events>(event_name: K, data: Events[K]) {
-    const funcs = this.#subscribers[event_name];
+    const funcs = this.#subs(event_name);
     if (funcs?.size || this.#proxies?.size)
       this.#emit_e(
         Object.freeze(
@@ -138,7 +143,11 @@ export class EventHandler<Events extends { [key: string]: any }, Target>
     funcs?: Set<ESubscriber<keyof Events, Target, Events[keyof Events]>>
   ) {
     this.#proxies?.forEach((proxy) => {
-      proxy(e);
+      try {
+        proxy(e);
+      } catch (e) {
+        console.error("Failed while dispatching event to proxy", e);
+      }
     });
     funcs?.forEach((func) => {
       try {
@@ -150,27 +159,27 @@ export class EventHandler<Events extends { [key: string]: any }, Target>
   }
 
   clear<K extends keyof Events>(event_name: K): void {
-    this.#subscribers[event_name]?.clear();
+    this.#subs(event_name)?.clear();
   }
 
   in_use<K extends keyof Events>(event_name: K): boolean {
-    return Boolean(this.#subscribers[event_name]?.size);
+    return Boolean(this.#subs(event_name)?.size);
   }
 
   has<K extends keyof Events>(
     event_name: K,
     subscriber: ESubscriber<K, Target, Events[K]>
   ): boolean {
-    return this.#subscribers[event_name]?.has(subscriber) || false;
+    return this.#subs(event_name)?.has(subscriber) || false;
   }
 
   amount<K extends keyof Events>(event_name: K): number {
-    return this.#subscribers[event_name]?.size || 0;
+    return this.#subs(event_name)?.size || 0;
   }
 
   proxy_func(): ESubscriber<keyof Events, Target, Events[keyof Events]> {
     return (e: E<keyof Events, Target, Events[keyof Events]>) => {
-      const subs = this.#subscribers[e.type];
+      const subs = this.#subs(e.type);
       if (subs) this.#emit_e(e, subs);
     };
   }

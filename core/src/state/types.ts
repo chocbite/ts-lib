@@ -58,13 +58,15 @@ export type StateInferSub<S extends State<any>> = StateSub<StateInferResult<S>>;
 export interface StateRelated {}
 
 /**Map of values or states related to a state */
-export interface StateHelper<_RRT, WT, REL extends StateRelated> {
+export interface StateHelper<RRT, WT, REL extends StateRelated> {
   /**Returns data related to the state */
   related(): REL;
   /**Limits given value to valid range if possible or error reason if not possible */
   limit(value: WT): PromiseLike<StateResult<WT>>;
   /**Checks if the value is valid and returns reason for invalidity */
   check(value: WT): PromiseLike<StateResult<WT>>;
+  /**Called with every new value of the state, an empty function when not needed*/
+  on_change(value: RRT): void;
 }
 
 export type HelperRelated<HEL extends StateHelper<any, any, any>> = ReturnType<
@@ -82,6 +84,28 @@ export type HelperRelated<HEL extends StateHelper<any, any, any>> = ReturnType<
 
 export const STATE_KEY = Symbol("state");
 
+/**true for types JSON can represent, states holding such types included, false otherwise*/
+type StateJsonPart<T> = 0 extends 1 & T
+  ? true
+  : T extends string | number | boolean | null
+    ? true
+    : T extends StateBase<infer R, any, any>
+      ? StateJsonPart<ResultInferOk<R>>
+      : T extends (...args: any[]) => any
+        ? false
+        : T extends { toJSON(): any }
+          ? true
+          : T extends readonly (infer E)[]
+            ? StateJsonPart<E>
+            : T extends object
+              ? //Optional fields are allowed, undefined values are left out of the JSON
+                StateJsonPart<Exclude<T[Exclude<keyof T, symbol>], undefined>>
+              : false;
+
+/**true when a value of type T can be stored as JSON, states holding such values included*/
+export type StateJsonCompatible<T> =
+  false extends StateJsonPart<T> ? false : true;
+
 export interface StateBase<
   RRT extends StateResult<any>,
   REL extends Option<StateRelated>,
@@ -95,6 +119,8 @@ export interface StateBase<
     on_fulfilled?: ((value: RRT) => TResult1 | PromiseLike<TResult1>) | null,
     on_rejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
   ): PromiseLike<TResult1 | TResult2>;
+  /**Returns the value as JSON, use StateJsonCompatible to require a value type JSON can represent.
+   * States in error, NaN and Infinity are written as null and logged with console.error*/
   to_json(): PromiseLike<string>;
 
   /**Is state guarenteed sync*/
@@ -136,7 +162,7 @@ export interface StateBase<
 }
 
 interface REA<RT, REL extends Option<StateRelated>, WT> extends StateBase<
-  ResultOk<RT>,
+  StateResult<RT>,
   REL,
   WT
 > {
@@ -179,7 +205,7 @@ interface ROS<RT, REL extends Option<StateRelated>, WT> extends StateBase<
 }
 
 interface REAW<RT, REL extends Option<StateRelated>, WT> extends StateBase<
-  ResultOk<RT>,
+  StateResult<RT>,
   REL,
   WT
 > {

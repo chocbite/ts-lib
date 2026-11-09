@@ -154,9 +154,10 @@ ctm.summon(menu, buttonEl, undefined, undefined, true);
 
 ---
 
-### `ctm.default(lines | false)`
+### `ctm.default(lines | false | undefined)`
 
 Sets a document-wide fallback context menu shown on any right-click with no element-specific menu.
+It applies to every registered document, also documents registered later.
 
 ```ts
 // Apply a global fallback
@@ -169,6 +170,9 @@ ctm.default(
 
 // Suppress the browser's native context menu everywhere
 ctm.default(false);
+
+// Give the browser's native context menu back
+ctm.default(undefined);
 ```
 
 ---

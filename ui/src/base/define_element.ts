@@ -90,23 +90,36 @@ export const define_element = (element: ElementConstructor) => {
     if (name !== "@abstract@") define_name = "-" + name + define_name;
   }
   define_name = base_element_global_namespace + namespace + define_name;
+  //Checked first, browsers word the error for a name or class used twice differently
+  if (customElements.get(define_name))
+    throw new Error(
+      'Failed to define element "' +
+        define_name +
+        '" the name has already been defined, by another element or by this library being loaded twice',
+    );
+  //getName is missing in older browsers
+  const defined_as =
+    "getName" in customElements
+      ? customElements.getName(element as unknown as CustomElementConstructor)
+      : null;
+  if (defined_as)
+    throw new Error(
+      'Failed to define element "' +
+        define_name +
+        '" the class is already defined as "' +
+        defined_as +
+        '"',
+    );
   try {
     // @ts-expect-error Dynamic custom element definition
     customElements.define(define_name, element);
     ELEMENT_LIST.add(define_name);
-  } catch (e) {
-    if (
-      e instanceof Error &&
-      e.message.includes("has already been used with this registry")
-    ) {
-      throw e;
-    } else {
-      throw new Error(
-        'Failed to define element "' +
-          define_name +
-          '" ' +
-          validate_element_name(define_name),
-      );
-    }
+  } catch {
+    throw new Error(
+      'Failed to define element "' +
+        define_name +
+        '" ' +
+        validate_element_name(define_name),
+    );
   }
 };

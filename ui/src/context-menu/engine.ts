@@ -15,8 +15,11 @@ declare global {
   }
 }
 
-/**Reference to document handler*/
-let default_menu: (ContextMenu | (() => Option<ContextMenu>)) | undefined;
+/**Default context menu, false blocks the operating system context menu, undefined leaves it*/
+let default_menu: ContextMenu | (() => Option<ContextMenu>) | false | undefined;
+
+/**Blocks the operating system context menu when the default is false*/
+const block_os_menu = (e: Event) => e.preventDefault();
 
 DOCUMENT_HANDLER.events.on("added", (e) => {
   apply_to_doc(e.data);
@@ -29,7 +32,17 @@ function apply_to_doc(doc: Document) {
   const container = new Container();
   doc[CONTEXT_MENY_SYMBOL] = container;
   doc.documentElement.appendChild(container);
-  if (default_menu) context_menu_attach(doc.documentElement, default_menu);
+  apply_default_to_doc(doc);
+}
+
+/**Applies the current default context menu to a document*/
+function apply_default_to_doc(doc: Document) {
+  const root = doc.documentElement;
+  context_menu_detach(root);
+  root.removeEventListener("contextmenu", block_os_menu);
+  if (default_menu) context_menu_attach(root, default_menu);
+  else if (default_menu === false)
+    root.addEventListener("contextmenu", block_os_menu);
 }
 
 /**Attaches a context menu to the given element
@@ -102,19 +115,11 @@ export function context_menu_summon(
 }
 
 /**Sets the default context menu for the page, the one used if no other context menu has been attached to the element
- * If set to a boolean the operating system context menu is disabled and nothing will appear
+ * If set to false the operating system context menu is disabled and nothing will appear
  * If set undefined the operating systems context menu will be used*/
 export function context_menu_default(
-  lines: (ContextMenu | (() => Option<ContextMenu>)) | false,
+  lines: ContextMenu | (() => Option<ContextMenu>) | false | undefined,
 ) {
-  if (default_menu)
-    DOCUMENT_HANDLER.for_documents((doc) => {
-      context_menu_detach(doc.documentElement);
-    });
-  if (lines) {
-    default_menu = lines;
-    DOCUMENT_HANDLER.for_documents((doc) => {
-      context_menu_attach(doc.documentElement, lines);
-    });
-  }
+  default_menu = lines;
+  DOCUMENT_HANDLER.for_documents(apply_default_to_doc);
 }

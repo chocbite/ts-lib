@@ -28,7 +28,7 @@ export class MenuSub extends MenuLine implements ContextMenuSub {
     icon_box.className = "icon";
     if (icon) icon_box.appendChild(icon);
     const text_box = this.appendChild(document.createElement("div"));
-    text_box.innerHTML = text;
+    text_box.textContent = text;
     text_box.className = "text";
     const shortcut_box = this.appendChild(document.createElement("div"));
     shortcut_box.className = "shortcut";
@@ -39,7 +39,7 @@ export class MenuSub extends MenuLine implements ContextMenuSub {
     this.onclick = (e) => {
       e.stopPropagation();
       if (!this.#block_time) {
-        navigator?.vibrate(25);
+        navigator.vibrate?.(25);
         if (this.#is_open) {
           this.close_down();
         } else {

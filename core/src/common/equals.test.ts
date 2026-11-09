@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { object_equals_deep } from "./equals";
+import { any_equals_deep, object_equals_deep } from "./equals";
 
 describe("Any Equals", async () => {
   it("Object Equals Deep", async () => {
@@ -47,5 +47,33 @@ describe("Any Equals", async () => {
         { value: { nested: true } }
       )
     ).toEqual(false);
+  });
+
+  it("ignores key order", async () => {
+    expect(object_equals_deep({ a: 1, b: 2 }, { b: 2, a: 1 })).toEqual(true);
+  });
+
+  it("compares dates by time", async () => {
+    expect(any_equals_deep(new Date(1), new Date(2))).toEqual(false);
+    expect(any_equals_deep(new Date(1), new Date(1))).toEqual(true);
+    expect(any_equals_deep({ d: new Date(1) }, { d: new Date(2) })).toEqual(
+      false
+    );
+  });
+
+  it("does not treat an array and an object as equal", async () => {
+    expect(any_equals_deep([1], { 0: 1 })).toEqual(false);
+    expect(any_equals_deep({ 0: 1 }, [1])).toEqual(false);
+  });
+
+  it("compares maps and sets by content", async () => {
+    expect(any_equals_deep(new Map([["a", 1]]), new Map([["a", 2]]))).toEqual(
+      false
+    );
+    expect(any_equals_deep(new Map([["a", 1]]), new Map([["a", 1]]))).toEqual(
+      true
+    );
+    expect(any_equals_deep(new Set([1]), new Set([2]))).toEqual(false);
+    expect(any_equals_deep(new Set([1]), new Set([1]))).toEqual(true);
   });
 });

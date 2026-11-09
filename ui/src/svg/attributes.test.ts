@@ -154,5 +154,83 @@ describe("SVGAttributes", () => {
       expect(result.elem.getAttribute("data-id")).toBe("1");
       expect(result.elem.getAttribute("transform")).toBe("translate(5 10)");
     });
+
+    it("every method returns the same wrapper", () => {
+      const attrs = createSVGElement();
+      for (const result of [
+        attrs.s("a"),
+        attrs.f("a"),
+        attrs.sw(1),
+        attrs.cl("a"),
+        attrs.a("x", "1"),
+        attrs.rotate(1),
+        attrs.scale(1),
+        attrs.skewX(1),
+        attrs.skewY(1),
+        attrs.transform("a"),
+      ])
+        expect(result).toBe(attrs);
+    });
+  });
+
+  describe("elem", () => {
+    it("returns the same element every time", () => {
+      const attrs = createSVGElement();
+      expect(attrs.elem).toBe(attrs.elem);
+    });
+
+    it("adds no transform attribute without transforms", () => {
+      const attrs = createSVGElement();
+      expect(attrs.elem.hasAttribute("transform")).toBe(false);
+    });
+
+    it("reading elem twice does not repeat the transforms", () => {
+      const attrs = createSVGElement().translate(1, 2);
+      void attrs.elem;
+      expect(attrs.elem.getAttribute("transform")).toBe("translate(1 2)");
+    });
+
+    it("transforms added after reading elem are written on the next read", () => {
+      const attrs = createSVGElement().translate(1, 2);
+      const elem = attrs.elem;
+      attrs.rotate(90);
+      expect(elem.getAttribute("transform")).toBe("translate(1 2)");
+      expect(attrs.elem.getAttribute("transform")).toBe(
+        "translate(1 2) rotate(90)",
+      );
+    });
+
+    it("other attributes are written immediately", () => {
+      const elem = document.createElementNS(NAME_SPACE, "rect");
+      new SVGAttributes(elem).fill("red");
+      expect(elem.getAttribute("fill")).toBe("red");
+    });
+  });
+
+  describe("edge cases", () => {
+    it("rotate ignores a center with only one coordinate", () => {
+      const attrs = createSVGElement().rotate(30, 5);
+      expect(attrs.elem.getAttribute("transform")).toBe("rotate(30)");
+    });
+
+    it("rotate keeps a center at zero", () => {
+      const attrs = createSVGElement().rotate(30, 0, 0);
+      expect(attrs.elem.getAttribute("transform")).toBe("rotate(30 0 0)");
+    });
+
+    it("scale keeps a zero y scale", () => {
+      const attrs = createSVGElement().scale(2, 0);
+      expect(attrs.elem.getAttribute("transform")).toBe("scale(2 0)");
+    });
+
+    it("later attribute calls overwrite earlier ones", () => {
+      const attrs = createSVGElement().fill("red").f("blue");
+      expect(attrs.elem.getAttribute("fill")).toBe("blue");
+    });
+
+    it("class names accumulate over calls", () => {
+      const attrs = createSVGElement().cl("a").class_list("b", "c");
+      expect([...attrs.elem.classList]).toEqual(["a", "b", "c"]);
+    });
   });
 });

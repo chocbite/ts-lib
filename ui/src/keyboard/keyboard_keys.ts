@@ -110,7 +110,7 @@ class KeyboardLayer extends Base {
 define_element(KeyboardLayer);
 
 const KEO = {
-  ctrlKey: true,
+  ctrlKey: false,
   shiftKey: false,
   altKey: false,
   metaKey: false,
@@ -121,6 +121,23 @@ const KEO = {
 const IEO = {
   bubbles: true,
 };
+
+/**KeyboardEvent code of the key typing a character, empty for characters without a key of their own*/
+function key_code(key: string): string {
+  if (key === " ") return "Space";
+  if (key >= "0" && key <= "9") return "Digit" + key;
+  const upper = key.toUpperCase();
+  if (upper.length === 1 && upper >= "A" && upper <= "Z") return "Key" + upper;
+  return "";
+}
+
+/**Email and number inputs have no selection api*/
+function no_selection(element: HTMLElement): boolean {
+  return (
+    element.tagName === "INPUT" &&
+    (element as HTMLInputElement).selectionStart === null
+  );
+}
 
 export class Keyboard_Keys extends KeyboardBase {
   static element_name(): string {
@@ -153,8 +170,9 @@ export class Keyboard_Keys extends KeyboardBase {
   }
 
   open(element: HTMLElement): void {
+    //Edits of the previous element are done when the keyboard moves to another
+    if (element !== this.elem) this.#dispatch_change();
     super.open(element);
-    this.#changed = false;
     this.#layer.write("default");
   }
 
@@ -205,9 +223,35 @@ export class Keyboard_Keys extends KeyboardBase {
     );
   }
 
-  #edit_value(data: string, delete_backward = false): boolean {
+  /**Edits like a typed key, beforeinput, the edit, then input*/
+  #edit(data: string | null, input_type: string): void {
+    if (!this.#dis_beforeinput({ data, inputType: input_type })) return;
+    const edited = this.#edit_value(data ?? "", data === null);
+    if (!edited) return;
+    this.#changed = true;
+    if (edited !== "native") this.#dis_input({ data, inputType: input_type });
+  }
+
+  /**Returns "native" when the browser dispatched the input event itself*/
+  #edit_value(data: string, delete_backward = false): boolean | "native" {
     const element = this.elem;
     if (!element) return false;
+
+    //Setting the value of a number input clears partial numbers like "-" or "1.",
+    //execCommand edits the text at the cursor like the user would
+    if (no_selection(element)) {
+      let edited = false;
+      const mark = () => (edited = true);
+      element.addEventListener("input", mark);
+      element.focus();
+      element.ownerDocument.execCommand(
+        delete_backward ? "delete" : "insertText",
+        false,
+        data,
+      );
+      element.removeEventListener("input", mark);
+      return edited && "native";
+    }
 
     if (element.tagName === "INPUT" || element.tagName === "TEXTAREA") {
       const input = element as HTMLInputElement | HTMLTextAreaElement;
@@ -268,47 +312,39 @@ export class Keyboard_Keys extends KeyboardBase {
     };
     const opts = special_keys[key as KeyboardSpecialKeys] ?? {
       key,
-      code: key === " " ? "Space" : "Key" + key.toUpperCase(),
+      code: key_code(key),
     };
 
-    const keydown = this.#dis_keydown(opts);
-    if (keydown && key.length === 1) {
-      this.#dis_keypress(opts);
-      if (
-        this.#dis_beforeinput({ data: key, inputType: "insertText" }) &&
-        this.#edit_value(key)
-      ) {
-        this.#changed = true;
-        this.#dis_input({ data: key, inputType: "insertText" });
-      }
-    } else if (
-      keydown &&
-      key === KeyboardSpecialKeys.Backspace &&
-      this.#dis_beforeinput({
-        data: null,
-        inputType: "deleteContentBackward",
-      }) &&
-      this.#edit_value("", true)
-    ) {
-      this.#changed = true;
-      this.#dis_input({ data: null, inputType: "deleteContentBackward" });
-    } else if (
-      keydown &&
-      key === KeyboardSpecialKeys.Enter &&
-      this.elem.tagName !== "INPUT" &&
-      this.#dis_beforeinput({ data: "\n", inputType: "insertLineBreak" })
-    ) {
-      if (this.#edit_value("\n")) {
-        this.#changed = true;
-        this.#dis_input({ data: "\n", inputType: "insertLineBreak" });
-      }
-    } else if (keydown && key === KeyboardSpecialKeys.Left) {
-      set_cursor_position(this.elem, get_cursor_position(this.elem) - 1);
-    } else if (keydown && key === KeyboardSpecialKeys.Right) {
-      set_cursor_position(this.elem, get_cursor_position(this.elem) + 1);
+    if (this.#dis_keydown(opts)) {
+      if (key.length === 1) {
+        this.#dis_keypress(opts);
+        this.#edit(key, "insertText");
+      } else if (key === KeyboardSpecialKeys.Backspace)
+        this.#edit(null, "deleteContentBackward");
+      else if (
+        key === KeyboardSpecialKeys.Enter &&
+        this.elem.tagName !== "INPUT"
+      )
+        this.#edit("\n", "insertLineBreak");
+      else if (key === KeyboardSpecialKeys.Left) this.#move_cursor(-1);
+      else if (key === KeyboardSpecialKeys.Right) this.#move_cursor(1);
     }
     this.#dis_keyup(opts);
     if (key === KeyboardSpecialKeys.Enter) this.#dispatch_change();
+  }
+
+  #move_cursor(by: -1 | 1): void {
+    const element = this.elem!;
+    if (no_selection(element)) {
+      element.focus();
+      element.ownerDocument
+        .getSelection()
+        ?.modify("move", by < 0 ? "backward" : "forward", "character");
+    } else
+      set_cursor_position(
+        element,
+        Math.max(get_cursor_position(element) + by, 0),
+      );
   }
 }
 define_element(Keyboard_Keys);

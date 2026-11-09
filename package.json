@@ -1,5 +1,6 @@
 {
   "name": "ts-lib-monorepo",
+  "version": "1.0.3",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -7,6 +8,8 @@
     "ui"
   ],
   "scripts": {
+    "dev": "vite --config dev/vite.config.ts",
+    "typecheck:dev": "tsc --noEmit -p dev",
     "build": "npm run build -w @chocbite/ts-lib && npm run build -w @chocbite/ts-lib-ui",
     "test": "npm run test --workspaces",
     "lint": "npm run lint --workspaces",

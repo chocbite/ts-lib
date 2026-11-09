@@ -21,7 +21,7 @@ spinner-spinner {
     max-width: 100%;
 
     > circle {
-      fill: var(--\@chocolatelibui\/spinners\/color);
+      fill: var(--spinners-color);
       animation: spinner 1.2s calc((var(--i) - 12) * 0.1s) infinite;
 
       @for $i from 1 through 12 {

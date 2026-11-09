@@ -42,5 +42,12 @@ list-addrow {
     &:active {
       box-shadow: 0 0rem 0.2rem 0rem var(--list-colors-border-header);
     }
+
+    svg {
+      fill: var(--list-colors-icon-add_icon);
+      height: 1.2em;
+      width: auto;
+      margin-right: 0.3rem;
+    }
   }
 }

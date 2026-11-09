@@ -58,4 +58,17 @@ describe("MD5", function () {
       md5("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq").hex_big
     ).toStrictEqual("8215EF0796A20BCAAAE116D3876C664A");
   });
+  //Expected values from node:crypto createHash("md5") of the UTF-8 bytes
+  it("Non ASCII text is hashed as UTF-8", function () {
+    expect(md5("€").hex_small).toStrictEqual("bca53fde466a76b7bee3e18997e94a7a");
+    expect(md5("æøå").hex_small).toStrictEqual(
+      "93c0abe43cfa5d4f4fbdd46694442182"
+    );
+    expect(md5("hello wörld").hex_small).toStrictEqual(
+      "8c6e15df743a0380aaa26e5741794d7b"
+    );
+  });
+  it("Different characters give different hashes", function () {
+    expect(md5("ā").hex_small).not.toStrictEqual(md5("\x01").hex_small);
+  });
 });

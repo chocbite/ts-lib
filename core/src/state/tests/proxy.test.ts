@@ -382,11 +382,12 @@ describe("Proxy features", function () {
   });
   //##################################################################################################################################################
   describe("write without transform", { timeout: 100 }, function () {
-    it("returns error when write transform not set", async function () {
+    it("passes write through when write transform not set", async function () {
       const inner = st.rosw(ok(1), true);
       const proxy = st.p.rosw(inner);
       const result = await proxy.write(15);
-      expect(result).toEqual(err("not writable"));
+      expect(result).toEqual(ok(undefined));
+      expect(inner.ok()).toBe(15);
     });
   });
   //##################################################################################################################################################
@@ -413,5 +414,41 @@ describe("Proxy features", function () {
         err("22 is bigger than the limit of 10"),
       );
     });
+  });
+});
+
+describe("Proxy with in place changed values", { timeout: 100 }, function () {
+  it("Passes on every array change of the source", async function () {
+    const source = st.ok_w([1, 2]);
+    const proxy = st.p.ros(source);
+    const values: number[][] = [];
+    proxy.sub((val) => values.push([...val.value]));
+    source.array.push(3);
+    source.array.push(4);
+    source.array.pop();
+    expect(values).toEqual([
+      [1, 2, 3],
+      [1, 2, 3, 4],
+      [1, 2, 3],
+    ]);
+  });
+});
+
+describe("Proxy flags", { timeout: 100 }, function () {
+  it("ROS over an errorable source reports ok", function () {
+    const proxy = st.p.ros(st.from(1), (value) =>
+      ok(value.ok ? value.value : 0),
+    );
+    expect(proxy.rok).toBe(true);
+    expect(st.is.ros(proxy)).toBe(true);
+  });
+  it("ROS over a writable source reports not writable", function () {
+    const proxy = st.p.ros(st.ok_w(1));
+    expect(proxy.writable).toBe(false);
+  });
+  it("ROSW without write transform, writable matches whether write works", async function () {
+    const proxy = st.p.rosw(st.ok_w(1));
+    const result = await proxy.write(5);
+    expect(proxy.writable).toBe(result.ok);
   });
 });

@@ -25,7 +25,7 @@ scroll_bar_thumb.make_variable(
   "Color of the scrollbar thumb in normal state",
   GREY["400"],
   GREY["800"],
-  "Font",
+  "Color",
   undefined,
 );
 scroll_bar_thumb.make_variable(
@@ -34,16 +34,16 @@ scroll_bar_thumb.make_variable(
   "Color of the scrollbar thumb when hovered",
   GREY["600"],
   GREY["600"],
-  "Font",
+  "Color",
   undefined,
 );
 scroll_bar_thumb.make_variable(
   "activeColor",
-  "Thumb Color",
-  "Color of the scrollbar thumb in normal state",
+  "Thumb Active Color",
+  "Color of the scrollbar thumb when pressed",
   GREY["500"],
   GREY["700"],
-  "Font",
+  "Color",
   undefined,
 );
 

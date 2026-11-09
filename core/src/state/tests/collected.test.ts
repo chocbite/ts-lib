@@ -531,4 +531,42 @@ describe("Collected states", function () {
       state.unsub(sub);
     });
   });
+
+  describe("Edge cases", { timeout: 200 }, function () {
+    it("ROS: keeps recomputing after the getter throws once", async function () {
+      const source = st.ok_w(1);
+      const state = st.c.ros((values) => {
+        if (values[0].value === 2) throw new Error("Getter failed");
+        return values[0];
+      }, source);
+      const updates: number[] = [];
+      state.sub((value) => updates.push(value.value));
+      source.set_ok(2);
+      await sleep(5);
+      source.set_ok(3);
+      await sleep(5);
+      expect(updates).toEqual([3]);
+    });
+
+    it("ROA: getter is not run before all states have a value, when one state updates twice", async function () {
+      const fast = st.ok_w(1);
+      const slow = st.roa(() => sleep(30, ok(10)));
+      const getter_inputs: (number | undefined)[][] = [];
+      const state = st.c.roa(
+        (values) => {
+          getter_inputs.push(Array.from(values, (value) => value?.value));
+          return ok(values[0].value + values[1].value);
+        },
+        fast,
+        slow,
+      );
+      const updates: number[] = [];
+      state.sub((value) => updates.push(value.value), true);
+      fast.set_ok(2);
+      fast.set_ok(3);
+      await sleep(50);
+      expect(getter_inputs).toEqual([[3, 10]]);
+      expect(updates).toEqual([13]);
+    });
+  });
 });

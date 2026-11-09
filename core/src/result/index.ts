@@ -205,14 +205,14 @@ interface ResultBase<T, E> {
   /**Calls mapper function if the result is valid, otherwise returns the error value of self.
    * This function can be used for control flow based on `Result` values.*/
   and_then<T2>(mapper: (value: T) => ResultOk<T2>): Result<T2, E>;
-  and_then<E2>(mapper: (value: T) => ResultErr<E2>): Result<T, E2>;
-  and_then<T2, E2>(mapper: (value: T) => Result<T2, E2>): Result<T2, E2>;
+  and_then<E2>(mapper: (value: T) => ResultErr<E2>): ResultErr<E | E2>;
+  and_then<T2, E2>(mapper: (value: T) => Result<T2, E2>): Result<T2, E | E2>;
 
   /**Calls mapper function if the result is an error, otherwise returns the value self.
    * This function can be used for control flow based on `Result` values.*/
-  or_else<T2>(mapper: (error: E) => ResultOk<T2>): Result<T2, E>;
+  or_else<T2>(mapper: (error: E) => ResultOk<T2>): ResultOk<T | T2>;
   or_else<E2>(mapper: (error: E) => ResultErr<E2>): Result<T, E2>;
-  or_else<T2, E2>(mapper: (error: E) => Result<T2, E2>): Result<T2, E2>;
+  or_else<T2, E2>(mapper: (error: E) => Result<T2, E2>): Result<T | T2, E2>;
 
   /**Maps a `Result<T, E>` to `Result<U, E>` by applying a function to a contained valid value, leaving an error value untouched.
    * This function can be used to compose the results of two functions.*/
@@ -386,10 +386,10 @@ export class ResultErr<E> implements ResultBase<never, E> {
 export type Result<T, E> = ResultOk<T> | ResultErr<E>;
 export type Option<T> = OptionSome<T> | OptionNone;
 
-export type ResultInferOk<T extends Result<any, string>> =
+export type ResultInferOk<T extends Result<any, any>> =
   T extends ResultOk<infer RT> ? RT : never;
 
-export type ResultInferErr<T extends Result<string, any>> =
+export type ResultInferErr<T extends Result<any, any>> =
   T extends ResultErr<infer RE> ? RE : never;
 
 export type OptionInfer<T extends Option<any>> =

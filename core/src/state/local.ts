@@ -14,10 +14,7 @@ import {
   type StateArrayRead as SAR,
   type StateArrayReadTypes as SART,
 } from "./helpers/array";
-import {
-  type StateNoHelper as NoHelper,
-  type StateHelperBase as SHB,
-} from "./helpers/helpers";
+import { type StateNoHelper as NoHelper } from "./helpers/helpers";
 import {
   OBJECT,
   STATE_OBJECT_READ_KEY as SORK,
@@ -147,8 +144,8 @@ export type StateLocalRESW<
 > = StateRESW<RT, HELToREL<HEL>, WT> &
   Owner<StateResult<RT>, HEL, WT> & {
     set_err(error: string): void;
-    readonly read_only: StateROS<RT, HELToREL<HEL>, WT>;
-    readonly read_write: StateROSW<RT, HELToREL<HEL>, WT>;
+    readonly read_only: StateRES<RT, HELToREL<HEL>, WT>;
+    readonly read_write: StateRESW<RT, HELToREL<HEL>, WT>;
   };
 
 export type StateLocalROAW<
@@ -157,8 +154,8 @@ export type StateLocalROAW<
   WT = RT,
 > = StateROAW<RT, HELToREL<HEL>, WT> &
   Owner<RO<RT>, HEL, WT> & {
-    readonly read_only: StateROS<RT, HELToREL<HEL>, WT>;
-    readonly read_write: StateROSW<RT, HELToREL<HEL>, WT>;
+    readonly read_only: StateROA<RT, HELToREL<HEL>, WT>;
+    readonly read_write: StateROAW<RT, HELToREL<HEL>, WT>;
   };
 
 export type StateLocalREAW<
@@ -168,8 +165,8 @@ export type StateLocalREAW<
 > = StateREAW<RT, HELToREL<HEL>, WT> &
   Owner<StateResult<RT>, HEL, WT> & {
     set_err(error: string): void;
-    readonly read_only: StateROS<RT, HELToREL<HEL>, WT>;
-    readonly read_write: StateROSW<RT, HELToREL<HEL>, WT>;
+    readonly read_only: StateREA<RT, HELToREL<HEL>, WT>;
+    readonly read_write: StateREAW<RT, HELToREL<HEL>, WT>;
   };
 
 //##################################################################################################################################################
@@ -422,8 +419,9 @@ class RXXX<
     setter?: Setter<RRT, HEL, WT> | true,
   ) {
     super();
-    if (helper) this.#helper = helper as unknown as SHB<any, any, any>;
+    if (helper) this.#helper = helper;
     this.#rok = init[1];
+    this.#sync = init[0] !== 2;
     if (setter !== true) this.#setter = setter;
     if (init[0] === 0) {
       if (setter === true) this.#setter = this.#make_setter(init[2]);
@@ -441,6 +439,8 @@ class RXXX<
       const f = init[2];
       //Temporary override until first access
       let initializing = false;
+      //A value set before init finishes wins over the init result
+      let set_during_init = false;
       this.then = <TResult1 = RRT>(
         func: (value: RRT) => TResult1 | PromiseLike<TResult1>,
       ): Promise<TResult1> => {
@@ -450,6 +450,7 @@ class RXXX<
             (async () => {
               try {
                 const value = await f();
+                if (set_during_init) return;
                 this.ful_r_prom((this.#value = value));
                 this.#helper?.on_change(value);
               } catch (e) {
@@ -458,6 +459,14 @@ class RXXX<
                   e,
                   this,
                 );
+                if (set_during_init) return;
+                //Ok states have no error value, reads wait for a set or retry init on next read
+                if (this.#rok) return void (initializing = false);
+                this.ful_r_prom(
+                  (this.#value = err(
+                    `Failed to initialize state: ${String(e)}`,
+                  ) as RRT),
+                );
               }
               this.#clean();
             })();
@@ -465,6 +474,7 @@ class RXXX<
         return this.append_r_prom(func);
       };
       this.set = (value) => {
+        set_during_init = true;
         this.#clean();
         this.set(this.ful_r_prom(value as RRT));
       };
@@ -478,7 +488,7 @@ class RXXX<
     (["then", "get", "set", "write"] as const).forEach((k) => delete this[k]);
   }
 
-  #helper?: SHB<any, any, any>;
+  #helper?: Helper<any, any, any>;
 
   #value?: RRT;
   #setter?: Setter<RRT, HEL, WT>;
@@ -489,7 +499,7 @@ class RXXX<
         if (old && !old.err && value === old.value)
           return sync_resolve(ok(undefined));
         if (this.#helper) {
-          return this.#helper.limit(value).then((e) => {
+          return this.#helper.check(value).then((e) => {
             if (e.err) return err(e.error);
             if (ARRAY.is_write(e.value))
               ARRAY.read_set(
@@ -527,7 +537,7 @@ class RXXX<
         if (old && !old.err && value === old.value)
           return sync_resolve(ok(undefined));
         if ((state as this).#helper)
-          return (state as this).#helper!.limit(value).then((e) => {
+          return (state as this).#helper!.check(value).then((e) => {
             if (e.err) return err(e.error);
             return ok(state.set_ok(e.value as RIOK<RRT>));
           });
@@ -538,7 +548,7 @@ class RXXX<
         if (old && !old.err && value === old.value)
           return sync_resolve(ok(undefined));
         if (this.#helper) {
-          return this.#helper.limit(value).then((e) => {
+          return this.#helper.check(value).then((e) => {
             if (e.err) return err(e.error);
             if (ARRAY.is_write(e.value))
               ARRAY.read_set(
@@ -562,7 +572,7 @@ class RXXX<
         if (old && !old.err && value === old.value)
           return sync_resolve(ok(undefined));
         if (this.#helper) {
-          return this.#helper.limit(value).then((e) => {
+          return this.#helper.check(value).then((e) => {
             if (e.err) return err(e.error);
             if (OBJECT.is_write(e.value))
               OBJECT.read_set(
@@ -650,8 +660,10 @@ class RXXX<
   get rok(): boolean {
     return this.#rok;
   }
+  //Lazy states are sync before their first read, delayed states once they have a value
+  #sync: boolean;
   get rsync(): boolean {
-    return Boolean(this.#value);
+    return this.#sync || Boolean(this.#value);
   }
   then<TResult1 = RRT, TResult2 = never>(
     on_fulfilled?: ((value: RRT) => TResult1 | PromiseLike<TResult1>) | null,
@@ -667,7 +679,7 @@ class RXXX<
         if (is_promise_like(rejected_result)) return rejected_result;
         return sync_resolve(rejected_result);
       }
-      return sync_reject(error as any);
+      return sync_reject(error);
     }
   }
   get(): RRT {
@@ -773,33 +785,33 @@ export function resw<
   ) as StateLocalRESW<RT, HEL, SWT<WT>>;
 }
 
-/**Creates a sync ok state from an initial result.
- * @param init initial result for state or helper.*/
+/**Creates an async ok state from an init function, called on first read.
+ * @param init init function giving an ok result, or init function and helper.*/
 export function roa<
   RT,
-  HEL extends Helper<SR<RT>, SWT<WT>, any> = NoHelper,
+  HEL extends Helper<RO<RT>, SWT<WT>, any> = NoHelper,
   WT = unknown,
->(init?: (() => Promise<SR<RT>>) | [() => Promise<SR<RT>>, HEL]) {
+>(init?: (() => Promise<RO<RT>>) | [() => Promise<RO<RT>>, HEL]) {
   const [i, h] = Array.isArray(init) ? [init[0], init[1]] : [init, undefined];
-  return new RXXX<SR<RT>, HEL, SWT<WT>>([2, true, i], h) as StateLocalROA<
+  return new RXXX<RO<RT>, HEL, SWT<WT>>([2, true, i], h) as StateLocalROA<
     RT,
     HEL,
     SWT<WT>
   >;
 }
 
-/**Creates a sync ok state from an initial result.
- * @param init initial result for state or helper.*/
+/**Creates a writable async ok state from an init function, called on first read.
+ * @param init init function giving an ok result, or init function and helper.*/
 export function roaw<
   RT,
   WT = RT,
-  HEL extends Helper<SR<RT>, SWT<WT>, any> = NoHelper,
+  HEL extends Helper<RO<RT>, SWT<WT>, any> = NoHelper,
 >(
-  init?: (() => Promise<SR<RT>>) | [() => Promise<SR<RT>>, HEL],
-  setter: Setter<SR<RT>, HEL, SWT<WT>> | true = true,
+  init?: (() => Promise<RO<RT>>) | [() => Promise<RO<RT>>, HEL],
+  setter: Setter<RO<RT>, HEL, SWT<WT>> | true = true,
 ) {
   const [i, h] = Array.isArray(init) ? [init[0], init[1]] : [init, undefined];
-  return new RXXX<SR<RT>, HEL, SWT<WT>>(
+  return new RXXX<RO<RT>, HEL, SWT<WT>>(
     [2, true, i],
     h,
     setter,

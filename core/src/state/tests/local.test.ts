@@ -1,6 +1,12 @@
 import { err, ok, ResultOk } from "#result";
-import { assertType, describe, expect, expectTypeOf, it } from "vitest";
-import { state as st, StateResult, StateROS } from "..";
+import { assertType, describe, expect, expectTypeOf, it, vi } from "vitest";
+import {
+  state as st,
+  StateJsonCompatible,
+  StateREA,
+  StateResult,
+  StateROS,
+} from "..";
 import {
   test_state_get,
   test_state_get_ok,
@@ -175,5 +181,97 @@ describe("Sync states", function () {
     it("Write", async function () {
       await test_state_write(maker_write, true);
     });
+  });
+});
+
+describe("to_json", function () {
+  it("Matches JSON.stringify for plain values", async function () {
+    const value = { a: 1, b: [1, "x", null], c: { d: true } };
+    expect(await st.ok(value).to_json()).toBe(JSON.stringify(value));
+  });
+  it("Leaves out unset optional fields like JSON.stringify", async function () {
+    const value: { a?: number; b: number } = { a: undefined, b: 1 };
+    const json = await st.ok(value).to_json();
+    expect(JSON.parse(json)).toEqual({ b: 1 });
+  });
+  it("Includes states nested inside plain objects", async function () {
+    const json = await st.ok({ inner: { count: st.ok(5) } }).to_json();
+    expect(JSON.parse(json)).toEqual({ inner: { count: 5 } });
+  });
+  it("Includes states nested inside arrays", async function () {
+    const json = await st.ok([[st.ok(1)], { a: st.ok(2) }]).to_json();
+    expect(JSON.parse(json)).toEqual([[1], { a: 2 }]);
+  });
+  it("Writes NaN, Infinity and states in error as null and logs where", async function () {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const json = await st
+        .ok({ a: NaN, b: [Infinity], c: st.err<number>("Broken") })
+        .to_json();
+      expect(JSON.parse(json)).toEqual({ a: null, b: [null], c: null });
+      const logged = error.mock.calls.map((call) => String(call[0]));
+      expect(logged).toEqual([
+        "state.a is NaN, written as null in JSON",
+        "state.b[0] is Infinity, written as null in JSON",
+        'state.c is in error "Broken", written as null in JSON',
+      ]);
+    } finally {
+      error.mockRestore();
+    }
+  });
+  it("Always produces valid JSON, even for values the types do not allow", async function () {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const json = await st.ok([undefined, () => 1, 1]).to_json();
+      expect(JSON.parse(json)).toEqual([null, null, 1]);
+      expect(error).toHaveBeenCalledTimes(2);
+    } finally {
+      error.mockRestore();
+    }
+  });
+  it("StateJsonCompatible accepts JSON values and rejects others", function () {
+    expectTypeOf<StateJsonCompatible<number>>().toEqualTypeOf<true>();
+    expectTypeOf<
+      StateJsonCompatible<{ a?: string; b: (number | null)[]; c: Date }>
+    >().toEqualTypeOf<true>();
+    expectTypeOf<
+      StateJsonCompatible<StateROS<{ inner: StateROS<boolean> }>>
+    >().toEqualTypeOf<true>();
+    expectTypeOf<StateJsonCompatible<(number | undefined)[]>>().toEqualTypeOf<false>();
+    expectTypeOf<StateJsonCompatible<Map<string, number>>>().toEqualTypeOf<false>();
+    expectTypeOf<StateJsonCompatible<{ f: () => void }>>().toEqualTypeOf<false>();
+    expectTypeOf<StateJsonCompatible<bigint>>().toEqualTypeOf<false>();
+  });
+});
+
+describe("Type declarations", function () {
+  it("Async errorable states read errors after narrowing", function () {
+    //Only type checked, never called
+    const check = (state: StateREA<number>) => {
+      if (!state.rok && !state.rsync)
+        expectTypeOf(state.then((value) => value)).toEqualTypeOf<
+          PromiseLike<StateResult<number>>
+        >();
+    };
+    expect(check).toBeTypeOf("function");
+  });
+  it("read_only and read_write keep the kind of state", function () {
+    //Only type checked, never called
+    const check = () => {
+      st.resw(ok(1), true).read_only.get();
+      // @ts-expect-error an errorable state has no ok()
+      st.resw(ok(1), true).read_only.ok();
+      // @ts-expect-error an errorable state has no ok()
+      st.resw(ok(1), true).read_write.ok();
+      // @ts-expect-error an async state has no get()
+      st.roaw<number>().read_only.get();
+      // @ts-expect-error an async state has no get()
+      st.roaw<number>().read_write.get();
+      // @ts-expect-error an async state has no get()
+      st.reaw<number>().read_only.get();
+      // @ts-expect-error an async state has no get()
+      st.reaw<number>().read_write.get();
+    };
+    expect(check).toBeTypeOf("function");
   });
 });

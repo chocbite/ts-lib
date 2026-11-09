@@ -323,12 +323,43 @@ export class StateNumberHelperBase
   }
 
   async check(value: number): Promise<SR<number>> {
-    const [min, max] = await Promise.all([this.min, this.max]);
+    const writable = await this.check_writable(value);
+    if (writable.err) return writable;
+    const [min, max, step, start, decimals] = await Promise.all([
+      this.min,
+      this.max,
+      this.step,
+      this.start,
+      this.decimals,
+    ]);
     if (max?.ok && value > max.value)
       return err(value + " is bigger than the limit of " + max.value);
     if (min?.ok && value < min.value)
       return err(value + " is smaller than the limit of " + min.value);
-    return ok(value);
+    //limit clamps to min and max after snapping to step, so those are valid even when not on a step
+    if (value === max?.unwrap_or(undefined) || value === min?.unwrap_or(undefined))
+      return ok(value);
+    const step_val = step?.unwrap_or(undefined);
+    const start_val = start?.unwrap_or(undefined);
+    const decimals_val = decimals?.unwrap_or(undefined);
+    const snapped = number_step_start_decimal(
+      value,
+      step_val,
+      start_val,
+      decimals_val,
+    );
+    //Tiny differences are floating point noise, like 0.1 + 0.2, so they are accepted
+    if (Math.abs(snapped - value) > 1e-9 * Math.max(1, Math.abs(value))) {
+      if (step_val)
+        return err(
+          value +
+            " is not on a step of " +
+            step_val +
+            (start_val ? " starting from " + start_val : ""),
+        );
+      return err(value + " has more than " + decimals_val + " decimals");
+    }
+    return ok(snapped);
   }
 
   related(): OptionSome<StateNumberRelated> {

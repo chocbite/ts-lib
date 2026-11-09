@@ -1,6 +1,5 @@
 import { sync_resolve } from "#common";
 import {
-  err,
   ok,
   OptionSome,
   ResultInferOk as RIO,
@@ -247,14 +246,13 @@ function write_apply<T>(
       array.unshift(...w.items);
       return [array, [{ type: "added", index: 0, items: w.items }]];
     } else if (w.type === "pop") {
+      if (!array.length) return [[], undefined];
       const items = [array.pop()!];
-      if (items[0])
-        return [array, [{ type: "removed", index: array.length, items }]];
-      else return [[], undefined];
+      return [array, [{ type: "removed", index: array.length, items }]];
     } else if (w.type === "shift") {
+      if (!array.length) return [[], undefined];
       const items = [array.shift()!];
-      if (items[0]) return [array, [{ type: "removed", index: 0, items }]];
-      else return [[], undefined];
+      return [array, [{ type: "removed", index: 0, items }]];
     } else if (w.type === "delete") {
       const operations = [] as StateArrayReadTypes<T>[];
       for (let i = 0; i < array.length; i++) {
@@ -348,9 +346,7 @@ export class StateArrayHelperBase<RT extends any[], WT extends any[]>
   }
 
   check(value: WT): PromiseLike<SR<WT>> {
-    if (this.writable !== undefined && !this.writable)
-      return sync_resolve(err("not writable"));
-    return sync_resolve(ok(value));
+    return this.check_writable(value);
   }
 
   related(): OptionSome<StateArrayRelated> {

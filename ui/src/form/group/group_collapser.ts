@@ -39,6 +39,8 @@ export class FormGroupCollapser extends FormElement {
   #group;
   #collapse_button;
   #collapsed: boolean = false;
+  /**Running collapse or open animation, cancelled when the other one starts*/
+  #animation?: Animation;
   #open_text = node_clone(opened_text);
   #close_text = node_clone(closed_text);
 
@@ -54,7 +56,11 @@ export class FormGroupCollapser extends FormElement {
     this.#collapse_button.appendChild(
       collapsed ? this.#close_text : this.#open_text,
     );
-    this.#collapse_button.appendChild(material_unfold_less_rounded());
+    this.#collapse_button.appendChild(
+      collapsed
+        ? material_unfold_more_rounded()
+        : material_unfold_less_rounded(),
+    );
     this.#collapse_button.onclick = () => (this.collapsed = !this.collapsed);
     this.#collapse_button.onkeydown = (e) => {
       if (e.key === "Enter" || e.key === " ") {
@@ -65,8 +71,8 @@ export class FormGroupCollapser extends FormElement {
   }
 
   set group(group: FormGroupBase<any, any>) {
-    const old_group = this.#group;
-    this.#group = this.replaceChild(group, old_group);
+    this.replaceChild(group, this.#group);
+    this.#group = group;
   }
 
   get group(): FormGroupBase<any, any> {
@@ -75,6 +81,7 @@ export class FormGroupCollapser extends FormElement {
 
   set collapsed(collapsed: boolean) {
     if (collapsed && !this.#collapsed) {
+      this.#animation?.cancel();
       //# Animation
       this.#collapse_button.replaceChildren(
         this.#close_text,
@@ -83,7 +90,7 @@ export class FormGroupCollapser extends FormElement {
       if (ANIMATION_LEVEL.get().value === AnimationLevels.All) {
         this.#group.style.overflowY = "auto";
         const full_height = this.#group.getBoundingClientRect().height + "px";
-        const animation = this.#group.animate(
+        this.#animation = this.#group.animate(
           [
             { maxHeight: full_height },
             { maxHeight: "0px", paddingBlock: "0px" },
@@ -93,7 +100,7 @@ export class FormGroupCollapser extends FormElement {
             easing: "ease-in-out",
           },
         );
-        animation.onfinish = async () => {
+        this.#animation.onfinish = () => {
           this.classList.add("collapsed");
           this.#group.style.overflowY = "";
         };
@@ -101,6 +108,7 @@ export class FormGroupCollapser extends FormElement {
         this.classList.add("collapsed");
       }
     } else if (!collapsed && this.#collapsed) {
+      this.#animation?.cancel();
       this.classList.remove("collapsed");
       this.#collapse_button.replaceChildren(
         this.#open_text,
@@ -110,7 +118,7 @@ export class FormGroupCollapser extends FormElement {
       if (ANIMATION_LEVEL.get().value === AnimationLevels.All) {
         this.#group.style.overflowY = "auto";
         const full_height = this.#group.getBoundingClientRect().height + "px";
-        const animation = this.#group.animate(
+        this.#animation = this.#group.animate(
           [
             { maxHeight: "0px", paddingBlock: "0px" },
             { maxHeight: full_height },
@@ -120,7 +128,7 @@ export class FormGroupCollapser extends FormElement {
             easing: "ease-in-out",
           },
         );
-        animation.onfinish = () => (this.#group.style.overflowY = "");
+        this.#animation.onfinish = () => (this.#group.style.overflowY = "");
       }
     }
     this.#collapsed = collapsed;

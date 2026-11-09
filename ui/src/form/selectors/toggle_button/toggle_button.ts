@@ -90,7 +90,7 @@ export class FormToggleButton<
       prev.top.classList.remove("selected");
       prev.bot.classList.remove("selected");
     }
-    const opt = this.#map.get(value)!;
+    const opt = this.#map.get(value);
     if (opt) {
       opt.top.classList.add("selected");
       opt.bot.classList.add("selected");
@@ -98,7 +98,7 @@ export class FormToggleButton<
       if (this.contains(document.activeElement)) {
         opt.top.focus();
       }
-    }
+    } else this.#selected = -1;
   }
 
   protected clear_value(): void {
@@ -107,6 +107,7 @@ export class FormToggleButton<
       prev.top.classList.remove("selected");
       prev.bot.classList.remove("selected");
     }
+    this.#selected = -1;
   }
 
   protected new_error(_val: string): void {}

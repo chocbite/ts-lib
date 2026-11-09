@@ -1,4 +1,5 @@
 import { Base, define_element } from "#base";
+import { DOCUMENT_HANDLER } from "#document";
 import {
   material_close_rounded,
   material_keyboard_arrow_down_rounded,
@@ -50,6 +51,8 @@ export class FormDropdown<
   );
   #default: Text = document.createTextNode("Select something");
   #default_icon?: SVGFunc;
+  /**Popup of the document the dropdown was opened in*/
+  #box?: DropDownBox;
   private is_open: boolean = false;
 
   constructor(id?: ID) {
@@ -121,12 +124,13 @@ export class FormDropdown<
       const old = this.#open;
       this.#open = material_unfold_less_rounded();
       old.replaceWith(this.#open);
-      box.open_menu(this.#map, this, this.buffer);
+      this.#box = boxes.get(this.ownerDocument) ?? main_box;
+      this.#box.open_menu(this.#map, this, this.buffer);
     } else if (!open && this.is_open) {
       const old = this.#open;
       this.#open = material_keyboard_arrow_down_rounded();
       old.replaceWith(this.#open);
-      box.close_menu();
+      this.#box?.close_menu();
     }
     this.is_open = open;
   }
@@ -258,7 +262,8 @@ class DropDownBox extends Base {
     this.#closer
       .appendChild(document.createElement("div"))
       .appendChild(material_close_rounded());
-    this.#closer.appendChild(document.createElement("div")).innerHTML = "Close";
+    this.#closer.appendChild(document.createElement("div")).textContent =
+      "Close";
     this.#closer.tabIndex = 0;
     this.#closer.onclick = (e) => {
       e.stopPropagation();
@@ -289,6 +294,8 @@ class DropDownBox extends Base {
     parent: FormDropdown<any, any>,
     value: any,
   ) {
+    //Another dropdown opening closes the open one, without focusing it
+    if (this.#is_open) this.close_menu(false);
     const inner_height = this.ownerDocument.defaultView?.innerHeight || 0;
     this.classList.add("open");
     const bounds = parent.getBoundingClientRect();
@@ -308,10 +315,6 @@ class DropDownBox extends Base {
     this.#container.style.left = bounds.x + "px";
     this.#container.style.width = bounds.width + "px";
     this.#dropdown = parent;
-
-    if (this.#scroll.scrollHeight > this.#scroll.clientHeight)
-      this.#scroll.classList.add("scroll");
-    else this.#scroll.classList.remove("scroll");
 
     let focus: HTMLElement | undefined = undefined as HTMLElement | undefined;
     this.#table.replaceChildren(
@@ -346,6 +349,11 @@ class DropDownBox extends Base {
       this.#table.prepend(this.#closer);
     }
 
+    //Checked after the options are added, so their size is known
+    if (this.#scroll.scrollHeight > this.#scroll.clientHeight)
+      this.#scroll.classList.add("scroll");
+    else this.#scroll.classList.remove("scroll");
+
     if (focus) {
       focus.focus();
       focus.classList.add("selected");
@@ -359,14 +367,14 @@ class DropDownBox extends Base {
     this.#is_open = true;
   }
 
-  close_menu() {
+  close_menu(focus: boolean = true) {
     if (!this.#is_open) return;
     this.#is_open = false;
     if (this.#dropdown) this.#dropdown.open = false;
     this.classList.remove("open");
     this.#table.replaceChildren();
     if (this.#dropdown) {
-      this.#dropdown.focus();
+      if (focus) this.#dropdown.focus();
       //@ts-expect-error Overwrite private property from sister class
       this.#dropdown.is_open = false;
     }
@@ -377,4 +385,18 @@ class DropDownBox extends Base {
   }
 }
 define_element(DropDownBox);
-const box = document.documentElement.appendChild(new DropDownBox());
+
+/**One popup per document, so dropdowns in popout windows open in their own window*/
+const boxes = new Map<Document, DropDownBox>();
+const add_box = (doc: Document): DropDownBox => {
+  const box = doc.documentElement.appendChild(new DropDownBox());
+  boxes.set(doc, box);
+  return box;
+};
+/**Used for dropdowns in documents not registered with the document handler*/
+const main_box = add_box(DOCUMENT_HANDLER.main);
+DOCUMENT_HANDLER.for_documents((doc) => {
+  if (doc !== DOCUMENT_HANDLER.main) add_box(doc);
+});
+DOCUMENT_HANDLER.events.on("added", (e) => add_box(e.data));
+DOCUMENT_HANDLER.events.on("removed", (e) => boxes.delete(e.data));

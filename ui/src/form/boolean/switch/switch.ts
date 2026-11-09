@@ -47,11 +47,11 @@ export class FormSwitch<ID extends string | undefined> extends FormValueWrite<
               case " ": {
                 e.stopPropagation();
                 e.preventDefault();
+                this.onkeyup = null;
                 this.set_value_check(!this.buffer);
                 break;
               }
             }
-            this.onkeyup = null;
           };
           break;
         }
@@ -81,14 +81,20 @@ export class FormSwitch<ID extends string | undefined> extends FormValueWrite<
             has_moved = true;
           }
         };
-        this.#switch.onpointerup = (ev) => {
-          ev.stopPropagation();
+        const release = () => {
           this.#switch.classList.remove("active");
-          if (!has_moved) this.set_value_check(!this.buffer);
           this.#switch.releasePointerCapture(e.pointerId);
           this.#switch.onpointerup = null;
           this.#switch.onpointermove = null;
+          this.#switch.onpointercancel = null;
         };
+        this.#switch.onpointerup = (ev) => {
+          ev.stopPropagation();
+          release();
+          if (!has_moved) this.set_value_check(!this.buffer);
+        };
+        //A cancelled press does not toggle, values set by moving are kept
+        this.#switch.onpointercancel = release;
       }
     };
 
@@ -104,11 +110,8 @@ export class FormSwitch<ID extends string | undefined> extends FormValueWrite<
 
   /**Changes the icon of the switch*/
   set icon(icon: SVGFunc | undefined) {
-    if (icon) this.#icon = this.insertBefore(icon(), this.#switch);
-    else if (this.#icon) {
-      this.removeChild(this.#icon);
-      this.#icon = undefined;
-    }
+    if (this.#icon) this.removeChild(this.#icon);
+    this.#icon = icon ? this.insertBefore(icon(), this.#switch) : undefined;
   }
 
   set on_color(color: FormColors) {

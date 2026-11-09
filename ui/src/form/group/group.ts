@@ -81,6 +81,8 @@ export class FormGroup<
     }
   }
 
+  #elements: FormElement[] = [];
+
   set elements(elements: FormElement[]) {
     for (let i = 0, n = elements.length; i < n; i++) {
       const comp = elements[i];
@@ -95,12 +97,13 @@ export class FormGroup<
         }
         this._value_elements.set(comp.form_id as string, comp);
       }
-      this.appendChild(comp);
+      this.#elements.push(this.appendChild(comp));
     }
   }
 
+  /**All elements added to the group, also those without a form id*/
   get elements(): FormElement[] {
-    return [...this._value_elements.values()];
+    return [...this.#elements];
   }
 }
 define_element(FormGroup);

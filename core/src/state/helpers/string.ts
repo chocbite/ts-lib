@@ -65,6 +65,8 @@ export class StateStringHelperBase
     return ok(value);
   }
   async check(value: string): Promise<SR<string>> {
+    const writable = await this.check_writable(value);
+    if (writable.err) return writable;
     const [max_length, max_length_bytes] = await Promise.all([
       this.max_length,
       this.max_length_bytes,

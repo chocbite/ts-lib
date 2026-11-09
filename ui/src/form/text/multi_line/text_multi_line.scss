@@ -26,8 +26,8 @@ form-textmultiline {
     box-sizing: border-box;
     outline: none;
     width: 100%;
-    min-height: base.$size_height - 0.2rem;
-    height: base.$size_height - 0.2rem;
+    min-height: calc(base.$size_height - 0.2rem);
+    height: calc(base.$size_height - 0.2rem);
     border-radius: base.$size_cornerRadius;
 
     .touch & {

@@ -1,0 +1,63 @@
+/* Stands in for the app's page colors and gives the dev helpers their look, nothing from the library */
+html {
+  color: #222;
+  background: #fafafa;
+}
+
+html[data-dev-theme="dark"] {
+  color: #ddd;
+  background: #1a1a1a;
+}
+
+body {
+  margin: 0;
+  padding: 1rem;
+}
+
+.dev-error {
+  margin: 0 0 1rem;
+  padding: 0.75rem;
+  white-space: pre-wrap;
+  color: #fff;
+  background: #a1260d;
+  border-radius: 4px;
+}
+
+.dev-section {
+  margin-bottom: 2rem;
+}
+
+.dev-section > h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.1rem;
+}
+
+.dev-section > p {
+  margin: 0 0 0.5rem;
+  opacity: 0.7;
+}
+
+.dev-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.dev-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.dev-box > span {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.dev-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
