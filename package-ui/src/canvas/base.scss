@@ -5,14 +5,14 @@
 //        | |  | |  | | |____| |  | | |____     \  / ____ \| | \ \ ____) |
 //        |_|  |_|  |_|______|_|  |_|______|     \/_/    \_\_|  \_\_____/
 //Colors
-$color_background: var(--viewport-colors-background);
-$color_page_background: var(--viewport-colors-pageBackground);
+$color_background: var(--canvas-colors-background);
+$color_page_background: var(--canvas-colors-pageBackground);
 
 //Edit
-$edit_checker1: var(--viewport-edit-checker1);
-$edit_checker2: var(--viewport-edit-checker2);
-$edit_checker_size: var(--viewport-edit-checkerSize);
+$edit_checker1: var(--canvas-edit-checker1);
+$edit_checker2: var(--canvas-edit-checker2);
+$edit_checker_size: var(--canvas-edit-checkerSize);
 
 //Transformer
-$transformer_color: var(--viewport-transformer-color);
-$transformer_handle_background: var(--viewport-transformer-handleBackground);
+$transformer_color: var(--canvas-transformer-color);
+$transformer_handle_background: var(--canvas-transformer-handleBackground);

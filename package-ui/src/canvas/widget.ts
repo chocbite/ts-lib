@@ -21,7 +21,7 @@ export abstract class WidgetBase extends Base {
   }
   /**Returns the namespace override for the element*/
   static element_name_space() {
-    return "viewport";
+    return "canvas";
   }
 
   #x: number = 0;

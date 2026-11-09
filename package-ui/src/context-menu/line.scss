@@ -1,7 +1,9 @@
 $menuMinWidth: 10rem;
 $menuMaxWidth: 30rem;
 $borderWidth: 1px;
+$borderWidthDouble: $borderWidth * 2;
 $padding: 0.25rem;
+$paddingDouble: $padding * 2;
 $iconWidth: 1.8rem;
 $iconWidthTouch: 2.6rem;
 
@@ -17,10 +19,9 @@ $iconWidthTouch: 2.6rem;
         position: absolute;
         inset: 0;
         min-width: calc(
-          $menuMinWidth - $padding - $padding -
-            calc($borderWidth + $borderWidth)
+          $menuMinWidth - $paddingDouble - $borderWidthDouble - 4px
         );
-        border-radius: 0.4rem;
+        border-radius: 0.5rem;
         background-color: var(--contextmenu-hover);
       }
     }
@@ -35,10 +36,9 @@ $iconWidthTouch: 2.6rem;
         position: absolute;
         inset: 0;
         min-width: calc(
-          $menuMinWidth - $padding - $padding -
-            calc($borderWidth + $borderWidth + 1px)
+          $menuMinWidth - $paddingDouble - $borderWidthDouble - 4px
         );
-        border-radius: 0.4rem;
+        border-radius: 0.5rem;
         outline: var(--contextmenu-hover) solid 0.2rem;
       }
     }
@@ -48,13 +48,13 @@ $iconWidthTouch: 2.6rem;
 @mixin line {
   display: table-row;
   position: relative;
-  border-radius: 0.4rem;
+  border-radius: 0.5rem;
   -webkit-user-select: none;
   user-select: none;
   color: var(--contextmenu-text);
   fill: var(--contextmenu-text);
   outline: none;
-
+  min-width: $menuMinWidth;
   @include hover;
 
   > div {

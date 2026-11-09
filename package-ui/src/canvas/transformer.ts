@@ -78,7 +78,7 @@ export class Transformer extends Base {
   }
   /**Returns the namespace override for the element*/
   static element_name_space() {
-    return "viewport";
+    return "canvas";
   }
 
   #widget: WidgetBase | undefined;

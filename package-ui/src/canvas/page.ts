@@ -12,7 +12,7 @@ export class Page extends Base {
   }
   /**Returns the namespace override for the element*/
   static element_name_space() {
-    return "viewport";
+    return "canvas";
   }
 
   #width: number = 1920;
@@ -64,3 +64,16 @@ export class Page extends Base {
   }
 }
 define_element(Page);
+
+export interface CanvasPageOptions {
+  /**Width of the page in page units, defaults to 1920 */
+  width?: number;
+  /**Height of the page in page units, defaults to 1080 */
+  height?: number;
+  /**Widgets on the page, the last widget is drawn on top */
+  widgets?: readonly WidgetBase[];
+}
+
+/**Creates a page of widgets with a fixed size */
+export const canvas_page = (options?: CanvasPageOptions): Page =>
+  options ? new Page().opts(options) : new Page();

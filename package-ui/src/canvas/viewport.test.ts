@@ -76,7 +76,7 @@ const make_viewport = async () => {
   await frames();
   const container = viewport.querySelector(":scope > .container") as HTMLDivElement;
   const transformer = viewport.querySelector(
-    ":scope > viewport-transformer",
+    ":scope > canvas-transformer",
   ) as Transformer;
   const box = viewport.getBoundingClientRect();
   /**Client coordinates of a point on the page*/

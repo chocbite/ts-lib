@@ -103,12 +103,6 @@
       "import": "./dist/theme/index.mjs",
       "style": "./dist/style.css"
     },
-    "./viewport": {
-      "development": "./src/viewport/index.ts",
-      "types": "./dist/viewport/index.d.mts",
-      "import": "./dist/viewport/index.mjs",
-      "style": "./dist/style.css"
-    },
     "./icons/mixins": "./dist/icons/mixins.scss",
     "./theme/mixins": "./dist/theme/mixins.scss"
   },
@@ -127,8 +121,7 @@
     "#spinner": "./src/spinner/index.ts",
     "#state": "./src/state/index.ts",
     "#svg": "./src/svg/index.ts",
-    "#theme": "./src/theme/index.ts",
-    "#viewport": "./src/viewport/index.ts"
+    "#theme": "./src/theme/index.ts"
   },
   "scripts": {
     "build": "tsdown && node -e \"for (const m of ['icons','theme']) require('fs').cpSync('src/'+m+'/mixins.scss','dist/'+m+'/mixins.scss')\"",

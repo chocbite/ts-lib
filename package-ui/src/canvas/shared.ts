@@ -2,9 +2,9 @@ import { BLUE, GREY } from "@chocbite/ts-lib/colors";
 import { theme_init_variable_root } from "#theme";
 
 const theme_root = theme_init_variable_root(
-  "viewport",
-  "Viewport",
-  "Theme variables for viewports and pages",
+  "canvas",
+  "Canvas",
+  "Theme variables for canvas viewports and pages",
 );
 
 //       _____ ____  _      ____  _____   _____

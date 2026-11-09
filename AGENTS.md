@@ -2,10 +2,10 @@
 
 Monorepo (npm workspaces) publishing two packages:
 
-| Package               | Folder | Rule                                                                                    |
-| --------------------- | ------ | --------------------------------------------------------------------------------------- |
-| `@chocbite/ts-lib`    | `core` | Platform independent. **No browser features** (no DOM, no `window`, no `localStorage`). |
-| `@chocbite/ts-lib-ui` | `ui`   | Browser UI. Depends on `@chocbite/ts-lib`.                                              |
+| Package               | Folder         | Rule                                                                                    |
+| --------------------- | -------------- | --------------------------------------------------------------------------------------- |
+| `@chocbite/ts-lib`    | `package-core` | Platform independent. **No browser features** (no DOM, no `window`, no `localStorage`). |
+| `@chocbite/ts-lib-ui` | `package-ui`   | Browser UI. Depends on `@chocbite/ts-lib`.                                              |
 
 ts-lib-ui must never be imported from ts-lib.
 
@@ -28,7 +28,7 @@ Each module is a folder `<folder>/src/<module>/` with an `index.ts` and its own 
 Every module is published as a subpath export, e.g. `@chocbite/ts-lib/state` and `@chocbite/ts-lib-ui/theme`. There is no root export.
 
 - ts-lib: `colors common depot event math parse result state string`
-- ts-lib-ui: `base canvas context-menu document dom form icons keyboard list selection settings spinner state svg theme viewport`
+- ts-lib-ui: `base canvas context-menu document dom form icons keyboard list selection settings spinner state svg theme`
 
 ## Imports
 
@@ -76,7 +76,7 @@ Packages are published from `dist`, never from the package folder (those are `"p
 
 - `*.trials.ts` and `trials/` folders are old manual demo code, kept as reference. Do not add new ones, use dev pages. Never export them from an `index.ts`, they must not end up in builds.
 - ts-lib enforces DOM-free code three ways: tsconfig `lib` has no `DOM`, eslint `no-restricted-globals`, and Node-only tests.
-- Enum icons in `state` are typed through the global `ChocbiteStateRegister` interface. ts-lib-ui augments it with `icon: SVGFunc` (see `ui/src/svg/index.ts`). Without ts-lib-ui no icon can be given.
+- Enum icons in `state` are typed through the global `ChocbiteStateRegister` interface. ts-lib-ui augments it with `icon: SVGFunc` (see `package-ui/src/svg/index.ts`). Without ts-lib-ui no icon can be given.
 - ts-lib-ui settings groups are named `@chocbite/ts-lib-xxx` so modules do not collide.
 - ts-lib-ui CSS is one `dist/style.css`, imported by every built file.
 - The ts-lib-ui theme applies nothing until the app calls `theme_init` once (deliberate, the app decides if the device has an operating system dark mode). Tests that check applied theme values must call it.

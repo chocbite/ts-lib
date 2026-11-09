@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "workspaces": [
-    "core",
-    "ui"
+    "package-core",
+    "package-ui"
   ],
   "scripts": {
     "dev": "vite --config dev/vite.config.ts",
@@ -14,7 +14,7 @@
     "test": "npm run test --workspaces",
     "lint": "npm run lint --workspaces",
     "typecheck": "npm run typecheck --workspaces",
-    "release": "npm run typecheck && npm test && npm run build && node config/write-dist-package.js core ui && npm publish ./core/dist && npm publish ./ui/dist",
+    "release": "npm run typecheck && npm test && npm run build && node config/write-dist-package.js package-core package-ui && npm publish ./package-core/dist && npm publish ./package-ui/dist",
     "upgrades": "npx npm-check-updates --target semver --workspaces --root",
     "upgrade": "npx npm-check-updates --target semver -u --workspaces --root && npm install"
   },

@@ -51,7 +51,7 @@ $handle_icon_rotations: (
   }
 }
 
-viewport-transformer {
+canvas-transformer {
   --handle-size: #{$handle_size_mouse};
   display: block;
   position: absolute;

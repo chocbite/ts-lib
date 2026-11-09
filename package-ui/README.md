@@ -62,4 +62,3 @@ SCSS mixins are available for use in your own styles:
 - `@chocbite/ts-lib-ui/spinner`
 - `@chocbite/ts-lib-ui/svg`
 - `@chocbite/ts-lib-ui/theme`
-- `@chocbite/ts-lib-ui/viewport`

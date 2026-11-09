@@ -37,7 +37,7 @@ export class Viewport extends Base {
   }
   /**Returns the namespace override for the element*/
   static element_name_space() {
-    return "viewport";
+    return "canvas";
   }
 
   #background: HTMLDivElement = this.appendChild(
@@ -307,3 +307,14 @@ export class Viewport extends Base {
   };
 }
 define_element(Viewport);
+
+export interface CanvasViewportOptions {
+  /**Page shown in the viewport */
+  page?: Page;
+  /**Enables zooming, panning and selecting widgets */
+  edit?: boolean;
+}
+
+/**Creates a viewport showing a page of widgets */
+export const canvas_viewport = (options?: CanvasViewportOptions): Viewport =>
+  options ? new Viewport().opts(options) : new Viewport();

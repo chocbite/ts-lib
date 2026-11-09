@@ -1,13 +1,6 @@
 import { define_element } from "@chocbite/ts-lib-ui/base";
+import canvas, { WidgetBase } from "@chocbite/ts-lib-ui/canvas";
 import { box, controls, row, section } from "../../helpers";
-//The viewport module exports nothing publicly yet (its index.ts is `export {}`),
-//so this page imports its sources directly, change to "@chocbite/ts-lib-ui/viewport" once it does
-import { Page } from "../../../ui/src/viewport/page";
-import { Viewport } from "../../../ui/src/viewport/viewport";
-import {
-  WIDGET_TRANSFORM_EVENT,
-  WidgetBase,
-} from "../../../ui/src/viewport/widget";
 
 /**Colored box with a label, does not stretch, so the text keeps its size when resized*/
 class DevBox extends WidgetBase {
@@ -105,8 +98,8 @@ const trial_widgets = () => [
     "Edit",
     "In edit mode: click a widget to select it, drag the outline to move, handles to resize, the top handle to rotate. Wheel pans, ctrl + wheel zooms toward the pointer, alt slows down, middle or right drag pans. Leaving edit resets the view. Switch input mode to touch in the shell for bigger handles",
   );
-  const page = new Page().opts({ width: 800, height: 600 });
-  const vp = new Viewport().opts({ page, edit: true });
+  const page = canvas.page({ width: 800, height: 600 });
+  const vp = canvas.viewport({ page, edit: true });
   vp.style.width = "100%";
   vp.style.height = "100%";
   const spinning = new DevGraphic("#c0392b").opts({
@@ -129,7 +122,7 @@ const trial_widgets = () => [
         : "nothing selected");
   };
   for (const widget of widgets)
-    widget.addEventListener(WIDGET_TRANSFORM_EVENT, update);
+    widget.addEventListener(canvas.WIDGET_TRANSFORM_EVENT, update);
   vp.addEventListener("pointerup", update);
   vp.addEventListener("wheel", update);
   //The scale is known once the viewport has been laid out
@@ -202,9 +195,9 @@ const trial_widgets = () => [
     ["24rem", "8rem"],
     ["8rem", "16rem"],
   ]) {
-    const page = new Page().opts({ width: 800, height: 600 });
+    const page = canvas.page({ width: 800, height: 600 });
     page.widgets = trial_widgets();
-    const vp = new Viewport().opts({ page });
+    const vp = canvas.viewport({ page });
     vp.style.width = "100%";
     vp.style.height = "100%";
     box(boxes, `${width} x ${height}`, { width, height }).appendChild(vp);
@@ -222,8 +215,8 @@ const trial_widgets = () => [
     "Many widgets",
     "Fills a 1920 x 1080 page with widgets in edit mode, how do panning, zooming and dragging feel",
   );
-  const page = new Page().opts({ width: 1920, height: 1080 });
-  const vp = new Viewport().opts({ page, edit: true });
+  const page = canvas.page({ width: 1920, height: 1080 });
+  const vp = canvas.viewport({ page, edit: true });
   vp.style.width = "100%";
   vp.style.height = "100%";
   const colors = ["#2980b9", "#27ae60", "#8e44ad", "#c0392b", "#d35400"];
