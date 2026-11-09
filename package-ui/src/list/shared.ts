@@ -1,5 +1,5 @@
-import { GREY, ORANGE } from "@chocbite/ts-lib/colors";
 import { theme_init_variable_root } from "#theme";
+import { GREY, ORANGE, RED } from "@chocbite/ts-lib/colors";
 
 const theme_root = theme_init_variable_root(
   "list",
@@ -89,6 +89,15 @@ colors_text.make_variable(
   "Color",
   undefined,
 );
+colors_text.make_variable(
+  "error",
+  "Error Text Color",
+  "Text color of list errors and invalid rows",
+  RED["800"],
+  RED["200"],
+  "Color",
+  undefined,
+);
 
 //      _____ _____ ____  _   _    _____ ____  _      ____  _____   _____
 //     |_   _/ ____/ __ \| \ | |  / ____/ __ \| |    / __ \|  __ \ / ____|
@@ -144,7 +153,7 @@ colors_background.make_variable(
   "row_even",
   "Even Row Background Color",
   "Color of even row element backgrounds",
-  GREY["100"],
+  GREY["200"],
   GREY["800"],
   "Color",
   undefined,

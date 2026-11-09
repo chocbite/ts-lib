@@ -4,7 +4,8 @@ import { some, type Option } from "@chocbite/ts-lib/result";
 import { state, type State, type StateInferSub } from "@chocbite/ts-lib/state";
 import state_ui from "#state";
 import { ListAddRow, type ListAddRowOptions } from "./add_row";
-import type { ListField } from "./field";
+import { list_rows_error_update, ListError, type ListRowsError } from "./error";
+import { list_align_apply, type ListField } from "./field";
 import { ListKeyField, type ListKeyFieldOptions } from "./key_field";
 import "./row.scss";
 import type {
@@ -47,6 +48,10 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   #add_row?: ListAddRow<R, T, A, S>;
   #fields: ListField[];
   #values!: T;
+  /**Shown instead of the fields while the row is invalid */
+  #invalid?: ListError;
+  /**Shown instead of the sub rows while their state has an error */
+  #error?: ListRowsError<A>;
   #open_pending = false;
   #sub_row_menu = false;
   #state_sub?: StateInferSub<State<R[]>>;
@@ -71,22 +76,28 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
         this.#sub_row_menu = true;
       };
     this.#fields = this.#generate_fields();
+    this.#show_cells(this.#fields);
 
     //Updates row data
     this.data = data;
   }
 
   #generate_fields(): ListField[] {
-    const fields = this.#root.columns_visible.map((key) => {
-      const field = this.#root.columns.get(key)!.field_gen();
+    return this.#root.columns_visible.map((key) => {
+      const column = this.#root.columns.get(key)!;
+      const field = column.field_gen();
+      list_align_apply(field, column.align);
       if (this.#root.observer)
         field.attach_to_intersect_observer(this.#root.observer);
       return field;
     });
+  }
+
+  /**Shows the cells after the key field, which stays so an invalid row keeps its indent and arrow key navigation */
+  #show_cells(cells: readonly HTMLElement[]) {
     if (this.#key_field)
-      this.#field_box.replaceChildren(this.#key_field, ...fields);
-    else this.#field_box.replaceChildren(...fields);
-    return fields;
+      this.#field_box.replaceChildren(this.#key_field, ...cells);
+    else this.#field_box.replaceChildren(...cells);
   }
 
   #apply_values() {
@@ -100,7 +111,11 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   /**Regenerates the fields of the row and its sub rows after the columns changed */
   columns_changed() {
     this.#fields = this.#generate_fields();
-    this.#apply_values();
+    //An invalid row has no values, the new fields are shown when it becomes valid
+    if (!this.#invalid) {
+      this.#show_cells(this.#fields);
+      this.#apply_values();
+    }
     for (let i = 0; i < this.#child_box.childElementCount; i++)
       (this.#child_box.children[i] as ListRow<R, T, A, S>).columns_changed();
   }
@@ -117,8 +132,10 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     field: Option<number>,
   ) {
     if (!this.#key_field) return;
+    //Open is not enough, an open row can show an error instead of sub rows
+    const has_rows = this.#child_box.childElementCount > 0;
     if (direction === "next" || direction === "p_next") {
-      if (direction === "next" && this.open)
+      if (direction === "next" && has_rows)
         (
           this.#child_box.firstElementChild! as ListRow<R, T, A, false>
         ).#key_field!.focus();
@@ -135,7 +152,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
       } else this.#parent.select_adjacent("p_previous", field);
     } else if (direction === "p_previous") this.#key_field.focus();
     else if (direction === "last") {
-      if (this.open) {
+      if (has_rows) {
         (
           this.#child_box.lastElementChild as ListRow<R, T, A, S>
         ).select_adjacent("last", field);
@@ -151,12 +168,21 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   //     |_____/_/    \_\_/_/    \_\
 
   set data(data: R) {
-    const row_options = this.#root.transform(
+    const result = this.#root.transform(
       data,
       this,
       //Only the container gives top level rows, rows are only parents of sub rows
       this.#parent.state as Parameters<ListRowTransformer<R, T, A, S>>[2],
     );
+    if (!result.ok) {
+      this.#set_invalid(result.error);
+      return;
+    }
+    const row_options = result.value;
+    if (this.#invalid) {
+      this.#invalid = undefined;
+      this.#show_cells(this.#fields);
+    }
     if (this.#key_field) this.#key_field.options = row_options.key_field;
     this.#sub_rows = row_options.sub_rows;
 
@@ -195,6 +221,23 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
         this.#sub_row_menu = false;
         return from_sub_row;
       });
+  }
+
+  /**Replaces the fields with the text and removes everything else the row options gave */
+  #set_invalid(text: string) {
+    if (this.#key_field) this.#key_field.options = undefined;
+    this.#sub_rows = undefined;
+    this.add_row = undefined;
+    this.#open_pending = false;
+    this.detach_state_from_prop("openable");
+    this.openable = false;
+    ctm.detach(this);
+    this.#sub_row_menu = false;
+    if (!this.#invalid) {
+      this.#invalid = new ListError();
+      this.#show_cells([this.#invalid]);
+    }
+    this.#invalid.text = text;
   }
 
   set add_row(options: ListAddRowOptions | undefined) {
@@ -270,13 +313,20 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     this.state = rows as ListParentRows<A>;
     if (state.is.state(rows))
       this.#state_sub = this.attach_state(rows, (r) =>
-        this.#update_rows(r.ok ? r.value : []),
+        this.#update_rows(r.ok ? r.value : [], r.ok ? undefined : r.error),
       );
     else this.#update_rows(rows);
   }
 
-  #update_rows(rows: readonly R[]) {
-    this.classList.toggle("open", rows.length > 0);
+  #update_rows(rows: readonly R[], error?: string) {
+    this.#error = list_rows_error_update(
+      this.#child_box,
+      this.#error,
+      error,
+      this.#root.sub_rows,
+      this,
+    );
+    this.classList.toggle("open", rows.length > 0 || error !== undefined);
     state_ui.a.apply(this.#child_box, rows, {
       create: (row) => new ListRow<R, T, A, S>(this.#root, this, row),
       update: (element, row) => (element.data = row),

@@ -64,7 +64,7 @@ function number_list(
 ) {
   const container = list.container(
     { col: list.column_string("Column") },
-    (item: number) => ({ values: { col: item.toString() } }),
+    (item: number) => ok({ values: { col: item.toString() } }),
     rows,
     options,
   );
@@ -79,7 +79,7 @@ describe("List container", () => {
     document.body.append(
       list.container(
         { col: list.column_string("Column") },
-        (item: number) => ({ values: { col: item.toString() } }),
+        (item: number) => ok({ values: { col: item.toString() } }),
         [1, 2],
         { observer },
       ),
@@ -93,7 +93,7 @@ describe("List container", () => {
     document.body.append(
       list.container(
         { a: list.column_string("A"), b: list.column_string("B") },
-        (item: number) => ({
+        (item: number) => ok({
           values: { a: item.toString(), b: item.toString() },
         }),
         [1, 2],
@@ -126,7 +126,7 @@ describe("List container header and columns", () => {
   it("renders a header field per column with the column title", () => {
     const container = list.container(
       { a: list.column_string("First"), b: list.column_string("Second") },
-      (item: number) => ({ values: { a: `${item}a`, b: `${item}b` } }),
+      (item: number) => ok({ values: { a: `${item}a`, b: `${item}b` } }),
       [1],
     );
     document.body.append(container);
@@ -189,7 +189,7 @@ describe("List container header and columns", () => {
           field_apply: () => {},
         }),
       },
-      () => ({
+      () => ok({
         values: {
           auto: undefined,
           init: undefined,
@@ -218,7 +218,7 @@ describe("List container header and columns", () => {
           field_apply: (f, v: string) => (f.text = v),
         }),
       },
-      () => ({ values: { a: "", b: "" } }),
+      () => ok({ values: { a: "", b: "" } }),
       [],
     );
     document.body.append(container);
@@ -267,7 +267,7 @@ describe("List container header and columns", () => {
     const col = list.column_string("Column");
     const container = list.container(
       { col },
-      (item: number) => ({ values: { col: item.toString() } }),
+      (item: number) => ok({ values: { col: item.toString() } }),
       [1],
     );
     document.body.append(container);
@@ -302,7 +302,7 @@ describe("List container header and columns", () => {
           field_apply: (f, v: string) => (f.text = v),
         }),
       },
-      () => ({ values: { a: "a", b: "b" } }),
+      () => ok({ values: { a: "a", b: "b" } }),
       [1],
     );
     document.body.append(container);
@@ -315,7 +315,7 @@ describe("List container header and columns", () => {
     const b = list.column_string("B");
     const container = list.container(
       { a, b },
-      () => ({ values: { a: "a", b: "b" } }),
+      () => ok({ values: { a: "a", b: "b" } }),
       [1],
     );
     document.body.append(container);
@@ -357,7 +357,7 @@ describe("List container rows from arrays", () => {
 
   it("calls the transformer with the item, the row and the rows", () => {
     const rows = [4, 5];
-    const transform = vi.fn((item: number, _row: unknown, _rows: unknown) => ({
+    const transform = vi.fn((item: number, _row: unknown, _rows: unknown) => ok({
       values: { col: item.toString() },
     }));
     document.body.append(
@@ -379,7 +379,7 @@ describe("List container rows from arrays", () => {
   it("counts sub rows recursively", () => {
     const container = list.container(
       { col: list.column_string("Col") },
-      (item: number, row) => ({
+      (item: number, row) => ok({
         openable: true,
         opened: row.depth < 2,
         sub_rows: () => [item * 10, item * 10 + 1],
@@ -397,7 +397,7 @@ describe("List container rows from arrays", () => {
   it("attaches the context menu given by the transformer to the row", () => {
     const container = list.container(
       { col: list.column_string("Col") },
-      (item: number) => ({
+      (item: number) => ok({
         context_menu:
           item === 1 ? ctm.menu([ctm.line("Do", () => {})]) : undefined,
         values: { col: item.toString() },
@@ -417,7 +417,7 @@ describe("List container rows from arrays", () => {
     const lines = vi.fn(() => none());
     const container = list.container(
       { col: list.column_string("Col") },
-      () => ({ context_menu: lines, values: { col: "x" } }),
+      () => ok({ context_menu: lines, values: { col: "x" } }),
       [1],
     );
     document.body.append(container);
@@ -433,7 +433,7 @@ describe("List container rows from states", () => {
     const rows = state.ok_w([1, 2]);
     const container = list.container(
       { col: list.column_string("Col") },
-      (item) => ({ values: { col: item.toString() } }),
+      (item) => ok({ values: { col: item.toString() } }),
       rows,
     );
     expect(container.amount_rows()).toBe(0);
@@ -644,7 +644,7 @@ export function container_type_tests() {
     (item, _row, rows) => {
       expectTypeOf(item).toEqualTypeOf<number>();
       expectTypeOf(rows).toEqualTypeOf<State<number[]>>();
-      return { values: { col: item.toString() } };
+      return ok({ values: { col: item.toString() } });
     },
     state.ok([1, 2]) as State<number[]>,
   );
@@ -652,21 +652,21 @@ export function container_type_tests() {
   list.container(
     { col: list.column_string("Col") },
     //@ts-expect-error A value for every column is required
-    () => ({ values: {} }),
+    () => ok({ values: {} }),
     [1],
   );
 
   list.container(
     { col: list.column_string("Col") },
     //@ts-expect-error The value must match the column type
-    () => ({ values: { col: 5 } }),
+    () => ok({ values: { col: 5 } }),
     [1],
   );
 
   list.container(
     { col: list.column_string("Col") },
     //@ts-expect-error Sub rows are not allowed without the sub_rows option
-    (item: number) => ({ sub_rows: () => [item], values: { col: "" } }),
+    (item: number) => ok({ sub_rows: () => [item], values: { col: "" } }),
     [1],
   );
 
@@ -676,10 +676,10 @@ export function container_type_tests() {
     { col: list.column_string("Col") },
     (item: number, _row, rows) => {
       expectTypeOf(rows).toEqualTypeOf<number[] | State<number[]>>();
-      return {
+      return ok({
         sub_rows: () => state.ok([item]) as State<number[]>,
         values: { col: "" },
-      };
+      });
     },
     [1],
     { sub_rows: true },
@@ -704,12 +704,12 @@ describe("List container sub row transformer argument", () => {
         { col: list.column_string("Col") },
         (item: number, row, rows) => {
           if (row.depth === 1) received.push(rows);
-          return {
+          return ok({
             openable: true,
             opened: true,
             sub_rows: row.depth === 0 ? () => sub : undefined,
             values: { col: item.toString() },
-          };
+          });
         },
         [1],
         { sub_rows: true },

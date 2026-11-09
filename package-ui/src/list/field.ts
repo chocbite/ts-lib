@@ -1,5 +1,16 @@
 import { Base, define_element } from "#base";
 import "./field.scss";
+import type { ListColumnAlign } from "./types";
+
+/**Adds the class for the alignment, center is the default and adds nothing
+ * Only the styling of an element decides if the class does anything, so complex fields just do not follow it */
+export function list_align_apply(
+  element: HTMLElement,
+  align: ListColumnAlign | undefined,
+) {
+  if (align === "left" || align === "right")
+    element.classList.add("align-" + align);
+}
 
 export abstract class ListField extends Base {
   static element_name() {

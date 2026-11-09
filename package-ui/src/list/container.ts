@@ -8,7 +8,8 @@ import state_ui from "#state";
 import { px_to_rem } from "#theme";
 import { ListAddRow, type ListAddRowOptions } from "./add_row";
 import "./container.scss";
-import { text_field } from "./field";
+import { list_rows_error_update, type ListRowsError } from "./error";
+import { list_align_apply, text_field } from "./field";
 import { ListRow } from "./row";
 import "./shared";
 import type {
@@ -130,6 +131,7 @@ class Container<
   #box = this.appendChild(document.createElement("div"));
   #header?: HeaderRow<R, T, A, S>;
   #child_box: HTMLDivElement;
+  #error?: ListRowsError<A>;
   #add_row?: ListAddRow<R, T, A, S>;
   #state_sub?: StateInferSub<State<R[]>>;
 
@@ -182,6 +184,7 @@ class Container<
       this.#header.fields = this.#root.columns_visible.map((key) => {
         const column = this.#root.columns.get(key)!;
         const header = new HeaderField(column.title);
+        list_align_apply(header, column.align);
         header.sizable(typeof column.fixed_width === "undefined", (width) => {
           column.init_width = width;
           this.#update_column_widths();
@@ -248,12 +251,19 @@ class Container<
     this.#parent.state = rows as A;
     if (state.is.state(rows))
       this.#state_sub = this.attach_state(rows, (r) =>
-        this.#update_rows(r.ok ? r.value : []),
+        this.#update_rows(r.ok ? r.value : [], r.ok ? undefined : r.error),
       );
     else this.#update_rows(rows);
   }
 
-  #update_rows(rows: readonly R[]) {
+  #update_rows(rows: readonly R[], error?: string) {
+    this.#error = list_rows_error_update(
+      this.#child_box,
+      this.#error,
+      error,
+      this.#root.sub_rows,
+      this.#parent,
+    );
     state_ui.a.apply(this.#child_box, rows, {
       create: (row) => new ListRow<R, T, A, S>(this.#root, this.#parent, row),
       update: (element, row) => (element.data = row),

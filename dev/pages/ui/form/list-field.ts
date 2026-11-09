@@ -4,6 +4,7 @@ import list from "@chocbite/ts-lib-ui/list";
 import { array_from_length } from "@chocbite/ts-lib/common";
 import state from "@chocbite/ts-lib/state";
 import { box, controls, section } from "../../../helpers";
+import { ok } from "@chocbite/ts-lib/result";
 
 const WORDS = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf"];
 
@@ -109,7 +110,7 @@ const MODES = [
             (field.element.on_click = () => v.set_ok(true)),
         }),
       },
-      (m) => ({
+      (m) => ok({
         values: {
           name: m.name,
           on: m.on,

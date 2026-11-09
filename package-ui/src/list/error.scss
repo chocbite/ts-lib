@@ -1,0 +1,28 @@
+list-rowserror {
+  display: contents;
+
+  > list-error {
+    background-color: var(--list-colors-background-row_odd);
+  }
+}
+
+list-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  grid-column: 1 / -1;
+  min-height: var(--list-size-row_min);
+  padding: 0 0.2rem;
+  text-align: center;
+  color: var(--list-colors-text-error);
+
+  .touch & {
+    min-height: var(--list-size-touch_row_min);
+  }
+
+  //The first column of a list with sub rows is for the key fields
+  list-container > div.sub-rows & {
+    grid-column: 2 / -1;
+  }
+}

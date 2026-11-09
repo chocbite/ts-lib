@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import list, { ListField } from ".";
 import { ListNodeField, ListNumberField, ListTextField } from "./field";
+import { ok } from "@chocbite/ts-lib/result";
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -82,7 +83,7 @@ describe("List column helpers", () => {
           },
         }),
       },
-      (item: number) => ({ values: { num: item, button: item } }),
+      (item: number) => ok({ values: { num: item, button: item } }),
       [1, 2],
     );
     document.body.append(container);

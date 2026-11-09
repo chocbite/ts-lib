@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ListAddRow } from "./add_row";
 import { ListKeyField } from "./key_field";
 import type { ListRoot, ListRowParent } from "./types";
+import { ok } from "@chocbite/ts-lib/result";
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -15,7 +16,7 @@ function root(sub_rows: boolean): ListRoot<number, Values, number[], boolean> {
     sub_rows,
     columns: new Map(),
     columns_visible: [],
-    transform: () => ({ values: {} }),
+    transform: () => ok({ values: {} }),
   };
 }
 

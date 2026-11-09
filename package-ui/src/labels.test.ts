@@ -3,6 +3,7 @@ import list from "#list";
 import { afterEach, describe, expect, it } from "vitest";
 import { SVGAnchorPoint } from "./svg/util/anchorPoint";
 import { multi_line_text, text } from "./svg/primitives/text";
+import { ok } from "@chocbite/ts-lib/result";
 
 //Labels and values are shown as plain text, markup in them is not turned into elements
 const markup = '<b>bold</b><img src="x">';
@@ -27,7 +28,7 @@ describe("Labels are text, not markup", () => {
   it("list header and field values", () => {
     const container = list.container(
       { col: list.column_string(markup) },
-      (item: string) => ({ values: { col: item } }),
+      (item: string) => ok({ values: { col: item } }),
       [markup],
     );
     document.body.append(container);

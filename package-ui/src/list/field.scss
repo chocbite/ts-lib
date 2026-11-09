@@ -1,6 +1,25 @@
-list-textfield {
+list-textfield,
+list-numberfield,
+list-nodefield {
   display: flex;
-  color: var(--list-colors-text-field);
   align-items: center;
   justify-content: center;
+  text-align: center;
+
+  &.align-left {
+    justify-content: flex-start;
+    text-align: left;
+    padding-inline: 0.2rem;
+  }
+
+  &.align-right {
+    justify-content: flex-end;
+    text-align: right;
+    padding-inline: 0.2rem;
+  }
+}
+
+list-textfield,
+list-numberfield {
+  color: var(--list-colors-text-field);
 }

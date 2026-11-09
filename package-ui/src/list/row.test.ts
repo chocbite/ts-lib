@@ -19,11 +19,11 @@ function create_list(sub_rows: () => number[] | State<number[]>): Row {
       { col: list.column_string("Column") },
       (item, row) => {
         if (row.depth === 0) top_row = row;
-        return {
+        return ok({
           openable: row.depth === 0,
           sub_rows,
           values: { col: item.toString() },
-        };
+        });
       },
       [1],
       { sub_rows: true },
@@ -89,7 +89,7 @@ function tree(name: string): Item {
 }
 
 function item_list(rows: Item[] | State<Item[]>) {
-  const transform = vi.fn((item: Item, _row: unknown, _rows: unknown) => ({
+  const transform = vi.fn((item: Item, _row: unknown, _rows: unknown) => ok({
     openable: item.openable,
     opened: item.opened,
     sub_rows: item.sub,

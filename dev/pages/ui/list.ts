@@ -5,7 +5,7 @@ import {
 } from "@chocbite/ts-lib-ui/icons";
 import list from "@chocbite/ts-lib-ui/list";
 import { array_from_length } from "@chocbite/ts-lib/common";
-import { ok } from "@chocbite/ts-lib/result";
+import { err, ok } from "@chocbite/ts-lib/result";
 import state from "@chocbite/ts-lib/state";
 import { box, controls, row, section } from "../../helpers";
 
@@ -45,7 +45,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
           field_gen: () => list.text_field(),
         }),
       },
-      (item) => ({
+      (item) => ok({
         values: { name: word(item), number: item, squared: item },
       }),
       rows,
@@ -70,7 +70,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
     box(sizes, width, { width }).appendChild(
       list.container(
         { name: list.column_string("Name") },
-        (item) => ({ values: { name: word(item) + " " + item } }),
+        (item) => ok({ values: { name: word(item) + " " + item } }),
         rows,
         { headless: true },
       ),
@@ -107,9 +107,68 @@ const word = (i: number) => WORDS[i % WORDS.length];
       },
       (item) => {
         const text = array_from_length(item + 1, (i) => word(i)).join(" ");
-        return { values: { a: text, b: word(item), c: text } };
+        return ok({ values: { a: text, b: word(item), c: text } });
       },
       array_from_length(6, (i) => i * 2),
+    ),
+  );
+}
+
+//         _      _____ _____ _   _
+//    /\  | |    |_   _/ ____| \ | |
+//   /  \ | |      | || |  __|  \| |
+//  / /\ \| |      | || | |_ | . ` |
+// / ____ \ |____ _| || |__| | |\  |
+///_/    \_\______|_____\_____|_| \_|
+{
+  const sec = section(
+    "Alignment",
+    "The align option of a column moves its title and fields, center is the default. Text, number and node fields follow it, form fields do not. In the narrow list long values wrap, the lines should follow the alignment too",
+  );
+  sec.appendChild(
+    list.container(
+      {
+        left: list.column_string("Left", { align: "left" }),
+        center: list.column_string("Center", { align: "center" }),
+        right: list.column_string("Right", { align: "right" }),
+        number: list.column({
+          title: "Number",
+          align: "right",
+          field_apply: (field, v: number) => (field.number = v),
+          field_gen: () => list.number_field(),
+        }),
+        node: list.column({
+          title: "Node",
+          align: "right",
+          field_apply: (field, v: string) => (field.node.textContent = v),
+          field_gen: () => list.node_field(document.createElement("button")),
+        }),
+      },
+      (item) =>
+        ok({
+          values: {
+            left: word(item),
+            center: word(item),
+            right: word(item),
+            number: item * 1234,
+            node: "Press",
+          },
+        }),
+      array_from_length(4, (i) => i),
+    ),
+  );
+  box(sec, "24rem wide", { width: "24rem" }).appendChild(
+    list.container(
+      {
+        left: list.column_string("Left", { align: "left" }),
+        center: list.column_string("Center"),
+        right: list.column_string("Right", { align: "right" }),
+      },
+      (item) => {
+        const text = array_from_length(item * 4 + 1, (i) => word(i)).join(" ");
+        return ok({ values: { left: text, center: text, right: text } });
+      },
+      array_from_length(3, (i) => i),
     ),
   );
 }
@@ -134,7 +193,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
     });
   const container = list.container(
     { a: text_column("A", 3), b: text_column("B", 1), c: text_column("C") },
-    (item: number) => ({
+    (item: number) => ok({
       values: { a: "a" + item, b: "b" + item, c: "c" + item },
     }),
     array_from_length(3, (i) => i),
@@ -200,7 +259,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
         );
         const remove = () =>
           rows_state.write(state.a.write.splice(list_row.index, 1));
-        return {
+        return ok({
           openable: item % 3 !== 2,
           key_field: {
             icon: item % 2 ? material_folder_rounded : undefined,
@@ -224,7 +283,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
             ),
             ctm.line("Empty", () => rows_state.write(state.a.write.fresh([]))),
           ]),
-        };
+        });
       },
       rows,
       {
@@ -238,6 +297,74 @@ const word = (i: number) => WORDS[i % WORDS.length];
   );
 }
 
+//      ______ _____  _____   ____  _____   _____
+//     |  ____|  __ \|  __ \ / __ \|  __ \ / ____|
+//     | |__  | |__) | |__) | |  | | |__) | (___
+//     |  __| |  _  /|  _  /| |  | |  _  / \___ \
+//     | |____| | \ \| | \ \| |__| | | \ \ ____) |
+//     |______|_|  \_\_|  \_\\____/|_|  \_\_____/
+{
+  const sec = section(
+    "Errors",
+    "First list: an error in the state replaces the rows with its text, the add row stays. Second and third list: invalid rows show their text instead of the fields, in the third they keep the indent and arrow keys move through them. The sub rows of row 0 can fail too",
+  );
+  const initial = () => array_from_length(4, (i) => i);
+  const failing = state.from_w(initial());
+  const invalid = state.ok_w(array_from_length(6, (i) => i));
+  const sub_rows = state.from_w([10, 12]);
+  let show_invalid = true;
+  const invalid_text = (item: number) =>
+    show_invalid && item % 3 === 1 ? `Row ${item} could not be read` : undefined;
+
+  controls(sec, {
+    "List error": () => failing.set_err("Could not read the rows"),
+    "List recover": () => failing.set_ok(initial()),
+    "Toggle invalid rows": () => {
+      show_invalid = !show_invalid;
+      invalid.set_ok([...invalid.ok()]);
+    },
+    "Sub rows error": () => sub_rows.set_err("Could not read the sub rows"),
+    "Sub rows recover": () => sub_rows.set_ok([10, 12]),
+  });
+
+  sec.appendChild(
+    list.container(
+      { name: list.column_string("Name"), id: list.column_string("Id") },
+      (item) => ok({ values: { name: word(item), id: item.toString() } }),
+      failing,
+      { add_row: { text: "Add row (does nothing here)", on_add: () => {} } },
+    ),
+  );
+  sec.appendChild(
+    list.container(
+      { name: list.column_string("Name"), id: list.column_string("Id") },
+      (item) => {
+        const text = invalid_text(item);
+        if (text !== undefined) return err(text);
+        return ok({ values: { name: word(item), id: item.toString() } });
+      },
+      invalid,
+    ),
+  );
+  sec.appendChild(
+    list.container(
+      { name: list.column_string("Name"), id: list.column_string("Id") },
+      (item, list_row) => {
+        const text = invalid_text(item);
+        if (text !== undefined) return err(text);
+        return ok({
+          openable: list_row.depth === 0,
+          opened: item === 0,
+          sub_rows: () => sub_rows,
+          values: { name: word(item), id: item.toString() },
+        });
+      },
+      invalid,
+      { sub_rows: true },
+    ),
+  );
+}
+
 //     __  __          _   ___     __
 //    |  \/  |   /\   | \ | \ \   / /
 //    | \  / |  /  \  |  \| |\ \_/ /
@@ -247,8 +374,13 @@ const word = (i: number) => WORDS[i % WORDS.length];
 {
   const sec = section(
     "Many rows",
-    "10000 rows in a 20rem high box, how does scrolling feel",
+    "Press the button for 10000 rows in a 20rem high box, how does scrolling feel",
   );
+  const rows = state.ok_w<number[]>([]);
+  controls(sec, {
+    "10000 rows": () => rows.set_ok(array_from_length(10000, (i) => i)),
+    Clear: () => rows.set_ok([]),
+  });
   box(sec, "10000 rows", { height: "20rem", display: "grid" }).appendChild(
     list.container(
       {
@@ -259,8 +391,8 @@ const word = (i: number) => WORDS[i % WORDS.length];
           field_gen: () => list.text_field(),
         }),
       },
-      (item) => ({ values: { name: word(item), number: item } }),
-      array_from_length(10000, (i) => i),
+      (item) => ok({ values: { name: word(item), number: item } }),
+      rows,
     ),
   );
 }

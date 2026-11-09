@@ -1,5 +1,5 @@
 import type { BaseIntersectObserver } from "#base";
-import { type Option } from "@chocbite/ts-lib/result";
+import { type Option, type Result } from "@chocbite/ts-lib/result";
 import type { State } from "@chocbite/ts-lib/state";
 import list from ".";
 import type { ListField, ListTextField } from "./field";
@@ -25,6 +25,8 @@ export const ListDataType = {
 } as const;
 export type ListDataType = (typeof ListDataType)[keyof typeof ListDataType];
 
+export type ListColumnAlign = "left" | "center" | "right";
+
 export interface ListColumnOptions<V, C extends ListField> {
   /**Initial width of the column in rem, auto when undefined*/
   init_width?: number;
@@ -37,6 +39,9 @@ export interface ListColumnOptions<V, C extends ListField> {
   reorderable?: boolean;
   /**Data type of the column, used for sorting, will attempt auto detect if undefined*/
   type?: ListDataType;
+  /**Horizontal alignment of the title and the fields, center when undefined
+   * Text, number and node fields follow it, more complex fields like form fields do not */
+  align?: ListColumnAlign;
   /**Column title*/
   title: string;
   /**Generates the field element, only called during row or column creation */
@@ -56,14 +61,19 @@ export function column<V, C extends ListField>(
 export function column_string(
   /**Column title*/
   title: string,
+  options?: { align?: ListColumnAlign },
 ): ListColumnOptions<string, ListTextField> {
   return {
     title,
+    align: options?.align,
     field_gen: () => list.text_field(),
     field_apply: (field, value) => (field.text = value),
   };
 }
 
+/**Transforms the data of a row into row options
+ * Returning an error makes the row invalid, the error text then replaces the fields of the row
+ * An invalid row is for failures with no other options, so it has no sub rows, add row or context menu */
 export type ListRowTransformer<
   R,
   T extends {},
@@ -76,7 +86,7 @@ export type ListRowTransformer<
   row: ListRow<R, T, A, S>,
   /**Rows the data is from, sub rows can come from an array or a state regardless of the top level rows */
   state: S extends true ? A | ListType<R> : A,
-) => ListRowOptions<R, T, S>;
+) => Result<ListRowOptions<R, T, S>, string>;
 
 export interface ListRoot<
   R,
