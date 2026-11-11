@@ -97,6 +97,12 @@
       "import": "./dist/svg/index.mjs",
       "style": "./dist/style.css"
     },
+    "./test": {
+      "development": "./src/test/index.ts",
+      "types": "./dist/test/index.d.mts",
+      "import": "./dist/test/index.mjs",
+      "style": "./dist/style.css"
+    },
     "./theme": {
       "development": "./src/theme/index.ts",
       "types": "./dist/theme/index.d.mts",
@@ -119,8 +125,9 @@
     "#selection": "./src/selection/index.ts",
     "#settings": "./src/settings/index.ts",
     "#spinner": "./src/spinner/index.ts",
-    "#state": "./src/state/index.ts",
+    "#state_ui": "./src/state_ui/index.ts",
     "#svg": "./src/svg/index.ts",
+    "#test": "./src/test/index.ts",
     "#theme": "./src/theme/index.ts"
   },
   "scripts": {

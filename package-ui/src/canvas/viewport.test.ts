@@ -87,7 +87,6 @@ const make_viewport = async () => {
   return { viewport, page, container, transformer, client, box };
 };
 
-//The module index exports nothing yet, so the files are imported directly
 describe("Page", () => {
   afterEach(() => {
     document.body.replaceChildren();
@@ -552,6 +551,60 @@ describe("Transformer", () => {
     expect(w.rotation).toBe(270);
     pointer(window, "pointerup", { clientX: x, clientY: y });
     expect(w.rotation).toBe(270);
+  });
+
+  it("keeps the grabbed point under the pointer when panning during a drag", async () => {
+    const { viewport, w, handle } = await with_selection();
+    const move = handle("handle move");
+    pointer(move, "pointerdown", { clientX: 200, clientY: 200 });
+    pointer(window, "pointermove", { clientX: 220, clientY: 200 });
+    expect(w.x).toBe(60);
+    //Panning 40 pixels left is 20 page units at a scale of 2
+    viewport.dispatchEvent(new WheelEvent("wheel", { deltaX: 80, cancelable: true }));
+    expect(w.x).toBe(80);
+    expect(w.y).toBe(25);
+    pointer(window, "pointerup", { clientX: 220, clientY: 200 });
+  });
+
+  it("keeps the grabbed point under the pointer when zooming during a drag", async () => {
+    const { viewport, w, handle, client } = await with_selection();
+    const move = handle("handle move");
+    const start = client(70, 35);
+    pointer(move, "pointerdown", start);
+    pointer(window, "pointermove", { ...client(100, 35) });
+    expect(w.x).toBe(80);
+    //Zooming toward the pointer leaves the page point under it unchanged
+    viewport.dispatchEvent(
+      new WheelEvent("wheel", { deltaY: -100, ctrlKey: true, cancelable: true, ...client(100, 35) }),
+    );
+    expect(viewport.scale).toBeGreaterThan(2);
+    expect(w.x).toBe(80);
+    expect(w.y).toBe(25);
+    pointer(window, "pointerup", client(100, 35));
+  });
+
+  it("does not move a pressed widget when the view changes before the pointer moved", async () => {
+    const { viewport, w, handle } = await with_selection();
+    w.x = 51;
+    pointer(handle("handle move"), "pointerdown", { clientX: 200, clientY: 200 });
+    viewport.dispatchEvent(new WheelEvent("wheel", { deltaX: 80, cancelable: true }));
+    expect(w.x).toBe(51);
+    pointer(window, "pointerup", { clientX: 200, clientY: 200 });
+  });
+
+  it("rotates around the current position of the widget after the view changed", async () => {
+    const { viewport, w, handle, client } = await with_selection();
+    const rotate = handle("handle rotate");
+    const box = rotate.getBoundingClientRect();
+    const x = box.left + box.width / 2;
+    const y = box.top + box.height / 2;
+    pointer(rotate, "pointerdown", { clientX: x, clientY: y });
+    //Pans the widget center 100 pixels down, on top of where the pointer is about to be
+    viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: -200, cancelable: true }));
+    const center = client(70, 85);
+    pointer(window, "pointermove", { clientX: center.clientX + 100, clientY: center.clientY });
+    expect(w.rotation).toBe(90);
+    pointer(window, "pointerup", { clientX: x, clientY: y });
   });
 
   it("is dragging between press and release only", async () => {

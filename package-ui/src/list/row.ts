@@ -2,7 +2,7 @@ import { Base, define_element } from "#base";
 import ctm, { ContextMenu } from "#context-menu";
 import { some, type Option } from "@chocbite/ts-lib/result";
 import { state, type State, type StateInferSub } from "@chocbite/ts-lib/state";
-import state_ui from "#state";
+import state_ui from "../state_ui";
 import { ListAddRow, type ListAddRowOptions } from "./add_row";
 import { list_rows_error_update, ListError, type ListRowsError } from "./error";
 import { list_align_apply, type ListField } from "./field";
