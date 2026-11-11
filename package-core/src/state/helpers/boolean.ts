@@ -39,7 +39,7 @@ export class StateBoolHelperBase
   }
 
   check(value: boolean): PromiseLike<SR<boolean>> {
-    return this.check_writable(value);
+    return sync_resolve(ok(value));
   }
 
   related(): OptionSome<StateBoolRelated> {
@@ -63,8 +63,8 @@ export const BOOL = {
   /**Boolean helper*/
   help<I extends Init<boolean>>(
     init: I,
-    options?: StateBoolHelperOptions,
+    _options?: StateBoolHelperOptions,
   ): [I, StateBoolHelper] {
-    return [init, new StateBoolHelperBase(options)];
+    return [init, new StateBoolHelperBase()];
   },
 };

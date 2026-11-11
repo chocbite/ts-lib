@@ -44,6 +44,8 @@ export interface StateRemoteOwner<
   /**Gets the current buffer value*/
   get buffer(): RRT | undefined;
   get state(): State<ResultInferOk<RRT>, HELToREL<HEL>, WT>;
+  /**Sets the state that decides if writing is allowed right now, undefined removes the gate */
+  set_write_enabled(gate: State<boolean> | undefined): void;
 }
 
 export type StateRemoteFuncROA<
@@ -134,7 +136,7 @@ export abstract class StateRemote<
   /**Debounce delaying one time value retrival*/
   abstract get debounce(): number;
 
-  /**Timeout for validity of last buffered value*/
+  /**Timeout for validity of last buffered value, true keeps it valid while connected, until teardown after retention*/
   abstract get validity(): number | true;
 
   /**Retention delay before remote performs teardown of connection is performed*/
@@ -161,16 +163,23 @@ export abstract class StateRemote<
     if (this.#debounce_timout) {
       clearTimeout(this.#debounce_timout);
       this.#debounce_timout = 0;
+      this.#invalidate_connected();
     } else {
       if (this.retention > 0) {
         this.#retention_timout = setTimeout(() => {
           this.teardown_connection(this);
           this.#retention_timout = 0;
+          this.#invalidate_connected();
         }, this.retention);
       } else {
         this.teardown_connection(this);
+        this.#invalidate_connected();
       }
     }
+  }
+
+  /**A validity of true means valid while connected, so the buffer is invalidated when the connection ends, after retention*/
+  #invalidate_connected(): void {
     if (this.validity === true) this.#valid = 0;
   }
 
@@ -220,12 +229,15 @@ export abstract class StateRemote<
     return this as State<ResultInferOk<RRT>, any, WT>;
   }
   get read_only() {
-    return this as StateREA<ResultInferOk<RRT>, any, WT>;
+    return this.read_only_view() as StateREA<ResultInferOk<RRT>, any, WT>;
   }
   get read_write() {
     return this.writable
       ? (this as State<ResultInferOk<RRT>, any, WT>)
       : undefined;
+  }
+  set_write_enabled(gate: State<boolean> | undefined): void {
+    super.set_write_enabled(gate);
   }
 
   //#Reader Context
@@ -279,6 +291,10 @@ export abstract class StateRemote<
   abstract get writable(): boolean;
 
   write(value: WT): PromiseLike<SR<void>> {
+    return this.write_gated(() => this.#write_debounced(value));
+  }
+
+  #write_debounced(value: WT): PromiseLike<SR<void>> {
     this.#write_buffer = value;
     if (this.write_debounce === 0) return this.#write_action_safe(value);
     else if (this.#write_debounce_timout === 0)
@@ -340,8 +356,7 @@ class Func<
     helper?: HEL,
   ) {
     super();
-    if (helper)
-      this.#helper = helper as unknown as StateHelperBase<any, any, any>;
+    if (helper) this.#helper = helper;
     this.#rok = read_ok;
     this.single_get = once;
     this.setup_connection = setup;
@@ -400,7 +415,9 @@ class Func<
     return this.#helper?.limit(value) ?? sync_resolve(ok(value));
   }
   check(value: WT): PromiseLike<SR<WT>> {
-    return this.#helper?.check(value) ?? sync_resolve(ok(value));
+    return this.write_gated(
+      () => this.#helper?.check(value) ?? sync_resolve(ok(value)),
+    );
   }
 }
 
@@ -419,7 +436,7 @@ interface FuncTimes {
   /**Delay before once is called after the first await, and before setup is called after the first subscribe,
    * collects multiple requests into a single one, defaults to 0*/
   debounce?: number;
-  /**How long the last retrived value is considered valid, true keeps it valid until all subscribers unsubscribe, defaults to 0*/
+  /**How long the last retrived value is considered valid, true keeps it valid while connected, until teardown after retention, defaults to 0*/
   validity?: number | true;
   /**Delay after the last subscriber unsubscribes before teardown is called, to allow quick resubscribe without teardown, defaults to 0*/
   retention?: number;

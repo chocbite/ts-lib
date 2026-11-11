@@ -69,7 +69,7 @@ export class StateEnumHelperBase<
   readonly list: State<L, any, any>;
 
   constructor(options: StateEnumHelperOptions<L>) {
-    super(options);
+    super();
     this.list = options.list;
   }
 
@@ -78,8 +78,6 @@ export class StateEnumHelperBase<
   }
 
   async check(value: K): Promise<SR<K>> {
-    const writable = await this.check_writable(value);
-    if (writable.err) return writable;
     const list = await this.list;
     if (list.err) return err("list is not available");
     if (value in list.value) return ok(value);

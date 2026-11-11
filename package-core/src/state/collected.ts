@@ -248,7 +248,7 @@ export class RXX<RT, IN extends State<any>[], WT, RRT extends SR<RT>>
     return this as State<RT, any, WT>;
   }
   get read_only() {
-    return this as StateROS<RT, any, WT>;
+    return this.read_only_view() as StateROS<RT, any, WT>;
   }
 
   //#Reader Context

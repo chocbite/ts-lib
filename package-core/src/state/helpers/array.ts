@@ -332,10 +332,6 @@ export class StateArrayHelperBase<RT extends any[], WT extends any[]>
 
   readonly length = ros(ok(0));
 
-  constructor(options?: StateArrayHelperOptions) {
-    super(options);
-  }
-
   on_change(value: SR<RT>): void {
     if (value.ok) this.length.set_ok(value.value.length);
     else this.length.set_ok(0);
@@ -346,7 +342,7 @@ export class StateArrayHelperBase<RT extends any[], WT extends any[]>
   }
 
   check(value: WT): PromiseLike<SR<WT>> {
-    return this.check_writable(value);
+    return sync_resolve(ok(value));
   }
 
   related(): OptionSome<StateArrayRelated> {
@@ -383,9 +379,9 @@ export const ARRAY = {
     WT extends any[] = RIO<RRT>,
   >(
     init: I,
-    options?: StateArrayHelperOptions,
+    _options?: StateArrayHelperOptions,
   ): [I, StateArrayHelper<RIO<RRT>, WT>] {
-    return [init, new StateArrayHelperBase<RIO<RRT>, WT>(options)];
+    return [init, new StateArrayHelperBase<RIO<RRT>, WT>()];
   },
   //### Read
   /**Returns true if object is a array read object */

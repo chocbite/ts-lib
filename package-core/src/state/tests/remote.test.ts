@@ -236,3 +236,85 @@ describe("Resource state failures", { timeout: 500 }, function () {
     );
   });
 });
+
+describe("Resource state validity and retention", { timeout: 500 }, function () {
+  /**Remote state counting calls to once, setup and teardown, once buffers the value with update_single(_, true)*/
+  const counted = (times: { validity?: number | true; retention?: number }) => {
+    const calls = { once: 0, setup: 0, teardown: 0 };
+    const state = st.r.rea.from<number>(
+      (state) => state.update_single(ok(++calls.once), true),
+      () => calls.setup++,
+      () => calls.teardown++,
+      times,
+    );
+    return { state, calls };
+  };
+
+  it("validity true: resubscribing within retention reuses the buffered value", async function () {
+    const { state, calls } = counted({ validity: true, retention: 50 });
+    const sub = () => {};
+    state.sub(sub, true);
+    await state;
+    state.unsub(sub);
+    await sleep(10);
+    expect(await state.then((v) => v)).toEqual(ok(1));
+    state.sub(sub, true);
+    await state;
+    expect(calls.once).toBe(1);
+    expect(calls.teardown).toBe(0);
+    state.unsub(sub);
+  });
+  it("validity true: buffered value is invalidated when retention ends and teardown runs", async function () {
+    const { state, calls } = counted({ validity: true, retention: 20 });
+    const sub = () => {};
+    state.sub(sub, true);
+    await state;
+    state.unsub(sub);
+    await sleep(40);
+    expect(calls.teardown).toBe(1);
+    expect(await state.then((v) => v)).toEqual(ok(2));
+    expect(calls.once).toBe(2);
+  });
+  it("validity true: without retention the buffered value is invalidated at last unsubscribe", async function () {
+    const { state, calls } = counted({ validity: true });
+    const sub = () => {};
+    state.sub(sub, true);
+    await state;
+    state.unsub(sub);
+    expect(calls.teardown).toBe(1);
+    expect(await state.then((v) => v)).toEqual(ok(2));
+    expect(calls.once).toBe(2);
+  });
+  it("validity true: buffered value stays valid while subscribed", async function () {
+    const { state, calls } = counted({ validity: true });
+    const sub = () => {};
+    state.sub(sub, true);
+    await state;
+    await sleep(20);
+    expect(await state.then((v) => v)).toEqual(ok(1));
+    expect(calls.once).toBe(1);
+    state.unsub(sub);
+  });
+  it("numeric validity: expires on time even when retention is longer", async function () {
+    const { state, calls } = counted({ validity: 20, retention: 200 });
+    const sub = () => {};
+    state.sub(sub, true);
+    await state;
+    state.unsub(sub);
+    await sleep(40);
+    state.sub(sub, true);
+    await state;
+    expect(calls.once).toBe(2);
+    expect(calls.teardown).toBe(0);
+    state.unsub(sub);
+  });
+  it("numeric validity: reused within its time across unsubscribe without retention", async function () {
+    const { state, calls } = counted({ validity: 100 });
+    const sub = () => {};
+    state.sub(sub, true);
+    await state;
+    state.unsub(sub);
+    expect(await state.then((v) => v)).toEqual(ok(1));
+    expect(calls.once).toBe(1);
+  });
+});

@@ -249,16 +249,12 @@ export class StateObjectHelperBase<RT extends Record<PropertyKey, any>>
     return true;
   }
 
-  constructor(options?: StateObjectHelperOptions) {
-    super(options);
-  }
-
   limit(value: RT): PromiseLike<SR<RT>> {
     return sync_resolve(ok(value));
   }
 
   check(value: RT): PromiseLike<SR<RT>> {
-    return this.check_writable(value);
+    return sync_resolve(ok(value));
   }
 
   related(): OptionSome<StateObjectRelated> {
@@ -305,9 +301,9 @@ export const OBJECT = {
     RRT extends SR<any> = SIR<I>,
   >(
     init: I,
-    options?: StateObjectHelperOptions,
+    _options?: StateObjectHelperOptions,
   ): [I, StateObjectHelper<RIO<RRT>>] {
-    return [init, new StateObjectHelperBase<RIO<RRT>>(options)];
+    return [init, new StateObjectHelperBase<RIO<RRT>>()];
   },
   //### Read
   /**Unique key to check if an object contains an object read object */

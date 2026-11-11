@@ -70,6 +70,8 @@ export interface Owner<
   setter?: Setter<RRT, HEL, WT>;
   /**Returns state as a simple state type */
   readonly state: State<RIOK<RRT>, HELToREL<HEL>, WT>;
+  /**Sets the state that decides if writing is allowed right now, undefined removes the gate */
+  set_write_enabled(gate: State<boolean> | undefined): void;
   /**Sets a function to be called when the state is initially subscribed to */
   set_onsub(func: () => void): void;
   /**Sets a function to be called when the state is terminally unsubscribed from */
@@ -619,12 +621,15 @@ class RXXX<
     return this as State<RIOK<RRT>, HELToREL<HEL>, WT>;
   }
   get read_only() {
-    return this as State<RIOK<RRT>, HELToREL<HEL>, WT>;
+    return this.read_only_view() as State<RIOK<RRT>, HELToREL<HEL>, WT>;
   }
   get read_write() {
     return this.#setter
       ? (this as State<RIOK<RRT>, HELToREL<HEL>, WT>)
       : undefined;
+  }
+  set_write_enabled(gate: State<boolean> | undefined): void {
+    super.set_write_enabled(gate);
   }
   set_onsub(func: () => void): void {
     this.on_sub = func;
@@ -697,17 +702,17 @@ class RXXX<
     return this.#setter !== undefined;
   }
   write(value: WT): PromiseLike<StateResult<void>> {
-    if (this.#setter) {
-      const res = this.#setter(value, this, this.#value);
-      return sync_resolve(res);
-    }
-    return sync_resolve(err("not writable"));
+    const setter = this.#setter;
+    if (!setter) return sync_resolve(err("not writable"));
+    return this.write_gated(() => setter(value, this, this.#value));
   }
   limit(value: WT): PromiseLike<StateResult<WT>> {
     return this.#helper?.limit(value) ?? sync_resolve(ok(value));
   }
   check(value: WT): PromiseLike<StateResult<WT>> {
-    return this.#helper?.check(value) ?? sync_resolve(ok(value));
+    return this.write_gated(
+      () => this.#helper?.check(value) ?? sync_resolve(ok(value)),
+    );
   }
 }
 

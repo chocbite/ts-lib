@@ -152,6 +152,10 @@ export interface StateBase<
   //#Writer Context
   /**Is state guarenteed writable*/
   readonly writable: boolean;
+  /**State that decides if writing is allowed right now, undefined when writing is not gated.
+   * writable says if the state can be written at all, this can disable writing temporarily,
+   * write and check give a not writable error while it is not true*/
+  readonly write_enabled?: State<boolean>;
   /** This attempts a write to the state, write is not guaranteed to succeed
    * @returns promise of result with error for the write*/
   write?(value: WT): PromiseLike<StateResult<void>>;

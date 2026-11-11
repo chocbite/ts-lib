@@ -289,7 +289,7 @@ export class StateNumberHelperBase
   readonly start?: State<number>;
 
   constructor(options: StateNumberHelperOptions) {
-    super(options);
+    super();
     if (options.min) this.min = options.min;
     if (options.max) this.max = options.max;
     if (options.unit) this.unit = options.unit;
@@ -323,8 +323,6 @@ export class StateNumberHelperBase
   }
 
   async check(value: number): Promise<SR<number>> {
-    const writable = await this.check_writable(value);
-    if (writable.err) return writable;
     const [min, max, step, start, decimals] = await Promise.all([
       this.min,
       this.max,

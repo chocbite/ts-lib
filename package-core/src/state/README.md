@@ -203,8 +203,8 @@ counter.set_ok(5); // shorthand: wraps the value in ok() for you
 counter.set_err("fail"); // set an error (only on error-capable states: RES/REA)
 
 // The owner can get basic state types without access to the owner methods for passing on, or just set them to a variable with appropriate typeing
-const read_only = counter.read_only; //Returns as StateROS<number>
-const read_only_type: StateROS<number> = counter;
+const read_only = counter.read_only; //Returns a read only view as StateROS<number>
+const read_only_type: StateROS<number> = counter; //Only read only by type, the owner methods are still there at runtime
 const read_write = counter.read_write; // Returns as StateROSW<number>
 const read_write_type: StateROSW<number> = counter;
 const state = counter.state; // Returns as State<number>
@@ -223,6 +223,28 @@ const limited = state.rosw(ok(0), async (value, owner, old) => {
   return ok(undefined);
 });
 ```
+
+#### Read only view
+
+`read_only` returns a view, not the state itself. The view forwards reading and subscribing to the state but has no write, setter or owner methods, `writable` is always `false`, `check` and `limit` give a not writable error, and its `write_enabled` gate is always false. Narrowing (`if (s.writable)`, `instanceof`) can not get write access back from it. The view keeps no value or subscribers of its own, it is created on first access of `read_only` and reused after that, so `owner.read_only !== owner` but `owner.read_only === owner.read_only`. Remote, proxy and collected states give a view the same way.
+
+Assigning the owner to a read only type (`const s: StateROS<number> = counter`) is only read only for TypeScript, use `read_only` when handing a state to code that must not write.
+
+#### Write gate
+
+`writable` says whether a state can be written at all. A state can also be disabled for writing temporarily with a write gate, a `State<boolean>` set by the owner. While the gate is not `ok(true)`, `write` and `check` give a not writable error, without calling the setter or helper. The gate is readable as `write_enabled`, so a UI can subscribe to it to show an input as disabled, it is `undefined` when writing is not gated.
+
+```typescript
+const logged_in = state.ok_w(false);
+const name = state.ok_w("");
+name.set_write_enabled(logged_in);
+await name.write("a"); // err("not writable")
+logged_in.set_ok(true);
+await name.write("a"); // ok
+name.set_write_enabled(undefined); // remove the gate
+```
+
+Local and remote states have `set_write_enabled`. Writable proxies use the gate of their source, read only proxies and read only views have a gate that is always false. Custom states extending `state.class` run their write through `write_gated` to apply the gate.
 
 ## Subscribing to State
 
@@ -327,7 +349,7 @@ Timing options control debounce, validity caching, and retention:
 state.r.rea.from(once, setup, teardown, {
   timeout: 1000, // ms before waiting reads get an error if no response, ok states (roa/roaw) keep waiting and the next read retries
   debounce: 50, // ms to batch multiple awaits into one fetch
-  validity: 5000, // ms the buffered value stays fresh (or true = until unsubscribe)
+  validity: 5000, // ms the buffered value stays fresh (or true = while connected, until teardown after retention)
   retention: 200, // ms to keep the connection after last unsubscribe
 });
 ```

@@ -43,7 +43,7 @@ export class StateStringHelperBase
   max_length?: State<number>;
   max_length_bytes?: State<number>;
   constructor(options: StateStringHelperOptions) {
-    super(options);
+    super();
     if (options.max_length) this.max_length = options.max_length;
     if (options.max_length_bytes)
       this.max_length_bytes = options.max_length_bytes;
@@ -65,8 +65,6 @@ export class StateStringHelperBase
     return ok(value);
   }
   async check(value: string): Promise<SR<string>> {
-    const writable = await this.check_writable(value);
-    if (writable.err) return writable;
     const [max_length, max_length_bytes] = await Promise.all([
       this.max_length,
       this.max_length_bytes,

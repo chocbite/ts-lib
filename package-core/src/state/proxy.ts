@@ -1,6 +1,6 @@
 import { is_promise_like, sync_reject, sync_resolve } from "#common";
 import { err, none, ok, OptionNone, ResultInferOk, ResultOk } from "#result";
-import { StateBase } from "./base";
+import { STATE_WRITE_DISABLED, StateBase } from "./base";
 import {
   StateResult as SR,
   StateInferResult,
@@ -229,7 +229,7 @@ class RXXX<
     return this as State<ROUT, OptionNone, WOUT>;
   }
   get read_only() {
-    return this as State<ROUT, OptionNone, WOUT>;
+    return this.read_only_view() as State<ROUT, OptionNone, WOUT>;
   }
   get read_write() {
     return this as State<ROUT, OptionNone, WOUT>;
@@ -283,6 +283,10 @@ class RXXX<
   //#Writer Context
   get writable(): boolean {
     return this.#writable && this.#state.writable;
+  }
+  /**The write gate of the source, writes and checks are passed to the source which applies it*/
+  get write_enabled(): State<boolean> | undefined {
+    return this.#writable ? this.#state.write_enabled : STATE_WRITE_DISABLED;
   }
   write(value: WOUT): PromiseLike<SR<void>> {
     if (!this.#writable || !this.#state.write)
