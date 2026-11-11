@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "vite --config dev/vite.config.ts",
     "typecheck:dev": "tsc --noEmit -p dev",
-    "build": "npm run build -w @chocbite/ts-lib && npm run build -w @chocbite/ts-lib-ui",
+    "build": "npm run build -w @chocbite/ts-lib && npm run build -w @chocbite/ts-lib-ui && node config/write-dist-agent-docs.js package-core package-ui",
     "test": "npm run test --workspaces",
     "lint": "npm run lint --workspaces",
     "typecheck": "npm run typecheck --workspaces",

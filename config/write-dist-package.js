@@ -1,4 +1,5 @@
 //Writes dist/package.json and dist/README.md for publishing from dist.
+//dist/AGENTS.md and dist/SOURCE.md are written by the build, see write-dist-agent-docs.js.
 //Only consumer facing fields are kept, so scripts, devDependencies, imports
 //and the development export condition never end up in the published package.
 //Only run by the release script after tests pass, a plain build leaves dist

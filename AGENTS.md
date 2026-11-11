@@ -60,6 +60,8 @@ Vitest strips types without checking them, so type tests (`expectTypeOf`, `// @t
 
 Packages are published from `dist`, never from the package folder (those are `"private": true`). Only `npm run release` publishes: it runs typecheck and all tests first, then builds and runs `config/write-dist-package.js`, which writes `dist/package.json` with only consumer facing fields (no scripts, devDependencies, `imports` or the `development` condition) and copies the package `README.md`. A plain build leaves `dist` without a `package.json`, so it cannot be published by hand without the tests. A new top level `package.json` field that consumers need must be added to the script's `KEEP` list.
 
+The root `npm run build` also runs `config/write-dist-agent-docs.js` (the per package build does not), which writes `dist/AGENTS.md` (version and commit, how to report library problems, the package README and every module README) and `dist/SOURCE.md` (all source except tests, each file under a `## <repo path>` heading). Agents in consumer projects read these from `node_modules` instead of a full source tree. Usage notes for consumers therefore belong in the package or module `README.md`.
+
 ## Dev pages
 
 `npm run dev` serves `dev/`, where the user tries out the libraries by hand: how things look and feel, sizes, hover effects, what is missing. See `dev/README.md`.
