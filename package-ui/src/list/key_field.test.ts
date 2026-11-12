@@ -1,7 +1,7 @@
-import { none, type Option } from "@chocbite/ts-lib/result";
+import { none, ok, type Option } from "@chocbite/ts-lib/result";
 import { state } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ListKeyField } from "./key_field";
+import { ListKeyField, type ListKeyFieldOptions } from "./key_field";
 import type { ListRowParent } from "./types";
 
 afterEach(() => {
@@ -109,5 +109,51 @@ describe("List key field", () => {
     field.options = undefined;
     icon.set_ok(() => svg());
     expect(field.querySelectorAll("svg")).toHaveLength(0);
+  });
+
+  it("shows text after the icon", () => {
+    const { field } = key_field(1);
+    field.text = "Hello";
+    field.icon = svg;
+    const text = field.querySelector(":scope > span.text")!;
+    expect(text.textContent).toBe("Hello");
+    expect(field.lastElementChild).toBe(text);
+    expect(text.previousElementSibling).toBeInstanceOf(SVGSVGElement);
+    field.text = "World";
+    expect(field.querySelectorAll(":scope > span.text")).toHaveLength(1);
+    expect(text.textContent).toBe("World");
+    field.text = "";
+    expect(field.querySelector(":scope > span.text")).toBeNull();
+  });
+
+  it("follows a text state and shows its error", () => {
+    const { field } = key_field(0);
+    const text = state.from_w("a");
+    field.options = { text };
+    const box = () => field.querySelector(":scope > span.text")?.textContent;
+    expect(box()).toBe("a");
+    text.set_ok("b");
+    expect(box()).toBe("b");
+    text.set_err("fail");
+    expect(box()).toBe("fail");
+    field.options = undefined;
+    expect(box()).toBeUndefined();
+    text.set_ok("c");
+    expect(box()).toBeUndefined();
+  });
+
+  it("accepts plain values and every kind of state for icon and text", () => {
+    //Type check only, tsc fails when a kind of state is not accepted
+    const options: ListKeyFieldOptions[] = [
+      { icon: svg, text: "a" },
+      { icon: state.ok(svg), text: state.ok("a") },
+      { icon: state.from_w(svg), text: state.from_w("a") },
+      { icon: state.rosw(ok(svg), true), text: state.resw(ok("a"), true) },
+      { icon: state.roa(async () => ok(svg)), text: state.rea(async () => ok("a")) },
+      { icon: state.reaw(async () => ok(svg), true), text: state.roaw(async () => ok("a"), true) },
+      { icon: state.p.ros(state.ok(1), () => ok(svg)).state },
+      { text: state.ros(state.s.help(ok("a"), {})) },
+    ];
+    expect(options).toHaveLength(8);
   });
 });

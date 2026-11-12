@@ -140,13 +140,49 @@ describe("List container header and columns", () => {
     expect(texts(container)).toEqual(["1", "2"]);
   });
 
-  it("adds an empty header field and a min-content grid column for sub rows", () => {
+  it("adds an empty header field and a max-content grid column for sub rows", () => {
     const container = number_list([1], { sub_rows: true });
     expect(header_texts(container)).toEqual(["", "Column"]);
     expect(box_of(container).style.gridTemplateColumns).toBe(
-      "min-content auto",
+      "max-content auto",
     );
     expect(box_of(container).classList.contains("sub-rows")).toBe(true);
+  });
+
+  it("resizes the key field column and keeps the width when the columns change", () => {
+    const container = number_list([1], { sub_rows: true });
+    const field = header_of(container)!.firstElementChild as HTMLElement;
+    field.setPointerCapture = () => {};
+    field.releasePointerCapture = () => {};
+    const field_box = field.firstElementChild as HTMLElement;
+    const sizer = field_box.lastElementChild as HTMLElement;
+    const start_width = field_box.offsetWidth;
+
+    sizer.dispatchEvent(
+      new PointerEvent("pointerdown", { clientX: 100, pointerId: 1 }),
+    );
+    field.dispatchEvent(
+      new PointerEvent("pointermove", { clientX: 200, pointerId: 1 }),
+    );
+    field.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1 }));
+    const width = Math.max(px_to_rem(start_width + 100), 1);
+    const key_width = () =>
+      parseFloat(box_of(container).style.gridTemplateColumns);
+    expect(key_width()).toBeCloseTo(width);
+    expect(box_of(container).style.gridTemplateColumns).toMatch(/rem auto$/);
+
+    container.columns = {
+      col: list.column_string("Other"),
+    };
+    expect(key_width()).toBeCloseTo(width);
+
+    //Second press within 300ms resets to fit the key fields
+    sizer.dispatchEvent(
+      new PointerEvent("pointerdown", { clientX: 100, pointerId: 1 }),
+    );
+    expect(box_of(container).style.gridTemplateColumns).toBe(
+      "max-content auto",
+    );
   });
 
   it("sets grid column widths from the column options", () => {

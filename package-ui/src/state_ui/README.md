@@ -3,7 +3,7 @@
 Shows states of `@chocbite/ts-lib/state` in the document. Everything is on the `state_ui` object, named so it does not collide with `state` of `@chocbite/ts-lib/state`, which has array features of its own. Like `state`, short and long names point to the same thing: `state_ui.a` is `state_ui.array`.
 
 ```ts
-import state_ui from "@chocbite/ts-lib-ui/state";
+import state_ui from "@chocbite/ts-lib-ui/state_ui";
 ```
 
 ## `state_ui.a.apply(parent, array, handlers)`

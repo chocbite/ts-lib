@@ -24,7 +24,6 @@ list-container {
         &:first-child {
           left: 0;
           z-index: 3;
-          border-right: 1px solid var(--list-colors-border-column);
         }
       }
 

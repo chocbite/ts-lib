@@ -230,7 +230,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
 {
   const sec = section(
     "Sub rows, add row, icons and context menu",
-    "Open rows, add rows, right click a row. Every other row has an icon, every third cannot be opened",
+    "Open rows, add rows, right click a row. Every other row has an icon, every fourth has key field text, every third cannot be opened. Drag the key column header narrower so the long text of row 4 wraps, its lines should stay centered. An open row draws a line from its middle down to its sub rows, double press the handle to fit the key column again",
   );
   const rows = state.ok_w(array_from_length(6, (i) => i));
   sec.appendChild(
@@ -263,6 +263,12 @@ const word = (i: number) => WORDS[i % WORDS.length];
           openable: item % 3 !== 2,
           key_field: {
             icon: item % 2 ? material_folder_rounded : undefined,
+            text:
+              item === 4
+                ? "Long key text that wraps in a narrow key column"
+                : item % 4 === 0
+                  ? "#" + item
+                  : undefined,
           },
           sub_rows: () => sub_rows,
           add_row: {
@@ -295,6 +301,83 @@ const word = (i: number) => WORDS[i % WORDS.length];
       },
     ),
   );
+}
+
+//     _  __________     __  ______ _____ ______ _      _____
+//    | |/ /  ____\ \   / / |  ____|_   _|  ____| |    |  __ \
+//    | ' /| |__   \ \_/ /  | |__    | | | |__  | |    | |  | |
+//    |  < |  __|   \   /   |  __|   | | |  __| | |    | |  | |
+//    | . \| |____   | |    | |     _| |_| |____| |____| |__| |
+//    |_|\_\______|  |_|    |_|    |_____|______|______|_____/
+{
+  const sec = section(
+    "Key field icon and text",
+    "Every combination of icon and text, all rows open. The line down to the sub rows must stay behind the icon and the text, and show below them in the tall row. The state row changes its icon and text from the buttons, an error shows as the text",
+  );
+  interface KeyItem {
+    name: string;
+    icon?: boolean;
+    text?: string;
+    tall?: boolean;
+  }
+  const items: KeyItem[] = [
+    { name: "Nothing" },
+    { name: "Icon only", icon: true },
+    { name: "Text only", text: "Text" },
+    { name: "Icon and text", icon: true, text: "Text" },
+    {
+      name: "Icon and long text",
+      icon: true,
+      text: "Long key text that wraps in a narrow key column",
+    },
+    { name: "Icon and text, tall row", icon: true, text: "Tall", tall: true },
+  ];
+  const state_icon = state.from_w(material_folder_rounded);
+  const state_text = state.from_w("State text");
+  const state_item: KeyItem = { name: "From states" };
+  const field = (item: KeyItem) =>
+    item === state_item
+      ? { icon: state_icon, text: state_text }
+      : {
+          icon: item.icon ? material_folder_rounded : undefined,
+          text: item.text,
+        };
+  sec.appendChild(
+    list.container(
+      {
+        name: list.column({
+          title: "Name",
+          field_gen: () => list.node_field(document.createElement("div")),
+          field_apply: (field, item: KeyItem) => {
+            field.node.textContent = item.name;
+            field.node.style.height = item.tall ? "4rem" : "";
+            field.node.style.alignContent = "center";
+          },
+        }),
+      },
+      (item: KeyItem) =>
+        ok({
+          openable: !item.name.startsWith("Sub"),
+          opened: !item.name.startsWith("Sub"),
+          key_field: field(item),
+          sub_rows: () => [
+            { name: "Sub with icon and text", icon: true, text: "Sub" },
+            { name: "Sub with text", text: "Sub" },
+          ],
+          values: { name: item },
+        }),
+      [...items, state_item],
+      { sub_rows: true },
+    ),
+  );
+  controls(sec, {
+    "Icon: folder": () => state_icon.set_ok(material_folder_rounded),
+    "Icon: add": () => state_icon.set_ok(material_add_to_queue_rounded),
+    "Text: short": () => state_text.set_ok("Short"),
+    "Text: long": () =>
+      state_text.set_ok("A much longer state text for the key field"),
+    "Text: error": () => state_text.set_err("Text failed"),
+  });
 }
 
 //      ______ _____  _____   ____  _____   _____

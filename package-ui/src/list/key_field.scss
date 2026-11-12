@@ -2,8 +2,16 @@
 
 list-keyfield {
   --list-row-size: var(--list-size-row_min);
+  //Width of an indent line box, the space after it and the width of the opener
+  //The vertical lines sit at the right edge of an indent box and the middle of the opener, so they line up between depths
+  --list-key-indent: calc(var(--list-row-size) / 2);
+  --list-key-indent-space: calc(var(--list-row-size) / 2 - 0.1rem);
+  --list-key-opener: var(--list-row-size);
   .touch & {
     --list-row-size: var(--list-size-touch_row_min);
+    --list-key-indent: calc(var(--list-row-size) / 2 - 0.3rem + 1.5px);
+    --list-key-indent-space: calc(var(--list-row-size) / 2 - 0.4rem);
+    --list-key-opener: calc(var(--list-row-size) - 0.4rem);
   }
 
   position: sticky;
@@ -26,40 +34,49 @@ list-keyfield {
     pointer-events: none;
   }
 
+  //Line from the middle of an open row down to its sub rows, at the line of the sub rows
+  list-row.open > div > & {
+    background-image: linear-gradient(
+      var(--list-colors-border-column),
+      var(--list-colors-border-column)
+    );
+    background-repeat: no-repeat;
+    background-size: 1px 50%;
+    background-position: calc(
+        (var(--list-key-depth) + 1) *
+          (var(--list-key-indent) + 1px + var(--list-key-indent-space)) +
+          var(--list-key-opener) / 2
+      )
+      100%;
+  }
+
   > div {
-    width: calc(var(--list-row-size) / 2);
-    margin-right: calc(var(--list-row-size) / 2 - 0.1rem);
+    flex-shrink: 0;
+    width: var(--list-key-indent);
+    margin-right: var(--list-key-indent-space);
     height: 100%;
     position: relative;
     border-right: 1px solid;
-
-    .touch & {
-      width: calc(var(--list-row-size) / 2 - 0.3rem + 1.5px);
-      margin-right: calc(var(--list-row-size) / 2 - 0.4rem);
-    }
   }
 
   &.openable {
-    > span {
+    > span:not(.text) {
       > div {
         display: block;
       }
     }
   }
 
-  > span {
+  > span:not(.text) {
     position: relative;
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: flex-start;
     height: 100%;
     min-height: var(--list-row-size);
     background-color: inherit;
-    width: var(--list-row-size);
-
-    .touch & {
-      width: calc(var(--list-row-size) - 0.4rem);
-    }
+    width: var(--list-key-opener);
 
     &::before {
       content: "";
@@ -75,14 +92,14 @@ list-keyfield {
       list-rowserror > &,
       list-row:not(.addrow) > span > list-row:last-child > * > &,
       div:not(.addrow) > div > list-row:last-child > * > & {
-        height: calc(var(--list-row-size) / 2);
+        height: 50%;
       }
     }
     &::after {
       content: "";
       display: block;
       position: absolute;
-      height: calc(var(--list-row-size) / 2);
+      height: 50%;
       width: 50%;
       top: 0;
       left: 50%;
@@ -135,8 +152,25 @@ list-keyfield {
     }
   }
 
+  //Icon and text are centered instead of stretched, so in a tall row the line down to the sub rows shows below them
+  > span.text {
+    display: flex;
+    align-self: center;
+    align-items: center;
+    min-width: 0;
+    color: var(--list-colors-text-key_field);
+    padding: 0 0.25rem;
+    min-height: var(--list-row-size);
+    //Covers the line down to the sub rows, it would run through the text without an icon
+    background-color: inherit;
+  }
+
   svg {
     position: relative;
+    flex-shrink: 0;
+    align-self: center;
+    //Covers the line down to the sub rows, it would show through the transparent parts of the icon
+    background-color: inherit;
     fill: var(--list-colors-icon-key_icon);
     padding: 0.25rem;
     width: calc(var(--list-row-size) - 0.4rem);
@@ -150,9 +184,9 @@ list-keyfield {
 
   &::after {
     content: "";
+    align-self: flex-start;
     height: 50%;
     border-bottom: 1px solid var(--list-colors-border-column);
     flex-grow: 1;
-    height: calc(var(--list-row-size) / 2);
   }
 }

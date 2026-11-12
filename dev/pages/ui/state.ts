@@ -1,4 +1,4 @@
-import state_ui from "@chocbite/ts-lib-ui/state";
+import state_ui from "@chocbite/ts-lib-ui/state_ui";
 import { array_from_length } from "@chocbite/ts-lib/common";
 import state from "@chocbite/ts-lib/state";
 import { box, controls, row, section } from "../../helpers";

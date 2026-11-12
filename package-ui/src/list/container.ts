@@ -1,11 +1,11 @@
 import { Base, define_element, type BaseIntersectObserver } from "#base";
 import { px_to_rem } from "#theme";
 import { state, type State, type StateInferSub } from "@chocbite/ts-lib/state";
-import state_ui from "../state_ui";
+import state_ui from "#state_ui";
 import { ListAddRow, type ListAddRowOptions } from "./add_row";
 import "./container.scss";
 import { list_rows_error_update, type ListRowsError } from "./error";
-import { list_align_apply, text_field } from "./field";
+import { list_align_apply } from "./field";
 import { ListRow } from "./row";
 import "./shared";
 import type {
@@ -85,15 +85,22 @@ class HeaderRow<
   }
 
   set fields(fields: HeaderField[]) {
-    if (this.#root.sub_rows) this.replaceChildren(text_field(), ...fields);
+    if (this.#key_header) this.replaceChildren(this.#key_header, ...fields);
     else this.replaceChildren(...fields);
   }
 
-  #root: ListRoot<R, T, A, S>;
+  /**Header of the key field column, only with sub rows */
+  #key_header?: HeaderField;
 
-  constructor(root: ListRoot<R, T, A, S>) {
+  constructor(
+    root: ListRoot<R, T, A, S>,
+    key_sizer: (width: number | undefined) => void,
+  ) {
     super();
-    this.#root = root;
+    if (root.sub_rows) {
+      this.#key_header = new HeaderField();
+      this.#key_header.sizable(true, key_sizer);
+    }
   }
 }
 define_element(HeaderRow);
@@ -130,6 +137,8 @@ class Container<
   #error?: ListRowsError<A>;
   #add_row?: ListAddRow<R, T, A, S>;
   #state_sub?: StateInferSub<State<R[]>>;
+  /**Width of the key field column in rem set by resizing, fits the key fields when undefined */
+  #key_width?: number;
 
   constructor(
     columns: { [K in keyof T]: ListColumnOptions<T[K], any> },
@@ -153,7 +162,12 @@ class Container<
     };
 
     if (!options?.headless)
-      this.#header = this.#box.appendChild(new HeaderRow(this.#root));
+      this.#header = this.#box.appendChild(
+        new HeaderRow(this.#root, (width) => {
+          this.#key_width = width;
+          this.#update_column_widths();
+        }),
+      );
     this.#child_box = this.#box.appendChild(document.createElement("div"));
     if (options?.sub_rows) this.#box.classList.add("sub-rows");
     this.add_row = options?.add_row;
@@ -204,7 +218,10 @@ class Container<
       }
       return "auto";
     });
-    if (this.#root.sub_rows) widths.unshift("min-content");
+    if (this.#root.sub_rows)
+      widths.unshift(
+        this.#key_width ? `${Math.max(this.#key_width, 1)}rem` : "max-content",
+      );
     this.#box.style.gridTemplateColumns = widths.join(" ");
   }
 

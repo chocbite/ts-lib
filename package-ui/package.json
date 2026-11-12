@@ -85,10 +85,10 @@
       "import": "./dist/spinner/index.mjs",
       "style": "./dist/style.css"
     },
-    "./state": {
-      "development": "./src/state/index.ts",
-      "types": "./dist/state/index.d.mts",
-      "import": "./dist/state/index.mjs",
+    "./state_ui": {
+      "development": "./src/state_ui/index.ts",
+      "types": "./dist/state_ui/index.d.mts",
+      "import": "./dist/state_ui/index.mjs",
       "style": "./dist/style.css"
     },
     "./svg": {

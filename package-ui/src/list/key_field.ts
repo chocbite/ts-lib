@@ -7,7 +7,10 @@ import "./key_field.scss";
 import type { ListRowParent, ListType } from "./types";
 
 export interface ListKeyFieldOptions {
+  /**Icon shown after the sub row opener */
   icon?: SVGFunc | State<SVGFunc>;
+  /**Text shown after the icon, an error of a state is shown as the text */
+  text?: string | State<string>;
 }
 
 export class ListKeyField<A extends ListType<any>> extends Base {
@@ -25,6 +28,8 @@ export class ListKeyField<A extends ListType<any>> extends Base {
   constructor(parent: ListRowParent<A>) {
     super();
     this.tabIndex = 0;
+    //Places the line down to the sub rows of an open row
+    this.style.setProperty("--list-key-depth", String(parent.depth));
     this.onkeydown = (e) => {
       if (e.key === "Enter" || e.key === " ") parent.open = !parent.open;
       else if (e.key === "ArrowRight") parent.open = true;
@@ -57,6 +62,9 @@ export class ListKeyField<A extends ListType<any>> extends Base {
     if (state.is.state(options?.icon)) {
       this.attach_state_to_prop("icon", options.icon, () => some(undefined));
     } else this.detach_state_from_prop("icon").icon = options?.icon;
+    if (state.is.state(options?.text)) {
+      this.attach_state_to_prop("text", options.text, (e) => some(e));
+    } else this.detach_state_from_prop("text").text = options?.text;
   }
 
   set icon(value: SVGFunc | undefined) {
@@ -66,6 +74,20 @@ export class ListKeyField<A extends ListType<any>> extends Base {
     this.#icon = value();
     if (this.#text_box) this.insertBefore(this.#icon, this.#text_box);
     else this.appendChild(this.#icon);
+  }
+
+  /**Text after the icon, an empty string removes the text element */
+  set text(value: string | undefined) {
+    if (!value) {
+      this.#text_box?.remove();
+      this.#text_box = undefined;
+      return;
+    }
+    if (!this.#text_box) {
+      this.#text_box = this.appendChild(document.createElement("span"));
+      this.#text_box.className = "text";
+    }
+    this.#text_box.textContent = value;
   }
 
   //       ____  _____  ______ _   _ _____ _   _  _____
