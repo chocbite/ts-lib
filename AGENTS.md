@@ -24,7 +24,7 @@ Bundling is fine, but unused icons must still be tree-shakeable by the consumer'
 
 ## Layout
 
-Each module is a folder `<folder>/src/<module>/` with an `index.ts` and its own `README.md`.
+Each module is a folder `<folder>/<module>/` directly in the package folder, with an `index.ts` and its own `README.md`. A package folder holds only its modules, `package.json` and `README.md`.
 Every module is published as a subpath export, e.g. `@chocbite/ts-lib/state` and `@chocbite/ts-lib-ui/theme`. There is no root export.
 
 - ts-lib: `colors common depot event math parse result state string`
@@ -32,9 +32,9 @@ Every module is published as a subpath export, e.g. `@chocbite/ts-lib/state` and
 
 ## Imports
 
-- Same package: `import { x } from "#common"` (the `imports` field in the package's `package.json`, one entry per module). No `../../` paths between modules.
+- Same package: `import { x } from "#common"` (the `#*` pattern in the `imports` field of the package's `package.json`). No `../../` paths between modules.
 - ts-lib-ui to ts-lib: `import { x } from "@chocbite/ts-lib/common"`. The `development` export condition resolves this to source, so no build is needed while developing.
-- Adding a module: create `src/<name>/index.ts`; add `exports` and `imports` entries to that package's `package.json` (the `exports` entry has `development`, `types`, `import`). The tsdown config picks up the folder automatically.
+- Adding a module: create `<folder>/<name>/index.ts`, nothing else. The `exports` and `imports` of the package are `./*` and `#*` patterns, and the tsdown config builds every folder with an `index.ts`. A folder without an `index.ts` is not a module.
 
 ## Commands
 
@@ -46,13 +46,13 @@ npm run dev                           # dev server for trying out the libraries 
 npm run typecheck
 npm run lint
 npm test                              # all, typecheck then tests
-npx vitest run --project core         # one package (core or ui), no typecheck, core is node and fast
-npx vitest run --project ui src/list  # one module, the path is relative to the package folder
+npm run vitest -- run --project core  # one package (core or ui), no typecheck, core is node and fast
+npm run vitest -- run --project ui list  # one module, the path is relative to the package folder
 npm run build                         # both packages into dist/ts-lib and dist/ts-lib-ui
 npm run release                       # typecheck, test, build, publish both dist folders
 ```
 
-Config files are all in the root: `vite.config.ts` (dev server, and the `core` and `ui` vitest projects), `tsdown.config.ts`, `eslint.config.js`, and `tsconfig.json`, which only references `tsconfig.core.json`, `tsconfig.ui.json`, `tsconfig.dev.json` and `tsconfig.node.json` (the config files). Core and ui are separate TypeScript programs because only ui gets the `DOM` lib.
+Config files are all in `config/`, the scripts pass them with `--config`, so run tools through the npm scripts (`npm run vitest` instead of `npx vitest`): `vite.config.ts` (dev server, and the `core` and `ui` vitest projects), `tsdown.config.ts`, `eslint.config.js`, and `tsconfig.core.json`, `tsconfig.ui.json`, `tsconfig.dev.json` and `tsconfig.node.json` (the config files themselves) on `tsconfig.base.json`. Core and ui are separate TypeScript programs because only ui gets the `DOM` lib. The root `tsconfig.json` only references them, it stays in the root because editors and typescript-eslint look for a `tsconfig.json` next to or above a file. `.vscode/settings.json` points the ESLint and Vitest extensions at `config/`.
 
 ts-lib tests run in plain Node. ts-lib-ui tests run in Chromium via `@vitest/browser-playwright` (`npx playwright install chromium` once).
 
@@ -70,7 +70,7 @@ Packages are published from `dist/ts-lib` and `dist/ts-lib-ui` in the repo root,
 
 - When adding or changing a feature, add or update its page in `dev/pages/<package>/<module>.ts` (e.g. `dev/pages/ui/list.ts`). Big modules get a folder with several pages, e.g. `dev/pages/ui/form/`.
 - A page is a plain module that builds into `document.body` when imported, no exports. Every `.ts` file in `dev/pages/` is a page, so shared code goes in `dev/helpers.ts`.
-- Import the libraries like a consumer, `@chocbite/ts-lib-ui/list`, never `#` imports or relative paths into `src`.
+- Import the libraries like a consumer, `@chocbite/ts-lib-ui/list`, never `#` imports or relative paths into the package folders.
 - Show variations side by side with `section`, `row`, `box` and `controls` from `dev/helpers.ts`, with a note per section on what to look at. Deterministic data, expensive cases (thousands of elements) behind a button.
 - The trial frame calls `theme_init` and applies theme, input mode and scale from the shell, pages must not call `theme_init`.
 - The shell (`dev/index.html`, `dev/shell.ts`) must never import from the libraries, so it keeps working while they are broken.
@@ -80,7 +80,7 @@ Packages are published from `dist/ts-lib` and `dist/ts-lib-ui` in the repo root,
 
 - `*.trials.ts` and `trials/` folders are old manual demo code, kept as reference. Do not add new ones, use dev pages. Never export them from an `index.ts`, they must not end up in builds.
 - ts-lib enforces DOM-free code three ways: tsconfig `lib` has no `DOM`, eslint `no-restricted-globals`, and Node-only tests.
-- Enum icons in `state` are typed through the global `ChocbiteStateRegister` interface. ts-lib-ui augments it with `icon: SVGFunc` (see `package-ui/src/svg/index.ts`). Without ts-lib-ui no icon can be given.
+- Enum icons in `state` are typed through the global `ChocbiteStateRegister` interface. ts-lib-ui augments it with `icon: SVGFunc` (see `package-ui/svg/index.ts`). Without ts-lib-ui no icon can be given.
 - ts-lib-ui settings groups are named `@chocbite/ts-lib-xxx` so modules do not collide.
 - ts-lib-ui CSS is one `dist/style.css`, imported by every built file.
 - The ts-lib-ui theme applies nothing until the app calls `theme_init` once (deliberate, the app decides if the device has an operating system dark mode). Tests that check applied theme values must call it.

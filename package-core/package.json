@@ -13,61 +13,13 @@
   },
   "description": "Platform independent TypeScript libraries, no browser features required",
   "exports": {
-    "./colors": {
-      "development": "./src/colors/index.ts",
-      "types": "./dist/colors/index.d.mts",
-      "import": "./dist/colors/index.mjs"
-    },
-    "./common": {
-      "development": "./src/common/index.ts",
-      "types": "./dist/common/index.d.mts",
-      "import": "./dist/common/index.mjs"
-    },
-    "./depot": {
-      "development": "./src/depot/index.ts",
-      "types": "./dist/depot/index.d.mts",
-      "import": "./dist/depot/index.mjs"
-    },
-    "./event": {
-      "development": "./src/event/index.ts",
-      "types": "./dist/event/index.d.mts",
-      "import": "./dist/event/index.mjs"
-    },
-    "./math": {
-      "development": "./src/math/index.ts",
-      "types": "./dist/math/index.d.mts",
-      "import": "./dist/math/index.mjs"
-    },
-    "./parse": {
-      "development": "./src/parse/index.ts",
-      "types": "./dist/parse/index.d.mts",
-      "import": "./dist/parse/index.mjs"
-    },
-    "./result": {
-      "development": "./src/result/index.ts",
-      "types": "./dist/result/index.d.mts",
-      "import": "./dist/result/index.mjs"
-    },
-    "./state": {
-      "development": "./src/state/index.ts",
-      "types": "./dist/state/index.d.mts",
-      "import": "./dist/state/index.mjs"
-    },
-    "./string": {
-      "development": "./src/string/index.ts",
-      "types": "./dist/string/index.d.mts",
-      "import": "./dist/string/index.mjs"
+    "./*": {
+      "development": "./*/index.ts",
+      "types": "./dist/*/index.d.mts",
+      "import": "./dist/*/index.mjs"
     }
   },
   "imports": {
-    "#colors": "./src/colors/index.ts",
-    "#common": "./src/common/index.ts",
-    "#depot": "./src/depot/index.ts",
-    "#event": "./src/event/index.ts",
-    "#math": "./src/math/index.ts",
-    "#parse": "./src/parse/index.ts",
-    "#result": "./src/result/index.ts",
-    "#state": "./src/state/index.ts",
-    "#string": "./src/string/index.ts"
+    "#*": "./*/index.ts"
   }
 }

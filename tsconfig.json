@@ -1,11 +1,12 @@
 {
-  //Only references, every part has its own config next to this one
+  //Editors and typescript-eslint look for a tsconfig.json next to or above a file, so this one stays in the root
+  //Only references, the configs are in config/
   //core and ui are separate programs because core must not see the DOM lib
   "files": [],
   "references": [
-    { "path": "./tsconfig.core.json" },
-    { "path": "./tsconfig.ui.json" },
-    { "path": "./tsconfig.dev.json" },
-    { "path": "./tsconfig.node.json" }
+    { "path": "./config/tsconfig.core.json" },
+    { "path": "./config/tsconfig.ui.json" },
+    { "path": "./config/tsconfig.dev.json" },
+    { "path": "./config/tsconfig.node.json" }
   ]
 }

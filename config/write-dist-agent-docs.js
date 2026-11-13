@@ -19,7 +19,7 @@ const is_excluded = (path) =>
 
 //Replaced by a note in SOURCE.md, generated files too big to be worth reading
 const OMITTED = {
-  "src/icons/material/material-symbols-rounded.ts": (code) =>
+  "icons/material/material-symbols-rounded.ts": (code) =>
     `Omitted, generated file with ${code.match(/^export const /gm)?.length ?? 0} icons. ` +
     "Every icon is `export const material_<name>_rounded = generate_function(...)`, e.g. `material_10k_rounded`, " +
     "exported from `@chocbite/ts-lib-ui/icons`. Search the `.d.mts` files of this package for the available names.",
@@ -27,8 +27,12 @@ const OMITTED = {
 
 const git = (command) => execSync(`git ${command}`, { encoding: "utf8" }).trim();
 
+//Build output and dependencies are never in a package folder, skipped in case they appear
+const SKIPPED_FOLDERS = new Set(["node_modules", "dist"]);
+
 const list_files = (folder) =>
   readdirSync(folder, { withFileTypes: true })
+    .filter((entry) => !(entry.isDirectory() && SKIPPED_FOLDERS.has(entry.name)))
     .flatMap((entry) => {
       const path = `${folder}/${entry.name}`;
       return entry.isDirectory() ? list_files(path) : [path];
@@ -58,7 +62,7 @@ const demote = (markdown, levels) => {
 
 const read_json = (path) => JSON.parse(readFileSync(path, "utf8"));
 
-//Build output of a package, dist/<name without scope> in the repo root, the same as DIST in tsdown.config.ts
+//Build output of a package, dist/<name without scope> in the repo root, the same as DIST in config/tsdown.config.ts
 const dist_of = (name) => join("dist", name.split("/").pop());
 
 const { version } = read_json("package.json");
@@ -85,15 +89,15 @@ for (const [i, folder] of folders.entries()) {
     `commit ${commit}${dirty ? ", with uncommitted changes" : ""}.`;
 
   //AGENTS.md
-  const module_readmes = list_files(`${folder}/src`).filter((path) =>
-    /^[^/]+\/src\/[^/]+\/README\.md$/.test(path),
+  const module_readmes = list_files(folder).filter((path) =>
+    /^[^/]+\/[^/]+\/README\.md$/.test(path),
   );
   const agents = [
     `# ${pkg.name}, notes for agents`,
     header,
     "Read the sections for the modules you use before using them. " +
       "The full source of this version is in `SOURCE.md` next to this file, every file under a `## <repo path>` heading, " +
-      "e.g. search it for `## " + folder + "/src/<module>/` to find a module.",
+      "e.g. search it for `## " + folder + "/<module>/` to find a module.",
     ...internal_deps.map(
       (dep) =>
         `This package builds on \`${dep}\`, its notes and source are in \`node_modules/${dep}/AGENTS.md\` and \`SOURCE.md\`.`,
@@ -110,14 +114,14 @@ for (const [i, folder] of folders.entries()) {
     ].join("\n"),
     demote(readFileSync(join(folder, "README.md"), "utf8").trim(), 1),
     ...module_readmes.map((path) => {
-      const module = path.split("/")[2];
+      const module = path.split("/")[1];
       return `## Module ${pkg.name}/${module}\n\n${demote(readFileSync(path, "utf8").trim(), 2)}`;
     }),
   ];
   writeFileSync(join(dist, "AGENTS.md"), agents.join("\n\n") + "\n");
 
   //SOURCE.md
-  const sources = list_files(`${folder}/src`).filter(
+  const sources = list_files(folder).filter(
     (path) =>
       SOURCE_EXTENSIONS.some((ext) => path.endsWith(ext)) && !is_excluded(path),
   );

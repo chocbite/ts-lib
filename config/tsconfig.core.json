@@ -1,11 +1,11 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.core.tsbuildinfo",
+    "tsBuildInfoFile": "../node_modules/.tmp/tsconfig.core.tsbuildinfo",
     /* No DOM: ts-lib must not use browser features */
     "lib": ["ESNext"],
     "types": ["node"],
     "noUncheckedIndexedAccess": true
   },
-  "include": ["package-core/src"]
+  "include": ["../package-core"]
 }

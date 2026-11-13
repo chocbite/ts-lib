@@ -32,7 +32,7 @@ const KEEP = [
 const strip_dist = (path) => path.replace(/^\.\/dist\//, "./");
 const read_json = (path) => JSON.parse(readFileSync(path, "utf8"));
 
-//Build output of a package, dist/<name without scope> in the repo root, the same as DIST in tsdown.config.ts
+//Build output of a package, dist/<name without scope> in the repo root, the same as DIST in config/tsdown.config.ts
 const dist_of = (name) => join("dist", name.split("/").pop());
 
 const { version } = read_json("package.json");

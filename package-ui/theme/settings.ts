@@ -8,7 +8,7 @@ import {
 import { settings_init } from "#settings";
 import { none, ok, some, type Option } from "@chocbite/ts-lib/result";
 import { state as st } from "@chocbite/ts-lib/state";
-import { version } from "../../../package.json";
+import { version } from "../../package.json";
 
 const SETTINGS = settings_init(
   "@chocbite/ts-lib-theme",

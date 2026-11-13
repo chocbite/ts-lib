@@ -3,10 +3,11 @@ import { resolve } from "node:path";
 import { defaultClientConditions } from "vite";
 import { defineConfig } from "vitest/config";
 
-const at_root = (path: string) => resolve(import.meta.dirname, path);
+const at_root = (path: string) => resolve(import.meta.dirname, "..", path);
 
 //Dev server for trying out the libraries by hand (dev/), never built or published
 //The tests of both packages are vitest projects, run one with --project core or --project ui
+//Used with --config config/vite.config.ts, see the scripts in the root package.json
 export default defineConfig({
   root: at_root("dev"),
   resolve: { conditions: ["development", ...defaultClientConditions] },
@@ -20,7 +21,7 @@ export default defineConfig({
         test: {
           name: "core",
           environment: "node",
-          include: ["src/**/*.test.ts"],
+          include: ["**/*.test.ts"],
         },
         root: at_root("package-core"),
         cacheDir: at_root("node_modules/.vite"),
@@ -31,7 +32,7 @@ export default defineConfig({
         cacheDir: at_root("node_modules/.vite"),
         test: {
           name: "ui",
-          include: ["src/**/*.test.ts"],
+          include: ["**/*.test.ts"],
           //Failure screenshots go to the repo root
           attachmentsDir: at_root(".vitest/attachments"),
           browser: {

@@ -1,1 +1,6 @@
-{}
+{
+  "eslint.options": {
+    "overrideConfigFile": "config/eslint.config.js"
+  },
+  "vitest.rootConfig": "config/vite.config.ts"
+}

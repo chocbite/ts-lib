@@ -8,12 +8,13 @@
     "package-ui"
   ],
   "scripts": {
-    "dev": "vite",
-    "typecheck": "tsc -b tsconfig.core.json tsconfig.ui.json tsconfig.node.json",
-    "typecheck:dev": "tsc -b tsconfig.dev.json",
-    "lint": "eslint \"package-*/src/**/*.ts\"",
-    "test": "npm run typecheck && vitest run",
-    "build": "tsdown && node config/write-dist-agent-docs.js package-core package-ui",
+    "dev": "vite --config config/vite.config.ts",
+    "vitest": "vitest --config config/vite.config.ts",
+    "typecheck": "tsc -b config/tsconfig.core.json config/tsconfig.ui.json config/tsconfig.node.json",
+    "typecheck:dev": "tsc -b config/tsconfig.dev.json",
+    "lint": "eslint --config config/eslint.config.js \"package-*/**/*.ts\"",
+    "test": "npm run typecheck && npm run vitest -- run",
+    "build": "tsdown --config config/tsdown.config.ts && node config/write-dist-agent-docs.js package-core package-ui",
     "release": "npm test && npm run build && node config/write-dist-package.js package-core package-ui && npm publish ./dist/ts-lib && npm publish ./dist/ts-lib-ui",
     "upgrades": "npx npm-check-updates --target semver --workspaces --root",
     "upgrade": "npx npm-check-updates --target semver -u --workspaces --root && npm install"

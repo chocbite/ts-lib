@@ -2,6 +2,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { defineConfig, type UserConfig } from "tsdown";
 
+const at_root = (path: string) => resolve(import.meta.dirname, "..", path);
+
 /**Build output of a package, dist/<name without scope>, where it is published from */
 export const DIST = { core: "dist/ts-lib", ui: "dist/ts-lib-ui" };
 
@@ -11,19 +13,19 @@ function package_config(
   dist: string,
   tsconfig: string,
 ): UserConfig {
-  const src = resolve(import.meta.dirname, folder, "src");
+  const root = at_root(folder);
   return {
     name: folder,
     //The package folder, so its package.json decides which dependencies are external
-    cwd: resolve(import.meta.dirname, folder),
+    cwd: root,
     entry: Object.fromEntries(
-      readdirSync(src, { withFileTypes: true })
+      readdirSync(root, { withFileTypes: true })
         .filter(
-          (d) => d.isDirectory() && existsSync(`${src}/${d.name}/index.ts`),
+          (d) => d.isDirectory() && existsSync(`${root}/${d.name}/index.ts`),
         )
-        .map((d) => [`${d.name}/index`, `src/${d.name}/index.ts`]),
+        .map((d) => [`${d.name}/index`, `${d.name}/index.ts`]),
     ),
-    outDir: resolve(import.meta.dirname, dist),
+    outDir: at_root(dist),
     tsconfig: resolve(import.meta.dirname, tsconfig),
     dts: true,
     sourcemap: true,
@@ -38,8 +40,8 @@ export default defineConfig([
     ...package_config("package-ui", DIST.ui, "tsconfig.ui.json"),
     //Sass mixins are published as source for consumers to use
     copy: ["icons", "theme"].map((module) => ({
-      from: `src/${module}/mixins.scss`,
-      to: resolve(import.meta.dirname, DIST.ui, module),
+      from: `${module}/mixins.scss`,
+      to: at_root(`${DIST.ui}/${module}`),
     })),
     plugins: [
       {
@@ -49,7 +51,7 @@ export default defineConfig([
           for (const [file, item] of Object.entries(bundle)) {
             if (item.type !== "chunk" || item.moduleIds.length === 0) continue;
             const only_icons = item.moduleIds.every((id) =>
-              id.replaceAll("\\", "/").includes("/src/icons/"),
+              id.replaceAll("\\", "/").includes("/package-ui/icons/"),
             );
             if (!only_icons) continue;
             delete bundle[`${file}.map`];
