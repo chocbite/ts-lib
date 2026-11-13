@@ -69,15 +69,5 @@
     "#result": "./src/result/index.ts",
     "#state": "./src/state/index.ts",
     "#string": "./src/string/index.ts"
-  },
-  "scripts": {
-    "build": "tsdown",
-    "lint": "eslint \"src/**/*.ts\"",
-    "test": "tsc --noEmit && vitest run",
-    "typecheck": "tsc --noEmit",
-    "check-deps": "npx depcheck"
-  },
-  "devDependencies": {
-    "@types/node": "^25.9.4"
   }
 }

@@ -8,21 +8,25 @@
     "package-ui"
   ],
   "scripts": {
-    "dev": "vite --config dev/vite.config.ts",
-    "typecheck:dev": "tsc --noEmit -p dev",
-    "build": "npm run build -w @chocbite/ts-lib && npm run build -w @chocbite/ts-lib-ui && node config/write-dist-agent-docs.js package-core package-ui",
-    "test": "npm run test --workspaces",
-    "lint": "npm run lint --workspaces",
-    "typecheck": "npm run typecheck --workspaces",
-    "release": "npm run typecheck && npm test && npm run build && node config/write-dist-package.js package-core package-ui && npm publish ./package-core/dist && npm publish ./package-ui/dist",
+    "dev": "vite",
+    "typecheck": "tsc -b tsconfig.core.json tsconfig.ui.json tsconfig.node.json",
+    "typecheck:dev": "tsc -b tsconfig.dev.json",
+    "lint": "eslint \"package-*/src/**/*.ts\"",
+    "test": "npm run typecheck && vitest run",
+    "build": "tsdown && node config/write-dist-agent-docs.js package-core package-ui",
+    "release": "npm test && npm run build && node config/write-dist-package.js package-core package-ui && npm publish ./dist/ts-lib && npm publish ./dist/ts-lib-ui",
     "upgrades": "npx npm-check-updates --target semver --workspaces --root",
     "upgrade": "npx npm-check-updates --target semver -u --workspaces --root && npm install"
   },
   "devDependencies": {
+    "@tsdown/css": "^0.23.0",
+    "@types/node": "^25.9.4",
+    "@vitest/browser-playwright": "^5.0.1",
     "eslint": "^10.12.0",
-    "typescript-eslint": "^8.58.2",
+    "sass-embedded": "^1.104.1",
     "tsdown": "^0.23.0",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.58.2",
     "vite": "^8.3.4",
     "vitest": "^5.0.1"
   }

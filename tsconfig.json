@@ -1,0 +1,11 @@
+{
+  //Only references, every part has its own config next to this one
+  //core and ui are separate programs because core must not see the DOM lib
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.core.json" },
+    { "path": "./tsconfig.ui.json" },
+    { "path": "./tsconfig.dev.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}

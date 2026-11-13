@@ -1,4 +1,4 @@
-//Writes dist/package.json and dist/README.md for publishing from dist.
+//Writes package.json and README.md into the dist folder of each package, which is published.
 //dist/AGENTS.md and dist/SOURCE.md are written by the build, see write-dist-agent-docs.js.
 //Only consumer facing fields are kept, so scripts, devDependencies, imports
 //and the development export condition never end up in the published package.
@@ -32,6 +32,9 @@ const KEEP = [
 const strip_dist = (path) => path.replace(/^\.\/dist\//, "./");
 const read_json = (path) => JSON.parse(readFileSync(path, "utf8"));
 
+//Build output of a package, dist/<name without scope> in the repo root, the same as DIST in tsdown.config.ts
+const dist_of = (name) => join("dist", name.split("/").pop());
+
 const { version } = read_json("package.json");
 if (!version) throw new Error("root package.json has no version");
 
@@ -41,11 +44,11 @@ const internal = new Set(
 );
 
 for (const folder of folders) {
-  const dist_folder = join(folder, "dist");
+  const source = read_json(join(folder, "package.json"));
+  const dist_folder = dist_of(source.name);
   if (!existsSync(dist_folder))
     throw new Error(`${dist_folder} does not exist, build first`);
 
-  const source = read_json(join(folder, "package.json"));
   source.version = version;
   if (source.dependencies)
     source.dependencies = Object.fromEntries(

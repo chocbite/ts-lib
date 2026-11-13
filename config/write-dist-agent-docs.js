@@ -1,4 +1,4 @@
-//Writes dist/AGENTS.md and dist/SOURCE.md, so agents working in a consumer
+//Writes AGENTS.md and SOURCE.md into the dist folder of each package, so agents working in a consumer
 //project have the docs and source of the installed version in node_modules,
 //as two files instead of the whole source tree.
 //AGENTS.md: version, how to report problems, the package README and every module README.
@@ -58,6 +58,9 @@ const demote = (markdown, levels) => {
 
 const read_json = (path) => JSON.parse(readFileSync(path, "utf8"));
 
+//Build output of a package, dist/<name without scope> in the repo root, the same as DIST in tsdown.config.ts
+const dist_of = (name) => join("dist", name.split("/").pop());
+
 const { version } = read_json("package.json");
 if (!version) throw new Error("root package.json has no version");
 const commit = git("rev-parse --short HEAD");
@@ -73,7 +76,7 @@ for (const [i, folder] of folders.entries()) {
     internal.has(name),
   );
   const repository = pkg.repository?.url;
-  const dist = join(folder, "dist");
+  const dist = dist_of(pkg.name);
   if (!existsSync(dist)) throw new Error(`${dist} does not exist, build first`);
 
   const header =

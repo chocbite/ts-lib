@@ -38,7 +38,7 @@ Every module is published as a subpath export, e.g. `@chocbite/ts-lib/state` and
 
 ## Commands
 
-Run from the repo root for everything, or with `-w @chocbite/ts-lib` / `-w @chocbite/ts-lib-ui` for one package. Prefer the narrow form.
+Everything runs from the repo root, the packages have no scripts or config files of their own. Prefer the narrow test forms.
 
 ```
 npm install
@@ -46,21 +46,23 @@ npm run dev                           # dev server for trying out the libraries 
 npm run typecheck
 npm run lint
 npm test                              # all, typecheck then tests
-npm test -w @chocbite/ts-lib          # node, fast
-npx vitest run src/state              # inside a package folder, one module, no typecheck
-npm run build                         # ts-lib first, then ts-lib-ui
+npx vitest run --project core         # one package (core or ui), no typecheck, core is node and fast
+npx vitest run --project ui src/list  # one module, the path is relative to the package folder
+npm run build                         # both packages into dist/ts-lib and dist/ts-lib-ui
 npm run release                       # typecheck, test, build, publish both dist folders
 ```
 
+Config files are all in the root: `vite.config.ts` (dev server, and the `core` and `ui` vitest projects), `tsdown.config.ts`, `eslint.config.js`, and `tsconfig.json`, which only references `tsconfig.core.json`, `tsconfig.ui.json`, `tsconfig.dev.json` and `tsconfig.node.json` (the config files). Core and ui are separate TypeScript programs because only ui gets the `DOM` lib.
+
 ts-lib tests run in plain Node. ts-lib-ui tests run in Chromium via `@vitest/browser-playwright` (`npx playwright install chromium` once).
 
-Vitest strips types without checking them, so type tests (`expectTypeOf`, `// @ts-expect-error`) only fail through `tsc`. That is why `npm test` runs `tsc --noEmit` first.
+Vitest strips types without checking them, so type tests (`expectTypeOf`, `// @ts-expect-error`) only fail through `tsc`. That is why `npm test` runs `npm run typecheck` first.
 
 ## Publishing
 
-Packages are published from `dist`, never from the package folder (those are `"private": true`). Only `npm run release` publishes: it runs typecheck and all tests first, then builds and runs `config/write-dist-package.js`, which writes `dist/package.json` with only consumer facing fields (no scripts, devDependencies, `imports` or the `development` condition) and copies the package `README.md`. A plain build leaves `dist` without a `package.json`, so it cannot be published by hand without the tests. A new top level `package.json` field that consumers need must be added to the script's `KEEP` list.
+Packages are published from `dist/ts-lib` and `dist/ts-lib-ui` in the repo root, never from the package folder (those are `"private": true`). Only `npm run release` publishes: it runs typecheck and all tests first, then builds and runs `config/write-dist-package.js`, which writes a `package.json` into each dist folder with only consumer facing fields (no scripts, devDependencies, `imports` or the `development` condition) and copies the package `README.md`. The `./dist/` paths in the package `exports` are rewritten to the dist folder. A plain build leaves the dist folders without a `package.json`, so it cannot be published by hand without the tests. A new top level `package.json` field that consumers need must be added to the script's `KEEP` list.
 
-The root `npm run build` also runs `config/write-dist-agent-docs.js` (the per package build does not), which writes `dist/AGENTS.md` (version and commit, how to report library problems, the package README and every module README) and `dist/SOURCE.md` (all source except tests, each file under a `## <repo path>` heading). Agents in consumer projects read these from `node_modules` instead of a full source tree. Usage notes for consumers therefore belong in the package or module `README.md`.
+`npm run build` also runs `config/write-dist-agent-docs.js`, which writes `AGENTS.md` into each dist folder (version and commit, how to report library problems, the package README and every module README) and `SOURCE.md` (all source except tests, each file under a `## <repo path>` heading). Agents in consumer projects read these from `node_modules` instead of a full source tree. Usage notes for consumers therefore belong in the package or module `README.md`.
 
 ## Dev pages
 

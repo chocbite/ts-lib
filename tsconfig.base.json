@@ -16,6 +16,7 @@
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "customConditions": ["development"]
+    "customConditions": ["development"],
+    "noEmit": true
   }
 }
