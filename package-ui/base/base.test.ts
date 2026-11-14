@@ -1,6 +1,11 @@
-import { none, some } from "@chocbite/ts-lib/result";
-import st from "@chocbite/ts-lib/state";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { none, some, type ResultOk } from "@chocbite/ts-lib/result";
+import st, {
+  type StateOrVal,
+  type StateOrValROS,
+  type StateOrValROSW,
+  type StateResult,
+} from "@chocbite/ts-lib/state";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { ACCESSTYPESINFO, AccessTypes } from "./access";
 import { Base } from "./base";
 import { define_element } from "./define_element";
@@ -495,7 +500,7 @@ describe("Base opts", () => {
     const func = vi.fn();
     expect(element.scope(func)).toBe(element);
     expect(func).toHaveBeenCalledWith(element);
-    expect(element.bind(undefined as never)).toBe(element);
+    expect(element.bind({})).toBe(element);
   });
 });
 
@@ -825,5 +830,195 @@ describe("Base resize observer", () => {
     await frame();
     await frame();
     expect(element.resize_calls.length).toBe(calls);
+  });
+});
+
+//      ____ _____ _   _ _____
+//     |  _ \_   _| \ | |  __ \
+//     | |_) || | |  \| | |  | |
+//     |  _ < | | | . ` | |  | |
+//     | |_) || |_| |\  | |__| |
+//     |____/_____|_| \_|_____/
+const BIND_WIDTH = Symbol();
+const BIND_LABEL = Symbol();
+
+interface BindProbeOptions {
+  width?: StateOrVal<number>;
+  label?: StateOrValROS<string>;
+}
+
+/**Element using bind, width keeps its last value on errors*/
+class BindProbe extends Base {
+  static element_name() {
+    return "bindprobe";
+  }
+  static element_name_space() {
+    return "basetest";
+  }
+  constructor() {
+    super();
+    this.style.width = "1px";
+    this.textContent = "default";
+  }
+  bind(options: BindProbeOptions): this {
+    this.bind_input(BIND_WIDTH, options.width, (width) => {
+      if (width.ok) this.style.width = width.value + "px";
+    });
+    this.bind_input(BIND_LABEL, options.label, (label) => {
+      this.textContent = this.format(label.value);
+    });
+    return this;
+  }
+  protected format(label: string): string {
+    return label;
+  }
+}
+define_element(BindProbe);
+
+interface BindPrefixOptions extends BindProbeOptions {
+  prefix?: string;
+}
+
+/**Subclass whose override reads its own private field*/
+class BindPrefix extends BindProbe {
+  static element_name() {
+    return "bindprefix";
+  }
+  #prefix = "";
+  bind(options: BindPrefixOptions): this {
+    if (options.prefix !== undefined) this.#prefix = options.prefix;
+    return super.bind(options);
+  }
+  protected format(label: string): string {
+    return this.#prefix + label;
+  }
+}
+define_element(BindPrefix);
+
+describe("Base bind", () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+  const attach = <T extends HTMLElement>(element: T): T =>
+    document.body.appendChild(element);
+
+  it("applies fixed values right away", () => {
+    const element = new BindProbe().bind({ width: 5, label: "a" });
+    expect(element.style.width).toBe("5px");
+    expect(element.textContent).toBe("a");
+  });
+
+  it("applies states while connected and follows them", () => {
+    const width = st.ok_w(5);
+    const element = new BindProbe().bind({ width });
+    expect(element.style.width).toBe("1px");
+    attach(element);
+    expect(element.style.width).toBe("5px");
+    width.set_ok(6);
+    expect(element.style.width).toBe("6px");
+    element.remove();
+    expect(width.amount()).toBe(0);
+  });
+
+  it("leaves options that are not given unchanged", () => {
+    const element = new BindProbe().bind({ width: 5, label: "a" });
+    element.bind({ label: "b" });
+    expect(element.style.width).toBe("5px");
+    expect(element.textContent).toBe("b");
+    element.bind({});
+    expect(element.textContent).toBe("b");
+  });
+
+  it("binding a state again replaces the previous state", () => {
+    const first = st.ok_w(5);
+    const second = st.ok_w(6);
+    const element = attach(new BindProbe().bind({ width: first }));
+    element.bind({ width: second });
+    expect(first.amount()).toBe(0);
+    expect(second.amount()).toBe(1);
+    first.set_ok(7);
+    expect(element.style.width).toBe("6px");
+  });
+
+  it("binding a fixed value detaches the previous state, also after reconnecting", () => {
+    const width = st.ok_w(5);
+    const element = attach(new BindProbe().bind({ width }));
+    element.bind({ width: 9 });
+    expect(width.amount()).toBe(0);
+    element.remove();
+    attach(element);
+    expect(width.amount()).toBe(0);
+    expect(element.style.width).toBe("9px");
+  });
+
+  it("a rebind while disconnected subscribes only the new state on connect", () => {
+    const first = st.ok_w(5);
+    const second = st.ok_w(6);
+    const element = attach(new BindProbe().bind({ width: first }));
+    element.remove();
+    element.bind({ width: second });
+    attach(element);
+    expect(first.amount()).toBe(0);
+    expect(second.amount()).toBe(1);
+    expect(element.style.width).toBe("6px");
+  });
+
+  it("a reused element follows only the state it was bound to last", () => {
+    const states = [st.ok_w(1), st.ok_w(2), st.ok_w(3)];
+    const element = attach(new BindProbe());
+    for (const width of states) element.bind({ width });
+    expect(states.map((s) => s.amount())).toEqual([0, 0, 1]);
+  });
+
+  it("the error is up to the element", () => {
+    const width = st.from_w(5);
+    const element = attach(new BindProbe().bind({ width }));
+    width.set_err("gone");
+    expect(element.style.width).toBe("5px");
+  });
+
+  it("an override can use fields of the subclass, with a fixed value or a state", () => {
+    expect(new BindPrefix().bind({ prefix: "p", label: "a" }).textContent).toBe(
+      "pa",
+    );
+    const element = attach(
+      new BindPrefix().bind({ prefix: "p", label: st.ok("b") }),
+    );
+    expect(element.textContent).toBe("pb");
+  });
+
+  it("gives ok only inputs ok results and errorable inputs results", () => {
+    const KEY = Symbol();
+    class TypeProbe extends Base {
+      static element_name() {
+        return "bindtypeprobe";
+      }
+      static element_name_space() {
+        return "basetest";
+      }
+      bind(options: {
+        ok_only?: StateOrValROS<number>;
+        writable?: StateOrValROSW<number>;
+        errorable?: StateOrVal<number>;
+      }): this {
+        this.bind_input(KEY, 5, (value) => {
+          expectTypeOf(value).toEqualTypeOf<ResultOk<number>>();
+        });
+        this.bind_input(KEY, options.ok_only, (value) => {
+          expectTypeOf(value).toEqualTypeOf<ResultOk<number>>();
+        });
+        this.bind_input(KEY, options.writable, (value) => {
+          expectTypeOf(value).toEqualTypeOf<ResultOk<number>>();
+        });
+        this.bind_input(KEY, options.errorable, (value) => {
+          expectTypeOf(value).toEqualTypeOf<StateResult<number>>();
+        });
+        return this;
+      }
+    }
+    define_element(TypeProbe);
+    expect(
+      new TypeProbe().bind({ ok_only: 1, writable: st.ok_w(2), errorable: 3 }),
+    ).toBeInstanceOf(TypeProbe);
   });
 });

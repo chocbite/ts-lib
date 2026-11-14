@@ -1,9 +1,10 @@
-import { some, type Option } from "@chocbite/ts-lib/result";
+import { ok, some, type Option, type ResultOk } from "@chocbite/ts-lib/result";
 import {
   state,
   type State,
   type StateInferSub,
   type StateREA,
+  type StateResult,
   type StateROA,
   type StateSub,
 } from "@chocbite/ts-lib/state";
@@ -34,6 +35,15 @@ const base_resize_observer = new ResizeObserver((e) => {
  *
  * Elements are only created in code, with new or a factory function, HTML is not supported,
  * constructors add children and attributes, which document.createElement and the HTML parser do not allow
+ *
+ * Elements built on bind:
+ * The class is only exported as a type, a factory function without arguments creates it
+ * The constructor takes no arguments, it builds the children and sets the defaults
+ * bind takes the options, each a fixed value or a state (StateOrVal), and applies them with bind_input
+ * so element_factory().bind({ width: 100, label: label_state })
+ *
+ * A fixed value never changes, anything that changes must be a state
+ * A value an element hands out to other elements, like a state its children follow, is stored in a private field with a getter
  *
  * All none abstracts classes must override the static method element_name to return the name of the element
  * Abstract classes should return @abstract@
@@ -100,9 +110,48 @@ export abstract class Base extends HTMLElement {
     return this;
   }
 
-  /**Elements that can attach to a writable state can declare them in binds*/
-  bind(_opts: never): this {
+  /**Applies the given options, options that are not given are left unchanged
+   * Can be called any number of times, like when a list reuses an element for other data
+   * Elements override it with their own options type and call super.bind with the options,
+   * each option is applied with bind_input, so binding an option again replaces the state bound before
+   * It runs after every constructor has finished, so overrides called from it can use all fields of the subclass*/
+  bind(_options: object): this {
     return this;
+  }
+
+  /**Binds an input that is either a fixed value or a state, see bind
+   * undefined leaves the input unchanged
+   * A fixed value is applied right away as an ok result, and detaches any state bound to the key before
+   * A state replaces any state bound to the key before, and is applied while the element is connected
+   * Inputs that can not be errors give ok results, so the input type decides if the element must handle errors
+   * The value type is only inferred from the state part, see state.as_state
+   * @param key symbol identifying the input, one per input, usually a module constant*/
+  protected bind_input<T = never>(
+    key: symbol,
+    sov: NoInfer<T> | StateROA<T, any, any> | undefined,
+    apply: (value: ResultOk<T>) => void,
+  ): void;
+  protected bind_input<T = never>(
+    key: symbol,
+    sov: NoInfer<T> | StateREA<T, any, any> | undefined,
+    apply: (value: StateResult<T>) => void,
+  ): void;
+  protected bind_input<T>(
+    key: symbol,
+    sov: T | undefined,
+    apply: (value: ResultOk<T>) => void,
+  ): void;
+  protected bind_input(
+    key: symbol,
+    sov: unknown,
+    apply: StateSub<any>,
+  ): void {
+    if (sov === undefined) return;
+    if (state.is.state_of(sov)) this.attach_state_to_symbol(key, sov, apply);
+    else {
+      this.detach_state_from_symbol(key);
+      apply(ok(sov));
+    }
   }
 
   /**Executes a function with the element as an argument and returns the element
