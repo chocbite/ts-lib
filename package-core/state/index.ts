@@ -15,6 +15,7 @@ import {
   STATE_OBJECT_READ_KEY,
   STATE_OBJECT_WRITE_KEY,
 } from "./helpers/object";
+import { as_state } from "./helpers/state_or_val";
 import { STRING } from "./helpers/string";
 import { UTIL } from "./helpers/util";
 import { VIEWER } from "./helpers/viewer";
@@ -66,6 +67,8 @@ export const state = {
   rea,
   /**Creates a writable async errorable state from an initial result */
   reaw,
+  /**Returns the state, or the fixed value wrapped in a read only sync ok state, see StateOrVal */
+  as_state,
   //The "as typeof" casts make the declaration output reference the helper objects instead of inlining
   //their types, inlining would drop the doc comments on their members
   /* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
@@ -216,6 +219,15 @@ export type {
   StateInferSub,
   StateInferType,
   StateJsonCompatible,
+  StateOrVal,
+  StateOrValREA,
+  StateOrValREAW,
+  StateOrValRES,
+  StateOrValRESW,
+  StateOrValROA,
+  StateOrValROAW,
+  StateOrValROS,
+  StateOrValROSW,
   StateREA,
   StateReadType,
   StateREAW,

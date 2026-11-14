@@ -341,3 +341,68 @@ export type StateROSW<
   REL extends Option<StateRelated> = Option<{}>,
   WT = unknown,
 > = ROSW<RT, REL, WT>;
+
+//###########################################################################################################################################################
+//       _____ _______    _______ ______    ____  _____   __      __     _
+//      / ____|__   __|/\|__   __|  ____|  / __ \|  __ \  \ \    / /\   | |
+//     | (___    | |  /  \  | |  | |__    | |  | | |__) |  \ \  / /  \  | |
+//      \___ \   | | / /\ \ | |  |  __|   | |  | |  _  /    \ \/ / /\ \ | |
+//      ____) |  | |/ ____ \| |  | |____  | |__| | | \ \     \  / ____ \| |____
+//     |_____/   |_/_/    \_\_|  |______|  \____/|_|  \_\     \/_/    \_\______|
+//A fixed value or a state giving the value, a fixed value never changes, so anything that changes must be a state
+//The value type must not itself be a state, as it could not be told apart from the state
+
+/**A fixed value or any state */
+export type StateOrVal<
+  RT,
+  REL extends Option<StateRelated> = Option<{}>,
+  WT = unknown,
+> = RT | State<RT, REL, WT>;
+/**A fixed value or an async errorable state */
+export type StateOrValREA<
+  RT,
+  REL extends Option<StateRelated> = Option<{}>,
+  WT = unknown,
+> = RT | StateREA<RT, REL, WT>;
+/**A fixed value or an async ok state */
+export type StateOrValROA<
+  RT,
+  REL extends Option<StateRelated> = Option<{}>,
+  WT = unknown,
+> = RT | StateROA<RT, REL, WT>;
+/**A fixed value or a sync errorable state */
+export type StateOrValRES<
+  RT,
+  REL extends Option<StateRelated> = Option<{}>,
+  WT = unknown,
+> = RT | StateRES<RT, REL, WT>;
+/**A fixed value or a sync ok state */
+export type StateOrValROS<
+  RT,
+  REL extends Option<StateRelated> = Option<{}>,
+  WT = unknown,
+> = RT | StateROS<RT, REL, WT>;
+/**A fixed value or a writable async errorable state */
+export type StateOrValREAW<
+  RT,
+  REL extends Option<StateRelated> = Option<{}>,
+  WT = unknown,
+> = RT | StateREAW<RT, REL, WT>;
+/**A fixed value or a writable async ok state */
+export type StateOrValROAW<
+  RT,
+  REL extends Option<StateRelated> = Option<{}>,
+  WT = unknown,
+> = RT | StateROAW<RT, REL, WT>;
+/**A fixed value or a writable sync errorable state */
+export type StateOrValRESW<
+  RT,
+  REL extends Option<StateRelated> = Option<{}>,
+  WT = unknown,
+> = RT | StateRESW<RT, REL, WT>;
+/**A fixed value or a writable sync ok state */
+export type StateOrValROSW<
+  RT,
+  REL extends Option<StateRelated> = Option<{}>,
+  WT = unknown,
+> = RT | StateROSW<RT, REL, WT>;
