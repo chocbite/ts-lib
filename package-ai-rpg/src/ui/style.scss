@@ -1,0 +1,508 @@
+//The game is always drawn over a dark scene, so text over the scene is light in every theme.
+//Panels follow the library theme.
+
+//Library elements set their own display, which would override hidden
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+  height: 100vh;
+  overflow: hidden;
+  font-family: Roboto, Arial, Helvetica, sans-serif;
+}
+
+//Placeholder for the scene image, colored by the location
+.scene {
+  position: fixed;
+  inset: 0;
+  --hue: 230;
+  background:
+    radial-gradient(ellipse at 30% 25%, hsl(var(--hue) 45% 38%) 0%, transparent 55%),
+    radial-gradient(ellipse at 75% 40%, hsl(calc(var(--hue) + 40) 40% 30%) 0%, transparent 50%),
+    linear-gradient(hsl(var(--hue) 30% 22%), hsl(calc(var(--hue) + 20) 25% 10%));
+  transition: --hue 1s;
+  //Darkens the bottom, where the story is, so light text reads on any image
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(transparent 25%, rgb(0 0 0 / 0.55) 55%, rgb(0 0 0 / 0.85) 100%);
+  }
+}
+
+.place {
+  position: fixed;
+  top: 1rem;
+  left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  color: #fff;
+  text-shadow: 0 1px 3px #000;
+  .place-name {
+    font-size: 1.3rem;
+    font-weight: bold;
+  }
+  .place-time {
+    opacity: 0.8;
+  }
+}
+
+.stage {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  padding: 1rem 1rem 1.25rem;
+  box-sizing: border-box;
+  pointer-events: none;
+  > * {
+    pointer-events: auto;
+    width: min(100%, 65ch);
+  }
+}
+
+.story {
+  max-height: 50vh;
+  overflow-y: auto;
+  scrollbar-width: none;
+  cursor: pointer;
+  color: #f2f2f2;
+  font-size: 1.15rem;
+  line-height: 1.5;
+  text-shadow: 0 1px 2px #000, 0 0 8px rgb(0 0 0 / 0.8);
+  //Older chunks fade out towards the top
+  mask-image: linear-gradient(transparent, #000 35%);
+  .chunk {
+    margin: 0 0 0.6em;
+    opacity: 0.75;
+    &.current {
+      opacity: 1;
+    }
+  }
+  .said {
+    font-style: italic;
+  }
+  .speaker {
+    --hue: 40;
+    display: block;
+    font-style: normal;
+    font-weight: bold;
+    font-size: 0.9em;
+    color: hsl(var(--hue) 80% 75%);
+  }
+  .mention {
+    border-bottom: 1px dotted rgb(255 255 255 / 0.5);
+  }
+}
+
+.more {
+  text-align: center;
+  color: #fff;
+  cursor: pointer;
+  animation: more-bob 1.2s ease-in-out infinite;
+  text-shadow: 0 1px 3px #000;
+}
+@keyframes more-bob {
+  50% {
+    transform: translateY(0.2rem);
+  }
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.5rem;
+  margin: 0.25rem 0;
+  color: #ddd;
+  font-size: 0.9rem;
+  text-shadow: 0 1px 2px #000;
+  .spin {
+    flex-shrink: 0;
+    width: 1.2rem;
+    height: 1.2rem;
+    > * {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+  }
+}
+
+.error {
+  color: #ff8a80;
+}
+
+.bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.4rem;
+  > * {
+    flex-shrink: 0;
+  }
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 2.6rem;
+  max-width: 12rem;
+  padding: 0 0.6rem 0 0.3rem;
+  border: none;
+  border-radius: 1.3rem;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+  .icon {
+    --hue: 200;
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background: hsl(var(--hue) 45% 40%);
+    font-size: 0.8rem;
+    font-weight: bold;
+  }
+  .name {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .switch {
+    opacity: 0.7;
+  }
+}
+
+//Plain buttons of the game screen, drawn over the scene
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  cursor: pointer;
+  svg {
+    width: 1.5rem;
+    height: 1.5rem;
+    fill: currentColor;
+  }
+  &:hover {
+    background: rgb(0 0 0 / 0.8);
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
+.text-button {
+  padding: 0.2rem 0.8rem;
+  border: 1px solid rgb(255 255 255 / 0.4);
+  border-radius: 1rem;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+  &:hover {
+    background: rgb(0 0 0 / 0.8);
+  }
+}
+
+.prompt {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 2.6rem;
+  max-height: 30vh;
+  box-sizing: border-box;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid rgb(255 255 255 / 0.25);
+  border-radius: 1.3rem;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  font: inherit;
+  resize: none;
+  outline: none;
+  &:focus {
+    border-color: rgb(255 255 255 / 0.6);
+  }
+  &::placeholder {
+    color: rgb(255 255 255 / 0.5);
+  }
+  &.submitted {
+    border-color: hsl(130 50% 55% / 0.8);
+  }
+  &:disabled {
+    opacity: 0.6;
+  }
+}
+
+//      _____        _   _ ______ _       _____
+//     |  __ \ /\   | \ | |  ____| |     / ____|
+//     | |__) /  \  |  \| | |__  | |    | (___
+//     |  ___/ /\ \ | . ` |  __| | |     \___ \
+//     | |  / ____ \| |\  | |____| |____ ____) |
+//     |_| /_/    \_\_| \_|______|______|_____/
+.panel-layer {
+  position: fixed;
+  inset: 0;
+  display: none;
+  place-items: center;
+  padding: 1rem;
+  box-sizing: border-box;
+  background: rgb(0 0 0 / 0.35);
+  //Over the scene and stage, which are made after it
+  z-index: 5;
+  &.open {
+    display: grid;
+  }
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 40rem);
+  //The grid row is sized by the panel, so a percentage would not limit it
+  max-height: calc(100vh - 2rem);
+  border-radius: 0.6rem;
+  background: var(--rpg-panel);
+  color: var(--rpg-panelText);
+  box-shadow: 0 0.5rem 2rem rgb(0 0 0 / 0.5);
+  &.wide {
+    width: min(100%, 70rem);
+    height: calc(100vh - 2rem);
+  }
+}
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.5rem 0.5rem 1rem;
+  h2 {
+    margin: 0;
+    font-size: 1.2rem;
+  }
+  .icon-button {
+    background: transparent;
+    color: inherit;
+    &:hover {
+      background: rgb(128 128 128 / 0.25);
+    }
+  }
+}
+.panel-body {
+  flex: 1 1 auto;
+  //Lets the body shrink and scroll instead of pushing the footer out
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 1rem 1rem;
+  h3 {
+    margin: 1rem 0 0.5rem;
+  }
+}
+.panel-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  &:empty {
+    display: none;
+  }
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  > :first-child {
+    flex: 1 1 auto;
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-bottom: 0.75rem;
+}
+.field-note {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.review-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgb(128 128 128 / 0.3);
+}
+.review-summary {
+  font-size: 0.95rem;
+}
+//Text boxes in panels grow with their text, the library multi line input has a fixed height and no option to grow
+.panel form-textmultiline > textarea {
+  field-sizing: content;
+  height: auto;
+  min-height: 2.5em;
+  max-height: 20rem;
+}
+
+.builder {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  height: 100%;
+}
+.builder-chat {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.chat {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+.chat-message {
+  max-width: 85%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.6rem;
+  white-space: pre-wrap;
+  &.user {
+    align-self: flex-end;
+    background: rgb(100 140 255 / 0.25);
+  }
+  &.assistant {
+    align-self: flex-start;
+    background: rgb(128 128 128 / 0.2);
+  }
+}
+.chat-input {
+  font: inherit;
+  resize: vertical;
+}
+.builder .status {
+  color: inherit;
+  text-shadow: none;
+}
+.proposal {
+  overflow-y: auto;
+  h3 {
+    margin-top: 0;
+  }
+  h4 {
+    margin: 0.75rem 0 0.25rem;
+  }
+  p {
+    margin: 0.25rem 0;
+  }
+  .opening {
+    white-space: pre-wrap;
+    font-style: italic;
+  }
+}
+.badge {
+  margin-left: 0.4rem;
+  padding: 0 0.4rem;
+  border-radius: 0.5rem;
+  background: hsl(130 50% 40%);
+  color: #fff;
+  font-size: 0.75rem;
+}
+
+//Editors, a list of things in a sidebar that can be hidden, and the selected thing's fields
+.editor {
+  display: grid;
+  grid-template-columns: 15rem 1fr;
+  gap: 1rem;
+  height: 100%;
+  &.no-sidebar {
+    grid-template-columns: 1fr;
+    .editor-sidebar {
+      display: none;
+    }
+  }
+}
+.editor-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 0;
+  overflow-y: auto;
+  list-row {
+    cursor: pointer;
+  }
+  //The list has no selection of its own
+  list-row.selected > div > * {
+    background-color: rgb(100 140 255 / 0.35) !important;
+  }
+  list-row.gone {
+    opacity: 0.6;
+  }
+}
+.editor-details {
+  min-height: 0;
+  overflow-y: auto;
+}
+.panel-header {
+  gap: 0.5rem;
+  h2 {
+    flex: 1 1 auto;
+  }
+}
+.panel-actions {
+  display: flex;
+  gap: 0.25rem;
+  &:empty {
+    display: none;
+  }
+}
+
+.debug-list {
+  pre {
+    white-space: pre-wrap;
+    font-size: 0.8rem;
+    background: rgb(128 128 128 / 0.15);
+    padding: 0.5rem;
+  }
+  .call {
+    padding: 0.4rem 0;
+    border-bottom: 1px solid rgb(128 128 128 / 0.3);
+  }
+}
+
+.toasts {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  translate: -50%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min(90%, 40rem);
+  z-index: 10;
+}
+.toast {
+  padding: 0.6rem 1rem;
+  border-radius: 0.5rem;
+  background: #333;
+  color: #fff;
+  cursor: pointer;
+  &.error {
+    background: #8b1d1d;
+  }
+}

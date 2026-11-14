@@ -1,0 +1,10 @@
+{
+  //Editors and typescript-eslint look for a tsconfig.json next to or above a file, so this one stays in the package root
+  //Only references, the configs are in config/
+  //The game (browser) and the config files (node) are separate programs
+  "files": [],
+  "references": [
+    { "path": "./config/tsconfig.app.json" },
+    { "path": "./config/tsconfig.node.json" }
+  ]
+}

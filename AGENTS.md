@@ -9,6 +9,12 @@ Monorepo (npm workspaces) publishing two packages:
 
 ts-lib-ui must never be imported from ts-lib.
 
+The monorepo also holds apps built on the library. They are workspaces so they resolve the library like package-ui resolves package-core, but they have their own build, and the root scripts below do not touch them. Each has its own `AGENTS.md`, read it before working there.
+
+| App                | Folder           |                                    |
+| ------------------ | ---------------- | ---------------------------------- |
+| `@chocbite/ai-rpg` | `package-ai-rpg` | Text based AI RPG, browser SPA. Private, never published. |
+
 ## Intended use
 
 ts-lib-ui is for single page applications that run offline on low end hardware. Runtime performance wins over file size, download size is a one time cost. The following are deliberate, do not flag or change them:
