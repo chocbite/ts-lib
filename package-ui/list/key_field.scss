@@ -21,7 +21,8 @@ list-keyfield {
   &.has-icon {
     --list-key-min-icon: calc(var(--list-key-icon) + 0.5rem);
   }
-  &.has-text {
+  &.has-text,
+  &.tail {
     --list-key-min-text: 4rem;
   }
   --list-key-min: calc(
@@ -77,14 +78,14 @@ list-keyfield {
   }
 
   &.openable {
-    > span:not(.text) {
+    > span.opener {
       > div {
         display: block;
       }
     }
   }
 
-  > span:not(.text) {
+  > span.opener {
     position: relative;
     flex-shrink: 0;
     display: flex;
@@ -182,7 +183,7 @@ list-keyfield {
     background-color: inherit;
   }
 
-  svg {
+  > svg {
     position: relative;
     flex-shrink: 0;
     align-self: center;
@@ -192,6 +193,19 @@ list-keyfield {
     padding: 0.25rem;
     width: var(--list-key-icon);
     height: auto;
+  }
+
+  //Runs into the value columns, the tail takes the space of the line after the text
+  &.tail {
+    grid-column: 1 / -1;
+    border-right: none;
+
+    > :last-child {
+      flex-grow: 1;
+    }
+    &::after {
+      display: none;
+    }
   }
 
   &::after {

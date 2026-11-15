@@ -182,19 +182,11 @@ list-container > div {
   //The error and add rows start after the lead columns
   @for $lead from 1 through 2 {
     &.lead-#{$lead} {
-      list-addrow > list-keyfield,
-      list-rowserror > list-keyfield {
-        grid-column: $lead + 1;
-      }
+      //With sub rows the key field holds the button or error and runs to the end
+      list-keyfield.tail,
       list-addrow > span,
       list-error {
         grid-column: #{$lead + 1} / -1;
-      }
-      &.sub-rows {
-        list-addrow > span,
-        list-error {
-          grid-column: #{$lead + 2} / -1;
-        }
       }
     }
   }

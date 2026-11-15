@@ -24,6 +24,7 @@ export class ListKeyField<A extends ListType<any>> extends Base {
   #opener: HTMLDivElement;
   #text_box?: HTMLSpanElement;
   #icon?: SVGSVGElement;
+  #tail?: HTMLElement;
 
   constructor(parent: ListRowParent<A>) {
     super();
@@ -42,6 +43,7 @@ export class ListKeyField<A extends ListType<any>> extends Base {
     };
 
     const opener_box = document.createElement("span");
+    opener_box.className = "opener";
     this.#opener = opener_box.appendChild(document.createElement("div"));
     this.replaceChildren(
       ...array_from_length(parent.depth, (i) => {
@@ -74,8 +76,20 @@ export class ListKeyField<A extends ListType<any>> extends Base {
     this.classList.toggle("has-icon", Boolean(value));
     if (!value) return;
     this.#icon = value();
-    if (this.#text_box) this.insertBefore(this.#icon, this.#text_box);
-    else this.appendChild(this.#icon);
+    this.insertBefore(this.#icon, this.#text_box ?? this.#tail ?? null);
+  }
+
+  /**Element filling the rest of the key field, the button of an add row or the text of an error
+   * A key field with a tail spans from the key column to the end of the row, so it works without value columns */
+  set tail(value: HTMLElement | undefined) {
+    if (value === this.#tail) return;
+    this.#tail?.remove();
+    this.#tail = value;
+    this.classList.toggle("tail", Boolean(value));
+    if (value) this.appendChild(value);
+  }
+  get tail(): HTMLElement | undefined {
+    return this.#tail;
   }
 
   /**Text after the icon, an empty string removes the text element */
@@ -87,8 +101,9 @@ export class ListKeyField<A extends ListType<any>> extends Base {
       return;
     }
     if (!this.#text_box) {
-      this.#text_box = this.appendChild(document.createElement("span"));
+      this.#text_box = document.createElement("span");
       this.#text_box.className = "text";
+      this.insertBefore(this.#text_box, this.#tail ?? null);
     }
     this.#text_box.textContent = value;
   }

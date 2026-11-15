@@ -250,6 +250,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     const row_options = result.value;
     if (this.#invalid) {
       this.#invalid = undefined;
+      if (this.#key_field) this.#key_field.tail = undefined;
       this.#show_cells(this.#fields);
     }
     this.#selection_update(row_options.selectable ?? true, data);
@@ -317,7 +318,11 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     this.#sub_row_menu = false;
     if (!this.#invalid) {
       this.#invalid = new ListError();
-      this.#show_cells([this.#invalid]);
+      //With sub rows the text is in the key field after the tree lines, it runs from the key column to the end
+      if (this.#key_field) {
+        this.#key_field.tail = this.#invalid;
+        this.#show_cells([]);
+      } else this.#show_cells([this.#invalid]);
     }
     this.#invalid.text = text;
   }

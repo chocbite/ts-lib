@@ -44,9 +44,13 @@ export class ListAddRow<
     super();
     this.#parent = parent;
     this.depth = parent.depth + 1;
-    if (root.sub_rows) this.appendChild(new ListKeyField(this));
-    this.#button = this.appendChild(document.createElement("span"));
+    this.#button = document.createElement("span");
+    this.#button.className = "add";
     this.#button.tabIndex = 0;
+    //With sub rows the button is in the key field after the tree lines, it runs from the key column to the end
+    if (root.sub_rows)
+      this.appendChild(new ListKeyField(this)).tail = this.#button;
+    else this.appendChild(this.#button);
     this.#text = this.#button.appendChild(document.createTextNode(""));
   }
 

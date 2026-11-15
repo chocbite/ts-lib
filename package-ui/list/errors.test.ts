@@ -300,3 +300,87 @@ describe("List sub row state error", () => {
     expect(document.activeElement).toBe(key_field_of(row(1)));
   });
 });
+
+describe("List without value columns", () => {
+  //Everything after the key field would be outside the grid and make a column of its own, the rows would flow into it
+  function names_list(rows: State<string[]> | string[], add: boolean) {
+    const container = list.container(
+      {},
+      (name: string) =>
+        name === "bad"
+          ? err("Invalid " + name)
+          : ok({ key_field: { text: name }, values: {} }),
+      rows,
+      {
+        headless: true,
+        sub_rows: true,
+        add_row: add ? { text: "Add row", on_add: () => {} } : undefined,
+      },
+    );
+    document.body.append(container);
+    return container;
+  }
+  function lefts_and_tops(container: HTMLElement) {
+    const cells = [
+      ...container.querySelectorAll(
+        ":scope > div > div > list-row list-keyfield, list-addrow > list-keyfield, list-rowserror > list-keyfield",
+      ),
+    ];
+    return cells.map((cell) => {
+      const rect = cell.getBoundingClientRect();
+      return { left: rect.left, top: rect.top };
+    });
+  }
+  function in_one_column(container: HTMLElement) {
+    const box = container.firstElementChild as HTMLElement;
+    expect(getComputedStyle(box).gridTemplateColumns.split(" ")).toHaveLength(
+      1,
+    );
+    const cells = lefts_and_tops(container);
+    expect(cells.length).toBeGreaterThan(1);
+    for (let i = 1; i < cells.length; i++) {
+      expect(cells[i].left).toBe(cells[0].left);
+      expect(cells[i].top).toBeGreaterThan(cells[i - 1].top);
+    }
+  }
+
+  it("keeps the rows under each other with an add row", () => {
+    const container = names_list(state.ok_w(["Alpha", "Beta", "Gamma"]), true);
+    in_one_column(container);
+    expect(container.querySelector("list-addrow")!.textContent).toBe("Add row");
+  });
+
+  it("keeps the rows under each other with an invalid row", () => {
+    const container = names_list(["Alpha", "bad", "Gamma"], false);
+    in_one_column(container);
+    expect(error_of(container)).toBe("Invalid bad");
+  });
+
+  it("keeps the rows under each other with an error instead of the rows", () => {
+    const rows = state.from_w<string[]>(["Alpha"]);
+    const container = names_list(rows, true);
+    rows.set_err("broken");
+    in_one_column(container);
+    expect(container.querySelector("list-rowserror")!.textContent).toBe(
+      "broken",
+    );
+  });
+
+  it("shows the fields again when an invalid row becomes valid", () => {
+    const rows = state.ok_w(["bad"]);
+    const container = list.container(
+      { name: list.column_string("Name") },
+      (name: string) =>
+        name === "bad" ? err("Invalid") : ok({ values: { name } }),
+      rows,
+      { sub_rows: true },
+    );
+    document.body.append(container);
+    const key = container.querySelector("list-row list-keyfield")!;
+    expect(key.classList.contains("tail")).toBe(true);
+    rows.set_ok(["good"]);
+    expect(key.classList.contains("tail")).toBe(false);
+    expect(key.querySelector("list-error")).toBeNull();
+    expect(container.querySelector("list-row")!.textContent).toContain("good");
+  });
+});
