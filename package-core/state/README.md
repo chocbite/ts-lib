@@ -387,12 +387,15 @@ list.array.push(4); // [1, 2, 3, 4]
 list.array.unshift(0); // [0, 1, 2, 3, 4]
 list.array.pop(); // [0, 1, 2, 3]
 list.array.shift(); // [1, 2, 3]
-list.array.insert(1, [99]); // [1, 99, 2, 3]
-list.array.remove(0, 1); // [99, 2, 3]
+list.array.splice(1, 0, 99); // [1, 99, 2, 3]
+list.array.splice(0, 1); // [99, 2, 3]
 list.array.change(0, 50); // [50, 2, 3]
+list.array.move(0, 2); // [2, 3, 50]
+list.array.delete(3); // [2, 50]  (removes by value)
+list.array.sort((a, b) => a - b);
 ```
 
-Each mutation is tracked with metadata (`added`, `removed`, `changed`, `fresh`).
+Each mutation is tracked with metadata (`added`, `removed`, `changed`, `moved`, `fresh`).
 
 ### Object
 
@@ -401,8 +404,9 @@ States holding objects get field-level mutation helpers:
 ```typescript
 const obj = state.rosw(ok({ a: 1, b: 2 }));
 
-obj.object.set({ a: 10 }); // { a: 10, b: 2 }
-obj.object.remove("b"); // { a: 10 }
+obj.object.change("a", 10); // { a: 10, b: 2 }
+obj.object.add("c", 3); // { a: 10, b: 2, c: 3 }
+obj.object.remove("b"); // { a: 10, c: 3 }
 ```
 
 Each mutation is tracked with metadata (`added`, `removed`, `changed`, `fresh`).
