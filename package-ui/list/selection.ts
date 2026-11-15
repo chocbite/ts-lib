@@ -26,6 +26,9 @@ export interface ListSelectionRow {
  * keys of rows it does not show are left alone, except by select all and deselect all which replace the selection */
 export class ListSelection<K> {
   readonly multi: boolean;
+  /**Whether the rows get a checkbox or radio button column
+   * Left out in single mode with a key column, a click on the row selects and the key field is the keyboard cell */
+  readonly column: boolean;
   readonly key: (data: any) => K;
   /**Called after a change of the shown selection or of the selectable rows */
   on_change?: () => void;
@@ -47,8 +50,13 @@ export class ListSelection<K> {
   #batch = 0;
   #changed = false;
 
-  constructor(options: ListSelectionOptions<any, K>, box: Element) {
+  constructor(
+    options: ListSelectionOptions<any, K>,
+    box: Element,
+    key_column: boolean,
+  ) {
     this.multi = options.mode === "multi";
+    this.column = this.multi || !key_column;
     this.key = options.key ?? ((data) => data as K);
     this.#box = box;
   }

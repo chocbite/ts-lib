@@ -306,7 +306,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
 {
   const sec = section(
     "Key field only, no value columns",
-    "A list with only the key column, the names are key field text. The rows must stay under each other, the add rows and the invalid row run from the key column to the end, after the tree lines. Open Beta for its sub rows and their add row. Add rows until the error row shows instead of the rows",
+    "A list with only the key column, the names are key field text. The key column fills the box. The rows must stay under each other, the add rows and the invalid row run from the key column to the end, after the tree lines. Open Beta for its sub rows and their add row. Add rows until the error row shows instead of the rows",
   );
   const rows = state.from_w<string[]>(["Alpha", "Beta", "invalid", "Gamma"]);
   let count = 0;
@@ -596,7 +596,7 @@ function sel_list(
 {
   const sec = section(
     "Selection",
-    "Single shows radio buttons, multi shows checkboxes, check that both are easy to hit in touch mode. Click on a row selects only it, ctrl click toggles, shift click selects a range (multi). A checkbox toggles its row without clearing the others, the header checkbox selects all or clears and shows some or all, right click or long press on it for a select all / deselect all menu. Right click only opens the menu, it never changes the selection. The row menu gets select or deselect (and select all / deselect all in multi) in front of its own line. Row 2 is not selectable, its cell stays empty. Keyboard in the checkbox and radio cells: arrows only move the focus, space selects or toggles, escape clears, ctrl+a selects all (multi). Remove and reverse should keep the selection on the same names. Removing a selected row does not change the state, Reset brings it back selected",
+    "Single shows radio buttons, multi shows checkboxes, check that both are easy to hit in touch mode. Click on a row selects only it, ctrl click toggles, shift click selects a range (multi). A checkbox toggles its row without clearing the others, the header checkbox selects all or clears and shows some or all, right click or long press on it for a select all / deselect all menu. Right click only opens the menu, it never changes the selection. The row menu gets select or deselect (and select all / deselect all in multi) in front of its own line. Row 2 is not selectable, its cell stays empty and selecting it shows a warning. Keyboard in the checkbox and radio cells: arrows only move the focus, space selects or toggles, escape clears, ctrl+a selects all (multi). Remove and reverse should keep the selection on the same names. Removing a selected row does not change the state, Reset brings it back selected",
   );
   const rows = state.ok_w(sel_tree(6, 0));
   controls(sec, {
@@ -642,7 +642,7 @@ function sel_list(
 {
   const sec = section(
     "Selection with sub rows",
-    "The keyboard works in the key field here. Arrows only move the focus, space selects or toggles, shift+arrows extend (multi), enter opens and closes. The row menu has open or close in front of the select lines. Closing a row hides its selected sub rows but keeps them in the state, opening shows them selected again. The buttons write the state like app code, keys of hidden sub rows show once their row is opened",
+    "The keyboard works in the key field here. Single has no radio buttons, the key field and a click on the row are enough. Arrows only move the focus, space selects or toggles, shift+arrows extend (multi), enter opens and closes. The row menu has open or close in front of the select lines. Closing a row hides its selected sub rows but keeps them in the state, opening shows them selected again. The buttons write the state like app code, keys of hidden sub rows show once their row is opened",
   );
   const r = row(sec);
   for (const mode of ["single", "multi"] as const) {

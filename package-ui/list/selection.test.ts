@@ -729,6 +729,31 @@ describe("List selection checkboxes and radio buttons", () => {
     ).toBeNull();
   });
 
+  it("are left out in single mode with a key column, the row and its key field select", () => {
+    const container = create([item(1), item(2)], { mode: "single" }, true);
+    const rows = rows_of(container);
+    expect(container.querySelector("list-checkfield")).toBeNull();
+    const box = container.firstElementChild as HTMLElement;
+    expect(box.style.gridTemplateColumns).toBe("max-content auto");
+    expect(key_field(rows[0]).getBoundingClientRect().left).toBe(
+      container.getBoundingClientRect().left,
+    );
+    click(cell(rows[0]));
+    expect(ids(container)).toEqual([1]);
+    expect(document.activeElement).toBe(key_field(rows[0]));
+    key(key_field(rows[0]), "ArrowDown");
+    key(key_field(rows[1]), " ");
+    expect(ids(container)).toEqual([2]);
+  });
+
+  it("stay in multi mode with a key column", () => {
+    const container = create([item(1), item(2)], {}, true);
+    expect(check(rows_of(container)[0])).not.toBeNull();
+    expect(
+      container.querySelector("list-headerrow > list-checkfield"),
+    ).not.toBeNull();
+  });
+
   it("are the keyboard cell without sub rows in single mode too", () => {
     const container = create([item(1), item(2)], { mode: "single" });
     const rows = rows_of(container);
@@ -924,5 +949,62 @@ describe("List selection in the row menu", () => {
     expect(texts()).toEqual(["Open"]);
     choose("Open");
     expect(row.open).toBe(true);
+  });
+});
+
+describe("List selection of a row that can not be selected", () => {
+  const warning = (container: HTMLElement) =>
+    container.querySelector<HTMLInputElement>("input.list-warn")
+      ?.validationMessage ?? "";
+
+  it("warns when the row is clicked", () => {
+    const container = create([{ ...item(1), selectable: false }]);
+    click(cell(rows_of(container)[0]));
+    expect(warning(container)).toBe("This row cannot be selected");
+    expect(ids(container)).toEqual([]);
+  });
+
+  it("moves the focus before the warning, the browser closes the warning when the focus moves", () => {
+    for (const sub_rows of [false, true]) {
+      const container = create(
+        [{ ...item(1), selectable: false }],
+        {},
+        sub_rows,
+      );
+      const row = rows_of(container)[0];
+      const shown_with = vi.spyOn(HTMLInputElement.prototype, "reportValidity");
+      let focus_at_warning: Element | null = null;
+      shown_with.mockImplementation(function (this: HTMLInputElement) {
+        focus_at_warning = document.activeElement;
+        return false;
+      });
+      for (const target of [cell(row), check(row)].filter(Boolean)) {
+        focus_at_warning = null;
+        (document.activeElement as HTMLElement | null)?.blur();
+        click(target);
+        expect(focus_at_warning).not.toBeNull();
+        expect(document.activeElement).toBe(focus_at_warning);
+      }
+      shown_with.mockRestore();
+      container.remove();
+    }
+  });
+
+  it("warns when its checkbox or radio button cell is clicked", () => {
+    const container = create([{ ...item(1), selectable: false }]);
+    click(check(rows_of(container)[0]));
+    expect(warning(container)).toBe("This row cannot be selected");
+  });
+
+  it("warns on space in its keyboard cell", () => {
+    const container = create([{ ...item(1), selectable: false }], {}, true);
+    key(key_field(rows_of(container)[0]), " ");
+    expect(warning(container)).toBe("This row cannot be selected");
+  });
+
+  it("warns for an invalid row", () => {
+    const container = create([{ ...item(1), invalid: true }]);
+    click(rows_of(container)[0].querySelector("list-error")!);
+    expect(warning(container)).toBe("This row cannot be selected");
   });
 });

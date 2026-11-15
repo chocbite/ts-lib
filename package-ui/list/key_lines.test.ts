@@ -1,5 +1,6 @@
 import { theme_init } from "#theme";
 import { ok } from "@chocbite/ts-lib/result";
+import { state } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it } from "vitest";
 import list from ".";
 import { ListKeyField, type ListKeyFieldOptions } from "./key_field";
@@ -161,5 +162,56 @@ describe("List key field lines", () => {
         0,
       );
     }
+  });
+});
+
+describe("List key field lines of an error instead of rows", () => {
+  /**Vertical line of the error, full height when the line continues below, half when it ends in the middle */
+  function error_line(container: HTMLElement) {
+    const key = container.querySelector<HTMLElement>(
+      "list-rowserror > list-keyfield",
+    )!;
+    const line = parseFloat(
+      getComputedStyle(opener(key as ListKeyField<any>), "::before").height,
+    );
+    return line / opener(key as ListKeyField<any>).clientHeight;
+  }
+  function errored(add: boolean, sub: boolean) {
+    const rows = state.from_w<string[]>(["a"]);
+    const sub_rows = state.from_w<string[]>(["b"]);
+    const container = list.container(
+      { name: list.column_string("Name") },
+      (name: string) =>
+        ok({
+          openable: name === "a",
+          opened: true,
+          sub_rows: () => sub_rows,
+          add_row:
+            sub && add ? { text: "Add sub", on_add: () => {} } : undefined,
+          values: { name },
+        }),
+      rows,
+      {
+        sub_rows: true,
+        add_row: !sub && add ? { text: "Add", on_add: () => {} } : undefined,
+      },
+    );
+    document.body.append(container);
+    (sub ? sub_rows : rows).set_err("broken");
+    return container;
+  }
+
+  it("continues the line down to the add row after the error", () => {
+    expect(error_line(errored(true, false))).toBeCloseTo(1, 1);
+  });
+
+  it("continues the line down to the add row of the parent after the error of its sub rows", () => {
+    expect(error_line(errored(true, true))).toBeCloseTo(1, 1);
+  });
+
+  it("ends the line in the middle of the error without an add row", () => {
+    expect(error_line(errored(false, false))).toBeCloseTo(0.5, 1);
+    document.body.replaceChildren();
+    expect(error_line(errored(false, true))).toBeCloseTo(0.5, 1);
   });
 });

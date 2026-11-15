@@ -124,6 +124,8 @@ list-container > input.list-warn {
   visibility: hidden;
   position: absolute;
   pointer-events: none;
+  height: 0px;
+  width: 0px;
 }
 
 //      _      ______          _____

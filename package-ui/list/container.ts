@@ -135,7 +135,7 @@ class HeaderRow<
     }
     if (root.reorder) this.#drag_header = new ListDragField();
     const selection = root.selection;
-    if (selection) this.#check_header = new ListCheckField();
+    if (selection?.column) this.#check_header = new ListCheckField();
     if (selection?.multi) {
       const check = this.#check_header!;
       check.onclick = () => {
@@ -239,18 +239,21 @@ class Container<
       this.#box.classList.add("drag");
     }
     if (options?.selection) {
-      this.#selection = new ListSelection(options.selection, this.#child_box);
-      this.#root.selection = this.#selection;
-      this.#box.classList.add(
-        "check",
-        this.#selection.multi ? "multi" : "single",
+      this.#selection = new ListSelection(
+        options.selection,
+        this.#child_box,
+        Boolean(options.sub_rows),
       );
+      this.#root.selection = this.#selection;
+      if (this.#selection.column) this.#box.classList.add("check");
+      this.#box.classList.add(this.#selection.multi ? "multi" : "single");
       this.#selection.on_error = (row, message) =>
         warn!.show(row?.anchor ?? this.#header ?? this.#box, message);
     }
     //Columns in front of the key field column, the error and add rows start after them
     const lead =
-      Number(Boolean(options?.reorder)) + Number(Boolean(options?.selection));
+      Number(Boolean(options?.reorder)) +
+      Number(Boolean(this.#selection?.column));
     if (lead) this.#box.classList.add("lead-" + lead);
 
     if (!options?.headless)
@@ -322,7 +325,9 @@ class Container<
   #update_column_widths() {
     const widths: string[] = this.#root.columns_visible.map((key) => {
       const col = this.#root.columns.get(key)!;
-      const width = col.fixed_width ?? col.init_width;
+      //Without a header nothing can resize, so init_width, the start of a resize, does not apply
+      const width =
+        col.fixed_width ?? (this.#header ? col.init_width : undefined);
       if (width) {
         if (width === "min") return "min-content";
         else if (width === "max") return "max-content";
@@ -331,7 +336,9 @@ class Container<
       return "auto";
     });
     //The key fields get the width instead of the column, so it never gets smaller than its widest key field minimum
-    if (this.#root.sub_rows) widths.unshift("max-content");
+    //Without value columns it fills the list unless resized
+    if (this.#root.sub_rows)
+      widths.unshift(widths.length || this.#key_width ? "max-content" : "auto");
     this.#box.classList.toggle("key-sized", Boolean(this.#key_width));
     if (this.#key_width)
       this.#box.style.setProperty(
@@ -339,7 +346,7 @@ class Container<
         `${Math.max(this.#key_width, 1)}rem`,
       );
     else this.#box.style.removeProperty("--list-key-width");
-    if (this.#selection) widths.unshift("var(--list-check-width)");
+    if (this.#selection?.column) widths.unshift("var(--list-check-width)");
     if (this.#root.reorder) widths.unshift("var(--list-drag-width)");
     this.#box.style.gridTemplateColumns = widths.join(" ");
   }

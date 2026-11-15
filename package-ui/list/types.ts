@@ -29,7 +29,7 @@ export type ListDataType = (typeof ListDataType)[keyof typeof ListDataType];
 export type ListColumnAlign = "left" | "center" | "right";
 
 export interface ListColumnOptions<V, C extends ListField> {
-  /**Initial width of the column in rem, auto when undefined*/
+  /**Initial width of the column in rem, auto when undefined, ignored in a headless list as nothing can resize it*/
   init_width?: number;
   /**If the column has a fixed width in rem, overrides init_width and disables resizing*/
   fixed_width?: number | "min" | "max";

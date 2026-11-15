@@ -18,6 +18,9 @@ import type {
   ListType,
 } from "./types";
 
+/**Shown when the user tries to select a row that can not be selected */
+const NOT_SELECTABLE = "This row cannot be selected";
+
 export type ListSubRows<R> = () => R[] | State<R[]>;
 
 export interface ListRowOptions<R, T extends {}, S extends boolean> {
@@ -218,7 +221,12 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
         selection.focus_moved(focused.selection_key, e);
       return true;
     }
-    return selection ? selection.key_down(this.selection_key, e) : false;
+    if (!selection) return false;
+    if (e.key === " " && this.selection_key === undefined) {
+      selection.on_error?.(this, NOT_SELECTABLE);
+      return true;
+    }
+    return selection.key_down(this.selection_key, e);
   }
 
   //      _____       _______
@@ -429,27 +437,33 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   #selection_setup(selection: ListSelection<unknown>) {
     const clear_click_focus = (e: Event) =>
       (e.currentTarget as HTMLElement).classList.remove("click-focus");
-    this.#check = new ListCheckField();
-    //The key field is the keyboard cell when there is one
-    if (!this.#key_field) this.#check.tabIndex = 0;
-    this.#check.onkeydown = (e) => {
-      if (this.key_down(e)) e.preventDefault();
-    };
+    if (selection.column) {
+      this.#check = new ListCheckField();
+      //The key field is the keyboard cell when there is one
+      if (!this.#key_field) this.#check.tabIndex = 0;
+      this.#check.onkeydown = (e) => {
+        if (this.key_down(e)) e.preventDefault();
+      };
+      this.#check.onclick = (e) => {
+        e.stopPropagation();
+        //Focus first, moving the focus after the warning would close it
+        this.#focus_after_click();
+        if (this.selection_key !== undefined)
+          selection.check_click(this.selection_key);
+        else selection.on_error?.(this, NOT_SELECTABLE);
+      };
+    }
     for (const cell of [this.#check, this.#key_field])
       if (cell) {
         cell.addEventListener("keydown", clear_click_focus);
         cell.addEventListener("blur", clear_click_focus);
       }
-    this.#check.onclick = (e) => {
-      e.stopPropagation();
-      if (this.selection_key !== undefined)
-        selection.check_click(this.selection_key);
-      this.#focus_after_click();
-    };
     this.#field_box.onclick = (e) => {
+      //Focus first, moving the focus after the warning would close it
+      this.#focus_after_click();
       if (this.selection_key !== undefined)
         selection.click(this.selection_key, e);
-      this.#focus_after_click();
+      else selection.on_error?.(this, NOT_SELECTABLE);
     };
     //Shift click would select text between the rows
     this.#field_box.onmousedown = (e) => {
