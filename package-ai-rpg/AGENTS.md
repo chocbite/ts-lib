@@ -66,6 +66,7 @@ The build is a single self contained `dist/index.html`: code, css, fonts and ima
   - `later`: debounce by key with a flush, flushed when the page is hidden
   - `dom`: `el()`, make an element with a class and children
   - `local`: local storage that never throws, for conveniences
+  - `split`: two panes side by side with a divider dragged to resize the first, which can be hidden
   - `tree`: a keyed tree of states, every node its own state with an array state of its children's states, maps directly to a `list` with sub rows
 - Game modules:
   - `world`: the world tree of locations, characters and items, the change list and applying it

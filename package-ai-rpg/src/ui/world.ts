@@ -2,6 +2,7 @@
 //The list's rows are the thing states of the engine and its sub rows their children states, a change refreshes only its row.
 import { ENGINE } from "#engine";
 import { local_get, local_set } from "#lib/local";
+import { split } from "#lib/split";
 import {
   FIELDS,
   Kind,
@@ -27,6 +28,7 @@ import state, { type StateROS } from "@chocbite/ts-lib/state";
 import { el, field, icon_button, panel, toast } from "./common";
 
 const SIDEBAR_KEY = "ai-rpg/editor-sidebar";
+const SIZE_KEY = "ai-rpg/editor-sidebar-size";
 
 const ICONS = {
   [Kind.Location]: material_location_on_rounded,
@@ -82,19 +84,25 @@ async function add(kind: Kind, parent: Id): Promise<Id | undefined> {
 export function world_panel(select?: Id) {
   if (!ENGINE.game.ok()) return;
   const p = panel("World", true);
-  const layout = p.body.appendChild(el("div", "editor"));
-  const sidebar = layout.appendChild(el("div", "editor-sidebar"));
-  const details = layout.appendChild(el("div", "editor-details"));
-
-  //The sidebar is shown or hidden as it was last time
+  const sidebar = el("div", "editor-sidebar");
+  const details = el("div", "editor-details");
+  //The width of the list and whether it is shown are kept from last time
+  const layout = split(sidebar, details, {
+    size: Number(local_get(SIZE_KEY)) || 18,
+    min: 10,
+    max: 40,
+    on_size: (size) => local_set(SIZE_KEY, String(size)),
+  });
+  layout.element.classList.add("editor");
+  p.body.append(layout.element);
   const toggle = (show: boolean) => {
-    layout.classList.toggle("no-sidebar", !show);
+    layout.first_shown = show;
     local_set(SIDEBAR_KEY, show ? undefined : "hidden");
   };
   toggle(local_get(SIDEBAR_KEY) !== "hidden");
   p.actions.append(
     icon_button(material_side_navigation_rounded, "Show or hide the list", () =>
-      toggle(layout.classList.contains("no-sidebar")),
+      toggle(!layout.first_shown),
     ),
   );
 
