@@ -56,16 +56,93 @@ Open: can the builder be opened on a running game, to change the world between r
 
 The game owns the state, not the chat history. Every prompt is built from the state each round, so contexts stay short and do not grow without limit. Stable parts first (bio, personality) and changing parts last, so the server can reuse its cache of the prompt start.
 
-Proposed model, a starting point:
-
-```
-Game      { id, name, created, updated, time, phase, locations[], characters[] }
-Character { id, name, icon, bio, personality, goals, location, memories[], relationships{id → { known_as, opinion }}, controller: "player" | "ai", gone }
-Location  { id, name, description, image? }
-Round     { game, n, actions{character → text}, rolls[], story[], changes[], applied }
-```
+The world is a tree of things, see [World tree](#world-tree). Rounds are kept apart from it, see [State and storage model](#state-and-storage-model).
 
 A character's memories hold only what it witnessed or was told, that is what keeps characters from knowing everything. The scribes write them.
+
+## World tree
+
+Decided, built.
+
+The whole world is one tree, like a file system. Every node is a **thing** of one kind:
+
+- **Location**: a place. Locations nest, a town holds a house, the house a room. Locations go only in locations, or at the top level.
+- **Character**: goes in anything, a location, another character (a tiny one in a pocket) or an item (in a chest). Never at the top level.
+- **Item**: goes in anything, items hold items (a bag in a chest). Never at the top level.
+
+Nothing goes into itself or anything inside it. There can be several top level locations.
+
+- Every thing has `parent` (empty at the top level) and `children`, the ids inside it in order. The order is kept and can be changed by hand. The game record holds the order of the top level, `roots`.
+- Moving is one operation for everything: walking somewhere, picking something up, handing it over and hiding in a chest all change the parent (`move`).
+- A removed thing leaves the tree: it is taken out of its parent, marked `gone` and kept, so its id is never reused and old story text still links to it. Only things with nothing inside can be removed.
+
+### What characters perceive
+
+- A character's **place** is the nearest location above it. The **scene** of a round is everyone in the same place, that decides the cast.
+- A character is told the path to where it is ("in [Hale]'s coat pocket, in the Market Square, in Ashencross").
+- It sees what is directly in its place: the characters, the items (the chest, not what is in it) and the locations inside it, which are the exits, along with the location around it.
+- It knows everything inside itself, its own items, bags included.
+- Things inside a character or an item are hidden from everyone except whoever holds them and whoever is inside with them. A character inside something sees what is in there with it.
+- The storyteller and the scribes see the whole scene, everything inside the place, and the locations of the world.
+
+### Editor
+
+One world editor, a dialog with a sidebar (can be hidden) holding the tree in a `list`, and a form for the selected thing on the right.
+
+- Each kind has an icon in the list, and the form has the fields of its kind.
+- Single selection, the selection state holds ids.
+- The row context menu adds a location, character or item inside the row, and removes. New top level locations come from a button under the list.
+- Rows are reordered by dragging inside their parent, a move writes a `move` change. Moving to another parent is done in the form. See [Depends on the library](#depends-on-the-library) for dragging between parents.
+
+## Attributes, skills and time
+
+Decided, not built yet. The principle: **the LLMs pick, the code does the numbers**. LLMs are bad at arithmetic and at randomness.
+
+### Attributes
+
+- Values with a type: number (with a unit, "cm", "kg", "coins"), text or yes/no.
+- **Global attributes** are defined once per game: name, type, unit and the kinds of thing that can have them. So `height` means the same everywhere and a potion finds it.
+- **Local attributes** are defined on one thing, for what only it has (a sword's inscription, a chest's lock).
+- A thing stores only the values it has, a missing value is unknown.
+- Changed with `set_attribute` and `add_to_attribute`, the attribute given as an enum in the schema. The LLM says +5, the code adds and rejects nonsense (adding to text, a negative height).
+- Shown to LLMs with the unit, "Height: 185 cm".
+
+### Skills
+
+- A skill list per game, ids like `skill:climbing`. The builder makes it, the scribes can add skills.
+- Characters have a level per skill, 0 to 100, a missing skill is 0. Items give -100 to 100 to skills.
+- Only items **directly** inside a character count, what it holds or wears. A sword in a bag does not help, drawing it moves it to the character.
+
+### Skillcheck
+
+A step between the characters and the storyteller.
+
+1. An LLM gets the actions and the characters' skills, and returns per action: the character, the relevant skills (enum) and a difficulty word (trivial, easy, normal, hard, extreme), or no check for actions without risk.
+2. The code sums per skill the character's level and its items, takes the best skill, applies the difficulty as a fixed amount and rolls d100.
+3. The storyteller gets the results with the margin ("failed, barely") and writes the story around them.
+
+Cowriter mode shows the rolls and they can be changed before the storyteller runs.
+
+### Experience and levels
+
+- The scribes award experience per character in words (none, small, medium, large) with a reason, the code turns the word into a number. No cap per round.
+- The code levels characters up on a threshold curve, each level gives skill points.
+- A **level up phase** after the round, only when someone has points: the player spends them in a window, AI characters are asked in character which skills they raise. The code checks the total and the 100 limit.
+
+### Time
+
+- Time is a number, minutes since the game started, with a start day and hour set by the builder. Shown as "Day 3, 14:20".
+- **Effects** are changes with an end time: height +5 cm for an hour, climbing +20 until dawn. They are stored on the thing, a value is the base value plus the active effects, and the code drops effects whose time has passed. Nothing has to be undone. LLMs see "Height: 185 cm (180 + potion, 40 min left)".
+
+### Sub scribes
+
+One scribe for everything is too hard for one LLM, the work is split, in this order:
+
+1. **scribe_time**: only how much time passed, an amount and a unit. The code adds it.
+2. **scribe_world**: creates new characters, items and locations, and changes things outside characters (a broken door, a burned house). Runs before the character scribes so they can use the new ids.
+3. **scribe_character**, one per character in the scene, run together: its memories, experience, relationships, its own fields, where it went, what it picked up, dropped or handed over. When two take the same item, the changes apply in order and the second shows as a problem in the review.
+
+The cowriter review groups the changes by scribe.
 
 ### References
 
@@ -129,10 +206,10 @@ The cost of a change is the size of the change: only the changed things are copi
 
 Everything the UI shows is a library state owned by the engine. The UI gets read only views (`owner.read_only`), only the engine writes.
 
-- **One state per game object.** Every location and character is its own state, holding a plain object. Changing a location sets that location's state, only its subscribers hear about it.
-- **Collections are array states of those states**, `StateROS<StateROS<Location>[]>` for the UI (`Collection` in `src/lib/collection`). Adding a location inserts its state with the array helpers (`splice`), so a list only adds that row. Changing a location sets its state and marks its index as changed in the collection (`array.change` with the same state), so a list refreshes only that row, the array and the other items stay the same objects. Items are kept in order of id, which is also the order IndexedDB loads them in.
-- **Identity is stable.** A location's state is made once when the game loads or the location is added, and stays the same object for the rest of the session (a read only view is also always the same object). So the state itself identifies the location in the UI, a list selection can be the state, with no key function.
-- **The engine keeps an index by id**, a `Map<Id, owner>` per collection, for resolving ids in changes and prompts.
+- **One state per thing.** Every location, character and item is its own state, holding a plain object. Changing a thing sets that thing's state, only its subscribers hear about it.
+- **The tree is array states of those states** (`Tree` in `src/lib/tree`): every thing has a children state, an array state of the states of what is inside it, and one roots state holds the top level. These map directly to a `list`, the roots state is the rows and a row's children state its sub rows. A change to the children is written with the array helpers (`splice`, `move`), so a list only adds, removes or moves those rows. Changing a thing sets its state and marks its index as changed in its parent's children state (`array.change` with the same state), so a list refreshes only that row.
+- **Identity is stable.** A thing's state is made once when the game loads or the thing is added, and stays the same object for the rest of the session (a read only view is also always the same object).
+- **The engine keeps an index by id**, a `Map<Id, owner>`, for resolving ids in changes and prompts.
 - **Memories are an array state per character**, apart from the character, added to with `push`. Prompts take the last ones.
 - **Rounds**: the current round is one state, the finished rounds an array state that is only pushed to. A finished round never changes, so its value is a plain object.
 - **Game details** (name, time, round number) are one small state.
@@ -153,7 +230,7 @@ The cowriter review uses step 1 alone, to show which changes will be skipped and
 Every record holds one thing, so a save writes only what changed:
 
 - `games`: game details, keyed by game id. Small.
-- `locations`, `characters`: one record per object, keyed by `[game, id]`. Characters without their memories.
+- `things`: one record per location, character or item, keyed by `[game, id]`. Characters without their memories. A move writes the thing and both parents in one transaction.
 - `memories`: one record per memory, keyed by `[game, character, n]`, only ever added.
 - `rounds`: one record per round, keyed by `[game, n]`. The current one is rewritten while it runs, finished ones never.
 - `calls`: every LLM call, keyed by `[game, round, id]`, for debugging. Can be cleared without harming the game.
@@ -164,10 +241,9 @@ Loading a game reads its records once and makes the states. Save files stay one 
 
 ### Depends on the library
 
-To discuss with the user, nothing of this is built:
+To discuss with the user:
 
-- **Selection in `list`**: a `selected` option taking a writable state of the row value. With stable row identity no key function is needed.
-- **Rows that are states**: the location list's rows would be location states, and a row's fields would follow the state. Whether `list` should support state rows, or something else is meant for this, is the user's call.
+- **Dragging rows to another parent.** The list writes it as two writes, an insert into the target and then `splice(index, count)` on the source. In the world tree a thing has one parent, so the engine moves it on the insert, and the removal by index would then hit whatever took its place. Suggested: a single move between parents write, or a removal that names its items. Until decided, children states take only `move` writes inside a parent and reject the insert with a message.
 
 ## AI server
 
@@ -198,7 +274,7 @@ Decided while building:
 
 Not built yet: dice rolls, images, a story log of earlier rounds, editing characters outside the builder, opening the builder on a running game, a way to tune prompts without code.
 
-Known problems: the location editor works around the missing selection in `list` (handlers and a class on the row elements), which must go once the library's selection is ready.
+Known problems: dragging a row to another parent in the world editor is rejected, see [Depends on the library](#depends-on-the-library).
 
 ## Open questions
 

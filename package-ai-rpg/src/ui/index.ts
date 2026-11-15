@@ -9,10 +9,10 @@ import ctm from "@chocbite/ts-lib-ui/context-menu";
 import { builder_panel } from "./builder";
 import { panel_close, toast } from "./common";
 import { debug_panel } from "./debug";
-import { locations_panel } from "./locations";
 import { play_view } from "./play";
 import { review_panel } from "./review";
 import { settings_panel } from "./settings";
+import { world_panel } from "./world";
 import "./style.scss";
 import "./theme";
 
@@ -55,7 +55,7 @@ function menu(button: HTMLElement) {
           })
         : undefined,
       ctm.devider(),
-      game ? ctm.line("Locations", () => locations_panel()) : undefined,
+      game ? ctm.line("World", () => world_panel()) : undefined,
       game ? ctm.line("Debug log", debug_panel) : undefined,
       ctm.line("Settings", settings_panel),
       game ? ctm.sub("Delete this game", ctm.menu([ctm.line(`Yes, delete ${game.name}`, () => delete_game(game.id))])) : undefined,

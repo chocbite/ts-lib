@@ -443,16 +443,6 @@ body {
   gap: 0.5rem;
   min-height: 0;
   overflow-y: auto;
-  list-row {
-    cursor: pointer;
-  }
-  //The list has no selection of its own
-  list-row.selected > div > * {
-    background-color: rgb(100 140 255 / 0.35) !important;
-  }
-  list-row.gone {
-    opacity: 0.6;
-  }
 }
 .editor-details {
   min-height: 0;

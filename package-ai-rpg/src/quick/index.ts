@@ -1,5 +1,5 @@
 //A ready made game for development, so the rounds can be tried without the game builder.
-//Has two characters named Edric on purpose, to keep the ids honest.
+//Has two characters named Edric on purpose, to keep the ids honest, and nesting at every level: locations in locations, items in items, a character in a character.
 import type { BuilderReply } from "#prompts";
 
 export const QUICK_GAME: BuilderReply = {
@@ -8,22 +8,45 @@ export const QUICK_GAME: BuilderReply = {
   changes: [
     {
       op: "add_location",
-      id: "new:goose",
-      name: "The Wayward Goose",
-      description: "A low-beamed roadside inn at the crossroads, warm and smoky, with a crooked stair to the rooms above",
+      id: "new:crossroads",
+      name: "Ashen Crossroads",
+      description: "A hamlet where three old roads meet, grey with ash from the charcoal burners in the hills",
+      in: "",
     },
     {
       op: "add_location",
-      id: "new:mill",
-      name: "The Old Mill",
-      description: "A creaking watermill by the river, half a mile east, its wheel turning even at night",
+      id: "new:goose",
+      name: "The Wayward Goose",
+      description: "A low-beamed roadside inn at the crossroads, warm and smoky, with a crooked stair to the rooms above",
+      in: "new:crossroads",
+    },
+    {
+      op: "add_location",
+      id: "new:cellar",
+      name: "The Goose's cellar",
+      description: "A cold cellar under the inn, smelling of beer and damp earth, reached by a trapdoor behind the counter",
+      in: "new:goose",
     },
     {
       op: "add_location",
       id: "new:square",
       name: "Market Square",
       description: "A muddy square with a dry well in the middle and shuttered stalls around it",
+      in: "new:crossroads",
     },
+    {
+      op: "add_location",
+      id: "new:mill",
+      name: "The Old Mill",
+      description: "A creaking watermill by the river, half a mile east of the crossroads, its wheel turning even at night",
+      in: "",
+    },
+    { op: "add_item", id: "new:counter-chest", name: "Iron-bound chest", description: "A heavy chest behind the counter, always locked", in: "new:goose" },
+    { op: "add_item", id: "new:ledger", name: "Guest ledger", description: "Edric's thick ledger of every guest for twenty years", in: "new:counter-chest" },
+    { op: "add_item", id: "new:satchel", name: "Ink-stained satchel", description: "Tamsin's leather satchel", in: "new:tamsin" },
+    { op: "add_item", id: "new:map", name: "Unfinished map", description: "A half-drawn map of the crossroads, the mill marked with a question mark", in: "new:satchel" },
+    { op: "add_item", id: "new:compass", name: "Brass compass", description: "A surveyor's compass, its needle a little unsteady near the river", in: "new:satchel" },
+    { op: "add_item", id: "new:coat", name: "Grey warden's coat", description: "Captain Hale's heavy cloak, with deep pockets", in: "new:hale" },
     {
       op: "add_character",
       id: "new:tamsin",
@@ -33,7 +56,7 @@ export const QUICK_GAME: BuilderReply = {
       bio: "Tamsin maps roads for the river guilds. Her last commission sent her to chart the crossroads, where three surveyors before her went missing.",
       personality: "Curious, dry-humoured, stubborn when told no",
       goals: "Finish the map of the crossroads and find out what happened to the missing surveyors",
-      location: "new:goose",
+      in: "new:goose",
       controller: "player",
     },
     {
@@ -45,7 +68,7 @@ export const QUICK_GAME: BuilderReply = {
       bio: "Has run the Goose for twenty years. Knows every traveller who passes, and keeps a ledger of who stayed and who never left.",
       personality: "Friendly on the surface, careful, protective of his inn",
       goals: "Keep his inn out of trouble, and keep the ledger hidden",
-      location: "new:goose",
+      in: "new:goose",
     },
     {
       op: "add_character",
@@ -56,7 +79,7 @@ export const QUICK_GAME: BuilderReply = {
       bio: "Runs the old mill alone. The missing surveyors all asked him about the river before they vanished.",
       personality: "Gruff, suspicious of strangers, sentimental about the past",
       goals: "Be left alone, and keep anyone from looking under the mill",
-      location: "new:mill",
+      in: "new:mill",
     },
     {
       op: "add_character",
@@ -67,7 +90,7 @@ export const QUICK_GAME: BuilderReply = {
       bio: "An orphan who does odd jobs for Edric the innkeeper and steals from guests when the jobs run out. Saw one of the surveyors leave for the mill at night.",
       personality: "Quick, cheeky, scared of the miller",
       goals: "Get enough coin to leave the crossroads",
-      location: "new:goose",
+      in: "new:goose",
     },
     {
       op: "add_character",
@@ -78,7 +101,18 @@ export const QUICK_GAME: BuilderReply = {
       bio: "Responsible for the roads, he closed the surveyor cases as accidents. He is paid by someone to keep them closed.",
       personality: "Polite, impatient, quick to threaten",
       goals: "Keep questions about the surveyors quiet",
-      location: "new:square",
+      in: "new:square",
+    },
+    {
+      op: "add_character",
+      id: "new:pip",
+      name: "Pip",
+      description: "a thumb-sized hob who lives in Captain Hale's coat pocket",
+      appearance: "a tiny grey-skinned creature no taller than a thumb",
+      bio: "A hob who climbed into the warden's pocket years ago for the warmth and the gossip. Hale does not know Pip is there.",
+      personality: "Nosy, cowardly, loves secrets more than food",
+      goals: "Learn who pays Captain Hale, and stay warm",
+      in: "new:coat",
     },
     { op: "set_relationship", character: "new:edric", other: "new:edric-miller", known_as: "Old Edric", opinion: "his cousin, a bitter man he pities" },
     { op: "set_relationship", character: "new:edric-miller", other: "new:edric", known_as: "Young Edric", opinion: "his cousin, too friendly with strangers" },

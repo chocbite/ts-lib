@@ -2,8 +2,8 @@
 //Everything the UI shows comes from the states here, everything the player does goes through the methods here.
 //Every game object is its own state, a change sets only the states of what changed and saves only those records,
 //see State and storage model in DESIGN.md.
-import { ActionSource, Phase, type Call, type Game, type MemoryRecord, type Round } from "#game";
-import { Collection } from "#lib/collection";
+import { ActionSource, Phase, type Call, type Game, type MemoryRecord, type Round, type ThingRecord } from "#game";
+import { Tree, type TreeRows } from "#lib/tree";
 import { id_random } from "#lib/ids";
 import { later } from "#lib/later";
 import { llm_chat, llm_json, type LlmMessage, type LlmReply } from "#lib/llm";
@@ -23,16 +23,15 @@ import { store_load, store_put_call, store_put_round, store_write, type GameWrit
 import {
   Controller,
   world_apply,
-  world_characters,
   world_chunks_ids,
   world_empty,
+  WorldRead,
   type Change,
   type Character,
   type Chunk,
   type Id,
-  type Location,
+  type Thing,
   type WorldApplied,
-  type WorldRead,
 } from "#world";
 import { err, ok, type Result } from "@chocbite/ts-lib/result";
 import state, { type StateLocalROS, type StateROS } from "@chocbite/ts-lib/state";
@@ -45,12 +44,12 @@ export interface Running {
   reasoning: string;
 }
 
-/**Characters taking part in a round: the living player characters and the AI characters where they are*/
+/**Characters taking part in a round: the living player characters and the AI characters in their places*/
 function cast_of(world: WorldRead): Id[] {
-  const living = world_characters(world);
+  const living = world.characters();
   const players = living.filter((c) => c.controller === Controller.Player);
-  const places = new Set(players.map((c) => c.location));
-  return [...players, ...living.filter((c) => c.controller === Controller.Ai && places.has(c.location))].map((c) => c.id);
+  const places = new Set(players.map((c) => world.place(c.id)?.id));
+  return [...players, ...living.filter((c) => c.controller === Controller.Ai && places.has(world.place(c.id)?.id))].map((c) => c.id);
 }
 
 const new_round = (game: string, n: number, world: WorldRead): Round => ({
@@ -67,24 +66,54 @@ const new_round = (game: string, n: number, world: WorldRead): Round => ({
 const without_thinking = (text: string) => text.replace(/^\s*<think>[\s\S]*?<\/think>\s*/, "");
 
 /**Strips the game id stored with world records*/
-const without_game = <T extends { game: string }>({ game: _game, ...rest }: T) => rest;
+const without_game = ({ game: _game, ...rest }: ThingRecord) => rest;
+
+/**The world of the loaded game, read from the states of the engine without copying*/
+class EngineWorld extends WorldRead {
+  readonly #game: StateROS<Game | undefined>;
+  readonly #tree: Tree<Thing>;
+  readonly #memories: Map<Id, StateROS<string[]>>;
+  constructor(game: StateROS<Game | undefined>, tree: Tree<Thing>, memories: Map<Id, StateROS<string[]>>) {
+    super();
+    this.#game = game;
+    this.#tree = tree;
+    this.#memories = memories;
+  }
+  get time() {
+    return this.#game.ok()?.time ?? "";
+  }
+  get roots() {
+    return this.#game.ok()?.roots ?? [];
+  }
+  thing(id: Id) {
+    return this.#tree.value(id);
+  }
+  things() {
+    return this.#tree.values();
+  }
+  memories(id: Id) {
+    return this.#memories.get(id)?.ok() ?? [];
+  }
+}
 
 class Engine {
   readonly #game = state.ros(ok<Game | undefined>(undefined));
-  readonly #characters = new Collection<Character>();
-  readonly #locations = new Collection<Location>();
+  readonly #tree = new Tree<Thing>((parent, from, to, count) => this.#reorder(parent, from, to, count));
   /**Memories of each character, an array state that is only pushed to*/
   readonly #memories = new Map<Id, StateLocalROS<string[]>>();
   readonly #round = state.ros(ok<Round | undefined>(undefined));
   readonly #history = state.ros(ok<Round[]>([]));
   readonly #running = state.ros(ok<{ [key: string]: Running }>({}));
+  /**Counts changes to the world*/
+  readonly #changed = state.ros(ok(0));
 
   /**Details of the loaded game, undefined when none is*/
   readonly game = this.#game.read_only;
-  /**Characters of the loaded game, removed ones too, each a state that stays the same object*/
-  readonly characters = this.#characters.list;
-  /**Locations of the loaded game, removed ones too, each a state that stays the same object*/
-  readonly locations = this.#locations.list;
+  /**Things at the top level of the world, each a state that stays the same object.
+   * Writing a move to it, or to the children of a thing, moves things by hand.*/
+  readonly roots: TreeRows<Thing> = this.#tree.roots;
+  /**Changes whenever anything in the world changes, for views showing a little of everything*/
+  readonly changed = this.#changed.read_only;
   /**The current round*/
   readonly round = this.#round.read_only;
   /**Finished rounds in order, only ever added to*/
@@ -93,24 +122,15 @@ class Engine {
   readonly running = this.#running.read_only;
 
   /**The world of the loaded game, read from the states without copying*/
-  readonly world: WorldRead = ((game, characters, locations, memories) => ({
-    get time() {
-      return game.ok()?.time ?? "";
-    },
-    character: (id: Id) => characters.value(id),
-    location: (id: Id) => locations.value(id),
-    characters: () => characters.values(),
-    locations: () => locations.values(),
-    memories: (id: Id) => memories.get(id)?.ok() ?? [],
-  }))(this.#game, this.#characters, this.#locations, this.#memories);
+  readonly world: WorldRead = new EngineWorld(this.#game, this.#tree, this.#memories);
 
-  /**State of a character*/
-  character(id: Id): StateROS<Character> | undefined {
-    return this.#characters.get(id);
+  /**State of a thing*/
+  thing(id: Id): StateROS<Thing> | undefined {
+    return this.#tree.get(id);
   }
-  /**State of a location*/
-  location(id: Id): StateROS<Location> | undefined {
-    return this.#locations.get(id);
+  /**States of what is in a thing, writing a move to it reorders them*/
+  children(id: Id): TreeRows<Thing> | undefined {
+    return this.#tree.children(id);
   }
 
   #calls = new Map<string, AbortController>();
@@ -140,16 +160,16 @@ class Engine {
     const records = await store_load(id);
     if (records.err) return records;
     if (generation !== this.#generation) return err("Another game was loaded");
-    const { game, characters, locations, memories, rounds } = records.value;
-    this.#characters.reset(characters.map(without_game));
-    this.#locations.reset(locations.map(without_game));
-    const by_character = new Map<Id, string[]>(characters.map((c) => [c.id, []]));
+    const { game, things, memories, rounds } = records.value;
+    this.#tree.reset(things.map(without_game), game.roots);
+    const by_character = new Map<Id, string[]>(things.filter((t) => t.kind === "character").map((c) => [c.id, []]));
     for (const m of memories.sort((a, b) => a.n - b.n)) by_character.get(m.character)?.push(m.text);
     for (const [character, texts] of by_character) this.#memories.set(character, state.ros(ok(texts)));
     rounds.sort((a, b) => a.n - b.n);
     this.#history.set_ok(rounds.filter((r) => r.phase === Phase.Done));
     this.#round.set_ok(rounds.find((r) => r.phase !== Phase.Done));
     this.#game.set_ok(game);
+    this.#changed.set_ok(this.#changed.ok() + 1);
     this.#step();
     return ok(undefined);
   }
@@ -162,7 +182,16 @@ class Engine {
     if (problems.length) return err("The world has problems: " + problems.join("; "));
     const now = Date.now();
     const id = id_random();
-    const game: Game = { id, name: proposal.name || "Untitled", premise, created: now, updated: now, time: applied.time ?? "", round: 1 };
+    const game: Game = {
+      id,
+      name: proposal.name || "Untitled",
+      premise,
+      created: now,
+      updated: now,
+      time: applied.time ?? "",
+      round: 1,
+      roots: applied.roots ?? [],
+    };
     //The opening is the story of round 0, so the first round starts after it
     const opening: Round = {
       game: id,
@@ -175,8 +204,7 @@ class Engine {
     };
     const saved = await store_write(id, {
       game,
-      characters: applied.characters,
-      locations: applied.locations,
+      things: applied.things,
       memories: memory_records(id, applied, () => 0),
       rounds: [opening, new_round(id, 1, applied.world)],
     });
@@ -194,9 +222,9 @@ class Engine {
     this.#game.set_ok(undefined);
     this.#round.set_ok(undefined);
     this.#history.set_ok([]);
-    this.#characters.reset([]);
-    this.#locations.reset([]);
+    this.#tree.reset([], []);
     this.#memories.clear();
+    this.#changed.set_ok(this.#changed.ok() + 1);
   }
 
   //      _____  _           __     ________ _____
@@ -308,26 +336,36 @@ class Engine {
     const g = this.#g;
     if (!g) return err("No game is loaded");
     const generation = this.#generation;
-    const game: Game = { ...g, ...extra.game, time: applied.time ?? g.time, updated: Date.now() };
+    const game: Game = { ...g, ...extra.game, time: applied.time ?? g.time, roots: applied.roots ?? g.roots, updated: Date.now() };
     const memories = memory_records(g.id, applied, (id) => this.world.memories(id).length);
     const saved = await store_write(g.id, {
       ...extra,
       game,
-      characters: applied.characters,
-      locations: applied.locations,
+      things: applied.things,
       memories,
     });
     if (saved.err) return saved;
     if (generation !== this.#generation) return err("Another game was loaded");
     after?.();
-    for (const l of applied.locations) this.#locations.put(l);
-    for (const c of applied.characters) {
-      if (!this.#memories.has(c.id)) this.#memories.set(c.id, state.ros(ok<string[]>([])));
-      this.#characters.put(c);
-    }
-    for (const m of memories) this.#memories.get(m.character)?.array.push(m.text);
+    //The game first, the world reads the top level from it
     this.#game.set_ok(game);
+    for (const t of applied.things)
+      if (t.kind === "character" && !this.#memories.has(t.id)) this.#memories.set(t.id, state.ros(ok<string[]>([])));
+    this.#tree.put(applied.things, applied.roots);
+    for (const m of memories) this.#memories.get(m.character)?.array.push(m.text);
+    this.#changed.set_ok(this.#changed.ok() + 1);
     return ok(undefined);
+  }
+
+  /**Moves things inside one parent by hand, from a list
+   * @param parent empty for the top level*/
+  async #reorder(parent: Id, from: number, to: number, count: number): Promise<Result<void, string>> {
+    const ids = (parent ? (this.world.thing(parent)?.children ?? []) : this.world.roots).slice(from, from + count);
+    //Each move takes one thing out and puts it at its final index, moving down the last goes first
+    const moves: Change[] = ids.map((thing, k) => ({ op: "move", thing, in: parent, index: to + k }));
+    if (to > from) moves.reverse();
+    const moved = await this.edit_world(moves);
+    return moved.err ? moved : ok(undefined);
   }
 
   //      _____   ____  _    _ _   _ _____   _____
@@ -396,9 +434,8 @@ class Engine {
   }
 
   async #decide(character: Character) {
-    const r = this.#r!;
     const last = this.#history.ok().at(-1);
-    const reply = await this.#call("char:" + character.id, Roles.Character, prompt_character(this.world, r, character, last), undefined, character.id);
+    const reply = await this.#call("char:" + character.id, Roles.Character, prompt_character(this.world, character, last), undefined, character.id);
     if (reply.err) return;
     const text = without_thinking(reply.value.text).trim();
     if (this.#r?.phase === Phase.Characters && !this.#r.actions[character.id])

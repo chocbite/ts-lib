@@ -1,11 +1,11 @@
 //Storage of games in IndexedDB, and save files.
 //Every record holds one thing, so a save writes only what changed.
-import type { Call, CharacterRecord, Game, LocationRecord, MemoryRecord, Round } from "#game";
+import type { Call, Game, MemoryRecord, Round, ThingRecord } from "#game";
 import { Db } from "#lib/db";
 import { id_random } from "#lib/ids";
 import type { LlmMessage } from "#lib/llm";
 import type { BuilderReply } from "#prompts";
-import type { Character, Location } from "#world";
+import type { Thing } from "#world";
 import { err, ok, type Result } from "@chocbite/ts-lib/result";
 
 /**A game builder session*/
@@ -19,20 +19,19 @@ export interface Build {
   proposal?: BuilderReply;
 }
 
-//Version 2 split the world out of the game record, older databases are reset
+//Version 3 made the world a tree of things, older databases are reset
 const DB = await Db.open(
   "ai-rpg",
-  2,
+  3,
   {
     games: { key: "id" },
-    characters: { key: ["game", "id"] },
-    locations: { key: ["game", "id"] },
+    things: { key: ["game", "id"] },
     memories: { key: ["game", "character", "n"] },
     rounds: { key: ["game", "n"] },
     calls: { key: ["game", "round", "id"] },
     builds: { key: "id" },
   },
-  { reset_before: 2 },
+  { reset_before: 3 },
 );
 
 /**Shown when storage fails, so it is never silent*/
@@ -66,8 +65,7 @@ const prefix_range = (...prefix: IDBValidKey[]) => IDBKeyRange.bound(prefix, [..
 /**Everything stored for a game*/
 export interface GameRecords {
   game: Game;
-  characters: CharacterRecord[];
-  locations: LocationRecord[];
+  things: ThingRecord[];
   /**In order of character and number*/
   memories: MemoryRecord[];
   /**In order of number*/
@@ -81,18 +79,15 @@ export async function store_load(id: string): Promise<Result<GameRecords, string
   const game = await db().get<Game>("games", id);
   if (game.err) return game;
   if (!game.value) return err("The game does not exist");
-  const characters = await db().all<CharacterRecord>("characters", prefix_range(id));
-  if (characters.err) return characters;
-  const locations = await db().all<LocationRecord>("locations", prefix_range(id));
-  if (locations.err) return locations;
+  const things = await db().all<ThingRecord>("things", prefix_range(id));
+  if (things.err) return things;
   const memories = await db().all<MemoryRecord>("memories", prefix_range(id));
   if (memories.err) return memories;
   const rounds = await db().all<Round>("rounds", prefix_range(id));
   if (rounds.err) return rounds;
   return ok({
     game: game.value,
-    characters: characters.value,
-    locations: locations.value,
+    things: things.value,
     memories: memories.value,
     rounds: rounds.value,
   });
@@ -101,8 +96,7 @@ export async function store_load(id: string): Promise<Result<GameRecords, string
 /**Records to save for a game, everything given is saved in one transaction, all of it or none*/
 export interface GameWrite {
   game?: Game;
-  characters?: readonly Character[];
-  locations?: readonly Location[];
+  things?: readonly Thing[];
   memories?: readonly MemoryRecord[];
   rounds?: readonly Round[];
 }
@@ -110,10 +104,9 @@ export interface GameWrite {
 /**Saves records of a game, all of them or none*/
 export const store_write = async (game: string, write: GameWrite) =>
   report(
-    await db().write(["games", "characters", "locations", "memories", "rounds"], (tx) => {
+    await db().write(["games", "things", "memories", "rounds"], (tx) => {
       if (write.game) tx.objectStore("games").put(write.game);
-      for (const c of write.characters ?? []) tx.objectStore("characters").put({ ...c, game });
-      for (const l of write.locations ?? []) tx.objectStore("locations").put({ ...l, game });
+      for (const t of write.things ?? []) tx.objectStore("things").put({ ...t, game });
       for (const m of write.memories ?? []) tx.objectStore("memories").put(m);
       for (const r of write.rounds ?? []) tx.objectStore("rounds").put(r);
     }),
@@ -125,9 +118,9 @@ export const store_calls = (game: string, round: number) => db().all<Call>("call
 
 export const store_delete_game = async (game: string) =>
   report(
-    await db().write(["games", "characters", "locations", "memories", "rounds", "calls"], (tx) => {
+    await db().write(["games", "things", "memories", "rounds", "calls"], (tx) => {
       tx.objectStore("games").delete(game);
-      for (const store of ["characters", "locations", "memories", "rounds", "calls"]) tx.objectStore(store).delete(prefix_range(game));
+      for (const store of ["things", "memories", "rounds", "calls"]) tx.objectStore(store).delete(prefix_range(game));
     }),
   );
 
@@ -143,7 +136,7 @@ export const store_delete_build = async (id: string) => report(await db().delete
 //     |_____/_/    \_\    \/   |______| |_|    |_____|______|______|_____/
 
 const FORMAT = "ai-rpg-save";
-const VERSION = 2;
+const VERSION = 3;
 
 interface SaveFile extends GameRecords {
   format: typeof FORMAT;
@@ -169,12 +162,11 @@ export async function store_import(text: string): Promise<Result<string, string>
   }
   if (file?.format !== FORMAT) return err("The file is not a save file of this game");
   if (file.version > VERSION) return err("The save file is from a newer version of the game");
-  if (file.version < VERSION) return err("The save file is from the prototype, its format can not be loaded any more");
+  if (file.version < VERSION) return err("The save file is from an older version of the game, its format can not be loaded any more");
   const id = id_random();
   const saved = await store_write(id, {
     game: { ...file.game, id, updated: Date.now() },
-    characters: file.characters,
-    locations: file.locations,
+    things: file.things,
     memories: file.memories.map((m) => ({ ...m, game: id })),
     rounds: file.rounds.map((r) => ({ ...r, game: id })),
   });

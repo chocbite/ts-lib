@@ -13,6 +13,8 @@ export function id_slug(name: string): string {
     .toLowerCase()
     //Letters NFKD does not split
     .replace(/[øæåßđł]/g, (c) => ({ ø: "o", æ: "ae", å: "a", ß: "ss", đ: "d", ł: "l" })[c] ?? c)
+    //Apostrophes join, "warden's" is one word
+    .replace(/['’]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .slice(0, 32)
     .replace(/^-+|-+$/g, "");

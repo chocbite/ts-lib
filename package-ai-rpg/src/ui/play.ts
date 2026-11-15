@@ -269,7 +269,7 @@ export function play_view(handlers: PlayHandlers) {
   function update_scene() {
     //The location of the character the prompt is for, or of the first player character
     const viewer = (selected && ENGINE.world.character(selected)) || choices().find((c) => c.controller === Controller.Player);
-    const location = viewer ? ENGINE.world.location(viewer.location) : undefined;
+    const location = viewer ? ENGINE.world.place(viewer.id) : undefined;
     scene.style.setProperty("--hue", String(location ? hue(location.id) : 230));
     place.replaceChildren();
     if (game && location) place.append(el("span", "place-name", location.name), game.time ? el("span", "place-time", game.time) : "");
@@ -299,12 +299,11 @@ export function play_view(handlers: PlayHandlers) {
   }, true);
   ENGINE.history.sub(() => update_story());
   //Names and places of characters and locations show on the screen
-  ENGINE.characters.sub(() => {
+  ENGINE.changed.sub(() => {
     update_scene();
     update_bar();
     render_story();
   });
-  ENGINE.locations.sub(() => update_scene());
   ENGINE.running.sub(() => {
     update_bar();
     update_status();
