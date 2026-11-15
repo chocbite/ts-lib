@@ -1,0 +1,51 @@
+//Only what the input needs to work, the app styles the rest
+.mention-input {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-y: auto;
+  cursor: text;
+  &.empty::before {
+    content: attr(data-placeholder);
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  &.disabled {
+    cursor: default;
+  }
+}
+
+.mention-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15em;
+  vertical-align: bottom;
+  user-select: all;
+  svg {
+    width: 1em;
+    height: 1em;
+    fill: currentColor;
+  }
+}
+
+.mention-suggestions {
+  position: fixed;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 12rem;
+  max-width: min(24rem, calc(100vw - 1rem));
+  padding: 0.25rem;
+  border-radius: 0.5rem;
+  background: #222;
+  color: #eee;
+  box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 0.5);
+}
+.mention-suggestion {
+  padding: 0.3rem 0.5rem;
+  border-radius: 0.3rem;
+  cursor: pointer;
+  &.active,
+  &:hover {
+    background: rgb(255 255 255 / 0.15);
+  }
+}

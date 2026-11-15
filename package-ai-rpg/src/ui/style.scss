@@ -243,14 +243,17 @@ body {
   &:focus {
     border-color: rgb(255 255 255 / 0.6);
   }
-  &::placeholder {
-    color: rgb(255 255 255 / 0.5);
-  }
   &.submitted {
     border-color: hsl(130 50% 55% / 0.8);
   }
-  &:disabled {
+  &.disabled {
     opacity: 0.6;
+  }
+  //A mentioned thing, its icon and name
+  .mention-chip {
+    padding: 0 0.3em;
+    border-radius: 0.3em;
+    background: rgb(120 160 255 / 0.3);
   }
 }
 
@@ -492,5 +495,23 @@ body {
   cursor: pointer;
   &.error {
     background: #8b1d1d;
+  }
+}
+
+//Suggestions of things to mention in the prompt
+.mention-suggestions .suggestion {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  svg {
+    width: 1.1rem;
+    height: 1.1rem;
+    fill: currentColor;
+    flex-shrink: 0;
+  }
+  .suggestion-detail {
+    margin-left: auto;
+    opacity: 0.6;
+    font-size: 0.85em;
   }
 }

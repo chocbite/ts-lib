@@ -39,33 +39,19 @@ import {
   material_auto_awesome_rounded,
   material_delete_rounded,
   material_inventory_2_rounded,
-  material_location_on_rounded,
   material_person_add_rounded,
-  material_person_rounded,
-  material_psychology_rounded,
-  material_public_rounded,
   material_school_rounded,
   material_side_navigation_rounded,
-  material_straighten_rounded,
-  material_tune_rounded,
 } from "@chocbite/ts-lib-ui/icons";
 import list from "@chocbite/ts-lib-ui/list";
 import { ok } from "@chocbite/ts-lib/result";
 import state, { type StateROS } from "@chocbite/ts-lib/state";
-import { el, field, icon_button, panel, toast } from "./common";
+import { el, field, icon_button, KIND_ICONS, panel, toast } from "./common";
 
 const SIDEBAR_KEY = "ai-rpg/editor-sidebar";
 const SIZE_KEY = "ai-rpg/editor-sidebar-size";
 
-const ICONS = {
-  [Kind.Location]: material_location_on_rounded,
-  [Kind.Character]: material_person_rounded,
-  [Kind.Item]: material_inventory_2_rounded,
-  [Kind.Global]: material_public_rounded,
-  [Kind.Group]: material_tune_rounded,
-  [Kind.Attribute]: material_straighten_rounded,
-  [Kind.Skill]: material_psychology_rounded,
-};
+const ICONS = KIND_ICONS;
 const KIND_NAMES = {
   [Kind.Location]: "Location",
   [Kind.Character]: "Character",

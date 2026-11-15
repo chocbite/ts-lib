@@ -6,7 +6,9 @@ import { COWRITER, Roles } from "#options";
 import { Controller, world_time_text, type Character, type Id } from "#world";
 import ctm from "@chocbite/ts-lib-ui/context-menu";
 import { material_menu_rounded, material_refresh_rounded, material_send_rounded } from "@chocbite/ts-lib-ui/icons";
-import { el, hue, icon_button, initials, spin, text_button, text_nodes } from "./common";
+import { mention_input } from "#lib/mention_input";
+import { el, hue, icon_button, initials, kind_icon, spin, text_button, text_nodes } from "./common";
+import { mentionable, type Mentionable } from "./mentionable";
 import { level_panel, level_waiting } from "./level";
 
 export interface PlayHandlers {
@@ -28,8 +30,14 @@ export function play_view(handlers: PlayHandlers) {
   const bar = stage.appendChild(el("div", "bar"));
 
   const tab = bar.appendChild(el("button", "tab"));
-  const input = bar.appendChild(el("textarea", "prompt"));
-  input.rows = 1;
+  const input = mention_input<Mentionable>({
+    candidates: () => (selected ? mentionable(selected) : []),
+    chip: (id, name) => el("span", undefined, kind_icon(ENGINE.world.node(id)?.kind), el("span", undefined, name)),
+    suggestion: (c) => el("div", "suggestion", kind_icon(c.kind), el("span", "suggestion-name", c.name), el("span", "suggestion-detail", c.detail)),
+    on_input: () => changed(),
+  });
+  input.element.classList.add("prompt");
+  bar.append(input.element);
   const send = icon_button(material_send_rounded, "Send (Enter)", () => submit());
   const redecide = icon_button(material_refresh_rounded, "Let the character decide again", () => selected && ENGINE.redecide(selected));
   const menu_button = icon_button(material_menu_rounded, "Menu", () => handlers.menu(menu_button));
@@ -173,20 +181,19 @@ export function play_view(handlers: PlayHandlers) {
     const running = selected ? ENGINE.running.ok()["char:" + selected] : undefined;
     const can_act = phase === Phase.Characters && !!character;
     input.disabled = !can_act || (ai && !!running);
-    input.classList.toggle("submitted", !!action && !ai);
+    input.element.classList.toggle("submitted", !!action && !ai);
     send.hidden = ai;
     redecide.hidden = !ai || !can_act;
     send.disabled = !can_act;
     if (ai) {
       const text = running ? running.text || "Deciding…" : (action?.text ?? "");
-      if (replace || document.activeElement !== input) input.value = text;
+      if (replace || !input.focused) input.value = text;
       input.placeholder = can_act ? "What the character does" : "";
     } else {
       if (replace && game && selected) input.value = action?.text ?? storage.get(draft_key(game.id, selected)) ?? "";
       if (!game) input.value = "";
       input.placeholder = !game ? "No game, start one from the menu" : can_act ? "What do you do?" : "Wait for the story to go on…";
     }
-    fit();
   }
 
   function submit() {
@@ -200,18 +207,12 @@ export function play_view(handlers: PlayHandlers) {
     if (waiting) select(waiting.id);
   }
 
-  const fit = () => {
-    input.style.height = "auto";
-    input.style.height = Math.min(input.scrollHeight, window.innerHeight * 0.3) + "px";
-  };
-
-  input.oninput = () => {
-    fit();
+  function changed() {
     if (!game || !selected) return;
     if (is_ai()) ENGINE.set_action(selected, input.value);
     else storage.set(draft_key(game.id, selected), input.value || undefined);
-  };
-  input.onkeydown = (e) => {
+  }
+  input.element.onkeydown = (e) => {
     if (e.key === "Enter" && !e.shiftKey && !is_ai()) {
       e.preventDefault();
       submit();

@@ -2,7 +2,17 @@
 import { el } from "#lib/dom";
 import { mention_parse } from "#lib/mention";
 import form from "@chocbite/ts-lib-ui/form";
-import { material_close_rounded } from "@chocbite/ts-lib-ui/icons";
+import {
+  material_close_rounded,
+  material_inventory_2_rounded,
+  material_location_on_rounded,
+  material_person_rounded,
+  material_psychology_rounded,
+  material_public_rounded,
+  material_straighten_rounded,
+  material_tune_rounded,
+} from "@chocbite/ts-lib-ui/icons";
+import { Kind } from "#world";
 import { Spinner } from "@chocbite/ts-lib-ui/spinner";
 import type { SVGFunc } from "@chocbite/ts-lib-ui/svg";
 
@@ -99,3 +109,16 @@ export function toast(message: string, error = true) {
   t.onclick = () => t.remove();
   setTimeout(() => t.remove(), error ? 12000 : 4000);
 }
+
+/**Icon of each kind of node, the same everywhere in the game*/
+export const KIND_ICONS: { [K in Kind]: SVGFunc } = {
+  [Kind.Location]: material_location_on_rounded,
+  [Kind.Character]: material_person_rounded,
+  [Kind.Item]: material_inventory_2_rounded,
+  [Kind.Global]: material_public_rounded,
+  [Kind.Group]: material_tune_rounded,
+  [Kind.Attribute]: material_straighten_rounded,
+  [Kind.Skill]: material_psychology_rounded,
+};
+/**Icon element of a kind, nothing for an unknown kind*/
+export const kind_icon = (kind: Kind | undefined) => (kind ? KIND_ICONS[kind]() : undefined);
