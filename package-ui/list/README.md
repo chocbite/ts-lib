@@ -25,6 +25,10 @@ const container = list.container(
 
 Row options besides `values`: `openable`, `opened`, `sub_rows` (with the `sub_rows` container option), `key_field`, `add_row`, `context_menu` and `selectable`.
 
+## Resizing columns
+
+Columns without a `fixed_width` get a handle at the right of their header, a double click on it resets the column. The first resize gives every auto width column the width it has, so only the dragged column changes. The key field column of sub rows never gets smaller than its widest key field needs for the indent, the opener, the icon and 3rem of the text, so it grows when deeper sub rows open. Text that does not fit wraps.
+
 ## Selection
 
 The `selection` option lets the user select rows. It adds a column in front of the rows, with radio buttons in single mode and checkboxes in multi mode, so selection works on touch without modifier keys.

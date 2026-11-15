@@ -71,6 +71,7 @@ export class ListKeyField<A extends ListType<any>> extends Base {
   set icon(value: SVGFunc | undefined) {
     if (this.#icon) this.#icon.remove();
     this.#icon = undefined;
+    this.classList.toggle("has-icon", Boolean(value));
     if (!value) return;
     this.#icon = value();
     if (this.#text_box) this.insertBefore(this.#icon, this.#text_box);
@@ -79,6 +80,7 @@ export class ListKeyField<A extends ListType<any>> extends Base {
 
   /**Text after the icon, an empty string removes the text element */
   set text(value: string | undefined) {
+    this.classList.toggle("has-text", Boolean(value));
     if (!value) {
       this.#text_box?.remove();
       this.#text_box = undefined;

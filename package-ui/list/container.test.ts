@@ -168,10 +168,13 @@ describe("List container header and columns", () => {
     );
     field.dispatchEvent(new PointerEvent("pointerup", { pointerId: 1 }));
     const width = Math.max(px_to_rem(start_width + 100), 1);
+    //The key fields get the width, the column fits them
     const key_width = () =>
-      parseFloat(box_of(container).style.gridTemplateColumns);
+      parseFloat(box_of(container).style.getPropertyValue("--list-key-width"));
     expect(key_width()).toBeCloseTo(width);
-    expect(box_of(container).style.gridTemplateColumns).toMatch(/rem auto$/);
+    expect(box_of(container).style.gridTemplateColumns).toBe(
+      "max-content auto",
+    );
 
     container.columns = {
       col: list.column_string("Other"),
