@@ -1,9 +1,10 @@
-import { Hash } from "./common";
+import { Hash } from "./hash";
 
 const ENCODER = new TextEncoder();
 
-/**Calculates the md5 hash of the given text, hashed as UTF-8, or bytes*/
-export function md5(data: string | Uint8Array) {
+/**Calculates the md5 hash of the given text, hashed as UTF-8, or bytes
+ * MD5 is broken for security, use it for checksums and cache keys only*/
+export function md5(data: string | Uint8Array): Hash {
   return new Hash(md5_words(message_words(data)));
 }
 

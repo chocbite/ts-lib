@@ -97,4 +97,19 @@ describe("throttle", () => {
     expect(func).toHaveBeenCalledTimes(2);
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it("cancel drops a pending call and makes the next call run at once", () => {
+    const func = vi.fn();
+    const throttled = throttle(func, 100);
+
+    throttled(1);
+    throttled(2);
+    throttled.cancel();
+    vi.advanceTimersByTime(500);
+    expect(func).toHaveBeenCalledExactlyOnceWith(1);
+    expect(vi.getTimerCount()).toBe(0);
+
+    throttled(3);
+    expect(func).toHaveBeenLastCalledWith(3);
+  });
 });

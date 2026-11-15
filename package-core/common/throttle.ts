@@ -1,3 +1,5 @@
+import type { Cancelable } from "./debounce";
+
 /** Creates a throttled function that only invokes `func` at most once per
  * every `wait` milliseconds.
  * * Features:
@@ -5,16 +7,16 @@
  * - Leading-edge and trailing-edge execution (ensures the last call is not lost).
  * * @param func - The function to throttle.
  * @param wait - The number of milliseconds to throttle invocations to.
- * @returns A new throttled function.*/
+ * @returns A new throttled function, its cancel drops a pending call and makes the next call run at once.*/
 export function throttle<T extends (...args: any[]) => any>(
   func: T,
   wait: number = 0
-): (...args: Parameters<T>) => void {
+): Cancelable<(...args: Parameters<T>) => void> {
   let args_buffer: Parameters<T>;
   let has_args = false;
   let state: number = 0;
   let interval: ReturnType<typeof setTimeout>;
-  return (...args: Parameters<T>) => {
+  const throttled = (...args: Parameters<T>) => {
     if (state > 0) {
       args_buffer = args;
       has_args = true;
@@ -33,4 +35,10 @@ export function throttle<T extends (...args: any[]) => any>(
       }, wait);
     }
   };
+  throttled.cancel = () => {
+    clearInterval(interval);
+    has_args = false;
+    state = 0;
+  };
+  return throttled;
 }

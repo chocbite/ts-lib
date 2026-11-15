@@ -1,5 +1,4 @@
 export * from "./conversion/linearization";
-export * from "./hash";
 export * from "./trigonometry";
 
 /**Snaps a value to the nearest step counted from start, then rounds it to the given decimals

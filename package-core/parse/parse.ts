@@ -1,3 +1,4 @@
+import type { Prettify } from "#common";
 import type { Result, ResultErr, ResultOk } from "#result";
 import { err, ok, result as results } from "#result";
 
@@ -66,12 +67,28 @@ type ResolveSpec<T> = T extends string
                 : T extends readonly SchemaQNSBL[]
                   ? ResolveSpec<T[number]>
                   : T extends object
-                    ? { -readonly [K in keyof T]: ResolveSpec<T[K]> }
+                    ? InferSchema<T>
                     : never;
 
-type InferSchema<S> = {
-  -readonly [K in keyof S]: ResolveSpec<S[K]>;
-};
+/**Keys whose spec accepts a missing value, the parser leaves them out of the result when missing*/
+type OptionalKeys<S> = {
+  [K in keyof S]-?: undefined extends ResolveSpec<S[K]> ? K : never;
+}[keyof S];
+
+/**Object type of an object schema, keys that may be missing are optional.
+ * An index signature, like the generic Record<string, SchemaQNSBL> constraint, keeps the lazy mapped type,
+ * flattening it would resolve SchemaQNSBL inside itself forever*/
+type InferSchema<S> = string extends keyof S
+  ? { -readonly [K in keyof S]: ResolveSpec<S[K]> }
+  : Prettify<
+      {
+        -readonly [K in Exclude<keyof S, OptionalKeys<S>>]: ResolveSpec<
+          S[K]
+        >;
+      } & {
+        -readonly [K in OptionalKeys<S>]?: ResolveSpec<S[K]>;
+      }
+    >;
 
 type InferArraySchema<S extends readonly [0, unknown]> = S extends readonly [
   0,

@@ -49,6 +49,23 @@ describe("IPAddress Class", () => {
     });
   });
 
+  describe("IPv6 to_string", () => {
+    it.each([
+      ["2001:db8:0:0:0:ff00:42:8329", "2001:db8::ff00:42:8329"],
+      ["0:0:0:0:0:0:0:1", "::1"],
+      ["0:0:0:0:0:0:0:0", "::"],
+      ["fe80:0:0:0:0:0:0:0", "fe80::"],
+      ["2001:DB8:0000:0000:0001:0000:0000:0001", "2001:db8::1:0:0:1"], // first of equal runs, lowercase, no leading zeros
+      ["2001:db8:0:0:1:0:0:0", "2001:db8:0:0:1::"], // longest run wins
+      ["2001:db8:0:1:1:1:1:1", "2001:db8:0:1:1:1:1:1"], // a single zero group is not shortened
+      ["1:2:3:4:5:6:7:8", "1:2:3:4:5:6:7:8"],
+    ])("%s gives %s", (input, expected) => {
+      const text = new IPAddress(input).to_string();
+      expect(text).toBe(expected);
+      expect(new IPAddress(text).equals(new IPAddress(input))).toBe(true);
+    });
+  });
+
   describe("Edge Cases and Errors", () => {
     it("should handle loopback addresses correctly", () => {
       const v4 = new IPAddress("127.0.0.1");

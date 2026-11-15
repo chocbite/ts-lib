@@ -74,9 +74,32 @@ export class IPAddress {
     return result;
   }
 
+  /**Dotted IPv4, or IPv6 in the RFC 5952 form: lowercase hex without leading zeros,
+   * and the longest run of two or more zero groups shortened to ::, the first run on a tie*/
   to_string(): string {
-    if (this.is_v4) return this.as_array.join(".");
-    return this.as_array.map((n) => n.toString(16)).join(":");
+    const parts = this.as_array;
+    if (this.is_v4) return parts.join(".");
+    let best_start = -1;
+    let best_length = 1;
+    for (let i = 0; i < 8; ) {
+      if (parts[i] !== 0) {
+        i++;
+        continue;
+      }
+      const start = i;
+      while (i < 8 && parts[i] === 0) i++;
+      if (i - start > best_length) {
+        best_start = start;
+        best_length = i - start;
+      }
+    }
+    const hex = (from: number, to: number) =>
+      parts
+        .slice(from, to)
+        .map((n) => n.toString(16))
+        .join(":");
+    if (best_start === -1) return hex(0, 8);
+    return hex(0, best_start) + "::" + hex(best_start + best_length, 8);
   }
 }
 

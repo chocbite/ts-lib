@@ -1,8 +1,49 @@
-/**Returns the SHA-1 digest of UTF-8 text or bytes as a lowercase hexadecimal string.
+/**Lowercase hex of every byte value, so converting a digest is one lookup per byte*/
+const HEX_BYTES = Array.from({ length: 256 }, (_, i) =>
+  i.toString(16).padStart(2, "0"),
+);
+
+/**Result of a hash function, the digest bytes with conversions to the common formats*/
+export class Hash {
+  readonly #bytes: Uint8Array;
+  #hex?: string;
+
+  constructor(bytes: Uint8Array) {
+    this.#bytes = bytes;
+  }
+
+  /**The digest as an array of byte values*/
+  get number_array(): number[] {
+    return [...this.#bytes];
+  }
+
+  /**The digest as a new Uint8Array, changing it does not change the hash*/
+  get uint8_array(): Uint8Array {
+    return new Uint8Array(this.#bytes);
+  }
+
+  /**The digest as lowercase hex, computed once and cached*/
+  get hex_small(): string {
+    if (this.#hex === undefined) {
+      let hex = "";
+      for (const byte of this.#bytes) hex += HEX_BYTES[byte];
+      this.#hex = hex;
+    }
+    return this.#hex;
+  }
+
+  /**The digest as uppercase hex*/
+  get hex_big(): string {
+    return this.hex_small.toUpperCase();
+  }
+}
+
+/**Returns the SHA-1 digest of UTF-8 text or bytes.
  * This is a portable implementation for contexts where Web Crypto is unavailable.
+ * SHA-1 is not collision resistant, use it for checksums and cache keys, not for security.
  * @param input - The text or bytes to hash.
- * @returns The 40-character lowercase hexadecimal SHA-1 digest.*/
-export function sha1(input: string | Uint8Array): string {
+ * @returns The 20 byte digest, hex_small gives the usual 40 character string.*/
+export function sha1(input: string | Uint8Array): Hash {
   const bytes =
     typeof input === "string" ? new TextEncoder().encode(input) : input;
   const bit_length = bytes.length * 8;
@@ -88,7 +129,9 @@ export function sha1(input: string | Uint8Array): string {
     h4 = (h4 + e) >>> 0;
   }
 
-  return [h0, h1, h2, h3, h4]
-    .map((word) => word.toString(16).padStart(8, "0"))
-    .join("");
+  //Big endian, the byte order of the SHA-1 digest
+  const result = new Uint8Array(20);
+  for (const [i, word] of [h0, h1, h2, h3, h4].entries())
+    for (let j = 0; j < 4; j++) result[i * 4 + j] = (word >>> (24 - j * 8)) & 0xff;
+  return new Hash(result);
 }

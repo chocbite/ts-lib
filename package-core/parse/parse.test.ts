@@ -32,6 +32,37 @@ describe("make_parser", () => {
 
       expectTypeOf<Parsed<typeof parse_item>>().toEqualTypeOf<Item>();
     });
+
+    it("should make keys optional when their spec accepts a missing value", () => {
+      const parse = make_parser({
+        name: "s",
+        age: "?n",
+        nick: ["?", "s"],
+        count: ["?", "n", () => 0],
+        either: ["?nl", [2, "b"]],
+        nullable: "sl",
+        nested: { inner: "?b", kept: "n" },
+        list: [0, { id: "n", label: "?s" }],
+        record: ["{}", "?n"],
+      });
+
+      expectTypeOf<Parsed<typeof parse>>().toEqualTypeOf<{
+        name: string;
+        age?: number | undefined;
+        nick?: string | undefined;
+        count: number;
+        either?: number | null | [boolean, boolean] | undefined;
+        nullable: string | null;
+        nested: { inner?: boolean | undefined; kept: number };
+        list: { id: number; label?: string | undefined }[];
+        record: Record<string, number | undefined>;
+      }>();
+    });
+
+    it("should leave a missing optional key out of the result", () => {
+      const result = make_parser({ name: "s", age: "?n" })({ name: "Ada" });
+      expect(result.ok && "age" in result.value).toBe(false);
+    });
   });
 
   describe("type strings", () => {
