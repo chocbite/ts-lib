@@ -1,12 +1,24 @@
 import { Base, define_element, type BaseIntersectObserver } from "#base";
+import ctm from "#context-menu";
 import { px_to_rem } from "#theme";
-import { state, type State, type StateInferSub } from "@chocbite/ts-lib/state";
-import state_ui from "#state_ui";
+import {
+  state,
+  type State,
+  type StateInferSub,
+  type StateREAW,
+  type StateSub,
+} from "@chocbite/ts-lib/state";
+import type { Result } from "@chocbite/ts-lib/result";
 import { ListAddRow, type ListAddRowOptions } from "./add_row";
 import "./container.scss";
 import { list_rows_error_update, type ListRowsError } from "./error";
 import { list_align_apply } from "./field";
-import { ListRow } from "./row";
+import { list_rows_apply, ListRow } from "./row";
+import {
+  ListCheckField,
+  ListSelection,
+  type ListSelectionOptions,
+} from "./selection";
 import "./shared";
 import type {
   ListColumnOptions,
@@ -85,12 +97,16 @@ class HeaderRow<
   }
 
   set fields(fields: HeaderField[]) {
-    if (this.#key_header) this.replaceChildren(this.#key_header, ...fields);
-    else this.replaceChildren(...fields);
+    const lead: HTMLElement[] = [];
+    if (this.#check_header) lead.push(this.#check_header);
+    if (this.#key_header) lead.push(this.#key_header);
+    this.replaceChildren(...lead, ...fields);
   }
 
   /**Header of the key field column, only with sub rows */
   #key_header?: HeaderField;
+  /**Header of the checkbox or radio button column, in multi mode it selects or deselects all rows */
+  #check_header?: ListCheckField;
 
   constructor(
     root: ListRoot<R, T, A, S>,
@@ -101,11 +117,40 @@ class HeaderRow<
       this.#key_header = new HeaderField();
       this.#key_header.sizable(true, key_sizer);
     }
+    const selection = root.selection;
+    if (selection) this.#check_header = new ListCheckField();
+    if (selection?.multi) {
+      const check = this.#check_header!;
+      check.onclick = () => {
+        if (selection.amount_selected > 0) selection.clear();
+        else selection.select_all();
+      };
+      ctm.attach(
+        check,
+        ctm.menu([
+          ctm.line(
+            "Select all",
+            () => selection.select_all(),
+            undefined,
+            "Ctrl+A",
+          ),
+          ctm.line("Deselect all", () => selection.clear(), undefined, "Esc"),
+        ]),
+      );
+      selection.on_change = () => {
+        const selected = selection.amount_selected;
+        check.classList.toggle("some", selected > 0);
+        check.classList.toggle(
+          "all",
+          selected > 0 && selected === selection.amount_selectable,
+        );
+      };
+    }
   }
 }
 define_element(HeaderRow);
 
-interface ContainerOptions<S extends boolean = false> {
+interface ContainerOptions<S extends boolean = false, R = unknown, K = R> {
   /**Should header row be omitted */
   headless?: boolean;
   /**Can rows have sub rows */
@@ -114,6 +159,8 @@ interface ContainerOptions<S extends boolean = false> {
   add_row?: ListAddRowOptions;
   /**If list should use a container to give fields the option of attach/detach to states when visible */
   observer?: BaseIntersectObserver;
+  /**Lets the user select rows, only rows that are visible can be selected */
+  selection?: ListSelectionOptions<R, K>;
 }
 
 class Container<
@@ -121,6 +168,7 @@ class Container<
   T extends { [key: string]: ListColumnOptions<any, any> },
   S extends boolean = false,
   R = ListTypeExtract<A>,
+  K = R,
 > extends Base {
   static element_name() {
     return "container";
@@ -130,6 +178,8 @@ class Container<
   }
 
   #root: ListRoot<R, T, A, S>;
+  #selection?: ListSelection<K>;
+  #selection_sub?: StateSub<Result<K[], string>>;
   #parent: ListRowParent<A>;
   #box = this.appendChild(document.createElement("div"));
   #header?: HeaderRow<R, T, A, S>;
@@ -141,10 +191,10 @@ class Container<
   #key_width?: number;
 
   constructor(
-    columns: { [K in keyof T]: ListColumnOptions<T[K], any> },
+    columns: { [C in keyof T]: ListColumnOptions<T[C], any> },
     transform: ListRowTransformer<R, T, A, S>,
     rows: A,
-    options?: ContainerOptions<S>,
+    options?: ContainerOptions<S, R, K>,
   ) {
     super();
     this.#root = {
@@ -161,6 +211,16 @@ class Container<
       state: rows,
     };
 
+    this.#child_box = document.createElement("div");
+    if (options?.selection) {
+      this.#selection = new ListSelection(options.selection, this.#child_box);
+      this.#root.selection = this.#selection;
+      this.#box.classList.add(
+        "check",
+        this.#selection.multi ? "multi" : "single",
+      );
+    }
+
     if (!options?.headless)
       this.#header = this.#box.appendChild(
         new HeaderRow(this.#root, (width) => {
@@ -168,15 +228,17 @@ class Container<
           this.#update_column_widths();
         }),
       );
-    this.#child_box = this.#box.appendChild(document.createElement("div"));
+    this.#box.appendChild(this.#child_box);
     if (options?.sub_rows) this.#box.classList.add("sub-rows");
     this.add_row = options?.add_row;
 
     this.columns = columns;
     this.rows = rows;
+    //Selection works without a bound state, in a state of its own nobody else can reach
+    if (this.#selection) this.bind({});
   }
 
-  set columns(columns: { [K in keyof T]: ListColumnOptions<T[K], any> }) {
+  set columns(columns: { [C in keyof T]: ListColumnOptions<T[C], any> }) {
     this.#root.columns.clear();
     const order = new Map<keyof T, number>();
     let index = 0;
@@ -222,6 +284,7 @@ class Container<
       widths.unshift(
         this.#key_width ? `${Math.max(this.#key_width, 1)}rem` : "max-content",
       );
+    if (this.#selection) widths.unshift("var(--list-check-width)");
     this.#box.style.gridTemplateColumns = widths.join(" ");
   }
 
@@ -277,10 +340,28 @@ class Container<
       this.#root.sub_rows,
       this.#parent,
     );
-    state_ui.a.apply(this.#child_box, rows, {
-      create: (row) => new ListRow<R, T, A, S>(this.#root, this.#parent, row),
-      update: (element, row) => (element.data = row),
-    });
+    list_rows_apply(this.#root, this.#parent, this.#child_box, rows);
+  }
+
+  /**Binds the selection to an array state of keys, which can be shared with other lists and elements
+   * The list shows the keys that have a visible row, and only writes the state on user actions,
+   * with array write instructions, so it must be a state that applies them, like a local writable state
+   * Without a state the selection is kept in a state of the list that nobody else can reach
+   * Needs the selection option */
+  bind(opts: { selection?: StateREAW<K[], any, K[]> }): this {
+    const selection = this.#selection;
+    if (!selection) {
+      if (opts.selection) console.error("List has no selection option", this);
+      return this;
+    }
+    if (this.#selection_sub) this.detach_state(this.#selection_sub);
+    const target = opts.selection ?? state.ok_w<K[]>([]);
+    selection.target = target;
+    this.#selection_sub = this.attach_state(
+      target as StateREAW<K[]>,
+      (value: Result<K[], string>) => selection.apply(value),
+    );
+    return this;
   }
 }
 define_element(Container);
@@ -290,11 +371,12 @@ export function container<
   T extends {},
   S extends boolean = false,
   R = ListTypeExtract<A>,
+  K = R,
 >(
-  columns: { [K in keyof T]: ListColumnOptions<T[K], any> },
+  columns: { [C in keyof T]: ListColumnOptions<T[C], any> },
   transform: ListRowTransformer<R, NoInfer<T>, A, S>,
   rows: A,
-  options?: ContainerOptions<S>,
+  options?: ContainerOptions<S, R, K>,
 ) {
-  return new Container<A, T, S, R>(columns, transform, rows, options);
+  return new Container<A, T, S, R, K>(columns, transform, rows, options);
 }

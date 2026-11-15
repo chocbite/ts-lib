@@ -56,3 +56,13 @@ list-row {
     }
   }
 }
+
+//After the even, odd and hover backgrounds so it wins over them
+list-row.selected {
+  > div > * {
+    background-color: var(--list-colors-background-row_selected);
+  }
+  > div:hover > * {
+    background-color: var(--list-colors-background-row_selected_hover);
+  }
+}

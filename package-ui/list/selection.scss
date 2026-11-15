@@ -1,0 +1,99 @@
+@use "../icons/mixins" as icons;
+
+list-container > div {
+  --list-check-width: var(--list-size-row_min);
+  .touch & {
+    --list-check-width: var(--list-size-touch_row_min);
+  }
+}
+
+list-checkfield {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  //Square, so rows keep the same height without a glyph, like unselectable rows
+  min-height: var(--list-check-width);
+  user-select: none;
+  cursor: pointer;
+  outline: none;
+  border-right: 1px solid var(--list-colors-border-column);
+
+  &::before {
+    @include icons.material-symbols-rounded;
+    font-size: 1.2rem;
+    //Fits in the minimum row height, so the glyph does not make rows taller
+    line-height: 1;
+    color: var(--list-colors-icon-check);
+
+    .touch & {
+      font-size: 1.8rem;
+    }
+  }
+
+  &:focus-visible:not(.click-focus) {
+    outline: 2px solid var(--list-colors-focus-normal);
+    outline-offset: -2px;
+  }
+}
+
+//Glyphs of the icon font, check_box_outline_blank, check_box and indeterminate_check_box
+list-container > div.multi {
+  list-row.selectable > div > list-checkfield::before,
+  > list-headerrow > list-checkfield::before {
+    content: "\e835";
+  }
+  list-row.selectable.selected > div > list-checkfield::before,
+  > list-headerrow > list-checkfield.all::before {
+    content: "\e834";
+  }
+  > list-headerrow > list-checkfield.some:not(.all)::before {
+    content: "\e909";
+  }
+}
+
+//Glyphs of the icon font, radio_button_unchecked and radio_button_checked
+list-container > div.single {
+  list-row.selectable > div > list-checkfield::before {
+    content: "\e836";
+  }
+  list-row.selectable.selected > div > list-checkfield::before {
+    content: "\e837";
+  }
+  //Nothing to select all with
+  > list-headerrow > list-checkfield {
+    cursor: default;
+  }
+}
+
+//The checkbox or radio button column is the first column, the key field column moves to the second
+list-container > div.check {
+  list-keyfield {
+    left: var(--list-check-width);
+  }
+
+  &.sub-rows > list-headerrow > :nth-child(2) {
+    left: var(--list-check-width);
+    z-index: 3;
+  }
+
+  list-addrow > list-keyfield,
+  list-rowserror > list-keyfield {
+    grid-column: 2;
+  }
+
+  list-addrow > span,
+  list-error {
+    grid-column: 2 / -1;
+  }
+
+  &.sub-rows {
+    list-addrow > span,
+    list-error {
+      grid-column: 3 / -1;
+    }
+  }
+}

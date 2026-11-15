@@ -31,7 +31,8 @@ export class ListKeyField<A extends ListType<any>> extends Base {
     //Places the line down to the sub rows of an open row
     this.style.setProperty("--list-key-depth", String(parent.depth));
     this.onkeydown = (e) => {
-      if (e.key === "Enter" || e.key === " ") parent.open = !parent.open;
+      if (parent.key_down?.(e)) e.preventDefault();
+      else if (e.key === "Enter" || e.key === " ") parent.open = !parent.open;
       else if (e.key === "ArrowRight") parent.open = true;
       else if (e.key === "ArrowLeft") parent.open = false;
       else if (e.key === "ArrowDown") parent.select_adjacent("next", none());

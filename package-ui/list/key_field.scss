@@ -23,7 +23,7 @@ list-keyfield {
   border-right: 1px solid var(--list-colors-border-column);
   background-color: var(--list-colors-background-row_odd);
 
-  &:focus-visible::before {
+  &:focus-visible:not(.click-focus)::before {
     content: "";
     position: absolute;
     width: 100%;

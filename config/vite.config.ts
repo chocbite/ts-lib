@@ -11,7 +11,7 @@ const at_root = (path: string) => resolve(import.meta.dirname, "..", path);
 export default defineConfig({
   root: at_root("dev"),
   resolve: { conditions: ["development", ...defaultClientConditions] },
-  server: { open: true, host: true, port: 9998 },
+  server: { host: true, port: 9998 },
   //Outside the package folders, otherwise every package gets a node_modules for the cache
   cacheDir: at_root("node_modules/.vite"),
   test: {

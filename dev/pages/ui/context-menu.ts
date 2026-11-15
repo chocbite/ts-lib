@@ -436,3 +436,51 @@ function target(
     "undefined, browser menu": () => ctm.default(undefined),
   });
 }
+
+//       _____ ____  __  __ ____ _____ _   _ ______
+//      / ____/ __ \|  \/  |  _ \_   _| \ | |  ____|
+//     | |   | |  | | \  / | |_) || | |  \| | |__
+//     | |   | |  | | |\/| |  _ < | | | . ` |  __|
+//     | |___| |__| | |  | | |_) || |_| |\  | |____
+//      \_____\____/|_|  |_|____/_____|_| \_|______|
+{
+  const sec = section(
+    "Combined menus",
+    "ctm.combine joins groups of lines and menus with a devider between them, the last box joins lines, two menus and a promised menu, it shows a spinner for a second. Empty groups leave no devider, all empty gives no menu so the default or browser menu shows. The middle group is a function, toggle the lock and right click again, the menu is built on every open",
+  );
+  let locked = false;
+  let opens = 0;
+  controls(sec, { "Toggle lock": () => (locked = !locked) });
+  const boxes = row(sec);
+  ctm.attach(
+    target(boxes, "Three groups"),
+    ctm.combine(
+      [line("Cut", material_content_cut_rounded), line("Copy", material_content_copy_rounded)],
+      () => [
+        line(locked ? "Unlock" : "Lock"),
+        locked ? undefined : line("Edit", material_edit_rounded),
+        line("Opened " + ++opens + " times"),
+      ],
+      [line("Delete", material_delete_rounded)],
+    ),
+  );
+  ctm.attach(
+    target(boxes, "Empty groups"),
+    ctm.combine([], undefined, [line("Only line")], () => [undefined], []),
+  );
+  ctm.attach(target(boxes, "All empty"), ctm.combine([], undefined));
+  ctm.attach(
+    target(boxes, "Lines + menus"),
+    ctm.combine(
+      [line("Extra line in front")],
+      ctm.menu([line("From a menu A"), line("From a menu B")]),
+      () => some(ctm.menu([line("From a menu factory")])),
+      () =>
+        ctm.menu(
+          new Promise((resolve) =>
+            setTimeout(() => resolve([line("Promised after 1s")]), 1000),
+          ),
+        ),
+    ),
+  );
+}

@@ -1,3 +1,4 @@
+import { context_combine } from "./combine";
 import { context_devider } from "./devider";
 import {
   context_menu_attach,
@@ -22,7 +23,9 @@ export const ctm = {
   line: context_line,
   sub: context_sub,
   devider: context_devider,
+  combine: context_combine,
 };
 export default ctm;
 
+export type { ContextMenuGroup } from "./combine";
 export type { ContextMenu, ContextMenuLines } from "./menu";

@@ -98,6 +98,36 @@ const menu = ctm.menu([
 
 ---
 
+### `ctm.combine(...groups)`
+
+Combines groups of lines and menus into one menu, with a devider between the groups. It returns a menu factory for `ctm.attach`, or anything else taking one, like the `context_menu` row option of the list.
+
+- A group is an array of lines, a menu, a function giving lines, a menu or an option of a menu (what `ctm.attach` takes), or `undefined` for no group.
+- Functions are called and the menu is built every time it opens, so lines can show the state at that moment.
+- A menu gives its lines, so two finished menus can be joined, like extra lines in front of a menu that came from somewhere else.
+- Empty groups are left out with their devider, `undefined` lines are skipped like in `ctm.menu`.
+- When all groups are empty there is no menu.
+
+```ts
+ctm.attach(
+  el,
+  ctm.combine(
+    [ctm.line("Cut", () => cut()), ctm.line("Copy", () => copy())],
+    () => (canDelete() ? [ctm.line("Delete", () => remove())] : []),
+    isAdmin ? [ctm.line("Admin Panel", () => openAdmin())] : undefined,
+  ),
+);
+
+// Lines in front of a finished menu, or of a menu factory given by someone else
+ctm.attach(el, ctm.combine([ctm.line("Select", () => select())], other_menu));
+```
+
+Lines are elements that live in one menu at a time. The combined menu takes the lines of a menu group while it is open, the menu takes them back when it opens on its own. An array group is fine because only one menu is open at a time, but give a function when the same lines should also be used in another menu that can be open at the same time.
+
+A menu group with promised lines makes the combined menu wait for all groups with a spinner, like `ctm.menu` with a promise. The combined menu then always opens, even when the lines turn out empty.
+
+---
+
 ### `ctm.attach(element, lines, block?)`
 
 Binds a context menu to a DOM element.
