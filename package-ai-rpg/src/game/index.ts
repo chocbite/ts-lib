@@ -1,6 +1,7 @@
 //Records of a game, as they are stored.
-import type { Change, Chunk, Id, World } from "#world";
+import type { Change, Character, Chunk, Id, Location } from "#world";
 
+/**Details of a game, its world is stored in records of its own*/
 export interface Game {
   /**Random id of the record, never shown to an LLM*/
   id: string;
@@ -9,9 +10,21 @@ export interface Game {
   premise: string;
   created: number;
   updated: number;
-  world: World;
+  /**Time in the story, free text*/
+  time: string;
   /**Number of the current round*/
   round: number;
+}
+
+/**Stored records of the world, one per thing, keyed by game and id*/
+export type CharacterRecord = Character & { game: string };
+export type LocationRecord = Location & { game: string };
+/**One memory of a character, keyed by game, character and its number*/
+export interface MemoryRecord {
+  game: string;
+  character: Id;
+  n: number;
+  text: string;
 }
 
 export const Phase = {

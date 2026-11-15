@@ -8,7 +8,7 @@ import { el, panel } from "./common";
 
 /**Opens the review for the phase of the current round, does nothing outside a review*/
 export function review_panel() {
-  const round = ENGINE.rounds.ok().at(-1);
+  const round = ENGINE.round.ok();
   if (round?.phase === Phase.StoryReview) story_review();
   else if (round?.phase === Phase.ChangesReview) changes_review();
 }
@@ -22,12 +22,11 @@ function footer(p: ReturnType<typeof panel>, redo: string, next: string) {
 
 function story_review() {
   const p = panel("Review the story");
-  const game = ENGINE.game.ok()!;
-  const round = ENGINE.rounds.ok().at(-1)!;
+  const round = ENGINE.round.ok()!;
   let story: Chunk[] = structuredClone(round.story);
   const speakers = [
     { value: "", text: "Narration" },
-    ...round.cast.map((id) => ({ value: id, text: game.world.characters[id]?.name ?? id })),
+    ...round.cast.map((id) => ({ value: id, text: ENGINE.world.character(id)?.name ?? id })),
   ];
   const list = p.body.appendChild(el("div", "review-list"));
   const save = () => ENGINE.edit_story(story);
@@ -58,15 +57,14 @@ function story_review() {
 
 function changes_review() {
   const p = panel("Review the changes");
-  const game = ENGINE.game.ok()!;
-  let changes: Change[] = structuredClone(ENGINE.rounds.ok().at(-1)!.changes);
+  let changes: Change[] = structuredClone(ENGINE.round.ok()!.changes);
   const list = p.body.appendChild(el("div", "review-list"));
   const save = () => {
     ENGINE.edit_changes(changes);
     render();
   };
   const render = () => {
-    const problems = ENGINE.rounds.ok().at(-1)?.problems ?? [];
+    const problems = ENGINE.round.ok()?.problems ?? [];
     list.replaceChildren(
       ...changes.map((change, i) => {
         const json = form.text_multiline({
@@ -83,7 +81,7 @@ function changes_review() {
         return el(
           "div",
           "review-item",
-          el("div", "row", el("span", "review-summary", world_change_text(game.world, change)), form.button({ icon: material_delete_rounded, on_click: () => (changes.splice(i, 1), save()) })),
+          el("div", "row", el("span", "review-summary", world_change_text(ENGINE.world, change)), form.button({ icon: material_delete_rounded, on_click: () => (changes.splice(i, 1), save()) })),
           problems[i] ? el("div", "error", "Will be skipped: " + problems[i]) : undefined,
           json,
         );

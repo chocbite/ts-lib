@@ -55,15 +55,15 @@ export async function builder_panel() {
       el("h3", undefined, proposal.name || "Untitled"),
       world.time ? el("p", "field-note", world.time) : "",
       el("h4", undefined, "Locations"),
-      ...Object.values(world.locations).map((l) => el("p", undefined, el("b", undefined, l.name), " ", text_nodes(l.description))),
+      ...[...world.locations()].map((l) => el("p", undefined, el("b", undefined, l.name), " ", text_nodes(l.description))),
       el("h4", undefined, "Characters"),
-      ...Object.values(world.characters).map((c) =>
+      ...[...world.characters()].map((c) =>
         el(
           "p",
           undefined,
           el("b", undefined, c.name),
           c.controller === "player" ? el("span", "badge", "you") : "",
-          ` at ${world.locations[c.location]?.name ?? "?"}: `,
+          ` at ${world.location(c.location)?.name ?? "?"}: `,
           text_nodes(c.description),
         ),
       ),

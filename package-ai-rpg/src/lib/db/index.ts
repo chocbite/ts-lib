@@ -27,19 +27,24 @@ export class Db {
     this.#idb = idb;
   }
 
-  /**Opens the database, missing stores and indexes are created.
-   * Raise the version whenever stores or indexes are added, upgrades only run on a version change.
-   * Removing or changing stores is not handled.*/
+  /**Opens the database, missing stores and indexes are created and stores no longer listed are deleted.
+   * Raise the version whenever stores or indexes change, upgrades only run on a version change.
+   * Changing the key of an existing store is not handled, use a new store name or reset_before.
+   * @param options.reset_before deletes every store of databases older than this version, for when the stored data can not be read any more*/
   static open(
     name: string,
     version: number,
     stores: { [name: string]: DbStore },
+    options?: { reset_before?: number },
   ): Promise<Result<Db, string>> {
     return new Promise((resolve) => {
       const req = indexedDB.open(name, version);
-      req.onupgradeneeded = () => {
+      req.onupgradeneeded = (e) => {
         const idb = req.result;
         const tx = req.transaction!;
+        const reset = options?.reset_before !== undefined && e.oldVersion < options.reset_before;
+        for (const store_name of [...idb.objectStoreNames])
+          if (reset || !(store_name in stores)) idb.deleteObjectStore(store_name);
         for (const [store_name, def] of Object.entries(stores)) {
           const store = idb.objectStoreNames.contains(store_name)
             ? tx.objectStore(store_name)

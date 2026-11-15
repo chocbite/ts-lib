@@ -1,20 +1,20 @@
 //Location editor: a list of the locations in a sidebar that can be hidden, and the selected location's fields.
+//The list's rows are the location states of the engine, a changed location refreshes only its row.
 import { ENGINE } from "#engine";
-import type { Game } from "#game";
 import { local_get, local_set } from "#lib/local";
-import { type Change, type Id, type Location } from "#world";
+import { world_characters, world_locations, type Change, type Id, type Location } from "#world";
 import form from "@chocbite/ts-lib-ui/form";
 import { material_add_location_rounded, material_delete_rounded, material_side_navigation_rounded } from "@chocbite/ts-lib-ui/icons";
 import list from "@chocbite/ts-lib-ui/list";
 import { ok } from "@chocbite/ts-lib/result";
-import state from "@chocbite/ts-lib/state";
+import type { StateROS } from "@chocbite/ts-lib/state";
 import { el, field, icon_button, panel, toast } from "./common";
 
 const SIDEBAR_KEY = "ai-rpg/editor-sidebar";
 
 /**Applies hand made changes, problems are shown and nothing is changed*/
-function edit(changes: Change[]) {
-  const applied = ENGINE.edit_world(changes);
+async function edit(changes: Change[]) {
+  const applied = await ENGINE.edit_world(changes);
   if (applied.err) toast(applied.error);
   return applied;
 }
@@ -22,8 +22,7 @@ function edit(changes: Change[]) {
 /**Opens the location editor
  * @param select location to show first, the first location when not given*/
 export function locations_panel(select?: Id) {
-  const start = ENGINE.game.ok();
-  if (!start) return;
+  if (!ENGINE.game.ok()) return;
   const p = panel("Locations", true);
   const layout = p.body.appendChild(el("div", "editor"));
   const sidebar = layout.appendChild(el("div", "editor-sidebar"));
@@ -37,30 +36,29 @@ export function locations_panel(select?: Id) {
   toggle(local_get(SIDEBAR_KEY) !== "hidden");
   p.actions.append(icon_button(material_side_navigation_rounded, "Show or hide the list", () => toggle(layout.classList.contains("no-sidebar"))));
 
-  let selected: Id | undefined = select ?? Object.values(start.world.locations).find((l) => !l.gone)?.id;
-  /**Row elements by location, to mark the selected one*/
+  let selected: Id | undefined = select ?? world_locations(ENGINE.world)[0]?.id;
+  //Workaround until list has selection, to be replaced by the library's selection: row elements by location, to mark the selected one
   const rows = new Map<Id, HTMLElement>();
 
-  const locations = state.p.ros(ENGINE.game, (g) => ok(g.value ? Object.values(g.value.world.locations) : []));
   sidebar.append(
     list.container(
       { name: list.column_string("Name", { align: "left" }) },
-      (location: Location, row) => {
-        //The list has no selection, a click on the row selects it
+      (location_state: StateROS<Location>, row) => {
+        const location = location_state.ok();
         rows.set(location.id, row);
         row.onclick = () => choose(location.id);
         row.classList.toggle("selected", location.id === selected);
         row.classList.toggle("gone", location.gone);
         return ok({ values: { name: location.gone ? `${location.name} (removed)` : location.name } });
       },
-      locations,
+      ENGINE.locations,
       { headless: true },
     ),
     form.button({
       text: "New location",
       icon: material_add_location_rounded,
-      on_click: () => {
-        const added = edit([{ op: "add_location", id: "new:location", name: "New location", description: "" }]);
+      on_click: async () => {
+        const added = await edit([{ op: "add_location", id: "new:location", name: "New location", description: "" }]);
         if (added.ok) choose(added.value.ids.get("new:location"));
       },
     }),
@@ -75,11 +73,10 @@ export function locations_panel(select?: Id) {
   /**Shows the fields of the selected location, values are written when a field is left*/
   function show() {
     details.replaceChildren();
-    const game: Game | undefined = ENGINE.game.ok();
-    const location = selected ? game?.world.locations[selected] : undefined;
-    if (!game || !location) return details.append(form.text({ text: "No location selected" }));
+    const location = selected ? ENGINE.world.location(selected) : undefined;
+    if (!location) return details.append(form.text({ text: "No location selected" }));
     const id = location.id;
-    const here = Object.values(game.world.characters).filter((c) => !c.gone && c.location === id);
+    const here = world_characters(ENGINE.world).filter((c) => c.location === id);
     details.append(
       field(
         "Name",
@@ -108,8 +105,8 @@ export function locations_panel(select?: Id) {
           form.button({
             text: "Remove location",
             icon: material_delete_rounded,
-            on_click: () => {
-              if (edit([{ op: "remove_location", location: id }]).ok) show();
+            on_click: async () => {
+              if ((await edit([{ op: "remove_location", location: id }])).ok) show();
             },
           }),
         ),

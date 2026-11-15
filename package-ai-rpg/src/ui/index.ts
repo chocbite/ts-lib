@@ -88,8 +88,8 @@ export async function ui_start() {
 
   //Reviews open by themselves when a round reaches one
   let phase: Phase | undefined;
-  ENGINE.rounds.sub((rounds) => {
-    const next = rounds.value.at(-1)?.phase;
+  ENGINE.round.sub((round) => {
+    const next = round.value?.phase;
     if (next !== phase && (next === Phase.StoryReview || next === Phase.ChangesReview)) review_panel();
     if (next !== phase && phase !== undefined && (phase === Phase.StoryReview || phase === Phase.ChangesReview)) panel_close();
     phase = next;

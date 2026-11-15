@@ -17,8 +17,8 @@ export function debug_panel() {
     if (!calls.value.length) return list.append(el("p", "field-note", "No calls in this round."));
     list.append(...calls.value.sort((a, b) => a.started - b.started).map(call_view));
   };
-  const rounds = ENGINE.rounds.ok().map((r) => ({ value: r.n, text: `Round ${r.n}` }));
-  const current = ENGINE.rounds.ok().at(-1)?.n ?? 0;
+  const current = ENGINE.round.ok()?.n ?? 0;
+  const rounds = Array.from({ length: current + 1 }, (_, n) => ({ value: n, text: `Round ${n}` }));
   p.body.append(el("div", "row", form.dropdown<number, undefined>({ selections: rounds, value: current, change: show })), list);
   show(current);
 }

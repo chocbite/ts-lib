@@ -8,7 +8,7 @@ describe("quick game", () => {
     expect(problems.filter((p) => p !== undefined)).toEqual([]);
     expect(ids.get("new:edric")).toBe("char:edric");
     expect(ids.get("new:edric-miller")).toBe("char:edric-2");
-    expect(Object.values(world.characters).filter((c) => c.controller === "player")).toHaveLength(1);
+    expect([...world.characters()].filter((c) => c.controller === "player")).toHaveLength(1);
     const opening = world_chunks_ids(QUICK_GAME.opening, ids);
     expect(opening.map((c) => c.text).join(" ")).not.toContain("new:");
   });

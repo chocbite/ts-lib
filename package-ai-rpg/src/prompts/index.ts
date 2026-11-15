@@ -14,7 +14,7 @@ import {
   type Character,
   type Chunk,
   type Id,
-  type World,
+  type WorldRead,
 } from "#world";
 
 const MEMORIES = 30;
@@ -24,13 +24,13 @@ const link = (name: string, id: Id) => `[${name}](${id})`;
 const lines = (items: string[], empty = "- none") => (items.length ? items.join("\n") : empty);
 
 /**The characters of the cast that are not gone*/
-const cast_of = (world: World, round: Round) =>
-  round.cast.map((id) => world.characters[id]).filter((c): c is Character => !!c && !c.gone);
+const cast_of = (world: WorldRead, round: Round) =>
+  round.cast.map((id) => world.character(id)).filter((c): c is Character => !!c && !c.gone);
 
 /**Story as the viewer experienced it, with the names the viewer knows, or true names without a viewer*/
-export function story_text(world: World, chunks: readonly Chunk[], viewer?: Id): string {
+export function story_text(world: WorldRead, chunks: readonly Chunk[], viewer?: Id): string {
   const name = (id: Id) =>
-    viewer ? world_known_as(world, viewer, id) : (world.characters[id]?.name ?? world.locations[id]?.name ?? id);
+    viewer ? world_known_as(world, viewer, id) : (world.character(id)?.name ?? world.location(id)?.name ?? id);
   const text = (t: string) => mention_map(t, (shown, id) => (id.startsWith("char:") ? { text: name(id), id } : { text: shown, id }));
   return chunks
     .map((c) => (c.speaker ? `${link(name(c.speaker), c.speaker)}: "${text(c.text)}"` : text(c.text)))
@@ -46,8 +46,8 @@ export function story_text(world: World, chunks: readonly Chunk[], viewer?: Id):
 
 /**Prompt for a character deciding its action
  * @param last the previous round, its story is included when the character took part in it*/
-export function prompt_character(world: World, round: Round, character: Character, last?: Round): LlmMessage[] {
-  const location = world.locations[character.location];
+export function prompt_character(world: WorldRead, round: Round, character: Character, last?: Round): LlmMessage[] {
+  const location = world.location(character.location);
   const others = cast_of(world, round).filter((c) => c.id !== character.id);
   const known = others.map((o) => {
     const rel = character.relationships[o.id];
@@ -74,7 +74,7 @@ Time: ${world.time || "unknown"}
 ${lines(known, "- nobody else")}
 
 # What you remember
-${lines(character.memories.slice(-MEMORIES).map((m) => "- " + m), "- nothing yet")}
+${lines(world.memories(character.id).slice(-MEMORIES).map((m) => "- " + m), "- nothing yet")}
 
 # What just happened
 ${witnessed || "Nothing yet, this is where your story starts."}
@@ -93,12 +93,12 @@ What do you do?`;
 //      ____) |  | | | |__| | | \ \  | |     | |  | |____| |____| |____| |____| | \ \
 //     |_____/   |_|  \____/|_|  \_\ |_|     |_|  |______|______|______|______|_|  \_\
 
-function world_text(world: World, cast: Character[]): string {
+function world_text(world: WorldRead, cast: Character[]): string {
   const in_cast = new Set(cast.map((c) => c.id));
   const person = (c: Character) =>
     `- ${link(c.name, c.id)}, ${c.description} (${c.controller === "player" ? "player character" : "AI character"})\n  Appearance: ${c.appearance}\n  Bio: ${c.bio}\n  Personality: ${c.personality}\n  Goals: ${c.goals}\n  Knows: ${
       Object.entries(c.relationships)
-        .map(([id, r]) => `${link(world.characters[id]?.name ?? id, id)} as "${r.known_as}", ${r.opinion}`)
+        .map(([id, r]) => `${link(world.character(id)?.name ?? id, id)} as "${r.known_as}", ${r.opinion}`)
         .join("; ") || "nobody"
     }`;
   const elsewhere = world_characters(world).filter((c) => !in_cast.has(c.id));
@@ -108,27 +108,27 @@ function world_text(world: World, cast: Character[]): string {
 ${lines(world_locations(world).map((l) => `- ${link(l.name, l.id)}: ${l.description}`))}
 
 ## Characters in the scene
-${lines(cast.map((c) => `${person(c)}\n  At: ${link(world.locations[c.location]?.name ?? c.location, c.location)}`))}
+${lines(cast.map((c) => `${person(c)}\n  At: ${link(world.location(c.location)?.name ?? c.location, c.location)}`))}
 
 ## Characters elsewhere
-${lines(elsewhere.map((c) => `- ${link(c.name, c.id)}, ${c.description}, at ${link(world.locations[c.location]?.name ?? c.location, c.location)}`))}`;
+${lines(elsewhere.map((c) => `- ${link(c.name, c.id)}, ${c.description}, at ${link(world.location(c.location)?.name ?? c.location, c.location)}`))}`;
 }
 
-const recent_story = (world: World, rounds: readonly Round[]) =>
+const recent_story = (world: WorldRead, rounds: readonly Round[]) =>
   rounds
     .filter((r) => r.story.length)
     .slice(-STORY_ROUNDS)
     .map((r) => story_text(world, r.story))
     .join("\n\n") || "The story has not started yet.";
 
-const actions_text = (world: World, round: Round) =>
+const actions_text = (world: WorldRead, round: Round) =>
   lines(
     cast_of(world, round).map((c) => `- ${link(c.name, c.id)} (${c.controller === "player" ? "player" : "AI"}): ${round.actions[c.id]?.text ?? "does nothing"}`),
   );
 
 /**Prompt for the storyteller deciding what happens
  * @param earlier rounds before this one, their stories give the storyteller the story so far*/
-export function prompt_storyteller(world: World, round: Round, earlier: readonly Round[]): LlmMessage[] {
+export function prompt_storyteller(world: WorldRead, round: Round, earlier: readonly Round[]): LlmMessage[] {
   const cast = cast_of(world, round);
   const system = `You are the storyteller of an interactive story. Each round every character in the scene, including the player's, says what they attempt. You decide what actually happens and write it as the next part of the story.
 
@@ -180,7 +180,7 @@ export interface StorytellerReply {
 //     |_____/ \_____|_|  \_\_____|____/|______|_____/
 
 /**Prompt for the scribes recording what the story changed*/
-export function prompt_scribes(world: World, round: Round): LlmMessage[] {
+export function prompt_scribes(world: WorldRead, round: Round): LlmMessage[] {
   const cast = cast_of(world, round);
   const system = `You are the scribe of an interactive story. The storyteller has written what happened this round. You record it as changes to the world, so later rounds stay consistent. Only record what the story says, never invent.
 
@@ -209,7 +209,7 @@ Record the changes.`;
   ];
 }
 
-export const schema_scribes = (world: World): Schema => schema_object({ changes: world_change_schema(world) });
+export const schema_scribes = (world: WorldRead): Schema => schema_object({ changes: world_change_schema(world) });
 export interface ScribesReply {
   changes: import("#world").Change[];
 }

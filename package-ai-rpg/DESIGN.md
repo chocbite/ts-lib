@@ -104,19 +104,70 @@ Decided:
 
 Proposed:
 
-- One IndexedDB database with these stores:
-  - `games`: one record per game with the current world state and phase. Small, rewritten on every change.
-  - `rounds`: one record per round, keyed by game and round number. Finished rounds are never rewritten, so saving does not get slower as the story grows.
-  - `images`: image blobs, stored as blobs (not base64), referenced by id from locations and characters.
-  - `calls`: every LLM call with its prompt, reply and time, for debugging. Can be cleared without harming the game.
-  - `chats`: the game builder chats.
-- Every change to the game goes through one function that also writes it to IndexedDB, so nothing can change without being saved. Text edits (storyteller text, change review) are written after a short pause in typing, and on `visibilitychange` to hidden.
+- The stores and how state is kept in memory are in [State and storage model](#state-and-storage-model).
+- Every change to the game goes through the engine, which also writes it to IndexedDB, so nothing can change without being saved. Text edits (storyteller text, change review) are written after a short pause in typing, and on `visibilitychange` to hidden.
 - Prompt drafts are kept in local storage per game and character, local storage writes are synchronous and survive a tab closing mid typing.
 - Resuming: the phase and which LLM calls are done are part of the state. Each reply is saved when it finishes. Calls that were running when the page closed are started again on load.
 - The game asks the browser to keep its storage (`navigator.storage.persist()`), otherwise the browser may delete it when the disk runs low.
 - A save file is one JSON file: a format version, the game, its rounds and its images as base64. The debug call log is optional. Loading a file creates a new game, it never overwrites one. The format version lets older files be upgraded on load.
 
 Open: when the game is opened as a `file://` page, browsers tie its storage to that origin, and some may tie it to the file's path. Moving or renaming the html file could then make saved games disappear (they are still on disk, but not found). To be checked per browser. Save files are the backup either way.
+
+## State and storage model
+
+Decided and built, replaced the prototype's model.
+
+### What is wrong with the prototype
+
+The prototype keeps the whole game as one immutable value in one state. Every change copies the whole world (`structuredClone`), rewrites the whole game record in IndexedDB, and gives every subscriber a new game without saying what changed, so views redraw everything. All of it grows with the size of the world instead of the size of the change, and memories, which only grow, live inside the characters. It also does not use the library's state model, which has array and object states that carry what changed for exactly this.
+
+### Rule
+
+The cost of a change is the size of the change: only the changed things are copied, saved and redrawn.
+
+### In memory
+
+Everything the UI shows is a library state owned by the engine. The UI gets read only views (`owner.read_only`), only the engine writes.
+
+- **One state per game object.** Every location and character is its own state, holding a plain object. Changing a location sets that location's state, only its subscribers hear about it.
+- **Collections are array states of those states**, `StateROS<StateROS<Location>[]>` for the UI (`Collection` in `src/lib/collection`). Adding a location inserts its state with the array helpers (`splice`), so a list only adds that row. Changing a location sets its state and marks its index as changed in the collection (`array.change` with the same state), so a list refreshes only that row, the array and the other items stay the same objects. Items are kept in order of id, which is also the order IndexedDB loads them in.
+- **Identity is stable.** A location's state is made once when the game loads or the location is added, and stays the same object for the rest of the session (a read only view is also always the same object). So the state itself identifies the location in the UI, a list selection can be the state, with no key function.
+- **The engine keeps an index by id**, a `Map<Id, owner>` per collection, for resolving ids in changes and prompts.
+- **Memories are an array state per character**, apart from the character, added to with `push`. Prompts take the last ones.
+- **Rounds**: the current round is one state, the finished rounds an array state that is only pushed to. A finished round never changes, so its value is a plain object.
+- **Game details** (name, time, round number) are one small state.
+- **Prompts** read the states when they are built. That costs the size of what goes into the prompt, which is spent anyway.
+
+### Applying changes
+
+A change list (from the scribes, the builder or an editor) is still all or nothing, without copying the world:
+
+1. **Check.** The changes are run against an overlay: a map of the objects the changes touch, each copied when first touched, on top of the current states. Later changes in the list see earlier ones, and new ids are given out here. Nothing outside the overlay is copied.
+2. **Save.** If every change fits, the touched objects (and new memories) are written to IndexedDB in one transaction.
+3. **Apply.** After the save succeeded, each touched object's state is set to its new value, added objects get new states pushed to their collection, and new memories are pushed. A failed save changes nothing, and the error is shown.
+
+The cowriter review uses step 1 alone, to show which changes will be skipped and why.
+
+### IndexedDB stores
+
+Every record holds one thing, so a save writes only what changed:
+
+- `games`: game details, keyed by game id. Small.
+- `locations`, `characters`: one record per object, keyed by `[game, id]`. Characters without their memories.
+- `memories`: one record per memory, keyed by `[game, character, n]`, only ever added.
+- `rounds`: one record per round, keyed by `[game, n]`. The current one is rewritten while it runs, finished ones never.
+- `calls`: every LLM call, keyed by `[game, round, id]`, for debugging. Can be cleared without harming the game.
+- `builds`: game builder sessions.
+- `images` later: blobs, referenced by id.
+
+Loading a game reads its records once and makes the states. Save files stay one JSON file, built from the records.
+
+### Depends on the library
+
+To discuss with the user, nothing of this is built:
+
+- **Selection in `list`**: a `selected` option taking a writable state of the row value. With stable row identity no key function is needed.
+- **Rows that are states**: the location list's rows would be location states, and a row's fields would follow the state. Whether `list` should support state rows, or something else is meant for this, is the user's call.
 
 ## AI server
 
@@ -145,7 +196,9 @@ Decided while building:
 - The builder's opening is stored as the story of round 0.
 - A failed call stops the round with the error shown and a retry button, nothing is retried by itself.
 
-Not built yet: dice rolls, images, a story log of earlier rounds, editing the world outside the builder, opening the builder on a running game, a way to tune prompts without code.
+Not built yet: dice rolls, images, a story log of earlier rounds, editing characters outside the builder, opening the builder on a running game, a way to tune prompts without code.
+
+Known problems: the location editor works around the missing selection in `list` (handlers and a class on the row elements), which must go once the library's selection is ready.
 
 ## Open questions
 

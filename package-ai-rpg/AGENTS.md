@@ -23,7 +23,7 @@ The library grows from what its apps need, but whether something belongs there i
 
 - **Something generic** (a helper, a UI element, a state or event pattern, parsing, formatting, storage, anything another app could use): build it in `src/lib/`, in its own module with no game specific code in it, so it could be moved to the library as is. Tell the user when you have built it, so it can be considered for the library.
 - **A pattern repeated** in the game, or between the game and the library: point it out to the user.
-- **The library has something close** but it is missing an option, is awkward to use, or has a bug: tell the user before working around it, do not work around library bugs silently.
+- **The library is missing something, is awkward to use, or has a bug: never work around it.** No CSS overriding library elements, no handlers or classes added onto library elements, no own replacement of a library feature, however small. Stop before writing any code for it, describe the gap and the library change you suggest, and wait for the user to decide. Telling the user after building a workaround is not acceptable.
 
 Do not change the library on your own. When the user decides to move something there, follow the root `../AGENTS.md` (ts-lib stays DOM free, module README, tests, dev page).
 
@@ -66,13 +66,14 @@ The build is a single self contained `dist/index.html`: code, css, fonts and ima
   - `later`: debounce by key with a flush, flushed when the page is hidden
   - `dom`: `el()`, make an element with a class and children
   - `local`: local storage that never throws, for conveniences
+  - `collection`: a keyed collection of states, every item its own state, the collection an array state of them that reports which item changed
 - Game modules:
   - `world`: characters, locations, the change list and applying it
   - `game`: stored records, rounds and phases
   - `options`: user settings
   - `prompts`: prompt and reply schema of every role
   - `store`: IndexedDB layout, continuous saving, save files
-  - `engine`: runs the rounds, the only place game state changes
+  - `engine`: runs the rounds, the only place game state changes. Every game object is its own state and a change sets and saves only what changed, keep it that way (see State and storage model in `DESIGN.md`)
   - `ui`: the views
   - `quick`: a ready made game for development, started with Quick game in the menu, so rounds can be tried without the game builder
 - The library is imported like a consumer, `@chocbite/ts-lib/state`, `@chocbite/ts-lib-ui/list`. Never relative paths into `../package-core` or `../package-ui`.

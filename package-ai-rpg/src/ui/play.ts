@@ -49,7 +49,14 @@ export function play_view(handlers: PlayHandlers) {
   let shown: Round | undefined;
   let read = 0;
 
-  const story_round = () => [...ENGINE.rounds.ok()].reverse().find((r) => r.story.length);
+  /**The current round when it has a story, otherwise the newest finished round with one*/
+  const story_round = () => {
+    const current = ENGINE.round.ok();
+    if (current?.story.length) return current;
+    const history = ENGINE.history.ok();
+    for (let i = history.length - 1; i >= 0; i--) if (history[i].story.length) return history[i];
+    return undefined;
+  };
 
   function render_story() {
     if (!game || !shown) {
@@ -57,12 +64,11 @@ export function play_view(handlers: PlayHandlers) {
       more.hidden = true;
       return;
     }
-    const world = game.world;
     story.replaceChildren(
       ...shown.story.slice(0, read + 1).map((chunk, i) => {
         const line = el("p", "chunk" + (chunk.speaker ? " said" : "") + (i === read ? " current" : ""));
         if (chunk.speaker) {
-          const speaker = world.characters[chunk.speaker];
+          const speaker = ENGINE.world.character(chunk.speaker);
           const name = line.appendChild(el("span", "speaker", speaker?.name ?? chunk.speaker));
           name.style.setProperty("--hue", String(hue(chunk.speaker)));
         }
@@ -82,7 +88,7 @@ export function play_view(handlers: PlayHandlers) {
     }
     if (shown?.n !== next.n || shown.game !== next.game) {
       const saved = JSON.parse(storage.get(read_key(game.id)) ?? "null") as { n: number; chunk: number } | null;
-      read = saved?.n === next.n ? saved.chunk : 0;
+      read = saved && saved.n === next.n ? saved.chunk : 0;
     }
     shown = next;
     read = Math.min(read, next.story.length - 1);
@@ -113,18 +119,19 @@ export function play_view(handlers: PlayHandlers) {
   /**Characters the prompt can be for, player characters first, AI characters in cowriter mode*/
   const choices = (): Character[] => {
     if (!game || !round) return [];
-    const cast = round.cast.map((id) => game!.world.characters[id]).filter((c): c is Character => !!c);
+    const cast = round.cast.map((id) => ENGINE.world.character(id)).filter((c): c is Character => !!c);
     const players = cast.filter((c) => c.controller === Controller.Player);
     return COWRITER.ok() ? [...players, ...cast.filter((c) => c.controller === Controller.Ai)] : players;
   };
 
-  const is_ai = () => !!selected && game?.world.characters[selected]?.controller === Controller.Ai;
+  const is_ai = () => !!selected && ENGINE.world.character(selected)?.controller === Controller.Ai;
 
   function select(id: Id | undefined) {
     if (game && selected && !is_ai()) storage.set(draft_key(game.id, selected), input.value || undefined);
     selected = id;
     input.value = "";
     update_bar(true);
+    update_scene();
   }
 
   tab.onclick = () => {
@@ -151,7 +158,7 @@ export function play_view(handlers: PlayHandlers) {
       selected = list[0]?.id;
       replace = true;
     }
-    const character = selected ? game?.world.characters[selected] : undefined;
+    const character = selected ? ENGINE.world.character(selected) : undefined;
     tab.replaceChildren();
     if (character) {
       const icon = tab.appendChild(el("span", "icon", initials(character.name)));
@@ -188,7 +195,7 @@ export function play_view(handlers: PlayHandlers) {
     ENGINE.submit(selected, text);
     storage.set(draft_key(game.id, selected), undefined);
     //The next player character that has not acted yet
-    const waiting = choices().find((c) => c.controller === Controller.Player && !ENGINE.rounds.ok().at(-1)?.actions[c.id]);
+    const waiting = choices().find((c) => c.controller === Controller.Player && !ENGINE.round.ok()?.actions[c.id]);
     if (waiting) select(waiting.id);
   }
 
@@ -227,12 +234,12 @@ export function play_view(handlers: PlayHandlers) {
     }
     switch (round.phase) {
       case Phase.Characters: {
-        const waiting_players = round.cast.filter((id) => game!.world.characters[id]?.controller === Controller.Player && !round!.actions[id]);
+        const waiting_players = round.cast.filter((id) => ENGINE.world.character(id)?.controller === Controller.Player && !round!.actions[id]);
         const deciding = running.filter((r) => r.role === Roles.Character);
         if (waiting_players.length) {
           if (deciding.length && COWRITER.ok()) busy(`${deciding.length} character${deciding.length > 1 ? "s" : ""} deciding`);
         } else if (deciding.length)
-          busy(`Waiting for ${deciding.map((r) => game!.world.characters[r.character!]?.name ?? "?").join(", ")} to decide`);
+          busy(`Waiting for ${deciding.map((r) => ENGINE.world.character(r.character!)?.name ?? "?").join(", ")} to decide`);
         return;
       }
       case Phase.Storyteller: {
@@ -260,11 +267,12 @@ export function play_view(handlers: PlayHandlers) {
   //     |_____/ \_____|______|_| \_|______|
   //A placeholder for the scene image until images are generated, colored by the location
   function update_scene() {
-    const player = game && Object.values(game.world.characters).find((c) => c.controller === Controller.Player && !c.gone);
-    const location = player ? game!.world.locations[player.location] : undefined;
+    //The location of the character the prompt is for, or of the first player character
+    const viewer = (selected && ENGINE.world.character(selected)) || choices().find((c) => c.controller === Controller.Player);
+    const location = viewer ? ENGINE.world.location(viewer.location) : undefined;
     scene.style.setProperty("--hue", String(location ? hue(location.id) : 230));
     place.replaceChildren();
-    if (game && location) place.append(el("span", "place-name", location.name), game.world.time ? el("span", "place-time", game.world.time) : "");
+    if (game && location) place.append(el("span", "place-name", location.name), game.time ? el("span", "place-time", game.time) : "");
     else if (!game)
       place.append(el("span", "place-name", "AI RPG"), el("span", "place-time", "Open the menu to start or load a game"));
   }
@@ -281,13 +289,22 @@ export function play_view(handlers: PlayHandlers) {
     update_bar(changed);
     update_status();
   }, true);
-  ENGINE.rounds.sub((rounds) => {
-    const changed = rounds.value.at(-1)?.n !== round?.n;
-    round = rounds.value.at(-1);
+  ENGINE.round.sub((r) => {
+    const changed = r.value?.n !== round?.n;
+    round = r.value;
     update_story();
     update_bar(changed);
     update_status();
+    update_scene();
   }, true);
+  ENGINE.history.sub(() => update_story());
+  //Names and places of characters and locations show on the screen
+  ENGINE.characters.sub(() => {
+    update_scene();
+    update_bar();
+    render_story();
+  });
+  ENGINE.locations.sub(() => update_scene());
   ENGINE.running.sub(() => {
     update_bar();
     update_status();

@@ -30,11 +30,26 @@ describe("world", () => {
     expect(problems.every((p) => p === undefined)).toBe(true);
     expect(ids.get("new:mara")).toBe("char:mara");
     expect(ids.get("new:mara-b")).toBe("char:mara-2");
-    expect(world.locations["loc:inn"].description).toBe("Where [Mara](char:mara) works");
-    expect(world.characters["char:mara"].controller).toBe("player");
-    expect(world.characters["char:mara-2"].controller).toBe("ai");
-    expect(world.characters["char:mara"].relationships["char:mara-2"].known_as).toBe("the other Mara");
+    expect(world.location("loc:inn")?.description).toBe("Where [Mara](char:mara) works");
+    expect(world.character("char:mara")?.controller).toBe("player");
+    expect(world.character("char:mara-2")?.controller).toBe("ai");
+    expect(world.character("char:mara")?.relationships["char:mara-2"].known_as).toBe("the other Mara");
     expect(world.time).toBe("Dawn");
+  });
+
+  it("returns only what the changes touched", () => {
+    const built = world_apply(world_empty(), BUILD);
+    const result = world_apply(built.world, [
+      { op: "update_location", location: "loc:inn", field: "name", value: "Old Inn" },
+      { op: "add_memory", character: "char:mara", memory: "rain" },
+    ]);
+    expect(result.locations.map((l) => l.id)).toEqual(["loc:inn"]);
+    expect(result.characters).toEqual([]);
+    expect(result.memories).toEqual([{ character: "char:mara", text: "rain" }]);
+    expect(result.time).toBeUndefined();
+    //The world it was applied to keeps its values
+    expect(built.world.location("loc:inn")?.name).toBe("Inn");
+    expect(result.world.location("loc:inn")?.name).toBe("Old Inn");
   });
 
   it("skips and explains changes that do not fit, applying the rest", () => {
@@ -49,11 +64,11 @@ describe("world", () => {
     ]);
     expect(result.problems[0]).toBe("there is no character char:nobody");
     expect(result.problems[1]).toBeUndefined();
-    expect(result.world.characters["char:mara"].memories).toEqual(["Saw [a stranger](char:stranger)"]);
+    expect(result.world.memories("char:mara")).toEqual(["Saw [a stranger](char:stranger)"]);
     expect(result.problems[4]).toBe("char:mara-2 is removed");
     expect(result.problems[5]).toContain("must start with new:");
     //The original is not changed
-    expect(world.characters["char:mara"].memories).toEqual([]);
+    expect(world.memories("char:mara")).toEqual([]);
   });
 
   it("never reuses ids of removed characters", () => {
@@ -83,7 +98,7 @@ describe("world", () => {
     expect(world_apply(world, [{ op: "remove_location", location: "loc:inn" }]).problems[0]).toBe("Mara, Mara are still at Inn");
     const removed = world_apply(world, [{ op: "remove_location", location: "loc:mill" }]);
     expect(removed.problems[0]).toBeUndefined();
-    expect(removed.world.locations["loc:mill"].gone).toBe(true);
+    expect(removed.world.location("loc:mill")?.gone).toBe(true);
     expect(world_apply(removed.world, [{ op: "move_character", character: "char:mara", location: "loc:mill" }]).problems[0]).toBe("loc:mill is removed");
   });
 

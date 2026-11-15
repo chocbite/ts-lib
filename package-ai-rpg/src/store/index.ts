@@ -1,9 +1,11 @@
 //Storage of games in IndexedDB, and save files.
+//Every record holds one thing, so a save writes only what changed.
+import type { Call, CharacterRecord, Game, LocationRecord, MemoryRecord, Round } from "#game";
 import { Db } from "#lib/db";
-import type { Call, Game, Round } from "#game";
 import { id_random } from "#lib/ids";
 import type { LlmMessage } from "#lib/llm";
 import type { BuilderReply } from "#prompts";
+import type { Character, Location } from "#world";
 import { err, ok, type Result } from "@chocbite/ts-lib/result";
 
 /**A game builder session*/
@@ -17,12 +19,21 @@ export interface Build {
   proposal?: BuilderReply;
 }
 
-const DB = await Db.open("ai-rpg", 1, {
-  games: { key: "id" },
-  rounds: { key: ["game", "n"] },
-  calls: { key: ["game", "round", "id"] },
-  builds: { key: "id" },
-});
+//Version 2 split the world out of the game record, older databases are reset
+const DB = await Db.open(
+  "ai-rpg",
+  2,
+  {
+    games: { key: "id" },
+    characters: { key: ["game", "id"] },
+    locations: { key: ["game", "id"] },
+    memories: { key: ["game", "character", "n"] },
+    rounds: { key: ["game", "n"] },
+    calls: { key: ["game", "round", "id"] },
+    builds: { key: "id" },
+  },
+  { reset_before: 2 },
+);
 
 /**Shown when storage fails, so it is never silent*/
 let on_error: (error: string) => void = (e) => console.error(e);
@@ -42,6 +53,9 @@ export const store_ready: Result<void, string> = DB.ok ? ok(undefined) : err(DB.
 //Asks the browser not to delete the storage when the disk runs low
 navigator.storage?.persist?.();
 
+//Every compound key starting with the prefix, an array sorts after every number and string
+const prefix_range = (...prefix: IDBValidKey[]) => IDBKeyRange.bound(prefix, [...prefix, []]);
+
 //       _____          __  __ ______  _____
 //      / ____|   /\   |  \/  |  ____|/ ____|
 //     | |  __   /  \  | \  / | |__  | (___
@@ -49,32 +63,71 @@ navigator.storage?.persist?.();
 //     | |__| |/ ____ \| |  | | |____ ____) |
 //      \_____/_/    \_\_|  |_|______|_____/
 
+/**Everything stored for a game*/
+export interface GameRecords {
+  game: Game;
+  characters: CharacterRecord[];
+  locations: LocationRecord[];
+  /**In order of character and number*/
+  memories: MemoryRecord[];
+  /**In order of number*/
+  rounds: Round[];
+}
+
 export const store_games = () => db().all<Game>("games");
-export const store_game = (id: string) => db().get<Game>("games", id);
-//Every compound key starting with the prefix, an array sorts after every number and string
-const prefix_range = (...prefix: IDBValidKey[]) => IDBKeyRange.bound(prefix, [...prefix, []]);
-export const store_rounds = (game: string) => db().all<Round>("rounds", prefix_range(game));
-export const store_calls = (game: string, round: number) => db().all<Call>("calls", prefix_range(game, round));
 
-export const store_put_game = async (game: Game) => report(await db().put("games", game));
-export const store_put_round = async (round: Round) => report(await db().put("rounds", round));
-export const store_put_call = async (call: Call) => report(await db().put("calls", call));
+/**Reads every record of a game*/
+export async function store_load(id: string): Promise<Result<GameRecords, string>> {
+  const game = await db().get<Game>("games", id);
+  if (game.err) return game;
+  if (!game.value) return err("The game does not exist");
+  const characters = await db().all<CharacterRecord>("characters", prefix_range(id));
+  if (characters.err) return characters;
+  const locations = await db().all<LocationRecord>("locations", prefix_range(id));
+  if (locations.err) return locations;
+  const memories = await db().all<MemoryRecord>("memories", prefix_range(id));
+  if (memories.err) return memories;
+  const rounds = await db().all<Round>("rounds", prefix_range(id));
+  if (rounds.err) return rounds;
+  return ok({
+    game: game.value,
+    characters: characters.value,
+    locations: locations.value,
+    memories: memories.value,
+    rounds: rounds.value,
+  });
+}
 
-/**Saves the game and rounds together, either all of it is saved or none*/
-export const store_put = async (game: Game, ...rounds: Round[]) =>
+/**Records to save for a game, everything given is saved in one transaction, all of it or none*/
+export interface GameWrite {
+  game?: Game;
+  characters?: readonly Character[];
+  locations?: readonly Location[];
+  memories?: readonly MemoryRecord[];
+  rounds?: readonly Round[];
+}
+
+/**Saves records of a game, all of them or none*/
+export const store_write = async (game: string, write: GameWrite) =>
   report(
-    await db().write(["games", "rounds"], (tx) => {
-      tx.objectStore("games").put(game);
-      for (const round of rounds) tx.objectStore("rounds").put(round);
+    await db().write(["games", "characters", "locations", "memories", "rounds"], (tx) => {
+      if (write.game) tx.objectStore("games").put(write.game);
+      for (const c of write.characters ?? []) tx.objectStore("characters").put({ ...c, game });
+      for (const l of write.locations ?? []) tx.objectStore("locations").put({ ...l, game });
+      for (const m of write.memories ?? []) tx.objectStore("memories").put(m);
+      for (const r of write.rounds ?? []) tx.objectStore("rounds").put(r);
     }),
   );
 
+export const store_put_round = async (round: Round) => report(await db().put("rounds", round));
+export const store_put_call = async (call: Call) => report(await db().put("calls", call));
+export const store_calls = (game: string, round: number) => db().all<Call>("calls", prefix_range(game, round));
+
 export const store_delete_game = async (game: string) =>
   report(
-    await db().write(["games", "rounds", "calls"], (tx) => {
+    await db().write(["games", "characters", "locations", "memories", "rounds", "calls"], (tx) => {
       tx.objectStore("games").delete(game);
-      tx.objectStore("rounds").delete(prefix_range(game));
-      tx.objectStore("calls").delete(prefix_range(game));
+      for (const store of ["characters", "locations", "memories", "rounds", "calls"]) tx.objectStore(store).delete(prefix_range(game));
     }),
   );
 
@@ -90,23 +143,18 @@ export const store_delete_build = async (id: string) => report(await db().delete
 //     |_____/_/    \_\    \/   |______| |_|    |_____|______|______|_____/
 
 const FORMAT = "ai-rpg-save";
-const VERSION = 1;
+const VERSION = 2;
 
-interface SaveFile {
+interface SaveFile extends GameRecords {
   format: typeof FORMAT;
   version: number;
-  game: Game;
-  rounds: Round[];
 }
 
 /**Save file of a game, as JSON*/
 export async function store_export(game: string): Promise<Result<Blob, string>> {
-  const g = await store_game(game);
-  if (g.err) return g;
-  if (!g.value) return err("The game does not exist");
-  const rounds = await store_rounds(game);
-  if (rounds.err) return rounds;
-  const file: SaveFile = { format: FORMAT, version: VERSION, game: g.value, rounds: rounds.value };
+  const records = await store_load(game);
+  if (records.err) return records;
+  const file: SaveFile = { format: FORMAT, version: VERSION, ...records.value };
   return ok(new Blob([JSON.stringify(file)], { type: "application/json" }));
 }
 
@@ -119,12 +167,16 @@ export async function store_import(text: string): Promise<Result<string, string>
   } catch (e) {
     return err("The file is not a save file: " + String(e));
   }
-  if (file?.format !== FORMAT || !file.game || !Array.isArray(file.rounds))
-    return err("The file is not a save file of this game");
+  if (file?.format !== FORMAT) return err("The file is not a save file of this game");
   if (file.version > VERSION) return err("The save file is from a newer version of the game");
+  if (file.version < VERSION) return err("The save file is from the prototype, its format can not be loaded any more");
   const id = id_random();
-  const game: Game = { ...file.game, id, updated: Date.now() };
-  const rounds = file.rounds.map((r) => ({ ...r, game: id }));
-  const saved = await store_put(game, ...rounds);
+  const saved = await store_write(id, {
+    game: { ...file.game, id, updated: Date.now() },
+    characters: file.characters,
+    locations: file.locations,
+    memories: file.memories.map((m) => ({ ...m, game: id })),
+    rounds: file.rounds.map((r) => ({ ...r, game: id })),
+  });
   return saved.err ? saved : ok(id);
 }
