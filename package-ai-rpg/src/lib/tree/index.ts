@@ -3,10 +3,12 @@
 //Changes are given as new node values, the tree works out what changed and writes only that to the array states,
 //so a list adds, removes or moves only those rows, and refreshes only the rows of changed nodes.
 //A node's state is made once and stays the same object, so it identifies the node.
-//The children and roots states are writable for moves inside one parent, which the tree hands to on_move, the owner of the data.
+//The children and roots states are writable for moves, which the tree hands to the owner of the data: moves inside one parent,
+//and inserts of nodes from elsewhere. The owner takes an inserted node out of its old parent itself, so a list must not remove it (no_remove).
 import { err, ok, type Result } from "@chocbite/ts-lib/result";
 import state, {
   STATE_ARRAY_WRITE_KEY,
+  type StateArrayWriteInstruction,
   type StateLocalROS,
   type StateLocalROSW,
   type StateROS,
@@ -25,6 +27,10 @@ export interface TreeNode {
  * @param parent the parent, empty for the top level*/
 export type TreeMove = (parent: string, from: number, to: number, count: number) => PromiseLike<Result<void, string>>;
 
+/**Asks the owner of the data to move nodes from wherever they are into a parent, at the index, in order
+ * @param parent the parent, empty for the top level*/
+export type TreeInsert = (parent: string, index: number, ids: string[]) => PromiseLike<Result<void, string>>;
+
 export type TreeRows<T> = StateROSW<StateROS<T>[]>;
 
 export class Tree<T extends TreeNode> {
@@ -32,9 +38,11 @@ export class Tree<T extends TreeNode> {
   readonly #children = new Map<string, StateLocalROSW<StateROS<T>[]>>();
   readonly #roots: StateLocalROSW<StateROS<T>[]>;
   readonly #on_move: TreeMove;
+  readonly #on_insert: TreeInsert;
 
-  constructor(on_move: TreeMove) {
+  constructor(on_move: TreeMove, on_insert: TreeInsert) {
     this.#on_move = on_move;
+    this.#on_insert = on_insert;
     this.#roots = this.#rows("");
   }
 
@@ -110,13 +118,17 @@ export class Tree<T extends TreeNode> {
     return ids.flatMap((id) => this.#owners.get(id)?.read_only ?? []);
   }
 
-  /**Rows state of a parent, writes to it are moves of its children*/
+  /**Rows state of a parent, writes to it are moves of its children, or inserts of nodes moved here from elsewhere*/
   #rows(parent: string): StateLocalROSW<StateROS<T>[]> {
-    return state.rosw(ok<StateROS<T>[]>([]), async (value) => {
-      const write = state.a.is_write(value) ? value[STATE_ARRAY_WRITE_KEY] : undefined;
-      if (write?.type !== "move") return err("Only moves inside the same parent are supported");
-      return this.#on_move(parent, write.from_index, write.to_index, write.count);
+    const rows: StateLocalROSW<StateROS<T>[]> = state.rosw(ok<StateROS<T>[]>([]), async (value) => {
+      const write = state.a.is_write(value) ? (value as StateArrayWriteInstruction<StateROS<T>>)[STATE_ARRAY_WRITE_KEY] : undefined;
+      const ids = (items: StateROS<T>[]) => items.map((s) => s.ok().id);
+      if (write?.type === "move") return this.#on_move(parent, write.from_index, write.to_index, write.count);
+      if (write?.type === "push") return this.#on_insert(parent, rows.ok().length, ids(write.items));
+      if (write?.type === "splice" && write.delete_count === 0) return this.#on_insert(parent, write.index, ids(write.items));
+      return err("Things can only be moved, not added or removed here");
     });
+    return rows;
   }
 
   /**Brings the rows to the order of the ids, with removals, moves and insertions of single rows

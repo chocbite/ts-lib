@@ -193,6 +193,8 @@ export function world_panel(select?: Id) {
           key: (thing_state) => thing_state.ok().id,
         },
         reorder: {
+          //The engine takes a moved thing out of its old parent itself
+          no_remove: true,
           can_drop: (thing_state, target) => {
             const thing = thing_state.ok();
             const into = target.parent?.ok();

@@ -10,10 +10,16 @@ const node = (id: string, parent: string, children: string[] = [], name = id): N
 
 const make = () => {
   const moves: unknown[] = [];
-  const tree = new Tree<Node>(async (...move) => {
-    moves.push(move);
-    return ok(undefined);
-  });
+  const tree = new Tree<Node>(
+    async (...move) => {
+      moves.push(["move", ...move]);
+      return ok(undefined);
+    },
+    async (...insert) => {
+      moves.push(["insert", ...insert]);
+      return ok(undefined);
+    },
+  );
   tree.reset([node("a", "", ["b", "c"]), node("b", "a"), node("c", "a"), node("d", "")], ["a", "d"]);
   return { tree, moves };
 };
@@ -47,15 +53,21 @@ describe("tree", () => {
     expect(ids(tree.roots)).toEqual(["d", "a"]);
   });
 
-  it("hands moves written to the rows to the owner, and rejects other writes", async () => {
+  it("hands moves and inserts written to the rows to the owner, and rejects other writes", async () => {
     const { tree, moves } = make();
+    const b = tree.get("b")!;
     expect((await tree.children("a")!.write(state.a.write.move(1, 0, 1))).ok).toBe(true);
     expect((await tree.roots.write(state.a.write.move(0, 1, 1))).ok).toBe(true);
+    expect((await tree.roots.write(state.a.write.splice(1, 0, b))).ok).toBe(true);
+    expect((await tree.children("d")!.write(state.a.write.push(b))).ok).toBe(true);
     expect(moves).toEqual([
-      ["a", 1, 0, 1],
-      ["", 0, 1, 1],
+      ["move", "a", 1, 0, 1],
+      ["move", "", 0, 1, 1],
+      ["insert", "", 1, ["b"]],
+      ["insert", "d", 0, ["b"]],
     ]);
     expect((await tree.roots.write(state.a.write.splice(0, 1))).err).toBe(true);
+    expect((await tree.roots.write(state.a.write.fresh([b]))).err).toBe(true);
     //Nothing moves until the owner gives the new values
     expect(ids(tree.children("a"))).toEqual(["b", "c"]);
   });

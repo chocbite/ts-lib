@@ -92,7 +92,7 @@ One world editor, a dialog with a sidebar (can be hidden) holding the tree in a 
 - Each kind has an icon in the list, and the form has the fields of its kind.
 - Single selection, the selection state holds ids.
 - The row context menu adds a location, character or item inside the row, and removes. New top level locations come from a button under the list.
-- Rows are reordered by dragging inside their parent, a move writes a `move` change. Moving to another parent is done in the form. See [Depends on the library](#depends-on-the-library) for dragging between parents.
+- Rows are dragged anywhere the rules allow, also to another parent, or moved in the form. A drag inside a parent is a `move` write to its children state, a drag to another parent only an insert into the target (the list's `no_remove`), the engine takes the thing out of its old parent itself. Either way it is one checked and saved `move` change.
 
 ## Attributes, skills and time
 
@@ -241,9 +241,7 @@ Loading a game reads its records once and makes the states. Save files stay one 
 
 ### Depends on the library
 
-To discuss with the user:
-
-- **Dragging rows to another parent.** The list writes it as two writes, an insert into the target and then `splice(index, count)` on the source. In the world tree a thing has one parent, so the engine moves it on the insert, and the removal by index would then hit whatever took its place. Suggested: a single move between parents write, or a removal that names its items. Until decided, children states take only `move` writes inside a parent and reject the insert with a message.
+Nothing open.
 
 ## AI server
 
@@ -274,7 +272,7 @@ Decided while building:
 
 Not built yet: dice rolls, images, a story log of earlier rounds, editing characters outside the builder, opening the builder on a running game, a way to tune prompts without code.
 
-Known problems: dragging a row to another parent in the world editor is rejected, see [Depends on the library](#depends-on-the-library).
+Known problems: none.
 
 ## Open questions
 

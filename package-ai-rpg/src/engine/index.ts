@@ -98,7 +98,10 @@ class EngineWorld extends WorldRead {
 
 class Engine {
   readonly #game = state.ros(ok<Game | undefined>(undefined));
-  readonly #tree = new Tree<Thing>((parent, from, to, count) => this.#reorder(parent, from, to, count));
+  readonly #tree = new Tree<Thing>(
+    (parent, from, to, count) => this.#reorder(parent, from, to, count),
+    (parent, index, ids) => this.#move_into(parent, index, ids),
+  );
   /**Memories of each character, an array state that is only pushed to*/
   readonly #memories = new Map<Id, StateLocalROS<string[]>>();
   readonly #round = state.ros(ok<Round | undefined>(undefined));
@@ -110,7 +113,8 @@ class Engine {
   /**Details of the loaded game, undefined when none is*/
   readonly game = this.#game.read_only;
   /**Things at the top level of the world, each a state that stays the same object.
-   * Writing a move to it, or to the children of a thing, moves things by hand.*/
+   * Writing a move to it, or to the children of a thing, moves things inside it by hand,
+   * writing an insert (splice or push of thing states) moves them there from wherever they are, without a removal from where they were.*/
   readonly roots: TreeRows<Thing> = this.#tree.roots;
   /**Changes whenever anything in the world changes, for views showing a little of everything*/
   readonly changed = this.#changed.read_only;
@@ -365,6 +369,13 @@ class Engine {
     const moves: Change[] = ids.map((thing, k) => ({ op: "move", thing, in: parent, index: to + k }));
     if (to > from) moves.reverse();
     const moved = await this.edit_world(moves);
+    return moved.err ? moved : ok(undefined);
+  }
+
+  /**Moves things from wherever they are into a parent by hand, from a list, all or none
+   * @param parent empty for the top level*/
+  async #move_into(parent: Id, index: number, ids: Id[]): Promise<Result<void, string>> {
+    const moved = await this.edit_world(ids.map((thing, k) => ({ op: "move", thing, in: parent, index: index + k })));
     return moved.err ? moved : ok(undefined);
   }
 

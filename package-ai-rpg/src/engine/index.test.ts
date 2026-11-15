@@ -40,7 +40,13 @@ describe("engine", () => {
     expect(ids(ENGINE.children("char:tamsin-vell"))).toEqual(["item:brass-compass", "item:ink-stained-satchel"]);
     (await ENGINE.roots.write(state.a.write.move(0, 1, 1))).unwrap();
     expect(ids(ENGINE.roots)).toEqual(["loc:the-old-mill", "loc:ashen-crossroads"]);
-    expect((await ENGINE.roots.write(state.a.write.push(compass))).err).toBe(true);
+    //A list moves rows to another parent by inserting them there, the engine takes them out of the old one
+    (await ENGINE.children("loc:the-old-mill")!.write(state.a.write.push(compass))).unwrap();
+    expect(ids(ENGINE.children("char:tamsin-vell"))).toEqual(["item:ink-stained-satchel"]);
+    expect(ids(ENGINE.children("loc:the-old-mill"))).toEqual(["char:edric-2", "item:brass-compass"]);
+    //A location can not go into an item, nothing changes
+    expect((await ENGINE.children("item:ink-stained-satchel")!.write(state.a.write.splice(0, 0, ENGINE.thing("loc:the-old-mill")!))).err).toBe(true);
+    expect(ids(ENGINE.roots)).toEqual(["loc:the-old-mill", "loc:ashen-crossroads"]);
 
     //All or nothing, a list with a bad change changes nothing
     const bad = await ENGINE.edit_world([
@@ -62,7 +68,7 @@ describe("engine", () => {
     expect(ENGINE.world.location("loc:the-wayward-goose")?.name).toBe("The Goose");
     expect(ENGINE.world.memories("char:tamsin-vell")).toEqual(["one", "two"]);
     expect(ids(ENGINE.roots)).toEqual(["loc:the-old-mill", "loc:ashen-crossroads"]);
-    expect(ids(ENGINE.children("char:tamsin-vell"))).toEqual(["item:brass-compass", "item:ink-stained-satchel"]);
+    expect(ids(ENGINE.children("loc:the-old-mill"))).toEqual(["char:edric-2", "item:brass-compass"]);
     expect(ENGINE.history.ok().map((r) => r.n)).toEqual([0]);
     expect(ENGINE.round.ok()?.n).toBe(1);
 
