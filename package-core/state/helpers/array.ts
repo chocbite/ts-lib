@@ -237,7 +237,11 @@ function write_apply<T>(
   const wk = (write as Partial<WithWriteKey<T>>)[STATE_ARRAY_WRITE_KEY];
   if (wk) {
     const w = wk;
-    if (w.type === "fresh") return [write, [{ type: "fresh", items: write }]];
+    if (w.type === "fresh") {
+      // fresh carries its instruction on the items array itself, strip it so the stored array is plain
+      delete (write as Partial<WithWriteKey<T>>)[STATE_ARRAY_WRITE_KEY];
+      return [write, [{ type: "fresh", items: write }]];
+    }
     else if (w.type === "push") {
       const index = array.length;
       array.push(...w.items);

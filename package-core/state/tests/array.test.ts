@@ -931,6 +931,19 @@ describe("Array State Write Without Helper", async () => {
     expect(reads![0]!.type).to.equal("fresh");
   });
 
+  it("write_apply fresh result does not carry the write instruction", async () => {
+    const [result] = st.a.write_apply(st.a.write.fresh([10, 20]), [1, 2, 3]);
+    expect(st.a.is_write(result)).to.equal(false);
+    expect(result).toEqual([10, 20]);
+  });
+
+  it("write fresh does not leave the write instruction on the stored array", async () => {
+    const s = st.rosw(ok<number[]>([1, 2, 3]));
+    await s.write(st.a.write.fresh([10, 20]));
+    expect(st.a.is_write(s.ok())).to.equal(false);
+    expect(s.ok()).toEqual([10, 20]);
+  });
+
   it("write plain array replaces state without read metadata", async () => {
     const s = st.rosw(ok<number[]>([1, 2, 3]));
     let reads: ReadItem<number>[] | undefined = undefined;
