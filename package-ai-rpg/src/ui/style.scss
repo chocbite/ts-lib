@@ -32,6 +32,13 @@ body {
   }
 }
 
+//Opens the world editor, floating over the scene in the top right corner
+.world-button {
+  position: fixed;
+  top: 1rem;
+  right: 1.25rem;
+}
+
 .place {
   position: fixed;
   top: 1rem;

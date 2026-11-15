@@ -6,8 +6,9 @@ import { local_get, local_set } from "#lib/local";
 import { QUICK_GAME } from "#quick";
 import { store_delete_game, store_export, store_games, store_import, store_on_error, store_ready } from "#store";
 import ctm from "@chocbite/ts-lib-ui/context-menu";
+import { material_public_rounded } from "@chocbite/ts-lib-ui/icons";
 import { builder_panel } from "./builder";
-import { panel_close, toast } from "./common";
+import { icon_button, panel_close, toast } from "./common";
 import { debug_panel } from "./debug";
 import { level_panel } from "./level";
 import { play_view } from "./play";
@@ -85,6 +86,10 @@ export async function ui_start() {
   store_on_error(toast);
   ctm.default(false);
   play_view({ menu, review: review_panel });
+  //Quick access to the world editor, shown while a game is loaded
+  const world_button = document.body.appendChild(icon_button(material_public_rounded, "World", () => world_panel()));
+  world_button.classList.add("world-button");
+  ENGINE.game.sub((g) => (world_button.hidden = !g.value), true);
   if (store_ready.err) return toast(store_ready.error);
 
   //Reviews and the level up window open by themselves when a round reaches them

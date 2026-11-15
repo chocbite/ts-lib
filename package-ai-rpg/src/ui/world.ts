@@ -93,7 +93,8 @@ const NOTES: { [F in Field]?: string } = {
   appearance: "What others see before they know this character",
 };
 
-const is_thing = (n: Node): n is Thing => (THING_KINDS as readonly string[]).includes(n.kind);
+const is_thing = (n: Node): n is Thing =>
+  (THING_KINDS as readonly string[]).includes(n.kind);
 const title = (text: string) => text[0].toUpperCase() + text.slice(1);
 
 /**Applies hand made changes, problems are shown and nothing is changed*/
@@ -106,16 +107,34 @@ async function edit(changes: Change[]) {
 /**Adds a new thing or definition in the parent
  * @returns the id of what was added*/
 async function add(kind: Kind, parent: Id): Promise<Id | undefined> {
-  const base = { id: "new:node", name: `New ${KIND_NAMES[kind].toLowerCase()}`, description: "" };
+  const base = {
+    id: "new:node",
+    name: `New ${KIND_NAMES[kind].toLowerCase()}`,
+    description: "",
+  };
   const change: Change | undefined =
     kind === Kind.Location
       ? { op: "add_location", ...base, in: parent }
       : kind === Kind.Item
         ? { op: "add_item", ...base, in: parent }
         : kind === Kind.Character
-          ? { op: "add_character", ...base, in: parent, appearance: "", bio: "", personality: "", goals: "" }
+          ? {
+              op: "add_character",
+              ...base,
+              in: parent,
+              appearance: "",
+              bio: "",
+              personality: "",
+              goals: "",
+            }
           : kind === Kind.Attribute
-            ? { op: "define_attribute", ...base, type: AttributeType.Number, unit: "", kinds: [...THING_KINDS] }
+            ? {
+                op: "define_attribute",
+                ...base,
+                type: AttributeType.Number,
+                unit: "",
+                kinds: [...THING_KINDS],
+              }
             : kind === Kind.Skill
               ? { op: "define_skill", ...base }
               : undefined;
@@ -145,7 +164,11 @@ export function world_panel(select?: Id) {
     local_set(SIDEBAR_KEY, show ? undefined : "hidden");
   };
   toggle(local_get(SIDEBAR_KEY) !== "hidden");
-  p.actions.append(icon_button(material_side_navigation_rounded, "Show or hide the list", () => toggle(!layout.first_shown)));
+  p.actions.append(
+    icon_button(material_side_navigation_rounded, "Show or hide the list", () =>
+      toggle(!layout.first_shown),
+    ),
+  );
 
   const first = select ?? ENGINE.world.roots[0];
   const selected = state.ok_w<Id[]>(first ? [first] : []);
@@ -163,19 +186,47 @@ export function world_panel(select?: Id) {
   const menu = (node: Node, row: { open: boolean }) => {
     if (node.kind === Kind.Group) {
       const kind = node.id === ATTRIBUTES ? Kind.Attribute : Kind.Skill;
-      return ctm.menu([ctm.line(`Add ${kind === Kind.Attribute ? "an attribute" : "a skill"}`, () => add_inside(kind, node.id, row), material_add_rounded())]);
+      return ctm.menu([
+        ctm.line(
+          `Add ${kind === Kind.Attribute ? "an attribute" : "a skill"}`,
+          () => add_inside(kind, node.id, row),
+          material_add_rounded(),
+        ),
+      ]);
     }
     if (node.kind === Kind.Attribute || node.kind === Kind.Skill)
-      return ctm.menu([ctm.line(`Remove ${node.name}`, () => edit([{ op: "remove_definition", definition: node.id }]), material_delete_rounded())]);
+      return ctm.menu([
+        ctm.line(
+          `Remove ${node.name}`,
+          () => edit([{ op: "remove_definition", definition: node.id }]),
+          material_delete_rounded(),
+        ),
+      ]);
     if (!is_thing(node)) return undefined;
     return ctm.menu([
       node.kind === Kind.Location
-        ? ctm.line("Add a location inside", () => add_inside(Kind.Location, node.id, row), material_add_location_rounded())
+        ? ctm.line(
+            "Add a location inside",
+            () => add_inside(Kind.Location, node.id, row),
+            material_add_location_rounded(),
+          )
         : undefined,
-      ctm.line("Add a character inside", () => add_inside(Kind.Character, node.id, row), material_person_add_rounded()),
-      ctm.line("Add an item inside", () => add_inside(Kind.Item, node.id, row), material_inventory_2_rounded()),
+      ctm.line(
+        "Add a character inside",
+        () => add_inside(Kind.Character, node.id, row),
+        material_person_add_rounded(),
+      ),
+      ctm.line(
+        "Add an item inside",
+        () => add_inside(Kind.Item, node.id, row),
+        material_inventory_2_rounded(),
+      ),
       ctm.devider(),
-      ctm.line(`Remove ${node.name}`, () => edit([{ op: "remove", thing: node.id }]), material_delete_rounded()),
+      ctm.line(
+        `Remove ${node.name}`,
+        () => edit([{ op: "remove", thing: node.id }]),
+        material_delete_rounded(),
+      ),
     ]);
   };
 
@@ -209,9 +260,12 @@ export function world_panel(select?: Id) {
             const node = node_state.ok();
             const into = target.parent?.ok();
             //Definitions are reordered inside their group, Global and the groups stay where they are
-            if (node.kind === Kind.Attribute || node.kind === Kind.Skill) return into?.id === node.parent;
+            if (node.kind === Kind.Attribute || node.kind === Kind.Skill)
+              return into?.id === node.parent;
             if (!is_thing(node) || (into && !is_thing(into))) return false;
-            return node.kind === Kind.Location ? !into || into.kind === Kind.Location : !!into;
+            return node.kind === Kind.Location
+              ? !into || into.kind === Kind.Location
+              : !!into;
           },
         },
       },
@@ -224,8 +278,15 @@ export function world_panel(select?: Id) {
     details.replaceChildren();
     const id = selected.ok()[0];
     const node = id ? ENGINE.world.node(id) : undefined;
-    if (!node || node.gone) return details.append(form.text({ text: "Nothing selected" }));
-    details.append(el("h3", undefined, node.kind === Kind.Group ? node.name : KIND_NAMES[node.kind]));
+    if (!node || node.gone)
+      return details.append(form.text({ text: "Nothing selected" }));
+    details.append(
+      el(
+        "h3",
+        undefined,
+        node.kind === Kind.Group ? node.name : KIND_NAMES[node.kind],
+      ),
+    );
     if (node.kind === Kind.Global) details.append(...global_form(node));
     else if (node.kind === Kind.Group)
       details.append(
@@ -236,7 +297,8 @@ export function world_panel(select?: Id) {
               : "Skills characters have a level of, 0 to 100, and items give a bonus to. Add one from the menu of this row.",
         }),
       );
-    else if (node.kind === Kind.Attribute || node.kind === Kind.Skill) details.append(...definition_form(node));
+    else if (node.kind === Kind.Attribute || node.kind === Kind.Skill)
+      details.append(...definition_form(node));
     else details.append(...thing_form(node));
   }
   selected.sub(() => show());
@@ -258,7 +320,11 @@ export function world_panel(select?: Id) {
 /**Time and experience settings*/
 function global_form(node: GlobalNode): HTMLElement[] {
   const time = node.settings.time;
-  const parts = { day: Math.floor(time / 1440) + 1, hour: Math.floor((time % 1440) / 60), minute: time % 60 };
+  const parts = {
+    day: Math.floor(time / 1440) + 1,
+    hour: Math.floor((time % 1440) / 60),
+    minute: time % 60,
+  };
   const part = (name: keyof typeof parts, min: number, max: number) =>
     form.number_input({
       value: parts[name],
@@ -271,7 +337,12 @@ function global_form(node: GlobalNode): HTMLElement[] {
     });
   return [
     field("Day", part("day", 1, 100000)),
-    el("div", "row", field("Hour", part("hour", 0, 23)), field("Minute", part("minute", 0, 59))),
+    el(
+      "div",
+      "row",
+      field("Hour", part("hour", 0, 23)),
+      field("Minute", part("minute", 0, 59)),
+    ),
     el("h4", undefined, "Experience"),
     ...SETTINGS_FIELDS.map((name) =>
       field(
@@ -280,7 +351,8 @@ function global_form(node: GlobalNode): HTMLElement[] {
           value: node.settings[name],
           min: name === "level_growth" ? 1 : 0,
           decimals: name === "level_growth" ? 2 : 0,
-          change: (value) => edit([{ op: "update_settings", field: name, value }]),
+          change: (value) =>
+            edit([{ op: "update_settings", field: name, value }]),
         }),
       ),
     ),
@@ -289,10 +361,17 @@ function global_form(node: GlobalNode): HTMLElement[] {
 
 /**Name and description of a definition, and the type, unit and kinds of an attribute*/
 function definition_form(def: Definition): HTMLElement[] {
-  const set = (field: "name" | "description" | "unit") => (value: string) => edit([{ op: "update_definition", definition: def.id, field, value }]);
+  const set = (field: "name" | "description" | "unit") => (value: string) =>
+    edit([{ op: "update_definition", definition: def.id, field, value }]);
   const fields = [
     field("Name", form.text_input({ value: def.name, change: set("name") })),
-    field("Description", form.text_multiline({ value: def.description, change: set("description") })),
+    field(
+      "Description",
+      form.text_multiline({
+        value: def.description,
+        change: set("description"),
+      }),
+    ),
   ];
   if (def.kind !== Kind.Attribute) return fields;
   const kinds = new Set(def.kinds);
@@ -303,11 +382,23 @@ function definition_form(def: Definition): HTMLElement[] {
       form.dropdown({
         selections: TYPE_NAMES,
         value: def.type,
-        change: (value) => edit([{ op: "update_definition", definition: def.id, field: "type", value }]),
+        change: (value) =>
+          edit([
+            {
+              op: "update_definition",
+              definition: def.id,
+              field: "type",
+              value,
+            },
+          ]),
       }),
       "Can only change while nothing has a value of it",
     ),
-    field("Unit", form.text_input({ value: def.unit, change: set("unit") }), "For numbers, like cm or coins"),
+    field(
+      "Unit",
+      form.text_input({ value: def.unit, change: set("unit") }),
+      "For numbers, like cm or coins",
+    ),
     el(
       "div",
       "row",
@@ -319,7 +410,14 @@ function definition_form(def: Definition): HTMLElement[] {
             change: (on) => {
               if (on) kinds.add(kind);
               else kinds.delete(kind);
-              edit([{ op: "update_definition", definition: def.id, field: "kinds", value: THING_KINDS.filter((k) => kinds.has(k)) }]);
+              edit([
+                {
+                  op: "update_definition",
+                  definition: def.id,
+                  field: "kinds",
+                  value: THING_KINDS.filter((k) => kinds.has(k)),
+                },
+              ]);
             },
           }),
         ),
@@ -331,36 +429,71 @@ function definition_form(def: Definition): HTMLElement[] {
 /**Fields of a thing, and the lists of its attributes, skills and abilities*/
 function thing_form(thing: Thing): HTMLElement[] {
   const fields = (Object.keys(FIELDS) as Field[])
-    .filter((name) => (FIELDS[name] as readonly ThingKind[]).includes(thing.kind))
+    .filter((name) =>
+      (FIELDS[name] as readonly ThingKind[]).includes(thing.kind),
+    )
     .map((name) => {
       const value = (thing as unknown as { [field: string]: string })[name];
-      const change = (value: string) => edit([{ op: "update", thing: thing.id, field: name, value }]);
-      return field(title(name), name === "name" ? form.text_input({ value, change }) : form.text_multiline({ value, change }), NOTES[name]);
+      const change = (value: string) =>
+        edit([{ op: "update", thing: thing.id, field: name, value }]);
+      return field(
+        title(name),
+        name === "name"
+          ? form.text_input({ value, change })
+          : form.text_multiline({ value, change }),
+        NOTES[name],
+      );
     });
   return [
     ...fields,
     ...(thing.kind === Kind.Character ? [level_text(thing)] : []),
     field("Attributes", attribute_list(thing)),
-    ...(thing.kind !== Kind.Location ? [field(thing.kind === Kind.Character ? "Skills" : "Skill bonuses", skill_list(thing))] : []),
-    ...(thing.kind === Kind.Character ? [field("Abilities", ability_list(thing))] : []),
-    field("Effects", effect_list(thing), "Changes that wear off, made by the story, like a potion"),
+    ...(thing.kind !== Kind.Location
+      ? [
+          field(
+            thing.kind === Kind.Character ? "Skills" : "Skill bonuses",
+            skill_list(thing),
+          ),
+        ]
+      : []),
+    ...(thing.kind === Kind.Character
+      ? [field("Abilities", ability_list(thing))]
+      : []),
+    field(
+      "Effects",
+      effect_list(thing),
+      "Changes that wear off, made by the story, like a potion",
+    ),
   ];
 }
 
 function effect_list(thing: Thing) {
   const world = ENGINE.world;
   return list.container(
-    { target: list.column_string("Changes", { align: "left" }), amount: list.column_string("By"), left: list.column_string("For") },
+    {
+      target: list.column_string("Changes", { align: "left" }),
+      amount: list.column_string("By"),
+      left: list.column_string("For"),
+    },
     (entry_state: StateROS<Effect>) => {
       const e = entry_state.ok();
-      const local = world.thing(thing.id)?.attributes.find((v) => v.id === e.target)?.local;
+      const local = world
+        .thing(thing.id)
+        ?.attributes.find((v) => v.id === e.target)?.local;
       return ok({
         values: {
           target: `${local?.name ?? world.node(e.target)?.name ?? e.target}, from ${e.reason || "an effect"}`,
           amount: (e.amount >= 0 ? "+" : "") + e.amount,
           left: world_duration_text(e.until - world.time),
         },
-        context_menu: ctm.menu([ctm.line("Remove", () => edit([{ op: "remove_effect", thing: thing.id, effect: e.id }]), material_delete_rounded())]),
+        context_menu: ctm.menu([
+          ctm.line(
+            "Remove",
+            () =>
+              edit([{ op: "remove_effect", thing: thing.id, effect: e.id }]),
+            material_delete_rounded(),
+          ),
+        ]),
       });
     },
     ENGINE.effects(thing.id),
@@ -373,7 +506,9 @@ function level_text(c: Character) {
   const next = world_level_exp(ENGINE.world.settings, c.level + 1);
   return field(
     "Level",
-    form.text({ text: `Level ${c.level}, ${c.exp} of ${next} experience to the next level, ${c.skill_points} skill points not spent` }),
+    form.text({
+      text: `Level ${c.level}, ${c.exp} of ${next} experience to the next level, ${c.skill_points} skill points not spent`,
+    }),
   );
 }
 
@@ -383,28 +518,50 @@ const node_column = (title: string) =>
     title,
     align: "left",
     field_gen: () => list.node_field(el("div")),
-    field_apply: (cell, make: () => HTMLElement) => cell.node.replaceChildren(make()),
+    field_apply: (cell, make: () => HTMLElement) =>
+      cell.node.replaceChildren(make()),
   });
 
 /**Input for a value of the type*/
-function value_input(type: string, value: Value, change: (value: Value) => void, unit = ""): HTMLElement {
-  if (type === AttributeType.Number) return form.number_input({ value: typeof value === "number" ? value : 0, unit, change });
-  if (type === AttributeType.Bool) return form.switch({ value: value === true, change });
+function value_input(
+  type: string,
+  value: Value,
+  change: (value: Value) => void,
+): HTMLElement {
+  if (type === AttributeType.Number)
+    return form.number_input({
+      value: typeof value === "number" ? value : 0,
+      change,
+    });
+  if (type === AttributeType.Bool)
+    return form.switch({ value: value === true, change });
   return form.text_input({ value: String(value), change });
 }
 
-const DEFAULTS: { [T in AttributeType]: Value } = { number: 0, text: "", bool: false };
+const DEFAULTS: { [T in AttributeType]: Value } = {
+  number: 0,
+  text: "",
+  bool: false,
+};
 
 /**A name for a new local attribute the thing does not have yet, "New attribute", "New attribute 2"*/
 function free_name(id: Id): string {
-  const names = new Set(ENGINE.world.thing(id)?.attributes.map((v) => v.local?.name.toLowerCase()));
-  for (let n = 1; ; n++) if (!names.has(n === 1 ? "new attribute" : `new attribute ${n}`)) return n === 1 ? "New attribute" : `New attribute ${n}`;
+  const names = new Set(
+    ENGINE.world.thing(id)?.attributes.map((v) => v.local?.name.toLowerCase()),
+  );
+  for (let n = 1; ; n++)
+    if (!names.has(n === 1 ? "new attribute" : `new attribute ${n}`))
+      return n === 1 ? "New attribute" : `New attribute ${n}`;
 }
 
 function attribute_list(thing: Thing) {
   const world = ENGINE.world;
   const container = list.container(
-    { name: node_column("Name"), value: node_column("Value") },
+    {
+      name: node_column("Name"),
+      value: node_column("Value"),
+      unit: node_column("Unit"),
+    },
     (entry_state: StateROS<AttributeValue>) => {
       const entry = entry_state.ok();
       const def: AttributeDef | undefined = world.attribute(entry.id);
@@ -417,7 +574,17 @@ function attribute_list(thing: Thing) {
             local
               ? form.text_input({
                   value: local.name,
-                  change: (name) => edit([{ op: "set_local_attribute", thing: thing.id, ...local, name, value: entry.value, attribute: entry.id }]),
+                  change: (name) =>
+                    edit([
+                      {
+                        op: "set_local_attribute",
+                        thing: thing.id,
+                        ...local,
+                        name,
+                        value: entry.value,
+                        attribute: entry.id,
+                      },
+                    ]),
                 })
               : form.text({ text: shape?.name ?? entry.id }),
           value: () =>
@@ -427,13 +594,60 @@ function attribute_list(thing: Thing) {
               (value) =>
                 edit([
                   local
-                    ? { op: "set_local_attribute", thing: thing.id, ...local, value, attribute: entry.id }
-                    : { op: "set_attribute", thing: thing.id, attribute: entry.id, value },
+                    ? {
+                        op: "set_local_attribute",
+                        thing: thing.id,
+                        ...local,
+                        value,
+                        attribute: entry.id,
+                      }
+                    : {
+                        op: "set_attribute",
+                        thing: thing.id,
+                        attribute: entry.id,
+                        value,
+                      },
                 ]),
-              shape?.unit,
             ),
+          //The unit of a local number is set here, of a global one under Global
+          unit: () =>
+            local?.type === AttributeType.Number
+              ? form.text_input({
+                  value: local.unit,
+                  placeholder: "Unit",
+                  change: (unit) =>
+                    edit([
+                      {
+                        op: "set_local_attribute",
+                        thing: thing.id,
+                        ...local,
+                        unit,
+                        value: entry.value,
+                        attribute: entry.id,
+                      },
+                    ]),
+                })
+              : form.text({
+                  text:
+                    shape?.type === AttributeType.Number
+                      ? (shape.unit ?? "")
+                      : "",
+                }),
         },
-        context_menu: ctm.menu([ctm.line("Remove", () => edit([{ op: "remove_attribute", thing: thing.id, attribute: entry.id }]), material_delete_rounded())]),
+        context_menu: ctm.menu([
+          ctm.line(
+            "Remove",
+            () =>
+              edit([
+                {
+                  op: "remove_attribute",
+                  thing: thing.id,
+                  attribute: entry.id,
+                },
+              ]),
+            material_delete_rounded(),
+          ),
+        ]),
       });
     },
     ENGINE.attributes(thing.id),
@@ -443,18 +657,42 @@ function attribute_list(thing: Thing) {
         text: "Add attribute",
         icon: material_add_rounded,
         on_add: () => {
-          const has = new Set(ENGINE.world.thing(thing.id)?.attributes.map((v) => v.id));
-          const global = world.attributes().filter((a) => a.kinds.includes(thing.kind) && !has.has(a.id));
+          const has = new Set(
+            ENGINE.world.thing(thing.id)?.attributes.map((v) => v.id),
+          );
+          const global = world
+            .attributes()
+            .filter((a) => a.kinds.includes(thing.kind) && !has.has(a.id));
           ctm.summon(
             ctm.menu([
-              ...global.map((a) => ctm.line(a.name + (a.unit ? ` (${a.unit})` : ""), () => edit([{ op: "set_attribute", thing: thing.id, attribute: a.id, value: DEFAULTS[a.type] }]))),
+              ...global.map((a) =>
+                ctm.line(a.name + (a.unit ? ` (${a.unit})` : ""), () =>
+                  edit([
+                    {
+                      op: "set_attribute",
+                      thing: thing.id,
+                      attribute: a.id,
+                      value: DEFAULTS[a.type],
+                    },
+                  ]),
+                ),
+              ),
               global.length ? ctm.devider() : undefined,
               ctm.sub(
                 "Only for this one",
                 ctm.menu(
                   TYPE_NAMES.map((t) =>
                     ctm.line(t.text, () =>
-                      edit([{ op: "set_local_attribute", thing: thing.id, name: free_name(thing.id), type: t.value, unit: "", value: DEFAULTS[t.value] }]),
+                      edit([
+                        {
+                          op: "set_local_attribute",
+                          thing: thing.id,
+                          name: free_name(thing.id),
+                          type: t.value,
+                          unit: "",
+                          value: DEFAULTS[t.value],
+                        },
+                      ]),
                     ),
                   ),
                 ),
@@ -476,15 +714,41 @@ function skill_list(thing: Exclude<Thing, { kind: "location" }>) {
   const world = ENGINE.world;
   const [min, max] = thing.kind === Kind.Character ? [0, 100] : [-100, 100];
   const container = list.container(
-    { name: list.column_string("Skill", { align: "left" }), value: node_column(thing.kind === Kind.Character ? "Level" : "Bonus") },
+    {
+      name: list.column_string("Skill", { align: "left" }),
+      value: node_column(thing.kind === Kind.Character ? "Level" : "Bonus"),
+    },
     (entry_state: StateROS<SkillValue>) => {
       const entry = entry_state.ok();
       return ok({
         values: {
           name: world.skill(entry.skill)?.name ?? entry.skill,
-          value: () => form.number_input({ value: entry.value, min, max, change: (value) => edit([{ op: "set_skill", thing: thing.id, skill: entry.skill, value }]) }),
+          value: () =>
+            form.number_input({
+              value: entry.value,
+              min,
+              max,
+              change: (value) =>
+                edit([
+                  {
+                    op: "set_skill",
+                    thing: thing.id,
+                    skill: entry.skill,
+                    value,
+                  },
+                ]),
+            }),
         },
-        context_menu: ctm.menu([ctm.line("Remove", () => edit([{ op: "remove_skill", thing: thing.id, skill: entry.skill }]), material_delete_rounded())]),
+        context_menu: ctm.menu([
+          ctm.line(
+            "Remove",
+            () =>
+              edit([
+                { op: "remove_skill", thing: thing.id, skill: entry.skill },
+              ]),
+            material_delete_rounded(),
+          ),
+        ]),
       });
     },
     ENGINE.skills(thing.id),
@@ -495,13 +759,33 @@ function skill_list(thing: Exclude<Thing, { kind: "location" }>) {
         icon: material_school_rounded,
         on_add: () => {
           const current = ENGINE.world.thing(thing.id);
-          const has = new Set(current && "skills" in current ? current.skills.map((s) => s.skill) : []);
+          const has = new Set(
+            current && "skills" in current
+              ? current.skills.map((s) => s.skill)
+              : [],
+          );
           const skills = world.skills().filter((s) => !has.has(s.id));
           ctm.summon(
             ctm.menu(
               skills.length
-                ? skills.map((s) => ctm.line(s.name, () => edit([{ op: "set_skill", thing: thing.id, skill: s.id, value: 0 }])))
-                : [ctm.line("Every skill is added, new skills are made under Global", () => {})],
+                ? skills.map((s) =>
+                    ctm.line(s.name, () =>
+                      edit([
+                        {
+                          op: "set_skill",
+                          thing: thing.id,
+                          skill: s.id,
+                          value: 0,
+                        },
+                      ]),
+                    ),
+                  )
+                : [
+                    ctm.line(
+                      "Every skill is added, new skills are made under Global",
+                      () => {},
+                    ),
+                  ],
             ),
             container,
             undefined,
@@ -524,10 +808,22 @@ function ability_list(c: Character) {
       const a = entry_state.ok();
       return ok({
         values: {
-          name: () => form.text_input({ value: a.name, change: set(a.id, "name") }),
-          description: () => form.text_input({ value: a.description, change: set(a.id, "description") }),
+          name: () =>
+            form.text_input({ value: a.name, change: set(a.id, "name") }),
+          description: () =>
+            form.text_input({
+              value: a.description,
+              change: set(a.id, "description"),
+            }),
         },
-        context_menu: ctm.menu([ctm.line("Remove", () => edit([{ op: "remove_ability", character: c.id, ability: a.id }]), material_delete_rounded())]),
+        context_menu: ctm.menu([
+          ctm.line(
+            "Remove",
+            () =>
+              edit([{ op: "remove_ability", character: c.id, ability: a.id }]),
+            material_delete_rounded(),
+          ),
+        ]),
       });
     },
     ENGINE.abilities(c.id),
@@ -536,7 +832,15 @@ function ability_list(c: Character) {
       add_row: {
         text: "Add ability",
         icon: material_auto_awesome_rounded,
-        on_add: () => edit([{ op: "add_ability", character: c.id, name: "New ability", description: "" }]),
+        on_add: () =>
+          edit([
+            {
+              op: "add_ability",
+              character: c.id,
+              name: "New ability",
+              description: "",
+            },
+          ]),
       },
     },
   );
