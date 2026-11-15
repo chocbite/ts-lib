@@ -395,25 +395,39 @@ function value_input(type: string, value: Value, change: (value: Value) => void,
 
 const DEFAULTS: { [T in AttributeType]: Value } = { number: 0, text: "", bool: false };
 
+/**A name for a new local attribute the thing does not have yet, "New attribute", "New attribute 2"*/
+function free_name(id: Id): string {
+  const names = new Set(ENGINE.world.thing(id)?.attributes.map((v) => v.local?.name.toLowerCase()));
+  for (let n = 1; ; n++) if (!names.has(n === 1 ? "new attribute" : `new attribute ${n}`)) return n === 1 ? "New attribute" : `New attribute ${n}`;
+}
+
 function attribute_list(thing: Thing) {
   const world = ENGINE.world;
   const container = list.container(
-    { name: list.column_string("Name", { align: "left" }), value: node_column("Value") },
+    { name: node_column("Name"), value: node_column("Value") },
     (entry_state: StateROS<AttributeValue>) => {
       const entry = entry_state.ok();
       const def: AttributeDef | undefined = world.attribute(entry.id);
       const shape = entry.local ?? def;
+      const local = entry.local;
       return ok({
         values: {
-          name: (shape?.name ?? entry.id) + (entry.local ? " (only here)" : ""),
+          //Only a local attribute is named here, a global one is renamed under Global
+          name: () =>
+            local
+              ? form.text_input({
+                  value: local.name,
+                  change: (name) => edit([{ op: "set_local_attribute", thing: thing.id, ...local, name, value: entry.value, attribute: entry.id }]),
+                })
+              : form.text({ text: shape?.name ?? entry.id }),
           value: () =>
             value_input(
               shape?.type ?? AttributeType.Text,
               entry.value,
               (value) =>
                 edit([
-                  entry.local
-                    ? { op: "set_local_attribute", thing: thing.id, ...entry.local, value }
+                  local
+                    ? { op: "set_local_attribute", thing: thing.id, ...local, value, attribute: entry.id }
                     : { op: "set_attribute", thing: thing.id, attribute: entry.id, value },
                 ]),
               shape?.unit,
@@ -440,7 +454,7 @@ function attribute_list(thing: Thing) {
                 ctm.menu(
                   TYPE_NAMES.map((t) =>
                     ctm.line(t.text, () =>
-                      edit([{ op: "set_local_attribute", thing: thing.id, name: "New attribute", type: t.value, unit: "", value: DEFAULTS[t.value] }]),
+                      edit([{ op: "set_local_attribute", thing: thing.id, name: free_name(thing.id), type: t.value, unit: "", value: DEFAULTS[t.value] }]),
                     ),
                   ),
                 ),

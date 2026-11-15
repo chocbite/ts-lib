@@ -42,7 +42,7 @@ export const QUICK_GAME: BuilderReply = {
       in: "",
     },
     { op: "add_item", id: "new:counter-chest", name: "Iron-bound chest", description: "A heavy chest behind the counter, always locked", in: "new:goose" },
-    { op: "add_item", id: "new:ledger", name: "Guest ledger", description: "Edric's thick ledger of every guest for twenty years", in: "new:counter-chest" },
+    { op: "add_item", id: "new:ledger", name: "Guest ledger", description: "Edric's thick ledger of every guest for twenty years, he keeps it locked in the chest when he is not writing in it", in: "new:edric" },
     { op: "add_item", id: "new:satchel", name: "Ink-stained satchel", description: "Tamsin's leather satchel", in: "new:tamsin" },
     { op: "add_item", id: "new:map", name: "Unfinished map", description: "A half-drawn map of the crossroads, the mill marked with a question mark", in: "new:satchel" },
     { op: "add_item", id: "new:compass", name: "Brass compass", description: "A surveyor's compass, its needle a little unsteady near the river", in: "new:satchel" },
@@ -150,10 +150,10 @@ export const QUICK_GAME: BuilderReply = {
     { op: "add_ability", character: "new:pip", name: "Pocket sized", description: "Fits anywhere a mouse would, and is easily overlooked" },
   ],
   opening: [
-    { speaker: "", text: "Rain lashes the shutters of [The Wayward Goose](new:goose) as you push the door open and shake the water from your satchel." },
+    { speaker: "", text: "Rain lashes the shutters of [The Wayward Goose](new:goose) as [Tamsin Vell](new:tamsin) pushes the door open and shakes the water from her satchel." },
     { speaker: "", text: "Behind the counter, [Edric](new:edric) looks up from a thick ledger and closes it a little too quickly." },
     { speaker: "new:edric", text: "A traveller, on a night like this! Sit by the fire, I'll find you something hot." },
-    { speaker: "", text: "In the corner, [a skinny kid in an oversized hood](new:wren) is watching your satchel with great interest." },
-    { speaker: "", text: "Somewhere to the east, over the storm, you can hear the slow creak of a mill wheel." },
+    { speaker: "", text: "In the corner, [a skinny kid in an oversized hood](new:wren) watches [Tamsin Vell](new:tamsin)'s satchel with great interest." },
+    { speaker: "", text: "Somewhere to the east, over the storm, the slow creak of a mill wheel carries through the rain." },
   ],
 };

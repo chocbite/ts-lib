@@ -658,7 +658,9 @@ class Engine {
     if (reply.err) return;
     const changes = parse<ScribesReply>(reply.value, schema);
     if (changes.err) return this.#update_round((r) => (r.error = `The scribe of ${character.name}'s reply did not fit: ${changes.error}`));
-    this.#scribed((s) => (s.characters[character.id] = changes.value.changes));
+    //Moves to where something already is change nothing, models still like to make them
+    const real = changes.value.changes.filter((c) => c.op !== "move" || world.thing(c.thing)?.parent !== c.in);
+    this.#scribed((s) => (s.characters[character.id] = real));
   }
 
   /**Lets an AI character spend its skill points, raises that do not fit are left out*/

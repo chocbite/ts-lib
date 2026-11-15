@@ -273,4 +273,25 @@ describe("world", () => {
     const spent = world_apply(world, [{ op: "spend_skill_points", character: "char:mara", skill: "skill:climbing", points: 3 }]).world.character("char:mara")!;
     expect([spent.skills[0].value, spent.skill_points]).toEqual([100, 2]);
   });
+
+  it("keeps local attributes apart, by id when given and else by name", () => {
+    const add = (name: string, value: number, attribute?: string): Change => ({
+      op: "set_local_attribute",
+      thing: "item:chest",
+      name,
+      type: "number",
+      unit: "",
+      value,
+      ...(attribute ? { attribute } : {}),
+    });
+    const world = world_apply(built(), [add("Weight", 1), add("Width", 2), add("weight", 3)]).world;
+    expect(world.item("item:chest")?.attributes.map((v) => [v.id, v.local?.name, v.value])).toEqual([
+      ["local:weight", "weight", 3],
+      ["local:width", "Width", 2],
+    ]);
+    //Renamed by id, the id stays, a name can not be taken twice
+    const renamed = world_apply(world, [add("Mass", 3, "local:weight")]).world;
+    expect(renamed.item("item:chest")?.attributes[0]).toEqual({ id: "local:weight", value: 3, local: { name: "Mass", type: "number", unit: "" } });
+    expect(world_apply(world, [add("Width", 3, "local:weight")]).problems[0]).toBe("Chest already has Width");
+  });
 });

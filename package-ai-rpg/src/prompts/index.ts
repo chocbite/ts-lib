@@ -73,10 +73,12 @@ const depth = (world: WorldRead, id: Id, top: Id) => {
 const cast_of = (world: WorldRead, round: Round) =>
   round.cast.map((id) => world.character(id)).filter((c): c is Character => !!c && !c.gone);
 
-/**Story as the viewer experienced it, with the names the viewer knows, or true names without a viewer*/
+/**Story as the viewer experienced it, with the names the viewer knows and the viewer marked as "(you)", or true names without a viewer*/
 export function story_text(world: WorldRead, chunks: readonly Chunk[], viewer?: Id): string {
   const name = (id: Id) =>
-    viewer ? world_known_as(world, viewer, id) : (world.character(id)?.name ?? world.location(id)?.name ?? id);
+    viewer
+      ? world_known_as(world, viewer, id) + (id === viewer ? " (you)" : "")
+      : (world.character(id)?.name ?? world.location(id)?.name ?? id);
   const text = (t: string) => mention_map(t, (shown, id) => (id.startsWith("char:") ? { text: name(id), id } : { text: shown, id }));
   return chunks
     .map((c) => (c.speaker ? `${link(name(c.speaker), c.speaker)}: "${text(c.text)}"` : text(c.text)))
@@ -289,11 +291,18 @@ export function prompt_storyteller(world: WorldRead, round: Round, earlier: read
 
 Rules:
 - Characters only attempt things, you decide the outcome. Not everything succeeds, keep it believable within the world.
-- Where the dice were rolled, the result is final: a failed roll fails, a barely won roll barely succeeds. Show it in the story, never mention dice or numbers.
+- Where the dice were rolled, the result is final, show it in the story but never mention dice or numbers:
+  - succeeded easily: it works smoothly, nobody can stop it.
+  - succeeded: it works.
+  - succeeded barely: it still works, with a close call, but nobody notices or prevents it.
+  - failed barely: it almost worked, but it did not.
+  - failed: it does not work.
+  - failed badly: it does not work, and it goes wrong in a way that matters.
 - Describe only what can be seen and heard, never private thoughts. Characters only know what they witness.
 - Do not make player characters do or say more than they attempted.
 - Keep it vivid but short, three to eight chunks. Each chunk is one to three sentences.
-- A chunk with a speaker is only the words that character says aloud, without quotes. A chunk with an empty speaker is narration.
+- Write in the third person and past or present tense, never "you", every character is named by their link.
+- A chunk with a speaker is only the words that character says aloud, without quotes, and the speaker is the id of the character saying them. Check the speaker of every spoken chunk. A chunk with an empty speaker is narration.
 - Refer to characters and locations as markdown links with their id, like ${cast[0] ? link(cast[0].name, cast[0].id) : "[Name](char:id)"}.
 - New people and places may appear when the story needs them, describe them in plain text without a link, the scribes record them.
 
@@ -389,10 +398,10 @@ export function prompt_scribe_character(world: WorldRead, round: Round, characte
   const system = `You are the scribe of ${character.name} (${character.id}) in an interactive story. The storyteller has written what happened this round. You record what changed for ${character.name} only, other scribes record the rest. ${SCRIBE_RULES}
 
 Record:
-- add_memory, always one: one or two sentences from ${character.name}'s point of view, what they did, saw and heard. Only what they could perceive.
-- move when ${character.name} went somewhere (into the location), picked something up (into ${character.id}), dropped it (into the location), handed it over (into the other character), put it into something (into the item).
+- add_memory, always one: one or two sentences from ${character.name}'s point of view, what they did, saw and heard. Only what ${character.name} noticed: when the story says they did not see or hear something, it is not in their memory, and they do not know the true names of people they have not been told.
+- move only when something ended up somewhere else than where it was: ${character.name} went to another place (into the location), picked something up (into ${character.id}), dropped it (into the location), handed it over (into the other character), put it into something (into the item). Never move something to where it already is.
 - set_relationship when ${character.name} learned another's name (known_as) or their opinion of them changed.
-- update when ${character.name}'s description, appearance, bio, personality or goals changed in a lasting way.
+- update only when who ${character.name} is changed for good: a new scar, a new goal, a changed bio. Never for what they are doing or feeling at the moment, that is what memories are for.
 - set_attribute, add_to_attribute, set_local_attribute or remove_attribute when a value of ${character.name} or what they carry changed ("amount": -3 for losing 3 coins).
 - add_effect for a change of a number attribute or skill that wears off, with how long it lasts, like a potion.
 - remove when something ${character.name} carries is used up or destroyed.
@@ -473,7 +482,7 @@ The world is a tree: locations can be inside locations (a town holds an inn, the
 - add_ability for what makes a character special, a name and a description.
 - Start small: one to three places and two to five characters, more can appear while playing.
 
-The opening is the first part of the story, setting the scene for the player in three to six chunks. A chunk with a speaker (a character's new: id) is only the words that character says, a chunk with an empty speaker is narration. Refer to characters and locations as markdown links with their new: id, like [Mara](new:mara).
+The opening is the first part of the story, setting the scene in three to six chunks, in the third person, never "you": every character, the player's too, is named by their link. A chunk with a speaker (a character's new: id) is only the words that character says, a chunk with an empty speaker is narration. Refer to characters and locations as markdown links with their new: id, like [Mara](new:mara).
 
 When the player asks for changes, return the whole updated world again, keeping the ids of everything that stays.`;
 

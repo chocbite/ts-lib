@@ -3,7 +3,7 @@
 //Changes are what the scribes, the game builder and the editors produce, applying them is the only way the world changes.
 //The world is read through WorldRead, so a running game can serve it from its states without copying anything.
 //See World tree and Attributes, skills and time in DESIGN.md.
-import { id_make, id_slug } from "#lib/ids";
+import { id_make } from "#lib/ids";
 import { mention_map } from "#lib/mention";
 import { schema_object, type Schema, type SchemaString } from "#lib/schema";
 
@@ -396,7 +396,8 @@ export type Change =
   //Values on things
   | { op: "set_attribute"; thing: Id; attribute: Id; value: Value }
   | { op: "add_to_attribute"; thing: Id; attribute: Id; amount: number }
-  | { op: "set_local_attribute"; thing: Id; name: string; type: AttributeType; unit: string; value: Value }
+  /**Sets an attribute only this thing has: the one with the id when given (renaming it), else the one with the name, else a new one*/
+  | { op: "set_local_attribute"; thing: Id; name: string; type: AttributeType; unit: string; value: Value; attribute?: Id }
   | { op: "remove_attribute"; thing: Id; attribute: Id }
   | { op: "set_skill"; thing: Id; skill: Id; value: number }
   | { op: "remove_skill"; thing: Id; skill: Id }
@@ -461,12 +462,13 @@ export function world_change_schema(world: WorldRead, role: SchemaFor, self?: Id
   };
   const add_item = schema_object({ op: op("add_item"), id: new_id, name: text, description: text, in: all_things });
   const define_skill = schema_object({ op: op("define_skill"), id: new_id, name: text, description: text });
-  /**Changes of attributes and effects of the things*/
-  const values = (things: Schema) => [
+  /**Changes of attributes and effects of the things
+   * @param has ids of the attributes the things have, the only ones that can be removed*/
+  const values = (things: Schema, has: string[]) => [
     schema_object({ op: op("set_attribute"), thing: things, attribute, value }),
     schema_object({ op: op("add_to_attribute"), thing: things, attribute, amount: number }),
     schema_object({ op: op("set_local_attribute"), thing: things, name: text, type, unit: text, value }),
-    schema_object({ op: op("remove_attribute"), thing: things, attribute: text }),
+    schema_object({ op: op("remove_attribute"), thing: things, attribute: ref([...new Set(has)], false) }),
     schema_object({ op: op("add_effect"), thing: things, target: text, amount: number, duration: number, unit, reason: text }),
   ];
 
@@ -515,7 +517,10 @@ export function world_change_schema(world: WorldRead, role: SchemaFor, self?: Id
           schema_object({ op: op("remove"), thing: not_characters }),
           define_skill,
           schema_object({ op: op("set_skill"), thing: ref(living.filter((t) => t.kind === Kind.Item).map((t) => t.id)), skill, value: number }),
-          ...values(not_characters),
+          ...values(
+            not_characters,
+            living.filter((t) => t.kind !== Kind.Character).flatMap((t) => t.attributes.map((v) => v.id)),
+          ),
         ],
       },
     };
@@ -539,7 +544,10 @@ export function world_change_schema(world: WorldRead, role: SchemaFor, self?: Id
         schema_object({ op: op("award_exp"), character: just_me, amount: { type: "string", enum: Object.values(ExpAward) }, reason: text }),
         schema_object({ op: op("add_ability"), character: just_me, name: text, description: text }),
         schema_object({ op: op("remove_ability"), character: just_me, ability: text }),
-        ...values(ref(own)),
+        ...values(
+          ref(own),
+          own.flatMap((id) => world.thing(id)?.attributes.map((v) => v.id) ?? []),
+        ),
       ],
     },
   };
@@ -876,13 +884,16 @@ export function world_apply(world: WorldRead, changes: readonly Change[]): World
         const t = thing(change.thing);
         if (!Object.values(AttributeType).includes(change.type)) fail(`${change.type} is not an attribute type`);
         check_value(change.type, change.value, change.name);
-        const id = "local:" + id_slug(change.name);
-        if (id === "local:") fail("a local attribute needs a name");
+        if (!change.name.trim()) fail("a local attribute needs a name");
         const values = next.edit(t).attributes;
-        const entry: AttributeValue = { id, value: change.value, local: { name: change.name, type: change.type, unit: change.unit } };
-        const i = values.findIndex((v) => v.id === id);
-        if (i >= 0) values[i] = entry;
-        else values.push(entry);
+        const same_name = (v: AttributeValue) => v.local?.name.trim().toLowerCase() === change.name.trim().toLowerCase();
+        const i = change.attribute ? values.findIndex((v) => v.id === change.attribute && v.local) : values.findIndex(same_name);
+        if (change.attribute && i < 0) fail(`${t.name} has no local attribute ${change.attribute}`);
+        //Two local attributes of one thing never share a name, the name is how the scribes find them
+        if (values.some((v, j) => j !== i && same_name(v))) fail(`${t.name} already has ${change.name}`);
+        const local = { name: change.name, type: change.type, unit: change.unit };
+        if (i >= 0) values[i] = { id: values[i].id, value: change.value, local };
+        else values.push({ id: id_make("local", change.name, (id) => values.some((v) => v.id === id)), value: change.value, local });
         return;
       }
       case "remove_attribute": {
