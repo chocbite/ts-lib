@@ -1,6 +1,6 @@
 import { Base, define_element } from "#base";
-import ctm, { ContextMenu } from "#context-menu";
-import { some, type Option } from "@chocbite/ts-lib/result";
+import ctm, { ContextMenu, type ContextMenuLines } from "#context-menu";
+import { none, some, type Option } from "@chocbite/ts-lib/result";
 import { state, type State, type StateInferSub } from "@chocbite/ts-lib/state";
 import state_ui from "#state_ui";
 import { ListAddRow, type ListAddRowOptions } from "./add_row";
@@ -8,6 +8,7 @@ import { list_rows_error_update, ListError, type ListRowsError } from "./error";
 import { list_align_apply, type ListField } from "./field";
 import { ListKeyField, type ListKeyFieldOptions } from "./key_field";
 import "./row.scss";
+import { ListCheckField, type ListSelection } from "./selection";
 import type {
   ListParentRows,
   ListRoot,
@@ -25,6 +26,8 @@ export interface ListRowOptions<R, T extends {}, S extends boolean> {
   sub_rows?: S extends true ? ListSubRows<R> : never;
   add_row?: ListAddRowOptions;
   context_menu?: ContextMenu | (() => Option<ContextMenu>);
+  /**Whether the row can be selected when the list has selection, true when undefined */
+  selectable?: boolean;
   values: T;
 }
 
@@ -43,6 +46,10 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   #sub_rows?: ListSubRows<R>;
   readonly depth: number;
   #key_field?: ListKeyField<A>;
+  /**Checkbox or radio button cell, only with selection */
+  #check?: ListCheckField;
+  /**Key of the row in the selection, undefined when the row can not be selected */
+  selection_key?: unknown;
   #field_box: HTMLDivElement;
   #child_box: HTMLSpanElement;
   #add_row?: ListAddRow<R, T, A, S>;
@@ -70,6 +77,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     }
     this.#field_box = this.appendChild(document.createElement("div"));
     this.#child_box = this.appendChild(document.createElement("span"));
+    if (this.#root.selection) this.#selection_setup(this.#root.selection);
     //A right click on a sub row without its own menu reaches the child box before this row
     if (this.#root.sub_rows)
       this.#child_box.oncontextmenu = () => {
@@ -95,8 +103,13 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
 
   /**Shows the cells after the key field, which stays so an invalid row keeps its indent and arrow key navigation */
   #show_cells(cells: readonly HTMLElement[]) {
-    if (this.#key_field)
-      this.#field_box.replaceChildren(this.#key_field, ...cells);
+    if (this.#check && this.#key_field)
+      this.#field_box.replaceChildren(this.#check, this.#key_field, ...cells);
+    else if (this.#check || this.#key_field)
+      this.#field_box.replaceChildren(
+        (this.#check ?? this.#key_field)!,
+        ...cells,
+      );
     else this.#field_box.replaceChildren(...cells);
   }
 
@@ -131,33 +144,67 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     direction: "next" | "previous" | "p_next" | "p_previous" | "last",
     field: Option<number>,
   ) {
-    if (!this.#key_field) return;
+    if (!this.#key_field && !this.#check) return;
     //Open is not enough, an open row can show an error instead of sub rows
     const has_rows = this.#child_box.childElementCount > 0;
     if (direction === "next" || direction === "p_next") {
       if (direction === "next" && has_rows)
-        (
-          this.#child_box.firstElementChild! as ListRow<R, T, A, false>
-        ).#key_field!.focus();
+        (this.#child_box.firstElementChild! as ListRow<R, T, A, S>).#focus();
       else {
         const sibling = this.nextElementSibling;
-        if (sibling instanceof ListRow) sibling.#key_field!.focus();
+        if (sibling instanceof ListRow) sibling.#focus();
         else this.#parent.select_adjacent("p_next", field);
       }
     } else if (direction === "previous") {
       const sibling = this.previousElementSibling;
       if (sibling instanceof ListRow) {
         if (sibling.open) sibling.select_adjacent("last", field);
-        else sibling.#key_field!.focus();
+        else sibling.#focus();
       } else this.#parent.select_adjacent("p_previous", field);
-    } else if (direction === "p_previous") this.#key_field.focus();
+    } else if (direction === "p_previous") this.#focus();
     else if (direction === "last") {
       if (has_rows) {
         (
           this.#child_box.lastElementChild as ListRow<R, T, A, S>
         ).select_adjacent("last", field);
-      } else this.#key_field.focus();
+      } else this.#focus();
     }
+  }
+
+  /**Focuses the cell used for keyboard navigation, the key field or else the checkbox */
+  #focus(options?: FocusOptions) {
+    (this.#key_field ?? this.#check)?.focus(options);
+  }
+
+  /**Moves the focus to the keyboard cell after a click, so the selection keys work right away
+   * Unless the click focused something in the row itself, like an input of a field */
+  #focus_after_click() {
+    const active = document.activeElement;
+    if (active && active !== document.body && this.#field_box.contains(active))
+      return;
+    const cell = this.#key_field ?? this.#check;
+    if (!cell) return;
+    //Without scrolling, the sticky cell would scroll the list sideways
+    cell.focus({ preventScroll: true });
+    //Focus from script shows the focus ring, which a click should not, removed again by a key or blur
+    cell.classList.add("click-focus");
+  }
+
+  key_down(e: KeyboardEvent): boolean {
+    const selection = this.#root.selection;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      this.select_adjacent(e.key === "ArrowDown" ? "next" : "previous", none());
+      const focused = document.activeElement?.closest("list-row");
+      if (
+        selection &&
+        focused !== this &&
+        focused instanceof ListRow &&
+        focused.selection_key !== undefined
+      )
+        selection.focus_moved(focused.selection_key, e);
+      return true;
+    }
+    return selection ? selection.key_down(this.selection_key, e) : false;
   }
 
   //      _____       _______
@@ -183,6 +230,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
       this.#invalid = undefined;
       this.#show_cells(this.#fields);
     }
+    this.#selection_update(row_options.selectable ?? true, data);
     if (this.#key_field) this.#key_field.options = row_options.key_field;
     this.#sub_rows = row_options.sub_rows;
 
@@ -215,8 +263,19 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     //Setup context menu, blocked for right clicks bubbling up from sub rows
     ctm.detach(this);
     this.#sub_row_menu = false;
-    if (row_options.context_menu)
-      ctm.attach(this, row_options.context_menu, () => {
+    //An openable row gets open or close lines and a selectable row select lines, in front of its own menu
+    //Openable can be a state, the lines are made when the menu opens
+    const openable = this.#root.sub_rows && Boolean(row_options.openable);
+    const menu =
+      openable || this.selection_key !== undefined
+        ? ctm.combine(
+            () => this.#open_lines(),
+            () => this.#selection_lines(),
+            row_options.context_menu,
+          )
+        : row_options.context_menu;
+    if (menu)
+      ctm.attach(this, menu, () => {
         const from_sub_row = this.#sub_row_menu;
         this.#sub_row_menu = false;
         return from_sub_row;
@@ -225,6 +284,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
 
   /**Replaces the fields with the text and removes everything else the row options gave */
   #set_invalid(text: string) {
+    this.#selection_update(false);
     if (this.#key_field) this.#key_field.options = undefined;
     this.#sub_rows = undefined;
     this.add_row = undefined;
@@ -327,10 +387,133 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
       this,
     );
     this.classList.toggle("open", rows.length > 0 || error !== undefined);
-    state_ui.a.apply(this.#child_box, rows, {
-      create: (row) => new ListRow<R, T, A, S>(this.#root, this, row),
-      update: (element, row) => (element.data = row),
-    });
+    list_rows_apply(this.#root, this, this.#child_box, rows);
+  }
+
+  //       _____ ______ _      ______ _____ _______ _____ ____  _   _
+  //      / ____|  ____| |    |  ____/ ____|__   __|_   _/ __ \| \ | |
+  //     | (___ | |__  | |    | |__ | |       | |    | || |  | |  \| |
+  //      \___ \|  __| | |    |  __|| |       | |    | || |  | | . ` |
+  //      ____) | |____| |____| |___| |____   | |   _| || |__| | |\  |
+  //     |_____/|______|______|______\_____|  |_|  |_____\____/|_| \_|
+
+  #selection_setup(selection: ListSelection<unknown>) {
+    const clear_click_focus = (e: Event) =>
+      (e.currentTarget as HTMLElement).classList.remove("click-focus");
+    this.#check = new ListCheckField();
+    //The key field is the keyboard cell when there is one
+    if (!this.#key_field) this.#check.tabIndex = 0;
+    this.#check.onkeydown = (e) => {
+      if (this.key_down(e)) e.preventDefault();
+    };
+    for (const cell of [this.#check, this.#key_field])
+      if (cell) {
+        cell.addEventListener("keydown", clear_click_focus);
+        cell.addEventListener("blur", clear_click_focus);
+      }
+    this.#check.onclick = (e) => {
+      e.stopPropagation();
+      if (this.selection_key !== undefined)
+        selection.check_click(this.selection_key);
+      this.#focus_after_click();
+    };
+    this.#field_box.onclick = (e) => {
+      if (this.selection_key !== undefined)
+        selection.click(this.selection_key, e);
+      this.#focus_after_click();
+    };
+    //Shift click would select text between the rows
+    this.#field_box.onmousedown = (e) => {
+      if (e.shiftKey && selection.multi) e.preventDefault();
+    };
+    //The menu of a right clicked row acts on the selection, so the row joins it, runs before the menu of the row
+  }
+
+  /**Registers the row in the selection with the key of its data, or removes it when not selectable */
+  #selection_update(selectable: boolean, data?: R) {
+    const selection = this.#root.selection;
+    if (!selection) return;
+    const key: unknown = selectable ? selection.key(data) : undefined;
+    if (key === this.selection_key) return;
+    if (this.selection_key !== undefined)
+      selection.unregister(this.selection_key, this);
+    this.selection_key = key;
+    if (key !== undefined) selection.register(key, this);
+    this.classList.toggle("selectable", key !== undefined);
+  }
+
+  /**Context menu line to open or close the sub rows, empty when the row can not be opened */
+  #open_lines(): ContextMenuLines {
+    if (!this.openable) return [];
+    return [
+      this.open
+        ? ctm.line("Close", () => (this.open = false))
+        : ctm.line("Open", () => (this.open = true)),
+    ];
+  }
+
+  /**Context menu lines to select or deselect the row, and in multi mode all rows
+   * Empty when the row can not be selected */
+  #selection_lines(): ContextMenuLines {
+    const selection = this.#root.selection;
+    const key = this.selection_key;
+    if (!selection || key === undefined) return [];
+    const lines: ContextMenuLines = [
+      selection.is_selected(key)
+        ? ctm.line("Deselect", () => selection.deselect(key))
+        : ctm.line("Select", () => selection.select(key)),
+    ];
+    if (selection.multi)
+      lines.push(
+        ctm.line(
+          "Select all",
+          () => selection.select_all(),
+          undefined,
+          "Ctrl+A",
+        ),
+        ctm.line("Deselect all", () => selection.clear(), undefined, "Esc"),
+      );
+    return lines;
+  }
+
+  set selected(value: boolean) {
+    this.classList.toggle("selected", value);
+  }
+  get selected(): boolean {
+    return this.classList.contains("selected");
+  }
+
+  /**Removes the row and its sub rows from the selection, when the row is removed */
+  selection_leave() {
+    const selection = this.#root.selection;
+    if (!selection) return;
+    if (this.selection_key !== undefined)
+      selection.unregister(this.selection_key, this);
+    this.selection_key = undefined;
+    for (let i = 0; i < this.#child_box.childElementCount; i++)
+      (this.#child_box.children[i] as ListRow<R, T, A, S>).selection_leave();
   }
 }
 define_element(ListRow);
+
+/**Applies rows to a row box, removed rows leave the selection, which updates once after all changes */
+export function list_rows_apply<
+  R,
+  T extends {},
+  A extends ListType<R>,
+  S extends boolean,
+>(
+  root: ListRoot<R, T, A, S>,
+  parent: ListRowParent<A>,
+  box: HTMLElement,
+  rows: readonly R[],
+) {
+  const apply = () =>
+    state_ui.a.apply(box, rows, {
+      create: (row) => new ListRow<R, T, A, S>(root, parent, row),
+      update: (element, row) => (element.data = row),
+      destroy: (element) => element.selection_leave(),
+    });
+  if (root.selection) root.selection.batch(apply);
+  else apply();
+}

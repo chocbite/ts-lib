@@ -831,3 +831,122 @@ describe("Context menu submenus", () => {
     expect(menu.isConnected).toBe(true);
   });
 });
+
+//       _____ ____  __  __ ____ _____ _   _ ______
+//      / ____/ __ \|  \/  |  _ \_   _| \ | |  ____|
+//     | |   | |  | | \  / | |_) || | |  \| | |__
+//     | |   | |  | | |\/| |  _ < | | | . ` |  __|
+//     | |___| |__| | |  | | |_) || |_| |\  | |____
+//      \_____\____/|_|  |_|____/_____|_| \_|______|
+describe("Combined menus", () => {
+  afterEach(() => close_all());
+
+  /**Opens the combined menu and gives its line elements, undefined without menu*/
+  const open = (factory: ReturnType<typeof ctm.combine>) => {
+    const menu = factory().unwrap_or(undefined);
+    if (!menu) return undefined;
+    ctm.summon(menu);
+    return [
+      ...menu.querySelectorAll("contextmenu-option, contextmenu-devider"),
+    ].map((line) =>
+      line.tagName === "CONTEXTMENU-DEVIDER" ? "|" : line.textContent,
+    );
+  };
+
+  it("joins groups with a devider between them", () => {
+    expect(
+      open(
+        ctm.combine(
+          [ctm.line("A", () => {}), ctm.line("B", () => {})],
+          [ctm.line("C", () => {})],
+          () => [ctm.line("D", () => {})],
+        ),
+      ),
+    ).toEqual(["A", "B", "|", "C", "|", "D"]);
+  });
+
+  it("leaves out empty and undefined groups and undefined lines, with their devider", () => {
+    expect(
+      open(
+        ctm.combine(
+          [],
+          undefined,
+          [undefined, ctm.line("A", () => {})],
+          () => [undefined],
+          [ctm.line("B", () => {})],
+          [],
+        ),
+      ),
+    ).toEqual(["A", "|", "B"]);
+  });
+
+  it("gives no menu when all groups are empty", () => {
+    expect(ctm.combine()().none).toBe(true);
+    expect(ctm.combine([], undefined, () => [undefined])().none).toBe(true);
+  });
+
+  it("calls group functions and builds a new menu on every open", () => {
+    let count = 0;
+    const factory = ctm.combine(() => [ctm.line("Open " + ++count, () => {})]);
+    const first = factory().unwrap_or(undefined);
+    expect(open(factory)).toEqual(["Open 2"]);
+    expect(open(factory)).toEqual(["Open 3"]);
+    expect(first).not.toBe(factory().unwrap_or(undefined));
+  });
+
+  it("takes the lines of menus, and of functions giving a menu or an option of one", () => {
+    const menu = ctm.menu([ctm.line("Menu", () => {})]);
+    const factory = ctm.combine(
+      menu,
+      () => ctm.menu(() => [ctm.line("Function", () => {})]),
+      () => some(ctm.menu([ctm.line("Some", () => {})])),
+      () => none(),
+    );
+    expect(open(factory)).toEqual(["Menu", "|", "Function", "|", "Some"]);
+    close_all();
+    //The lines go back to their menu when it opens on its own
+    ctm.summon(menu);
+    expect(
+      [...menu.querySelectorAll("contextmenu-option")].map(
+        (o) => o.textContent,
+      ),
+    ).toEqual(["Menu"]);
+    close_all();
+    expect(open(factory)).toEqual(["Menu", "|", "Function", "|", "Some"]);
+  });
+
+  it("waits for promised lines of a menu with a spinner", async () => {
+    let resolve!: (lines: ReturnType<typeof ctm.line>[]) => void;
+    const factory = ctm.combine(
+      [ctm.line("Now", () => {})],
+      ctm.menu(new Promise((r) => (resolve = r))),
+    );
+    const menu = factory().unwrap_or(undefined)!;
+    ctm.summon(menu);
+    expect(menu.querySelector("contextmenu-buffer")).not.toBeNull();
+    resolve([ctm.line("Later", () => {})]);
+    await expect
+      .poll(() =>
+        [...menu.querySelectorAll("contextmenu-option")].map(
+          (o) => o.textContent,
+        ),
+      )
+      .toEqual(["Now", "Later"]);
+  });
+
+  it("works with attach", () => {
+    const element = document.body.appendChild(document.createElement("div"));
+    try {
+      ctm.attach(element, ctm.combine([ctm.line("A", () => {})]));
+      element.dispatchEvent(
+        new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+      );
+      expect(
+        document.documentElement.querySelector("contextmenu-option")
+          ?.textContent,
+      ).toBe("A");
+    } finally {
+      element.remove();
+    }
+  });
+});

@@ -79,8 +79,13 @@ else {
   const [x, y] = (localStorage.getItem(SCROLL_KEY) ?? "0,0")
     .split(",")
     .map(Number);
-  requestAnimationFrame(() => window.scrollTo(x, y));
+  //The body scrolls instead of the window, see trial.css
+  const scroller = document.body;
+  requestAnimationFrame(() => scroller.scrollTo(x, y));
   window.addEventListener("pagehide", () =>
-    localStorage.setItem(SCROLL_KEY, `${window.scrollX},${window.scrollY}`),
+    localStorage.setItem(
+      SCROLL_KEY,
+      `${scroller.scrollLeft},${scroller.scrollTop}`,
+    ),
   );
 }

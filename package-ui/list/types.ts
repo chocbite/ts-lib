@@ -4,6 +4,7 @@ import type { State } from "@chocbite/ts-lib/state";
 import list from ".";
 import type { ListField, ListTextField } from "./field";
 import type { ListRow, ListRowOptions } from "./row";
+import type { ListSelection } from "./selection";
 
 export type ListType<R> = R[] | State<R[]>;
 
@@ -104,6 +105,8 @@ export interface ListRoot<
   transform: ListRowTransformer<R, T, A, S>;
   /**Observer for the container if observer is active */
   observer?: BaseIntersectObserver;
+  /**Selection of rows, when enabled */
+  selection?: ListSelection<any>;
 }
 
 export interface ListRowParent<A extends ListType<any>> {
@@ -118,4 +121,6 @@ export interface ListRowParent<A extends ListType<any>> {
   ): void;
   /**Rows of the parent, the rows of the container or the sub rows of a row */
   state: ListParentRows<A>;
+  /**Handles a key pressed in the key field before the key field does, returns true when the key was used */
+  key_down?(e: KeyboardEvent): boolean;
 }

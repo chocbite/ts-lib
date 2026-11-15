@@ -82,8 +82,7 @@ export class ContextMenu extends Base {
 
   protected connectedCallback(): void {
     super.connectedCallback();
-    const lines =
-      typeof this.#lines === "function" ? this.#lines() : this.#lines;
+    const lines = this.read_lines();
     this.#loading?.remove();
     if (lines instanceof Promise) {
       const buffer = (this.#loading = this.appendChild(new Buffer()));
@@ -118,6 +117,13 @@ export class ContextMenu extends Base {
       "resize",
       this.#window_resize_handler,
     );
+  }
+
+  /**Gives the lines the menu shows when it opens, a lines function is called
+   * The lines are elements in one menu at a time, ctm.combine moves them into its menu, this menu takes them back when it opens */
+  read_lines():
+    (ContextMenuLine | undefined)[] | Promise<(ContextMenuLine | undefined)[]> {
+    return typeof this.#lines === "function" ? this.#lines() : this.#lines;
   }
 
   /**Sets the lines of the context menu */

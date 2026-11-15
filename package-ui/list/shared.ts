@@ -1,5 +1,5 @@
 import { theme_init_variable_root } from "#theme";
-import { GREY, ORANGE, RED } from "@chocbite/ts-lib/colors";
+import { BLUE, GREY, ORANGE, RED } from "@chocbite/ts-lib/colors";
 
 const theme_root = theme_init_variable_root(
   "list",
@@ -129,6 +129,15 @@ colors_icon.make_variable(
   undefined,
 );
 colors_icon.make_variable(
+  "check",
+  "Selection Checkbox Color",
+  "Color of the selection checkboxes",
+  GREY["800"],
+  GREY["200"],
+  "Color",
+  undefined,
+);
+colors_icon.make_variable(
   "add_icon",
   "Add Row Icon Color",
   "Color of the add row icon",
@@ -173,6 +182,24 @@ colors_background.make_variable(
   "Color of row element backgrounds when hovering",
   GREY["300"],
   GREY["700"],
+  "Color",
+  undefined,
+);
+colors_background.make_variable(
+  "row_selected",
+  "Selected Row Background Color",
+  "Color of selected row element backgrounds",
+  BLUE["100"],
+  BLUE["900"],
+  "Color",
+  undefined,
+);
+colors_background.make_variable(
+  "row_selected_hover",
+  "Selected Hover Row Background Color",
+  "Color of selected row element backgrounds when hovering",
+  BLUE["200"],
+  BLUE["800"],
   "Color",
   undefined,
 );

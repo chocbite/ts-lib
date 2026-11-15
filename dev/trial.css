@@ -9,7 +9,16 @@ html[data-dev-theme="dark"] {
   background: #1a1a1a;
 }
 
+/* The library sets touch-action: none on html, which blocks touch panning of the document,
+   only scroll containers inside it can be panned. So the body is the scroll container, like an app would have one */
+html,
 body {
+  height: 100%;
+}
+
+body {
+  box-sizing: border-box;
+  overflow: auto;
   margin: 0;
   padding: 1rem;
 }
