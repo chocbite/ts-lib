@@ -236,3 +236,83 @@ describe("Key column resizing", () => {
     expect(keys()[0].offsetWidth).toBe(header.offsetWidth);
   });
 });
+
+describe("Column widths without a header or value columns", () => {
+  const value_column = (options: {
+    init_width?: number;
+    fixed_width?: number | "min" | "max";
+  }) =>
+    list.column({
+      title: "Column",
+      ...options,
+      field_gen: () => list.text_field(),
+      field_apply: () => {},
+    });
+  function widths_list(headless: boolean) {
+    const container = list.container(
+      {
+        init: value_column({ init_width: 10 }),
+        fixed: value_column({ fixed_width: 5 }),
+        min: value_column({ fixed_width: "min" }),
+      },
+      () =>
+        ok({ values: { init: undefined, fixed: undefined, min: undefined } }),
+      [1],
+      { headless },
+    );
+    document.body.append(container);
+    return (container.firstElementChild as HTMLElement).style
+      .gridTemplateColumns;
+  }
+  function key_only(headless: boolean, columns: boolean) {
+    const container = list.container(
+      //Typed as with the column, values are given either way and ignored without it
+      (columns ? { name: list.column_string("Name") } : {}) as {
+        name: ReturnType<typeof list.column_string>;
+      },
+      (name: string) => ok({ key_field: { text: name }, values: { name } }),
+      ["Alpha", "Beta"],
+      { headless, sub_rows: true },
+    );
+    container.style.width = "30rem";
+    document.body.append(container);
+    const key = container.querySelector<HTMLElement>("list-row list-keyfield")!;
+    return { container, key };
+  }
+
+  it("ignores init_width without a header, nothing can resize it", () => {
+    expect(widths_list(true)).toBe("auto 5rem min-content");
+  });
+
+  it("keeps init_width with a header", () => {
+    expect(widths_list(false)).toBe("10rem 5rem min-content");
+  });
+
+  it("fills the list with the key column when there are no value columns", () => {
+    for (const headless of [true, false]) {
+      const { container, key } = key_only(headless, false);
+      expect(key.offsetWidth).toBeCloseTo(container.clientWidth, 0);
+      container.remove();
+    }
+  });
+
+  it("keeps the key column at its content with value columns", () => {
+    const { container, key } = key_only(true, true);
+    expect(key.offsetWidth).toBeLessThan(container.clientWidth / 2);
+  });
+
+  it("keeps the resized width of a key column without value columns", () => {
+    const { container, key } = key_only(false, false);
+    const header = container.querySelector<HTMLElement>(
+      "list-headerrow > .key",
+    )!;
+    header.setPointerCapture = () => {};
+    const sizer = header.firstElementChild!.lastElementChild as HTMLElement;
+    const start = header.offsetWidth;
+    pointer(sizer, "pointerdown", 500);
+    pointer(header, "pointermove", 400);
+    pointer(header, "pointerup", 400);
+    expect(start).toBeCloseTo(container.clientWidth, 0);
+    expect(key.offsetWidth).toBeCloseTo(start - 100, 0);
+  });
+});

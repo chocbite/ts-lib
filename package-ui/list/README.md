@@ -29,11 +29,13 @@ With sub rows, add rows and error texts sit in the key field after the tree line
 
 ## Resizing columns
 
-Columns without a `fixed_width` get a handle at the right of their header, a double click on it resets the column. The first resize gives every auto width column the width it has, so only the dragged column changes. The key field column of sub rows never gets smaller than its widest key field needs for the indent, the opener, the icon and 4rem of the text, so it grows when deeper sub rows open. Text that does not fit wraps.
+Columns without a `fixed_width` get a handle at the right of their header, a double click on it resets the column. The first resize gives every auto width column the width it has, so only the dragged column changes. The key field column of sub rows never gets smaller than its widest key field needs for the indent, the opener, the icon and 4rem of the text, so it grows when deeper sub rows open. Text that does not fit wraps. A list without value columns has its key column fill the list until it is resized.
+
+A `headless` list has no handles, so `init_width` does not apply and columns without a `fixed_width` get an automatic width.
 
 ## Selection
 
-The `selection` option lets the user select rows. It adds a column in front of the rows, with radio buttons in single mode and checkboxes in multi mode, so selection works on touch without modifier keys.
+The `selection` option lets the user select rows. It adds a column in front of the rows, with radio buttons in single mode and checkboxes in multi mode, so selection works on touch without modifier keys. Single mode with sub rows has no such column, a click on the row selects it and the key field takes the keyboard, so radio buttons would only take space.
 
 The selection is an array state of keys owned by the app, given to the list with `bind`, the same way form elements take their value. Several lists, or any other element, can share one state.
 
@@ -51,10 +53,10 @@ selected.write([1, 4]); // selects the rows with these keys
 
 Options:
 
-- `mode`: `"single"` (radio buttons) or `"multi"` (checkboxes). In multi mode the header checkbox selects all rows or clears, and shows whether some or all rows are selected. Right click (or long press) on it opens a menu with "Select all" and "Deselect all". In single mode the header cell is empty.
+- `mode`: `"single"` (radio buttons, none with sub rows) or `"multi"` (checkboxes). In multi mode the header checkbox selects all rows or clears, and shows whether some or all rows are selected. Right click (or long press) on it opens a menu with "Select all" and "Deselect all". In single mode the header cell is empty.
 - `key`: the identity of the data of a row. Defaults to the data itself. Give a key whenever the data can be equal between rows, like primitives, or is replaced by new objects on updates. Keys must be unique among all rows, sub rows included.
 
-A row with `selectable: false` in its row options, or an invalid row, can not be selected. Its radio button or checkbox cell is empty.
+A row with `selectable: false` in its row options, or an invalid row, can not be selected. Its radio button or checkbox cell is empty, and trying to select it shows "This row cannot be selected" at the row.
 
 ### The state
 

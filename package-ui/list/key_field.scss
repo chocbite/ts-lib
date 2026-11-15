@@ -107,9 +107,10 @@ list-keyfield {
       border-right: 1px solid var(--list-colors-border-column);
 
       list-addrow > &,
-      list-rowserror > &,
-      list-row:not(.addrow) > span > list-row:last-child > * > &,
-      div:not(.addrow) > div > list-row:last-child > * > & {
+      div:not(.addrow) > list-rowserror > &,
+      list-row:not(.addrow) > list-rowserror > &,
+      list-row:not(.addrow) > span > list-row:last-child > div > &,
+      div:not(.addrow) > div > list-row:last-child > div > & {
         height: 50%;
       }
     }
