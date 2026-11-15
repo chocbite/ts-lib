@@ -64,6 +64,8 @@ ts-lib tests run in plain Node. ts-lib-ui tests run in Chromium via `@vitest/bro
 
 Vitest strips types without checking them, so type tests (`expectTypeOf`, `// @ts-expect-error`) only fail through `tsc`. That is why `npm test` runs `npm run typecheck` first.
 
+When fixing a bug, write the test first and run it to see it fail for the reason of the bug, then fix the code and see it pass. A test that never failed does not show it catches the bug. A type bug is seen failing through `npm run typecheck`, not vitest.
+
 ## Publishing
 
 Packages are published from `dist/ts-lib` and `dist/ts-lib-ui` in the repo root, never from the package folder (those are `"private": true`). Only `npm run release` publishes: it runs typecheck and all tests first, then builds and runs `config/write-dist-package.js`, which writes a `package.json` into each dist folder with only consumer facing fields (no scripts, devDependencies, `imports` or the `development` condition) and copies the package `README.md`. The `./dist/` paths in the package `exports` are rewritten to the dist folder. A plain build leaves the dist folders without a `package.json`, so it cannot be published by hand without the tests. A new top level `package.json` field that consumers need must be added to the script's `KEEP` list.

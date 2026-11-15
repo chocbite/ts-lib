@@ -102,7 +102,7 @@ describe("IP input display", () => {
     expect(element.classList.contains("ipv6")).toBe(true);
     expect(element.classList.contains("ipv4")).toBe(false);
     expect(parts().length).toBe(8);
-    expect(element.value_as_ip.to_string()).toBe("0:0:0:0:0:0:0:1");
+    expect(element.value_as_ip.to_string()).toBe("::1");
   });
 
   it("keeps its warning input after the type changes", () => {

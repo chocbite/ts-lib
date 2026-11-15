@@ -5,6 +5,7 @@ export * from "./debounce";
 export * from "./diffing";
 export * from "./equals";
 export * from "./hash";
+export * from "./md5";
 export * from "./ip";
 export * from "./number";
 export * from "./throttle";

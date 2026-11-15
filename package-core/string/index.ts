@@ -13,7 +13,7 @@ export const string_byte_length = (string: string) => {
   }
 };
 
-/**Returns the byte length of a string accounting for encoding*/
+/**Returns the string cut to at most limit bytes of UTF-8, never in the middle of a character*/
 export const string_byte_limit = (string: string, limit: number) => {
   const encoder = new TextEncoder().encode(string);
   string = new TextDecoder().decode(encoder.slice(0, limit));

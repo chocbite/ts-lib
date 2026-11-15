@@ -27,14 +27,15 @@ export type ESubSubscriber<Type, Target, Data> = (
 ) => void;
 
 export interface EventSubConsumer<Events extends object, Target> {
-  /**This add the subscriber to the event handler
-   * Returning true in subscriber will remove the subscriber from the event handler after call*/
+  /**This adds the subscriber to the event handler, it stays until removed with off
+   * Adding a subscriber that is already added logs an error*/
   on<K extends keyof Events>(
     eventName: K,
     subscriber: ESubSubscriber<K, Target, Events[K]>,
     sub?: SubPath
   ): typeof subscriber;
-  /**This removes the subscriber from the event handler*/
+  /**This removes the subscriber from the event handler
+   * Removing a subscriber that is not added logs an error*/
   off<K extends keyof Events>(
     eventName: K,
     subscriber: ESubSubscriber<K, Target, Events[K]>,
@@ -54,7 +55,7 @@ export interface EventSubProducer<Events extends object, Target>
   extends EventSubConsumer<Events, Target> {
   /**Override for target */
   target: Target | undefined;
-  /**This dispatches the event, event data is frozen*/
+  /**This dispatches the event, the event object is frozen, the data is passed as is*/
   emit<K extends keyof Events>(
     eventName: K,
     data: Events[K],
@@ -133,19 +134,13 @@ export class EventHandlerSub<Events extends object, Target>
     sub?: SubPath
   ): typeof subscriber {
     let sub_level = this.#sub_storage.get(event_name);
-    if (sub_level) {
-      if (sub)
-        for (const key of sub) {
-          const sub_level_buffer: ListenerStorage<any, Target, any> | undefined = sub_level.subs.get(key);
-          if (sub_level_buffer) sub_level = sub_level_buffer;
-          else {
-            console.error("Subscriber not in handler");
-            return subscriber;
-          }
-        }
-      if (sub_level.funcs.delete(subscriber) === false)
-        console.error("Subscriber not in handler");
-    }
+    if (sub_level && sub)
+      for (const key of sub) {
+        sub_level = sub_level.subs.get(key);
+        if (!sub_level) break;
+      }
+    if (!sub_level?.funcs.delete(subscriber))
+      console.error("Subscriber not in handler");
     return subscriber;
   }
 

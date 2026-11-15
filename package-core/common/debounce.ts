@@ -5,17 +5,17 @@
  * @param func - The function to debounce.
  * @param wait - The delay in milliseconds, when 0 or unspecified it only removes calls to the function in the same cycle.
  * @param leading - If true, triggers the function on the leading edge of the timeout.
- * @returns  A new debounced function. */
+ * @returns  A new debounced function, its cancel drops a pending call and resets it to its first call state. */
 export function debounce<T extends (...args: any[]) => any>(
   func: T,
   wait: number = 0,
   leading: boolean = false
-): (...args: Parameters<T>) => void {
+): Cancelable<(...args: Parameters<T>) => void> {
   let running = false;
   let args_buffer: Parameters<T>;
   let has_args = false;
   let timeout: ReturnType<typeof setTimeout>;
-  return (...args: Parameters<T>) => {
+  const debounced = (...args: Parameters<T>) => {
     if (running) {
       args_buffer = args;
       has_args = true;
@@ -40,4 +40,15 @@ export function debounce<T extends (...args: any[]) => any>(
         }, wait);
     }, wait);
   };
+  debounced.cancel = () => {
+    clearTimeout(timeout);
+    has_args = false;
+    running = false;
+  };
+  return debounced;
 }
+
+/**A function with a cancel method that drops its pending call*/
+export type Cancelable<F extends (...args: any[]) => void> = F & {
+  cancel(): void;
+};

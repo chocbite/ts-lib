@@ -92,4 +92,33 @@ describe("debounce", () => {
     vi.advanceTimersByTime(50);
     expect(callback).toHaveBeenCalledTimes(1);
   });
+
+  it("cancel drops a pending call", () => {
+    const callback = vi.fn();
+    const debounced = debounce(callback, 100);
+
+    debounced(1);
+    debounced.cancel();
+    vi.advanceTimersByTime(500);
+    expect(callback).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+
+    debounced(2);
+    vi.advanceTimersByTime(100);
+    expect(callback).toHaveBeenCalledExactlyOnceWith(2);
+  });
+
+  it("cancel with leading makes the next call run at once", () => {
+    const callback = vi.fn();
+    const debounced = debounce(callback, 100, true);
+
+    debounced(1);
+    debounced(2);
+    debounced.cancel();
+    vi.advanceTimersByTime(500);
+    expect(callback).toHaveBeenCalledExactlyOnceWith(1);
+
+    debounced(3);
+    expect(callback).toHaveBeenLastCalledWith(3);
+  });
 });

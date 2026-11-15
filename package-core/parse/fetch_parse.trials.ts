@@ -50,7 +50,7 @@ yo[FETCH_PARSE].then((v) => {
   console.warn(v);
 });
 
-yo.then.write("test data");
+yo.then.write(5);
 
 // yo.test.sub((v) => {
 //   console.warn(v);

@@ -1,7 +1,7 @@
 import { Base } from "#base";
 import { sync_resolve } from "@chocbite/ts-lib/common";
 import { err, ok, type Option, type Result } from "@chocbite/ts-lib/result";
-import type { State, StateREAW, StateSub } from "@chocbite/ts-lib/state";
+import type { State, StateREA, StateSub } from "@chocbite/ts-lib/state";
 import "./shared";
 
 export interface FormOptions {}
@@ -93,7 +93,8 @@ export abstract class FormValue<
   protected _state?: State<RT, Option<{}>, RT>;
   #func?: StateSub<Result<RT, string>>;
 
-  bind(opts: { value: StateREAW<RT, Option<{}>, RT> }): this {
+  /**Binds the element to a state, a read only state is shown and changes to the element are refused with a warning*/
+  bind(opts: { value: StateREA<RT, Option<{}>, RT> }): this {
     if (this.#func) {
       this.detach_state(this.#func);
       this.#func = undefined;

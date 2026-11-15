@@ -389,3 +389,21 @@ describe("Throwing proxy", { timeout: 50 }, function () {
     }
   });
 });
+
+describe("Removing a listener that is not added", { timeout: 50 }, function () {
+  it("Logs an error whether or not the event or path has had listeners", function () {
+    const handler = new EventHandlerSub<{ used: number; unused: number }, undefined>(undefined);
+    handler.on("used", () => {}, ["a"]);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      handler.off("used", () => {}, ["a"]);
+      handler.off("used", () => {}, ["b"]);
+      handler.off("unused", () => {});
+      handler.off("unused", () => {}, ["a"]);
+      expect(error).toHaveBeenCalledTimes(4);
+      expect(error).toHaveBeenNthCalledWith(4, "Subscriber not in handler");
+    } finally {
+      error.mockRestore();
+    }
+  });
+});

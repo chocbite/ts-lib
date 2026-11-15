@@ -21,14 +21,15 @@ export type ESubscriber<Type, Target, Data> = (
 ) => void;
 
 export interface EventConsumer<Events extends object, Target> {
-  /**This add the subscriber to the event handler
-   * Returning true in subscriber will remove the subscriber from the event handler after call*/
+  /**This adds the subscriber to the event handler, it stays until removed with off
+   * Adding a subscriber that is already added logs an error*/
   on<K extends keyof Events>(
     eventName: K,
     subscriber: ESubscriber<K, Target, Events[K]>
   ): typeof subscriber;
 
-  /**This removes the subscriber from the event handler*/
+  /**This removes the subscriber from the event handler
+   * Removing a subscriber that is not added logs an error*/
   off<K extends keyof Events>(
     eventName: K,
     subscriber: ESubscriber<K, Target, Events[K]>
@@ -47,7 +48,7 @@ export interface EventProducer<Events extends object, Target>
   extends EventConsumer<Events, Target> {
   /**Override for target */
   target: Target | undefined;
-  /**This dispatches the event, event data is frozen*/
+  /**This dispatches the event, the event object is frozen, the data is passed as is*/
   emit<K extends keyof Events>(eventName: K, data: Events[K]): void;
   /**This removes all listeners of a type from the event handler*/
   clear<K extends keyof Events>(eventName: K): void;
@@ -100,7 +101,7 @@ export class EventHandler<Events extends { [key: string]: any }, Target>
     event_name: K,
     subscriber: ESubscriber<K, Target, Events[K]>
   ) {
-    if (this.#subs(event_name)?.delete(subscriber) === false)
+    if (!this.#subs(event_name)?.delete(subscriber))
       console.error("Subscriber not in handler");
     return subscriber;
   }
