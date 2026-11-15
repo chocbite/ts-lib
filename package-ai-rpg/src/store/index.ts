@@ -5,7 +5,7 @@ import { Db } from "#lib/db";
 import { id_random } from "#lib/ids";
 import type { LlmMessage } from "#lib/llm";
 import type { BuilderReply } from "#prompts";
-import type { Thing } from "#world";
+import type { Node } from "#world";
 import { err, ok, type Result } from "@chocbite/ts-lib/result";
 
 /**A game builder session*/
@@ -19,10 +19,10 @@ export interface Build {
   proposal?: BuilderReply;
 }
 
-//Version 3 made the world a tree of things, older databases are reset
+//Version 4 added the Global node, definitions and numeric time, older databases are reset
 const DB = await Db.open(
   "ai-rpg",
-  3,
+  4,
   {
     games: { key: "id" },
     things: { key: ["game", "id"] },
@@ -31,7 +31,7 @@ const DB = await Db.open(
     calls: { key: ["game", "round", "id"] },
     builds: { key: "id" },
   },
-  { reset_before: 3 },
+  { reset_before: 4 },
 );
 
 /**Shown when storage fails, so it is never silent*/
@@ -96,7 +96,7 @@ export async function store_load(id: string): Promise<Result<GameRecords, string
 /**Records to save for a game, everything given is saved in one transaction, all of it or none*/
 export interface GameWrite {
   game?: Game;
-  things?: readonly Thing[];
+  things?: readonly Node[];
   memories?: readonly MemoryRecord[];
   rounds?: readonly Round[];
 }
@@ -136,7 +136,7 @@ export const store_delete_build = async (id: string) => report(await db().delete
 //     |_____/_/    \_\    \/   |______| |_|    |_____|______|______|_____/
 
 const FORMAT = "ai-rpg-save";
-const VERSION = 3;
+const VERSION = 4;
 
 interface SaveFile extends GameRecords {
   format: typeof FORMAT;

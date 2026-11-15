@@ -7,10 +7,14 @@ import { schema_object, type Schema } from "#lib/schema";
 import {
   Kind,
   NEW_ID_PATTERN,
+  SchemaFor,
+  world_attribute_texts,
   world_change_schema,
   world_empty,
   world_known_as,
+  world_skill_texts,
   world_subtree,
+  world_time_text,
   world_visible,
   type Character,
   type Chunk,
@@ -23,6 +27,24 @@ const MEMORIES = 30;
 const STORY_ROUNDS = 3;
 
 const link = (name: string, id: Id) => `[${name}](${id})`;
+
+/**Attributes, skills, abilities and level of a character, one line each, empty lines left out*/
+const sheet = (world: WorldRead, c: Character, indent = "") =>
+  [
+    `Level ${c.level}`,
+    world_attribute_texts(world, c).join(", "),
+    world_skill_texts(world, c).length ? "Skills: " + world_skill_texts(world, c).join(", ") : "",
+    c.abilities.length ? "Abilities: " + c.abilities.map((a) => `${a.name} (${a.description})`).join("; ") : "",
+  ]
+    .filter(Boolean)
+    .map((l) => indent + l)
+    .join("\n");
+
+/**Description of an item with its attributes and skill bonuses*/
+const item_text = (world: WorldRead, t: Thing) => {
+  const extra = [...world_attribute_texts(world, t), ...(t.kind === Kind.Item ? world_skill_texts(world, t) : [])];
+  return t.description + (extra.length ? ` (${extra.join(", ")})` : "");
+};
 const lines = (items: string[], empty = "- none") => (items.length ? items.join("\n") : empty);
 
 /**Where a thing is, as links from the nearest outwards, like "in [Hale](char:hale), in [Market Square](loc:square)"
@@ -75,11 +97,11 @@ export function prompt_character(world: WorldRead, character: Character, last?: 
     const rel = character.relationships[o.id];
     return `- ${link(seen_as(o), o.id)}${rel?.opinion ? `, ${rel.opinion}` : rel ? "" : ", a stranger to you"}`;
   });
-  const things = visible.filter((t) => t.kind === Kind.Item).map((t) => `- ${link(t.name, t.id)}: ${t.description}`);
+  const things = visible.filter((t) => t.kind === Kind.Item).map((t) => `- ${link(t.name, t.id)}: ${item_text(world, t)}`);
   const exits = visible.filter((t) => t.kind === Kind.Location).map((t) => `- ${link(t.name, t.id)}`);
   const carried = world_subtree(world, character.id)
     .filter((t) => !t.gone)
-    .map((t) => `${"  ".repeat(depth(world, t.id, character.id))}- ${link(seen_as(t), t.id)}: ${t.kind === Kind.Character ? (t).appearance : t.description}`);
+    .map((t) => `${"  ".repeat(depth(world, t.id, character.id))}- ${link(seen_as(t), t.id)}: ${t.kind === Kind.Character ? t.appearance : item_text(world, t)}`);
   const example = people[0] ? link(seen_as(people[0]), people[0].id) : "[Name](char:id)";
   const system = `You play one character in an interactive story. Stay in character and only decide what this character does and says next. Others decide everything else, including whether you succeed.
 
@@ -87,6 +109,7 @@ export function prompt_character(world: WorldRead, character: Character, last?: 
 ${character.bio}
 Personality: ${character.personality}
 Goals: ${character.goals}
+${sheet(world, character)}
 
 # How to answer
 Write what ${character.name} does and says next, in first person, one to four sentences. Say what you attempt, not how it turns out. Refer to the people here by their link, like ${example}.`;
@@ -95,7 +118,7 @@ Write what ${character.name} does and says next, in first person, one to four se
   const user = `# Where you are
 You are ${where(world, character.id, seen_as)}.
 ${place ? `${place.name}: ${place.description}` : ""}
-Time: ${world.time || "unknown"}
+Time: ${world_time_text(world.time)}
 
 # Who is here
 ${lines(known, "- nobody else")}
@@ -139,6 +162,7 @@ ${indent}  Appearance: ${c.appearance}
 ${indent}  Bio: ${c.bio}
 ${indent}  Personality: ${c.personality}
 ${indent}  Goals: ${c.goals}
+${sheet(world, c, indent + "  ")}
 ${indent}  Knows: ${
       Object.entries(c.relationships)
         .map(([id, r]) => `${link(world.character(id)?.name ?? id, id)} as "${r.known_as}", ${r.opinion}`)
@@ -156,12 +180,18 @@ ${indent}  Knows: ${
         .filter((t) => !t.gone)
         .map((t) => {
           const indent = "  ".repeat(depth(world, t.id, p.id) + 1);
-          return t.kind === Kind.Character ? person(t, indent) : `${indent}- ${link(t.name, t.id)} (${t.kind}): ${t.description}`;
+          return t.kind === Kind.Character ? person(t, indent) : `${indent}- ${link(t.name, t.id)} (${t.kind}): ${item_text(world, t)}`;
         }),
     ].join("\n"),
   );
   const elsewhere = world.characters().filter((c) => !in_scene.has(c.id));
-  return `Time: ${world.time || "unknown"}
+  return `Time: ${world_time_text(world.time)}
+
+## Attributes
+${lines(world.attributes().map((a) => `- ${a.id}: ${a.name} (${a.type}${a.unit ? ", in " + a.unit : ""}, for ${a.kinds.join(", ")}): ${a.description}`))}
+
+## Skills
+${lines(world.skills().map((s) => `- ${s.id}: ${s.name}: ${s.description}`))}
 
 ## Locations
 Nested locations are inside the location above them.
@@ -253,7 +283,11 @@ Record:
 - set_relationship when a character learns another's name (known_as) or their opinion of them changes.
 - update when a name, description, bio, personality or goals changed in a lasting way.
 - remove when a character dies or leaves the story for good, or an item is used up or destroyed. Only things with nothing inside can be removed, move what is inside out first.
-- set_time when time passed noticeably.
+- pass_time with how much time passed this round, always, as an amount and a unit.
+- set_attribute or add_to_attribute when a value of a listed attribute changed, add_to_attribute adds to numbers ("amount": -3 for losing 3 coins). set_local_attribute for something only that thing has, remove_attribute when it is gone.
+- add_ability when a character gained a lasting special ability, remove_ability when it lost one.
+- award_exp for characters who achieved something, learned or overcame something: small, medium or large, with the reason.
+- define_skill for a new kind of skill the story needed, set_skill for the bonus a new or changed item gives to a skill (-100 to 100).
 Refer to characters and locations in text as markdown links with their id, like ${cast[0] ? link(cast[0].name, cast[0].id) : "[Name](char:id)"}. Keep every text short. Return an empty list when nothing changed.
 
 # World
@@ -271,7 +305,7 @@ Record the changes.`;
   ];
 }
 
-export const schema_scribes = (world: WorldRead): Schema => schema_object({ changes: world_change_schema(world) });
+export const schema_scribes = (world: WorldRead): Schema => schema_object({ changes: world_change_schema(world, SchemaFor.Scribes) });
 export interface ScribesReply {
   changes: import("#world").Change[];
 }
@@ -290,7 +324,10 @@ The world is a tree: locations can be inside locations (a town holds an inn, the
 - add_character for every character, with ids like new:mara. controller is "player" for the characters the player plays, at least one, and "ai" for the others. description tells characters apart, appearance is what strangers see, in is where they start.
 - add_item for objects that matter: what characters carry (in the character) and what lies around (in a location), with ids like new:silver-key.
 - set_relationship for characters that already know each other, known_as is the name they know them by.
-- set_time for the starting time.
+- set_time for the starting day (from 1), hour and minute.
+- define_attribute for measurable properties that matter in this world (number with a unit, text or bool, and the kinds of thing that have it), like height in cm or coins. set_attribute gives things their values.
+- define_skill for the skills that matter in this world, five to ten, like new:climbing. set_skill gives characters their level (0 to 100, 20 is a beginner, 50 skilled, 80 a master) and items their bonus (-100 to 100).
+- add_ability for what makes a character special, a name and a description.
 - Start small: one to three places and two to five characters, more can appear while playing.
 
 The opening is the first part of the story, setting the scene for the player in three to six chunks. A chunk with a speaker (a character's new: id) is only the words that character says, a chunk with an empty speaker is narration. Refer to characters and locations as markdown links with their new: id, like [Mara](new:mara).
@@ -301,7 +338,7 @@ export const schema_builder = (): Schema =>
   schema_object({
     message: { type: "string" },
     name: { type: "string" },
-    changes: world_change_schema(world_empty(), true),
+    changes: world_change_schema(world_empty(), SchemaFor.Builder),
     opening: {
       type: "array",
       items: schema_object({

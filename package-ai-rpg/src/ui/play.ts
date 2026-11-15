@@ -3,7 +3,7 @@ import { ENGINE } from "#engine";
 import { Phase, type Game, type Round } from "#game";
 import { local_get, local_set } from "#lib/local";
 import { COWRITER, Roles } from "#options";
-import { Controller, type Character, type Id } from "#world";
+import { Controller, world_time_text, type Character, type Id } from "#world";
 import ctm from "@chocbite/ts-lib-ui/context-menu";
 import { material_menu_rounded, material_refresh_rounded, material_send_rounded } from "@chocbite/ts-lib-ui/icons";
 import { el, hue, icon_button, initials, spin, text_button, text_nodes } from "./common";
@@ -272,7 +272,7 @@ export function play_view(handlers: PlayHandlers) {
     const location = viewer ? ENGINE.world.place(viewer.id) : undefined;
     scene.style.setProperty("--hue", String(location ? hue(location.id) : 230));
     place.replaceChildren();
-    if (game && location) place.append(el("span", "place-name", location.name), game.time ? el("span", "place-time", game.time) : "");
+    if (game && location) place.append(el("span", "place-name", location.name), el("span", "place-time", world_time_text(ENGINE.world.time)));
     else if (!game)
       place.append(el("span", "place-name", "AI RPG"), el("span", "place-time", "Open the menu to start or load a game"));
   }

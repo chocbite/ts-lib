@@ -96,7 +96,15 @@ One world editor, a dialog with a sidebar (can be hidden) holding the tree in a 
 
 ## Attributes, skills and time
 
-Decided, not built yet. The principle: **the LLMs pick, the code does the numbers**. LLMs are bad at arithmetic and at randomness.
+Decided. Built: global node, attributes, skills, abilities, experience and levels as data, numeric time. Not built yet: the skillcheck step, the level up phase, effects, sub scribes. The principle: **the LLMs pick, the code does the numbers**. LLMs are bad at arithmetic and at randomness.
+
+### Global
+
+Everything that is global to a game is under a **Global** node, the first row of the world tree, with a globe icon. It can not be removed or moved.
+
+- Its form holds the game settings: the time (day, hour, minute), and the experience settings (exp per small, medium and large award, exp to reach level 2, how much more each level needs, skill points per level).
+- Under it are two groups, **Attributes** and **Skills**, holding the global definitions. A group's context menu adds a definition. Definitions are reordered by dragging inside their group, and removed only while nothing uses them.
+- Every node of the tree, Global, groups and definitions included, is its own state, stored as its own record, like the things.
 
 ### Attributes
 
@@ -104,6 +112,7 @@ Decided, not built yet. The principle: **the LLMs pick, the code does the number
 - **Global attributes** are defined once per game: name, type, unit and the kinds of thing that can have them. So `height` means the same everywhere and a potion finds it.
 - **Local attributes** are defined on one thing, for what only it has (a sword's inscription, a chest's lock).
 - A thing stores only the values it has, a missing value is unknown.
+- A thing's attributes, skills and abilities are each an array state of states, one per entry, so the form shows them as lists and a change touches only its entry.
 - Changed with `set_attribute` and `add_to_attribute`, the attribute given as an enum in the schema. The LLM says +5, the code adds and rejects nonsense (adding to text, a negative height).
 - Shown to LLMs with the unit, "Height: 185 cm".
 
@@ -112,6 +121,10 @@ Decided, not built yet. The principle: **the LLMs pick, the code does the number
 - A skill list per game, ids like `skill:climbing`. The builder makes it, the scribes can add skills.
 - Characters have a level per skill, 0 to 100, a missing skill is 0. Items give -100 to 100 to skills.
 - Only items **directly** inside a character count, what it holds or wears. A sword in a bag does not help, drawing it moves it to the character.
+
+### Abilities
+
+Not global, they belong to one character: a name and a description of something special it can do ("reads old maps at a glance"). Ids are local to the character, `ability:<slug>`.
 
 ### Skillcheck
 
@@ -131,7 +144,7 @@ Cowriter mode shows the rolls and they can be changed before the storyteller run
 
 ### Time
 
-- Time is a number, minutes since the game started, with a start day and hour set by the builder. Shown as "Day 3, 14:20".
+- Time is a number, minutes since the start of day 1, kept in the Global settings. The builder sets the start with `set_time` (day, hour, minute), `pass_time` (an amount and a unit) moves it on. Shown as "Day 3, 14:20".
 - **Effects** are changes with an end time: height +5 cm for an hour, climbing +20 until dawn. They are stored on the thing, a value is the base value plus the active effects, and the code drops effects whose time has passed. Nothing has to be undone. LLMs see "Height: 185 cm (180 + potion, 40 min left)".
 
 ### Sub scribes

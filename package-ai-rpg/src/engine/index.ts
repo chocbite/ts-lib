@@ -3,6 +3,7 @@
 //Every game object is its own state, a change sets only the states of what changed and saves only those records,
 //see State and storage model in DESIGN.md.
 import { ActionSource, Phase, type Call, type Game, type MemoryRecord, type Round, type ThingRecord } from "#game";
+import { Keyed } from "#lib/keyed";
 import { Tree, type TreeRows } from "#lib/tree";
 import { id_random } from "#lib/ids";
 import { later } from "#lib/later";
@@ -22,15 +23,20 @@ import {
 import { store_load, store_put_call, store_put_round, store_write, type GameWrite } from "#store";
 import {
   Controller,
+  GLOBAL,
   world_apply,
+  world_base_nodes,
   world_chunks_ids,
   world_empty,
   WorldRead,
+  type Ability,
+  type AttributeValue,
   type Change,
   type Character,
   type Chunk,
   type Id,
-  type Thing,
+  type Node,
+  type SkillValue,
   type WorldApplied,
 } from "#world";
 import { err, ok, type Result } from "@chocbite/ts-lib/result";
@@ -68,27 +74,33 @@ const without_thinking = (text: string) => text.replace(/^\s*<think>[\s\S]*?<\/t
 /**Strips the game id stored with world records*/
 const without_game = ({ game: _game, ...rest }: ThingRecord) => rest;
 
+type Entries = "attributes" | "skills" | "abilities";
+const ENTRIES: Entries[] = ["attributes", "skills", "abilities"];
+type Entry = AttributeValue | SkillValue | Ability;
+/**Key of an entry, an entry keeps its state while its key stays*/
+const entry_key = (e: Entry) => ("skill" in e ? e.skill : e.id);
+/**Entries of a list of a node, empty when the node has no such list*/
+const entries_of = (node: Node | undefined, field: Entries): Entry[] =>
+  node && field in node ? (node as unknown as { [f in Entries]: Entry[] })[field] : [];
+
 /**The world of the loaded game, read from the states of the engine without copying*/
 class EngineWorld extends WorldRead {
   readonly #game: StateROS<Game | undefined>;
-  readonly #tree: Tree<Thing>;
+  readonly #tree: Tree<Node>;
   readonly #memories: Map<Id, StateROS<string[]>>;
-  constructor(game: StateROS<Game | undefined>, tree: Tree<Thing>, memories: Map<Id, StateROS<string[]>>) {
+  constructor(game: StateROS<Game | undefined>, tree: Tree<Node>, memories: Map<Id, StateROS<string[]>>) {
     super();
     this.#game = game;
     this.#tree = tree;
     this.#memories = memories;
   }
-  get time() {
-    return this.#game.ok()?.time ?? "";
-  }
   get roots() {
     return this.#game.ok()?.roots ?? [];
   }
-  thing(id: Id) {
+  node(id: Id) {
     return this.#tree.value(id);
   }
-  things() {
+  nodes() {
     return this.#tree.values();
   }
   memories(id: Id) {
@@ -98,7 +110,7 @@ class EngineWorld extends WorldRead {
 
 class Engine {
   readonly #game = state.ros(ok<Game | undefined>(undefined));
-  readonly #tree = new Tree<Thing>(
+  readonly #tree = new Tree<Node>(
     (parent, from, to, count) => this.#reorder(parent, from, to, count),
     (parent, index, ids) => this.#move_into(parent, index, ids),
   );
@@ -109,13 +121,15 @@ class Engine {
   readonly #running = state.ros(ok<{ [key: string]: Running }>({}));
   /**Counts changes to the world*/
   readonly #changed = state.ros(ok(0));
+  /**Entry lists of things, made when first asked for*/
+  readonly #entries = new Map<string, Keyed<Entry>>();
 
   /**Details of the loaded game, undefined when none is*/
   readonly game = this.#game.read_only;
-  /**Things at the top level of the world, each a state that stays the same object.
-   * Writing a move to it, or to the children of a thing, moves things inside it by hand,
-   * writing an insert (splice or push of thing states) moves them there from wherever they are, without a removal from where they were.*/
-  readonly roots: TreeRows<Thing> = this.#tree.roots;
+  /**The Global node and the things at the top level of the world, each a state that stays the same object.
+   * Writing a move to it, or to the children of a node, moves nodes inside it by hand,
+   * writing an insert (splice or push of node states) moves them there from wherever they are, without a removal from where they were.*/
+  readonly roots: TreeRows<Node> = this.#tree.roots;
   /**Changes whenever anything in the world changes, for views showing a little of everything*/
   readonly changed = this.#changed.read_only;
   /**The current round*/
@@ -128,13 +142,33 @@ class Engine {
   /**The world of the loaded game, read from the states without copying*/
   readonly world: WorldRead = new EngineWorld(this.#game, this.#tree, this.#memories);
 
-  /**State of a thing*/
-  thing(id: Id): StateROS<Thing> | undefined {
+  /**State of a node*/
+  node(id: Id): StateROS<Node> | undefined {
     return this.#tree.get(id);
   }
-  /**States of what is in a thing, writing a move to it reorders them*/
-  children(id: Id): TreeRows<Thing> | undefined {
+  /**States of what is in a node, writing a move to it reorders them*/
+  children(id: Id): TreeRows<Node> | undefined {
     return this.#tree.children(id);
+  }
+
+  /**Attribute values of a thing, each entry a state, the array only changes where the entries change*/
+  attributes(id: Id): StateROS<StateROS<AttributeValue>[]> {
+    return this.#keyed(id, "attributes") as Keyed<AttributeValue>["rows"];
+  }
+  /**Skill levels or bonuses of a character or item*/
+  skills(id: Id): StateROS<StateROS<SkillValue>[]> {
+    return this.#keyed(id, "skills") as Keyed<SkillValue>["rows"];
+  }
+  /**Abilities of a character*/
+  abilities(id: Id): StateROS<StateROS<Ability>[]> {
+    return this.#keyed(id, "abilities") as Keyed<Ability>["rows"];
+  }
+
+  #keyed(id: Id, field: Entries) {
+    const name = field + "/" + id;
+    let keyed = this.#entries.get(name);
+    if (!keyed) this.#entries.set(name, (keyed = new Keyed<Entry>(entry_key, entries_of(this.#tree.value(id), field))));
+    return keyed.rows;
   }
 
   #calls = new Map<string, AbortController>();
@@ -165,7 +199,8 @@ class Engine {
     if (records.err) return records;
     if (generation !== this.#generation) return err("Another game was loaded");
     const { game, things, memories, rounds } = records.value;
-    this.#tree.reset(things.map(without_game), game.roots);
+    this.#entries.clear();
+    this.#tree.reset(things.map(without_game), [GLOBAL, ...game.roots]);
     const by_character = new Map<Id, string[]>(things.filter((t) => t.kind === "character").map((c) => [c.id, []]));
     for (const m of memories.sort((a, b) => a.n - b.n)) by_character.get(m.character)?.push(m.text);
     for (const [character, texts] of by_character) this.#memories.set(character, state.ros(ok(texts)));
@@ -181,7 +216,8 @@ class Engine {
   /**Makes a game from what the game builder proposed, and loads it
    * @returns the id of the new game*/
   async create(proposal: BuilderReply, premise: string): Promise<Result<string, string>> {
-    const applied = world_apply(world_empty(), proposal.changes);
+    const base = world_empty();
+    const applied = world_apply(base, proposal.changes);
     const problems = applied.problems.filter((p) => p !== undefined);
     if (problems.length) return err("The world has problems: " + problems.join("; "));
     const now = Date.now();
@@ -192,7 +228,6 @@ class Engine {
       premise,
       created: now,
       updated: now,
-      time: applied.time ?? "",
       round: 1,
       roots: applied.roots ?? [],
     };
@@ -208,7 +243,8 @@ class Engine {
     };
     const saved = await store_write(id, {
       game,
-      things: applied.things,
+      //The nodes every world has and everything the changes added or touched
+      things: [...new Map([...world_base_nodes(), ...applied.nodes].map((n) => [n.id, n])).values()],
       memories: memory_records(id, applied, () => 0),
       rounds: [opening, new_round(id, 1, applied.world)],
     });
@@ -227,6 +263,7 @@ class Engine {
     this.#round.set_ok(undefined);
     this.#history.set_ok([]);
     this.#tree.reset([], []);
+    this.#entries.clear();
     this.#memories.clear();
     this.#changed.set_ok(this.#changed.ok() + 1);
   }
@@ -340,12 +377,12 @@ class Engine {
     const g = this.#g;
     if (!g) return err("No game is loaded");
     const generation = this.#generation;
-    const game: Game = { ...g, ...extra.game, time: applied.time ?? g.time, roots: applied.roots ?? g.roots, updated: Date.now() };
+    const game: Game = { ...g, ...extra.game, roots: applied.roots ?? g.roots, updated: Date.now() };
     const memories = memory_records(g.id, applied, (id) => this.world.memories(id).length);
     const saved = await store_write(g.id, {
       ...extra,
       game,
-      things: applied.things,
+      things: applied.nodes,
       memories,
     });
     if (saved.err) return saved;
@@ -353,9 +390,11 @@ class Engine {
     after?.();
     //The game first, the world reads the top level from it
     this.#game.set_ok(game);
-    for (const t of applied.things)
-      if (t.kind === "character" && !this.#memories.has(t.id)) this.#memories.set(t.id, state.ros(ok<string[]>([])));
-    this.#tree.put(applied.things, applied.roots);
+    for (const n of applied.nodes)
+      if (n.kind === "character" && !this.#memories.has(n.id)) this.#memories.set(n.id, state.ros(ok<string[]>([])));
+    this.#tree.put(applied.nodes, applied.roots && [GLOBAL, ...applied.roots]);
+    for (const n of applied.nodes)
+      for (const field of ENTRIES) this.#entries.get(field + "/" + n.id)?.sync(entries_of(n, field));
     for (const m of memories) this.#memories.get(m.character)?.array.push(m.text);
     this.#changed.set_ok(this.#changed.ok() + 1);
     return ok(undefined);
@@ -364,7 +403,10 @@ class Engine {
   /**Moves things inside one parent by hand, from a list
    * @param parent empty for the top level*/
   async #reorder(parent: Id, from: number, to: number, count: number): Promise<Result<void, string>> {
-    const ids = (parent ? (this.world.thing(parent)?.children ?? []) : this.world.roots).slice(from, from + count);
+    const ids = (parent ? (this.world.node(parent)?.children ?? []) : [GLOBAL, ...this.world.roots]).slice(from, from + count);
+    if (ids.includes(GLOBAL)) return err("Global stays first");
+    //The top level rows start with Global, which is not one of the roots
+    if (!parent) to = Math.max(0, to - 1);
     //Each move takes one thing out and puts it at its final index, moving down the last goes first
     const moves: Change[] = ids.map((thing, k) => ({ op: "move", thing, in: parent, index: to + k }));
     if (to > from) moves.reverse();
@@ -375,6 +417,8 @@ class Engine {
   /**Moves things from wherever they are into a parent by hand, from a list, all or none
    * @param parent empty for the top level*/
   async #move_into(parent: Id, index: number, ids: Id[]): Promise<Result<void, string>> {
+    if (ids.includes(GLOBAL)) return err("Global stays first");
+    if (!parent) index = Math.max(0, index - 1);
     const moved = await this.edit_world(ids.map((thing, k) => ({ op: "move", thing, in: parent, index: index + k })));
     return moved.err ? moved : ok(undefined);
   }

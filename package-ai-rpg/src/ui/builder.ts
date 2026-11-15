@@ -6,7 +6,7 @@ import { ROLES, Roles, SERVER_KEY, SERVER_URL } from "#options";
 import { PROMPT_BUILDER, schema_builder, story_text, type BuilderReply } from "#prompts";
 import { schema_check } from "#lib/schema";
 import { store_builds, store_delete_build, store_put_build, type Build } from "#store";
-import { world_apply, world_chunks_ids, world_empty } from "#world";
+import { world_apply, world_chunks_ids, world_empty, world_time_text } from "#world";
 import form from "@chocbite/ts-lib-ui/form";
 import { material_send_rounded } from "@chocbite/ts-lib-ui/icons";
 import { el, panel, spin, text_nodes, toast } from "./common";
@@ -53,7 +53,7 @@ export async function builder_panel() {
     const problems = applied.problems.filter((x) => x !== undefined);
     proposal_view.append(
       el("h3", undefined, proposal.name || "Untitled"),
-      world.time ? el("p", "field-note", world.time) : "",
+      el("p", "field-note", world_time_text(world.time)),
       el("h4", undefined, "Locations"),
       ...world.locations().map((l) => el("p", undefined, el("b", undefined, l.name), " ", text_nodes(l.description))),
       el("h4", undefined, "Characters"),

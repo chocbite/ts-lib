@@ -1,5 +1,5 @@
 //Records of a game, as they are stored.
-import type { Change, Chunk, Id, Thing } from "#world";
+import type { Change, Chunk, Id, Node } from "#world";
 
 /**Details of a game, its world is stored in records of its own*/
 export interface Game {
@@ -10,16 +10,14 @@ export interface Game {
   premise: string;
   created: number;
   updated: number;
-  /**Time in the story, free text*/
-  time: string;
   /**Number of the current round*/
   round: number;
   /**Things at the top level of the world, in order*/
   roots: Id[];
 }
 
-/**Stored record of a thing of the world, keyed by game and id*/
-export type ThingRecord = Thing & { game: string };
+/**Stored record of a node of the world, a thing, the Global node, a group or a definition, keyed by game and id*/
+export type ThingRecord = Node & { game: string };
 /**One memory of a character, keyed by game, character and its number*/
 export interface MemoryRecord {
   game: string;
