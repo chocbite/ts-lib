@@ -129,6 +129,15 @@ colors_icon.make_variable(
   undefined,
 );
 colors_icon.make_variable(
+  "drag",
+  "Drag Handle Color",
+  "Color of the drag handles that move rows",
+  GREY["600"],
+  GREY["400"],
+  "Color",
+  undefined,
+);
+colors_icon.make_variable(
   "check",
   "Selection Checkbox Color",
   "Color of the selection checkboxes",

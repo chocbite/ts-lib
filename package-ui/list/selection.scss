@@ -1,15 +1,8 @@
 @use "../icons/mixins" as icons;
 
-list-container > div {
-  --list-check-width: var(--list-size-row_min);
-  .touch & {
-    --list-check-width: var(--list-size-touch_row_min);
-  }
-}
-
 list-checkfield {
   position: sticky;
-  left: 0;
+  left: var(--list-drag-width);
   z-index: 2;
   display: flex;
   align-items: center;
@@ -66,34 +59,5 @@ list-container > div.single {
   //Nothing to select all with
   > list-headerrow > list-checkfield {
     cursor: default;
-  }
-}
-
-//The checkbox or radio button column is the first column, the key field column moves to the second
-list-container > div.check {
-  list-keyfield {
-    left: var(--list-check-width);
-  }
-
-  &.sub-rows > list-headerrow > :nth-child(2) {
-    left: var(--list-check-width);
-    z-index: 3;
-  }
-
-  list-addrow > list-keyfield,
-  list-rowserror > list-keyfield {
-    grid-column: 2;
-  }
-
-  list-addrow > span,
-  list-error {
-    grid-column: 2 / -1;
-  }
-
-  &.sub-rows {
-    list-addrow > span,
-    list-error {
-      grid-column: 3 / -1;
-    }
   }
 }

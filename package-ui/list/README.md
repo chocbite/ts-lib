@@ -56,7 +56,7 @@ A row with `selectable: false` in its row options, or an invalid row, can not be
 - The list writes the state only on user actions, never on its own. Rows that are removed, closed away, become invalid or unselectable, or get another key do not change the state.
 - Writes use array write instructions, so only the changed keys are sent and only their rows are touched: a toggle writes a `push` or `delete`, while a plain click, a range and single mode replace the selection with a `fresh` array. The bound state must apply these instructions, which local writable states like `state.ok_w` do.
 - A toggle or ctrl shift range keeps the keys the list does not show, so lists showing different rows can share a state. Select all replaces the selection with all visible selectable rows of the list, deselect all and escape clear the whole selection.
-- The rows show a change when the state gives it back, so a state that rejects a write, or writes asynchronously, is shown as it is. An error of the state shows nothing selected.
+- The rows show a change when the state gives it back, so a state that rejects a write, or writes asynchronously, is shown as it is. The reason of a rejected write is shown at the row as the validation message of the browser, like the form elements do. An error of the state shows nothing selected.
 - The state is attached while the list is in the document, like other element states.
 - Without `bind` the selection is kept in a state of the list nobody else can reach, `bind({})` goes back to that.
 
@@ -93,6 +93,30 @@ Nothing has to be done for it, `context_menu` stays a menu or a function giving 
 
 The menu is combined with `ctm.combine` of the context menu module when it opens, so it shows the open state and the selection at that moment (also for an `openable` state), and rows that are never right clicked cost nothing. A right click never changes the selection by itself, so the row line says "Select" or "Deselect" by the state of the row. A row with nothing to open or select uses its own menu as it is, and has no menu without one.
 
-### Look
+## Reorder
 
-Selected rows get the `selected` class and the theme variables `list.colors.background.row_selected` and `row_selected_hover`. The radio buttons and checkboxes are glyphs of the bundled Material icon font, colored by `list.colors.icon.check`.
+The `reorder` option adds a column of drag handles in front of the rows, before the selection column. Rows are moved by dragging their handle, or with alt and arrow up or down in the key field or selection cell.
+
+```ts
+const group = list.drag_group<File>();
+list.container(columns, transform, files, {
+  sub_rows: true,
+  reorder: {
+    group, // optional, lists of one group give rows to each other
+    can_drop: (file, target) => target.parent?.kind !== "file",
+  },
+});
+```
+
+- Only rows in a writable array state can be moved, they show a handle. Rows of a plain array or a read only state have an empty handle cell.
+- Like the selection, the list only writes the moves to the rows states, the rows move when the states give the change back. A rejected write leaves the rows where they are and shows the reason at the row, like the form elements do.
+- A drop goes before or after a row, or into an openable row as its last sub rows. Dropping after an open row puts the rows first in its sub rows. Hovering into a closed row opens it after a moment, and a drop into it opens it. Below the last row drops at the end. Escape cancels a drag.
+- Inside one parent a move is one `move` write. Moving to another parent or list first inserts into the target and then removes from the source, so a failed write can leave a row in both places but never loses it.
+- Dragging a selected row in multi mode moves all visible selected rows, in their order. Rows next to each other in one parent move with one write. Sub rows of a dragged row move with it.
+- A row can not be dropped into itself or its sub rows. `can_drop(data, target)` decides the rest, `target.parent` is the data of the row the rows go into, undefined for the top level, and `target.list` the list.
+- `list.drag_group<R>()` makes a group of lists that can give rows to each other. Only lists with exactly the same row type can join a group. Without a group rows only move inside their list.
+- A row moved to another parent is a new row element, so its sub rows close.
+
+## Look
+
+Selected rows get the `selected` class and the theme variables `list.colors.background.row_selected` and `row_selected_hover`. The radio buttons, checkboxes and drag handles are glyphs of the bundled Material icon font, colored by `list.colors.icon.check` and `list.colors.icon.drag`. The drop line, the box around a row dropped into and the focus use `list.colors.focus.normal`. Dragged rows are dimmed until the move comes back from the state.

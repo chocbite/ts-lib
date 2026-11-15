@@ -17,6 +17,8 @@ export interface ListSelectionOptions<R, K = R> {
 export interface ListSelectionRow {
   /**Shows the row as selected */
   selected: boolean;
+  /**Cell to point at with a message about the row */
+  readonly anchor: Element | undefined;
 }
 
 /**Selection of the rows of a list, kept in an array state of keys owned by the app
@@ -27,6 +29,8 @@ export class ListSelection<K> {
   readonly key: (data: any) => K;
   /**Called after a change of the shown selection or of the selectable rows */
   on_change?: () => void;
+  /**Called when the state rejects a write, with the row the user acted on */
+  on_error?: (row: ListSelectionRow | undefined, message: string) => void;
   /**State user actions are written to */
   target?: StateREAW<K[], any, K[]>;
 
@@ -141,8 +145,14 @@ export class ListSelection<K> {
     this.#changed = true;
   }
 
-  #write(value: K[]) {
-    void this.target?.write(value);
+  /**Writes the state, a rejected write is reported at the row of the key the user acted on */
+  #write(value: K[], key?: K) {
+    const write = this.target?.write(value);
+    if (!write) return;
+    const row = key === undefined ? undefined : this.#rows.get(key);
+    void write.then((result) => {
+      if (result.err) this.on_error?.(row, result.error);
+    });
   }
 
   //      _____   ______          _______
@@ -223,9 +233,9 @@ export class ListSelection<K> {
         : to;
     const keys = this.#range(anchor, to);
     this.#anchor = anchor;
-    if (!add) return this.#write(state.a.write.fresh(keys));
+    if (!add) return this.#write(state.a.write.fresh(keys), to);
     const added = keys.filter((key) => !this.#counts.has(key));
-    if (added.length) this.#write(state.a.write.push(...added));
+    if (added.length) this.#write(state.a.write.push(...added), to);
   }
 
   /**Replaces the selection with only the row */
@@ -233,7 +243,7 @@ export class ListSelection<K> {
     if (!this.#rows.has(key)) return;
     this.#anchor = key;
     if (this.#keys.length === 1 && this.#keys[0] === key) return;
-    this.#write(state.a.write.fresh([key]));
+    this.#write(state.a.write.fresh([key]), key);
   }
 
   /**Adds the row to the selection, in single mode it replaces the selection */
@@ -241,12 +251,12 @@ export class ListSelection<K> {
     if (!this.multi) return this.select_only(key);
     if (!this.#rows.has(key)) return;
     this.#anchor = key;
-    if (!this.#counts.has(key)) this.#write(state.a.write.push(key));
+    if (!this.#counts.has(key)) this.#write(state.a.write.push(key), key);
   }
 
   /**Removes the row from the selection */
   deselect(key: K) {
-    if (this.#counts.has(key)) this.#write(state.a.write.delete(key));
+    if (this.#counts.has(key)) this.#write(state.a.write.delete(key), key);
   }
 
   /**Toggles the row, in single mode selecting replaces the selection */

@@ -60,7 +60,9 @@ function header_texts(container: HTMLElement): string[] {
 
 function number_list(
   rows: number[] | State<number[]>,
-  options?: Parameters<typeof list.container>[3],
+  options?: Parameters<
+    typeof list.container<number[], { col: string }, boolean, number>
+  >[3],
 ) {
   const container = list.container(
     { col: list.column_string("Column") },
