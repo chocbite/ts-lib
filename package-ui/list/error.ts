@@ -38,8 +38,9 @@ export class ListRowsError<A extends ListType<any>>
     super();
     this.#parent = parent;
     this.depth = parent.depth + 1;
-    if (sub_rows) this.appendChild(new ListKeyField(this));
-    this.appendChild(this.#text);
+    //With sub rows the text is in the key field after the tree lines, it runs from the key column to the end
+    if (sub_rows) this.appendChild(new ListKeyField(this)).tail = this.#text;
+    else this.appendChild(this.#text);
   }
 
   set text(value: string) {

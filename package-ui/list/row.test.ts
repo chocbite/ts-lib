@@ -508,7 +508,7 @@ describe("ListRow add row", () => {
     expect(row.classList.contains("addrow")).toBe(true);
     expect(add.depth).toBe(1);
     expect(add.textContent).toBe("Add");
-    (add.lastElementChild as HTMLElement).click();
+    add.querySelector<HTMLElement>("span.add")!.click();
     expect(on_add).toHaveBeenCalledOnce();
 
     rows.array.change(0, { name: "a", add_row: { text: "More", on_add } });

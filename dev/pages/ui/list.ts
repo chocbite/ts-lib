@@ -303,6 +303,51 @@ const word = (i: number) => WORDS[i % WORDS.length];
   );
 }
 
+{
+  const sec = section(
+    "Key field only, no value columns",
+    "A list with only the key column, the names are key field text. The rows must stay under each other, the add rows and the invalid row run from the key column to the end, after the tree lines. Open Beta for its sub rows and their add row. Add rows until the error row shows instead of the rows",
+  );
+  const rows = state.from_w<string[]>(["Alpha", "Beta", "invalid", "Gamma"]);
+  let count = 0;
+  const names = (name: string) => [name + " 1", name + " 2"];
+  {
+    const b = box(sec, "key column only", { width: "16rem" });
+    b.appendChild(
+      list.container(
+        {},
+        (name: string) =>
+          name === "invalid"
+            ? err("This row is invalid")
+            : ok({
+                key_field: { text: name },
+                openable: name === "Beta",
+                sub_rows: () => names(name),
+                add_row:
+                  name === "Beta"
+                    ? { text: "Add sub row", on_add: () => {} }
+                    : undefined,
+                values: {},
+              }),
+        rows,
+        {
+          headless: true,
+          sub_rows: true,
+          add_row: {
+            text: "Add row",
+            on_add: () => {
+              count++;
+              if (count > 2) rows.set_err("The rows failed to load");
+              else void rows.write(state.a.write.push("New " + count));
+            },
+          },
+        },
+      ),
+    );
+  }
+  controls(sec, { Reset: () => location.reload() });
+}
+
 //     _  __________     __  ______ _____ ______ _      _____
 //    | |/ /  ____\ \   / / |  ____|_   _|  ____| |    |  __ \
 //    | ' /| |__   \ \_/ /  | |__    | | | |__  | |    | |  | |

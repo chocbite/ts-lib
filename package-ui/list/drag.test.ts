@@ -157,17 +157,21 @@ describe("List reorder handles", () => {
     ).toBe('""');
   });
 
-  it("keep the columns of error and add rows after them", () => {
+  it("keep the error and add rows after them, from the key column to the end", () => {
     const rows = state.from_w<Node[]>([node(1)]);
     const container = tree(rows as unknown as Rows, { multi: true });
     rows.set_err("broken");
-    const error = container.querySelector("list-error")!;
-    const header = container.querySelector(
-      "list-headerrow > list-headerfield:not(.key)",
-    )!;
-    expect(error.getBoundingClientRect().left).toBe(
-      header.getBoundingClientRect().left,
-    );
+    const key = container
+      .querySelector("list-rowserror > list-keyfield")!
+      .getBoundingClientRect();
+    const key_header = container
+      .querySelector("list-headerrow > .key")!
+      .getBoundingClientRect();
+    const last_header = container
+      .querySelector("list-headerrow > :last-child")!
+      .getBoundingClientRect();
+    expect(key.left).toBeCloseTo(key_header.left, 0);
+    expect(key.right).toBeCloseTo(last_header.right, 0);
   });
 });
 

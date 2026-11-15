@@ -1,7 +1,8 @@
 list-rowserror {
   display: contents;
 
-  > list-error {
+  > list-error,
+  > list-keyfield {
     background-color: var(--list-colors-background-row_odd);
   }
 }
@@ -19,10 +20,5 @@ list-error {
 
   .touch & {
     min-height: var(--list-size-touch_row_min);
-  }
-
-  //The first column of a list with sub rows is for the key fields
-  list-container > div.sub-rows & {
-    grid-column: 2 / -1;
   }
 }
