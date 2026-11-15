@@ -7,12 +7,29 @@ list-keyfield {
   --list-key-indent: calc(var(--list-row-size) / 2);
   --list-key-indent-space: calc(var(--list-row-size) / 2 - 0.1rem);
   --list-key-opener: var(--list-row-size);
+  --list-key-icon: calc(var(--list-row-size) - 0.4rem);
   .touch & {
     --list-row-size: var(--list-size-touch_row_min);
     --list-key-indent: calc(var(--list-row-size) / 2 - 0.3rem + 1.5px);
     --list-key-indent-space: calc(var(--list-row-size) / 2 - 0.4rem);
     --list-key-opener: calc(var(--list-row-size) - 0.4rem);
+    --list-key-icon: calc(var(--list-row-size) - 1.1rem);
   }
+  //Smallest width of the key column when resized, the indents, the opener, the icon with its padding, 3rem of the text and the border
+  --list-key-min-icon: 0px;
+  --list-key-min-text: 0px;
+  &.has-icon {
+    --list-key-min-icon: calc(var(--list-key-icon) + 0.5rem);
+  }
+  &.has-text {
+    --list-key-min-text: 4rem;
+  }
+  --list-key-min: calc(
+    var(--list-key-depth) *
+      (var(--list-key-indent) + 1px + var(--list-key-indent-space)) +
+      var(--list-key-opener) + var(--list-key-min-icon) +
+      var(--list-key-min-text) + 1px
+  );
 
   position: sticky;
   left: 0;
@@ -173,13 +190,8 @@ list-keyfield {
     background-color: inherit;
     fill: var(--list-colors-icon-key_icon);
     padding: 0.25rem;
-    width: calc(var(--list-row-size) - 0.4rem);
+    width: var(--list-key-icon);
     height: auto;
-
-    .touch & {
-      width: calc(var(--list-row-size) - 1.1rem);
-      height: auto;
-    }
   }
 
   &::after {

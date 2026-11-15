@@ -66,16 +66,26 @@ class HeaderField extends Base {
           double_timeout = 0;
         }, 300);
         this.setPointerCapture(e.pointerId);
+        const handle = e.currentTarget as HTMLElement;
+        handle.classList.add("active");
         const start_x = e.pageX;
         const start_width = this.#box.offsetWidth;
         this.onpointermove = (ev: PointerEvent) => {
           sizer(px_to_rem(start_width + (ev.pageX - start_x)));
         };
-        this.onpointerup = () => {
-          this.releasePointerCapture(e.pointerId);
+        //A cancel or lost capture also ends the resize, a touch the browser takes for something else cancels
+        const end = () => {
+          if (this.hasPointerCapture(e.pointerId))
+            this.releasePointerCapture(e.pointerId);
+          handle.classList.remove("active");
           this.onpointermove = null;
           this.onpointerup = null;
+          this.onpointercancel = null;
+          this.onlostpointercapture = null;
         };
+        this.onpointerup = end;
+        this.onpointercancel = end;
+        this.onlostpointercapture = end;
       };
     } else if (this.#sizer) {
       this.#sizer.remove();
@@ -274,21 +284,39 @@ class Container<
       (a, b) => order.get(a)! - order.get(b)!,
     );
 
-    if (this.#header)
-      this.#header.fields = this.#root.columns_visible.map((key) => {
+    if (this.#header) {
+      const headers = this.#root.columns_visible.map((key) => {
         const column = this.#root.columns.get(key)!;
         const header = new HeaderField(column.title);
         list_align_apply(header, column.align);
         header.sizable(typeof column.fixed_width === "undefined", (width) => {
+          if (width !== undefined) this.#freeze_auto_widths(headers);
           column.init_width = width;
           this.#update_column_widths();
         });
         return header;
       });
+      this.#header.fields = headers;
+    }
     this.#update_column_widths();
 
     for (let i = 0; i < this.#child_box.childElementCount; i++)
       (this.#child_box.children[i] as ListRow<R, T, A, S>).columns_changed();
+  }
+
+  /**Gives the auto width columns their current width, so resizing one column does not resize the others
+   * Only measures while there are auto width columns, so after the first resize a move does no layout here*/
+  #freeze_auto_widths(headers: HeaderField[]) {
+    const auto = this.#root.columns_visible.flatMap((key, i) => {
+      const col = this.#root.columns.get(key)!;
+      return col.fixed_width === undefined && !col.init_width ? [i] : [];
+    });
+    //Measured before any is set, setting one would change the layout of the rest
+    const widths = auto.map((i) => px_to_rem(headers[i].offsetWidth));
+    auto.forEach((i, j) => {
+      this.#root.columns.get(this.#root.columns_visible[i])!.init_width =
+        widths[j];
+    });
   }
 
   #update_column_widths() {
@@ -302,10 +330,15 @@ class Container<
       }
       return "auto";
     });
-    if (this.#root.sub_rows)
-      widths.unshift(
-        this.#key_width ? `${Math.max(this.#key_width, 1)}rem` : "max-content",
+    //The key fields get the width instead of the column, so it never gets smaller than its widest key field minimum
+    if (this.#root.sub_rows) widths.unshift("max-content");
+    this.#box.classList.toggle("key-sized", Boolean(this.#key_width));
+    if (this.#key_width)
+      this.#box.style.setProperty(
+        "--list-key-width",
+        `${Math.max(this.#key_width, 1)}rem`,
       );
+    else this.#box.style.removeProperty("--list-key-width");
     if (this.#selection) widths.unshift("var(--list-check-width)");
     if (this.#root.reorder) widths.unshift("var(--list-drag-width)");
     this.#box.style.gridTemplateColumns = widths.join(" ");

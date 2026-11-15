@@ -44,7 +44,8 @@ list-row.dragging > div > * {
 list-container > span.list-drop {
   display: block;
   position: absolute;
-  z-index: 1000;
+  //Above the rows and their sticky cells, below the header the rows scroll under
+  z-index: 998;
   pointer-events: none;
   box-sizing: border-box;
   //A line, the list sizes it and places it inside the top or bottom edge of the row, starting at the indent of the row

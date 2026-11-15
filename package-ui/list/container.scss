@@ -1,5 +1,6 @@
 list-container {
   $sizer_width: 0.5rem;
+  $sizer_touch_width: 1.5rem;
 
   position: relative;
   display: block;
@@ -19,11 +20,11 @@ list-container {
         position: sticky;
         border-bottom: 1px solid var(--list-colors-border-header);
         background-color: var(--list-colors-background-row_even);
+        //Above the rows scrolling under it
         z-index: 999;
 
         &:first-child {
           left: 0;
-          z-index: 3;
         }
       }
 
@@ -62,6 +63,7 @@ list-container {
             }
           }
 
+          //Handle resizing the column
           > div {
             display: flex;
             position: relative;
@@ -71,8 +73,11 @@ list-container {
             cursor: ew-resize;
             justify-content: center;
             align-items: center;
+            //A drag on the handle resizes, it does not pan the list
+            touch-action: none;
 
-            &:hover {
+            &:hover,
+            &.active {
               background-color: var(--list-colors-background-row_hover);
             }
 
@@ -81,6 +86,26 @@ list-container {
               width: 2px;
               height: 80%;
               background-color: var(--list-colors-border-column);
+            }
+
+            &.active::after {
+              background-color: var(--list-colors-focus-normal);
+            }
+
+            //Wide enough for a finger, with two lines as a grip so it shows it can be grabbed
+            .touch & {
+              width: $sizer_touch_width;
+
+              &::after {
+                width: 3px;
+                height: 60%;
+                transform: translateX(-0.2rem);
+                box-shadow: 0.4rem 0 0 var(--list-colors-border-column);
+              }
+
+              &.active::after {
+                box-shadow: 0.4rem 0 0 var(--list-colors-focus-normal);
+              }
             }
           }
         }
@@ -127,12 +152,31 @@ list-container > div {
   > list-headerrow > .key {
     left: calc(var(--list-drag-width) + var(--list-check-width));
   }
-  > list-headerrow > .key {
-    z-index: 3;
-  }
+  //Sticky in both directions, above the column headers that scroll under them sideways
+  > list-headerrow > :first-child,
+  > list-headerrow > .key,
   > list-headerrow > list-dragfield,
   > list-headerrow > list-checkfield {
-    z-index: 3;
+    z-index: 1000;
+  }
+
+  //A resized key column, the column fits the widest key field minimum, so opening sub rows widens it by their indent
+  //The containment makes the text not count for the width, the key fields stretch to the column like other cells
+  &.key-sized {
+    list-keyfield {
+      box-sizing: border-box;
+      contain: inline-size;
+      min-width: max(var(--list-key-width), var(--list-key-min));
+
+      //A word longer than the space breaks instead of running under the next column
+      > span.text {
+        overflow-wrap: anywhere;
+      }
+    }
+    //Stretches to the column like the other header cells, the width holds the column without rows
+    > list-headerrow > .key {
+      min-width: var(--list-key-width);
+    }
   }
 
   //The error and add rows start after the lead columns
