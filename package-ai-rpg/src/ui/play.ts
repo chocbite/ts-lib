@@ -42,7 +42,8 @@ export function play_view(handlers: PlayHandlers) {
   const redecide = icon_button(material_refresh_rounded, "Let the character decide again", () => selected && ENGINE.redecide(selected));
   const menu_button = icon_button(material_menu_rounded, "Menu", () => handlers.menu(menu_button));
   menu_button.classList.add("menu-button");
-  bar.append(send, redecide, menu_button);
+  //Menu on top, sending below, the same place as deciding again for an AI character
+  bar.append(el("div", "bar-buttons", menu_button, el("div", "bar-send", send, redecide)));
 
   let game: Game | undefined;
   let round: Round | undefined;
@@ -173,7 +174,8 @@ export function play_view(handlers: PlayHandlers) {
       const icon = tab.appendChild(el("span", "icon", initials(character.name)));
       icon.style.setProperty("--hue", String(hue(character.id)));
       tab.append(el("span", "name", character.name));
-      if (list.length > 1) tab.append(el("span", "switch", "▾"));
+      tab.classList.toggle("switchable", list.length > 1);
+      tab.title = list.length > 1 ? "Switch character" : character.name;
     } else tab.append(el("span", "icon", "?"), el("span", "name", game ? "Nobody" : "No game"));
     const phase = round?.phase;
     const action = selected ? round?.actions[selected] : undefined;

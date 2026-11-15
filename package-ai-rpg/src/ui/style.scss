@@ -144,47 +144,73 @@ body {
   color: #ff8a80;
 }
 
+//The bottom box: the character, the prompt, and the menu and send buttons, one box over the scene
 .bar {
   display: flex;
-  align-items: flex-end;
-  gap: 0.4rem;
+  align-items: stretch;
+  gap: 0.5rem;
+  padding: 0.4rem;
+  border: 1px solid rgb(255 255 255 / 0.15);
+  border-radius: 1rem;
+  background: rgb(0 0 0 / 0.6);
+  box-sizing: border-box;
   > * {
     flex-shrink: 0;
   }
+  .icon-button {
+    width: 2.4rem;
+    height: 2.4rem;
+    background: transparent;
+    &:hover {
+      background: rgb(255 255 255 / 0.12);
+    }
+  }
+}
+.bar-buttons {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.2rem;
 }
 
+//The character the prompt is for, a square icon with the name under it
 .tab {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.4rem;
-  height: 2.6rem;
-  max-width: 12rem;
-  padding: 0 0.6rem 0 0.3rem;
+  justify-content: flex-start;
+  gap: 0.2rem;
+  width: 4.5rem;
+  padding: 0;
   border: none;
-  border-radius: 1.3rem;
-  background: rgb(0 0 0 / 0.55);
+  background: none;
   color: #fff;
   font: inherit;
-  cursor: pointer;
+  cursor: default;
+  &.switchable {
+    cursor: pointer;
+    .name::after {
+      content: " ▾";
+      opacity: 0.7;
+    }
+  }
   .icon {
     --hue: 200;
     display: grid;
     place-items: center;
-    width: 2rem;
-    height: 2rem;
-    flex-shrink: 0;
-    border-radius: 50%;
+    width: 3.2rem;
+    height: 3.2rem;
+    border-radius: 0.6rem;
     background: hsl(var(--hue) 45% 40%);
-    font-size: 0.8rem;
+    font-size: 1.1rem;
     font-weight: bold;
   }
   .name {
+    max-width: 100%;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-  }
-  .switch {
-    opacity: 0.7;
+    font-size: 0.75rem;
   }
 }
 
@@ -232,16 +258,14 @@ body {
   min-height: 2.6rem;
   max-height: 30vh;
   box-sizing: border-box;
-  padding: 0.6rem 0.9rem;
-  border: 1px solid rgb(255 255 255 / 0.25);
-  border-radius: 1.3rem;
-  background: rgb(0 0 0 / 0.55);
+  padding: 0.6rem 0.8rem;
+  border: 1px solid transparent;
+  border-radius: 0.6rem;
+  background: rgb(255 255 255 / 0.06);
   color: #fff;
-  font: inherit;
-  resize: none;
   outline: none;
   &:focus {
-    border-color: rgb(255 255 255 / 0.6);
+    border-color: rgb(255 255 255 / 0.35);
   }
   &.submitted {
     border-color: hsl(130 50% 55% / 0.8);
