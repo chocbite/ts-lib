@@ -27,6 +27,12 @@ Row options besides `values`: `openable`, `opened`, `sub_rows` (with the `sub_ro
 
 With sub rows, add rows and error texts sit in the key field after the tree lines and run from the key column to the end of the row. A list can therefore have no value columns at all, `{}` as columns with the names as key field text.
 
+## Opening and closing all rows
+
+With sub rows the key column header has an open all and a close all button, also in its context menu. While a row is open, every row menu has "Close all", so lists without a header can close all too. `container.open_all()` and `container.close_all()` do the same for buttons of the app.
+
+Open all opens level by level, so the upper levels are open first. It stops after opening 1000 rows and warns at the key column header, opening all again continues. That keeps a mistake that makes the sub rows recursive from freezing the app. Rows whose sub rows come from a state that delivers later open with what they have.
+
 ## Resizing columns
 
 Columns without a `fixed_width` get a handle at the right of their header, a double click on it resets the column. The first resize gives every auto width column the width it has, so only the dragged column changes. The key field column of sub rows never gets smaller than its widest key field needs for the indent, the opener, the icon and 4rem of the text, so it grows when deeper sub rows open. Text that does not fit wraps. A list without value columns has its key column fill the list until it is resized.

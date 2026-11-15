@@ -294,11 +294,10 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     //Setup context menu, blocked for right clicks bubbling up from sub rows
     ctm.detach(this);
     this.#sub_row_menu = false;
-    //An openable row gets open or close lines and a selectable row select lines, in front of its own menu
-    //Openable can be a state, the lines are made when the menu opens
-    const openable = this.#root.sub_rows && Boolean(row_options.openable);
+    //With sub rows a row gets open, close and close all lines and a selectable row select lines, in front of its own menu
+    //Openable can be a state and rows open and close, the lines are made when the menu opens
     const menu =
-      openable || this.selection_key !== undefined
+      this.#root.sub_rows || this.selection_key !== undefined
         ? ctm.combine(
             () => this.#open_lines(),
             () => this.#selection_lines(),
@@ -484,14 +483,19 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     this.classList.toggle("selectable", key !== undefined);
   }
 
-  /**Context menu line to open or close the sub rows, empty when the row can not be opened */
+  /**Context menu lines to open or close the sub rows of an openable row, and to close all rows while one is open
+   * Close all is on every row, so a list without header can close all */
   #open_lines(): ContextMenuLines {
-    if (!this.openable) return [];
-    return [
-      this.open
-        ? ctm.line("Close", () => (this.open = false))
-        : ctm.line("Open", () => (this.open = true)),
-    ];
+    const lines: ContextMenuLines = [];
+    if (this.openable)
+      lines.push(
+        this.open
+          ? ctm.line("Close", () => (this.open = false))
+          : ctm.line("Open", () => (this.open = true)),
+      );
+    if (this.#root.any_open())
+      lines.push(ctm.line("Close all", () => this.#root.close_all()));
+    return lines;
   }
 
   /**Context menu lines to select or deselect the row, and in multi mode all rows

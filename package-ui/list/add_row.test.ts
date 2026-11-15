@@ -17,6 +17,9 @@ function root(sub_rows: boolean): ListRoot<number, Values, number[], boolean> {
     columns: new Map(),
     columns_visible: [],
     transform: () => ok({ values: {} }),
+    open_all() {},
+    close_all() {},
+    any_open: () => false,
   };
 }
 
