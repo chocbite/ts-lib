@@ -27,7 +27,7 @@ Row options besides `values`: `openable`, `opened`, `sub_rows` (with the `sub_ro
 
 ## Resizing columns
 
-Columns without a `fixed_width` get a handle at the right of their header, a double click on it resets the column. The first resize gives every auto width column the width it has, so only the dragged column changes. The key field column of sub rows never gets smaller than its widest key field needs for the indent, the opener, the icon and 3rem of the text, so it grows when deeper sub rows open. Text that does not fit wraps.
+Columns without a `fixed_width` get a handle at the right of their header, a double click on it resets the column. The first resize gives every auto width column the width it has, so only the dragged column changes. The key field column of sub rows never gets smaller than its widest key field needs for the indent, the opener, the icon and 4rem of the text, so it grows when deeper sub rows open. Text that does not fit wraps.
 
 ## Selection
 
@@ -115,7 +115,7 @@ list.container(columns, transform, files, {
 - Only rows in a writable array state can be moved, they show a handle. Rows of a plain array or a read only state have an empty handle cell.
 - Like the selection, the list only writes the moves to the rows states, the rows move when the states give the change back. A rejected write leaves the rows where they are and shows the reason at the row, like the form elements do.
 - A drop goes before or after a row, or into an openable row as its last sub rows. Dropping after an open row puts the rows first in its sub rows. Hovering into a closed row opens it after a moment, and a drop into it opens it. Below the last row drops at the end. Escape cancels a drag.
-- Inside one parent a move is one `move` write. Moving to another parent or list first inserts into the target and then removes from the source, so a failed write can leave a row in both places but never loses it.
+- Inside one parent a move is one `move` write. Moving to another parent or list first inserts into the target and then removes from the source, so a failed write can leave a row in both places but never loses it. If the app removes rows itself when they are added somewhere else, `no_remove: true` on the list the rows are dragged from makes it only insert.
 - Dragging a selected row in multi mode moves all visible selected rows, in their order. Rows next to each other in one parent move with one write. Sub rows of a dragged row move with it.
 - A row can not be dropped into itself or its sub rows. `can_drop(data, target)` decides the rest, `target.parent` is the data of the row the rows go into, undefined for the top level, and `target.list` the list.
 - `list.drag_group<R>()` makes a group of lists that can give rows to each other. Only lists with exactly the same row type can join a group. Without a group rows only move inside their list.

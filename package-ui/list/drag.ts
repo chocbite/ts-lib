@@ -48,6 +48,10 @@ export interface ListReorderOptions<R> {
   group?: ListDragGroup<R>;
   /**Whether the row data can be dropped at the target, all dropped rows must be allowed for a drop */
   can_drop?(data: R, target: ListDropTarget<R>): boolean;
+  /**Rows moved to another parent or list are only inserted there, not removed from where they came from
+   * For apps that remove the rows themselves when they are added, set on the list the rows are dragged from
+   * Moves inside one parent are still one move write */
+  no_remove?: boolean;
 }
 
 /**Drag handle cell in front of a row, empty in the header */
@@ -376,6 +380,8 @@ export class ListReorder<R> {
         errors.push(inserted.error);
         continue;
       }
+      //The app already took the rows out of the source while inserting
+      if (this.#options.no_remove || !first.parentElement) continue;
       const source_rows = first.parent_rows;
       if (!writable(source_rows)) continue;
       const removed = await source_rows.write(
