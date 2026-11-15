@@ -9,6 +9,7 @@ import ctm from "@chocbite/ts-lib-ui/context-menu";
 import { builder_panel } from "./builder";
 import { panel_close, toast } from "./common";
 import { debug_panel } from "./debug";
+import { level_panel } from "./level";
 import { play_view } from "./play";
 import { review_panel } from "./review";
 import { settings_panel } from "./settings";
@@ -86,12 +87,14 @@ export async function ui_start() {
   play_view({ menu, review: review_panel });
   if (store_ready.err) return toast(store_ready.error);
 
-  //Reviews open by themselves when a round reaches one
+  //Reviews and the level up window open by themselves when a round reaches them
+  const REVIEWS: Phase[] = [Phase.RollsReview, Phase.StoryReview, Phase.ChangesReview];
   let phase: Phase | undefined;
   ENGINE.round.sub((round) => {
     const next = round.value?.phase;
-    if (next !== phase && (next === Phase.StoryReview || next === Phase.ChangesReview)) review_panel();
-    if (next !== phase && phase !== undefined && (phase === Phase.StoryReview || phase === Phase.ChangesReview)) panel_close();
+    if (next !== phase && phase !== undefined && (REVIEWS.includes(phase) || phase === Phase.LevelUp)) panel_close();
+    if (next !== phase && next && REVIEWS.includes(next)) review_panel();
+    if (next !== phase && next === Phase.LevelUp) level_panel();
     phase = next;
   });
   ENGINE.game.sub((g) => {

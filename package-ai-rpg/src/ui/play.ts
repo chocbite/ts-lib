@@ -7,6 +7,7 @@ import { Controller, world_time_text, type Character, type Id } from "#world";
 import ctm from "@chocbite/ts-lib-ui/context-menu";
 import { material_menu_rounded, material_refresh_rounded, material_send_rounded } from "@chocbite/ts-lib-ui/icons";
 import { el, hue, icon_button, initials, spin, text_button, text_nodes } from "./common";
+import { level_panel, level_waiting } from "./level";
 
 export interface PlayHandlers {
   menu: (button: HTMLElement) => void;
@@ -233,6 +234,17 @@ export function play_view(handlers: PlayHandlers) {
       return;
     }
     switch (round.phase) {
+      case Phase.LevelUp: {
+        if (level_waiting().length) status.append(text_button("Spend skill points", level_panel));
+        else busy("Characters are choosing skills to raise");
+        return;
+      }
+      case Phase.Skillcheck:
+        busy("Deciding which attempts need a roll");
+        return;
+      case Phase.RollsReview:
+        status.append(text_button("Review the rolls", handlers.review));
+        return;
       case Phase.Characters: {
         const waiting_players = round.cast.filter((id) => ENGINE.world.character(id)?.controller === Controller.Player && !round!.actions[id]);
         const deciding = running.filter((r) => r.role === Roles.Character);
@@ -250,9 +262,12 @@ export function play_view(handlers: PlayHandlers) {
       case Phase.StoryReview:
         status.append(text_button("Review the story", handlers.review));
         return;
-      case Phase.Scribes:
-        busy("The scribes are recording what happened");
+      case Phase.Scribes: {
+        const scribes = running.filter((r) => r.role === Roles.Scribes).length;
+        busy(`The scribes are recording what happened${scribes > 1 ? ` (${scribes} at work)` : ""}`);
         return;
+        return;
+      }
       case Phase.ChangesReview:
         status.append(text_button("Review the changes", handlers.review));
         return;

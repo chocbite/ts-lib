@@ -1,6 +1,7 @@
 //Prompts and reply schemas of every role. Prompts are built from the world each time, never from a growing chat.
 //Stable parts come first, so the server can reuse its cache of the start of the prompt.
-import type { Round } from "#game";
+import { Difficulty, type Round } from "#game";
+import { rules_roll_text } from "#rules";
 import type { LlmMessage } from "#lib/llm";
 import { mention_map } from "#lib/mention";
 import { schema_object, type Schema } from "#lib/schema";
@@ -8,14 +9,17 @@ import {
   Kind,
   NEW_ID_PATTERN,
   SchemaFor,
+  TimeUnit,
   world_attribute_texts,
   world_change_schema,
   world_empty,
   world_known_as,
   world_skill_texts,
+  world_skill_total,
   world_subtree,
   world_time_text,
   world_visible,
+  type Change,
   type Character,
   type Chunk,
   type Id,
@@ -217,6 +221,66 @@ const actions_text = (world: WorldRead, round: Round) =>
     cast_of(world, round).map((c) => `- ${link(c.name, c.id)} (${c.controller === "player" ? "player" : "AI"}): ${round.actions[c.id]?.text ?? "does nothing"}`),
   );
 
+const rolls_text = (world: WorldRead, round: Round) => lines((round.rolls ?? []).map((r) => "- " + rules_roll_text(world, r)), "- No action needed a roll.");
+
+const messages = (system: string, user: string): LlmMessage[] => [
+  { role: "system", content: system },
+  { role: "user", content: user },
+];
+
+//       _____ _  _______ _      _       _____ _    _ ______ _____ _  __
+//      / ____| |/ /_   _| |    | |     / ____| |  | |  ____/ ____| |/ /
+//     | (___ | ' /  | | | |    | |    | |    | |__| | |__ | |    | ' /
+//      \___ \|  <   | | | |    | |    | |    |  __  |  __|| |    |  <
+//      ____) | . \ _| |_| |____| |____| |____| |  | | |___| |____| . \
+//     |_____/|_|\_\_____|______|______|\_____|_|  |_|______\_____|_|\_\
+
+/**Prompt for the skillcheck deciding which actions need a roll*/
+export function prompt_skillcheck(world: WorldRead, round: Round): LlmMessage[] {
+  const cast = cast_of(world, round);
+  const system = `You are the referee of an interactive story. Each character in the scene says what they attempt. You decide which attempts are uncertain enough to need a roll of the dice. The game rolls, you only decide what is checked.
+
+Rules:
+- Only attempts that could fail and where failing matters get a check: climbing, sneaking, persuading someone unwilling, noticing something hidden, fighting. Talking, walking, looking around and simple tasks need none.
+- At most one check per character, for the most uncertain part of what they attempt.
+- check is what is tested in a few words, like "climb the mill wall".
+- skills are the skills that could help, best first, the best one counts. Leave it empty when none fits.
+- difficulty is how hard it is for anyone: trivial, easy, normal, hard or extreme.
+- Return an empty list when nothing needs a roll.
+
+# Skills
+${lines(world.skills().map((s) => `- ${s.id}: ${s.name}: ${s.description}`))}
+
+# Characters
+${lines(cast.map((c) => `- ${link(c.name, c.id)}: ${world_skill_texts(world, c).join(", ") || "no skills"}`))}`;
+  return messages(system, `# This round, what each character attempts\n${actions_text(world, round)}\n\nDecide the checks.`);
+}
+
+export function schema_skillcheck(world: WorldRead, round: Round): Schema {
+  const skills = world.skills().map((s) => s.id);
+  return schema_object({
+    checks: {
+      type: "array",
+      items: schema_object({
+        character: { type: "string", enum: round.cast.length ? round.cast : [""] },
+        check: { type: "string" },
+        skills: { type: "array", items: { type: "string", enum: skills.length ? skills : [""] } },
+        difficulty: { type: "string", enum: Object.values(Difficulty) },
+      }),
+    },
+  });
+}
+export interface SkillcheckReply {
+  checks: { character: Id; check: string; skills: Id[]; difficulty: Difficulty }[];
+}
+
+//       _____ _______ ____  _______     _________ ______ _      _      ______ _____
+//      / ____|__   __/ __ \|  __ \ \   / /__   __|  ____| |    | |    |  ____|  __ \
+//     | (___    | | | |  | | |__) \ \_/ /   | |  | |__  | |    | |    | |__  | |__) |
+//      \___ \   | | | |  | |  _  / \   /    | |  |  __| | |    | |    |  __| |  _  /
+//      ____) |  | | | |__| | | \ \  | |     | |  | |____| |____| |____| |____| | \ \
+//     |_____/   |_|  \____/|_|  \_\ |_|     |_|  |______|______|______|______|_|  \_\
+
 /**Prompt for the storyteller deciding what happens
  * @param earlier rounds before this one, their stories give the storyteller the story so far*/
 export function prompt_storyteller(world: WorldRead, round: Round, earlier: readonly Round[]): LlmMessage[] {
@@ -225,6 +289,7 @@ export function prompt_storyteller(world: WorldRead, round: Round, earlier: read
 
 Rules:
 - Characters only attempt things, you decide the outcome. Not everything succeeds, keep it believable within the world.
+- Where the dice were rolled, the result is final: a failed roll fails, a barely won roll barely succeeds. Show it in the story, never mention dice or numbers.
 - Describe only what can be seen and heard, never private thoughts. Characters only know what they witness.
 - Do not make player characters do or say more than they attempted.
 - Keep it vivid but short, three to eight chunks. Each chunk is one to three sentences.
@@ -240,11 +305,11 @@ ${recent_story(world, earlier)}
 # This round, what each character attempts
 ${actions_text(world, round)}
 
+# How the uncertain attempts went
+${rolls_text(world, round)}
+
 Write what happens.`;
-  return [
-    { role: "system", content: system },
-    { role: "user", content: user },
-  ];
+  return messages(system, user);
 }
 
 /**Schema of the storyteller's reply, speakers are limited to the cast*/
@@ -270,44 +335,122 @@ export interface StorytellerReply {
 //      ____) | |____| | \ \ _| |_| |_) | |____ ____) |
 //     |_____/ \_____|_|  \_\_____|____/|______|_____/
 
-/**Prompt for the scribes recording what the story changed*/
-export function prompt_scribes(world: WorldRead, round: Round): LlmMessage[] {
+const SCRIBE_RULES = `Only record what the story says, never invent. Keep every text short. Refer to characters and locations in text as markdown links with their id. Return an empty list when nothing changed.`;
+
+/**What happened this round, for every scribe*/
+const round_text = (world: WorldRead, round: Round) => `# What each character attempted
+${actions_text(world, round)}
+
+# How the uncertain attempts went
+${rolls_text(world, round)}
+
+# What happened
+${story_text(world, round.story)}`;
+
+/**Prompt for the time scribe, only how much time passed*/
+export function prompt_scribe_time(world: WorldRead, round: Round): LlmMessage[] {
+  const system = `You keep the clock of an interactive story. Read what happened this round and say how much time it took, as an amount and a unit (minutes, hours or days). A short exchange of words takes a few minutes, a walk across town half an hour, a night's sleep about eight hours.
+
+It is now ${world_time_text(world.time)}.`;
+  return messages(system, round_text(world, round) + "\n\nHow much time passed?");
+}
+export const schema_scribe_time = (): Schema => schema_object({ amount: { type: "number" }, unit: { type: "string", enum: Object.values(TimeUnit) } });
+export interface ScribeTimeReply {
+  amount: number;
+  unit: TimeUnit;
+}
+
+/**Prompt for the world scribe: new things, and changes to things that are not characters of the scene*/
+export function prompt_scribe_world(world: WorldRead, round: Round): LlmMessage[] {
   const cast = cast_of(world, round);
-  const system = `You are the scribe of an interactive story. The storyteller has written what happened this round. You record it as changes to the world, so later rounds stay consistent. Only record what the story says, never invent.
+  const system = `You are the world scribe of an interactive story. The storyteller has written what happened this round. You record what changed in the world outside the characters themselves, other scribes record the characters. ${SCRIBE_RULES}
 
 Record:
-- add_memory for every character in the scene: one or two sentences from their point of view, what they did, saw and heard. Only what they could perceive.
-- move when something went somewhere: a character walks to another location, picks up an item (into the character), drops it (into the location), hands it over (into the other character), puts it into a chest (into the item). For a new place, add_location first with an id like new:old-mill, inside the location it is part of.
-- add_character when someone new appeared, with an id like new:city-guard. appearance is what others see of them.
-- add_item for an object that matters to the story, with an id like new:rusty-key, in the location, character or item that holds it.
-- set_relationship when a character learns another's name (known_as) or their opinion of them changes.
-- update when a name, description, bio, personality or goals changed in a lasting way.
-- remove when a character dies or leaves the story for good, or an item is used up or destroyed. Only things with nothing inside can be removed, move what is inside out first.
-- pass_time with how much time passed this round, always, as an amount and a unit.
-- set_attribute or add_to_attribute when a value of a listed attribute changed, add_to_attribute adds to numbers ("amount": -3 for losing 3 coins). set_local_attribute for something only that thing has, remove_attribute when it is gone.
-- add_ability when a character gained a lasting special ability, remove_ability when it lost one.
-- award_exp for characters who achieved something, learned or overcame something: small, medium or large, with the reason.
-- define_skill for a new kind of skill the story needed, set_skill for the bonus a new or changed item gives to a skill (-100 to 100).
-Refer to characters and locations in text as markdown links with their id, like ${cast[0] ? link(cast[0].name, cast[0].id) : "[Name](char:id)"}. Keep every text short. Return an empty list when nothing changed.
+- add_location for a new place, with an id like new:old-mill, inside the location it is part of.
+- add_character when someone new appeared, with an id like new:city-guard, in where they are. appearance is what others see of them.
+- add_item for a new object that matters to the story, with an id like new:rusty-key, in the location, character or item that holds it.
+- update when the name or description of a location or item changed in a lasting way (a broken door, a burned house).
+- move for items or locations moved by something other than the characters of the scene.
+- remove when an item is destroyed or used up, or a place is gone. Only things with nothing inside can be removed.
+- set_attribute, add_to_attribute, set_local_attribute or remove_attribute when a value of a location or item changed ("amount": -3 for 3 less).
+- add_effect for a change of a number attribute or skill that wears off, with how long it lasts.
+- define_skill for a new kind of skill the story needed, set_skill for the bonus an item gives to a skill (-100 to 100).
 
 # World
 ${world_text(world, cast)}`;
-  const user = `# What each character attempted
-${actions_text(world, round)}
+  return messages(system, round_text(world, round) + "\n\nRecord the changes to the world.");
+}
+export const schema_scribe_world = (world: WorldRead): Schema => schema_object({ changes: world_change_schema(world, SchemaFor.ScribeWorld) });
 
-# What happened
-${story_text(world, round.story)}
+/**Prompt for the scribe of one character: what it remembers, where it went, what it took, learned and became
+ * @param world the world with the changes of the world scribe, so new things can be used*/
+export function prompt_scribe_character(world: WorldRead, round: Round, character: Character): LlmMessage[] {
+  const cast = cast_of(world, round);
+  const system = `You are the scribe of ${character.name} (${character.id}) in an interactive story. The storyteller has written what happened this round. You record what changed for ${character.name} only, other scribes record the rest. ${SCRIBE_RULES}
 
-Record the changes.`;
-  return [
-    { role: "system", content: system },
-    { role: "user", content: user },
-  ];
+Record:
+- add_memory, always one: one or two sentences from ${character.name}'s point of view, what they did, saw and heard. Only what they could perceive.
+- move when ${character.name} went somewhere (into the location), picked something up (into ${character.id}), dropped it (into the location), handed it over (into the other character), put it into something (into the item).
+- set_relationship when ${character.name} learned another's name (known_as) or their opinion of them changed.
+- update when ${character.name}'s description, appearance, bio, personality or goals changed in a lasting way.
+- set_attribute, add_to_attribute, set_local_attribute or remove_attribute when a value of ${character.name} or what they carry changed ("amount": -3 for losing 3 coins).
+- add_effect for a change of a number attribute or skill that wears off, with how long it lasts, like a potion.
+- remove when something ${character.name} carries is used up or destroyed.
+- add_ability or remove_ability when ${character.name} gained or lost a lasting special ability.
+- award_exp when ${character.name} achieved, learned or overcame something: small, medium or large, with the reason.
+
+# ${character.name}
+${character.description}
+${sheet(world, character)}
+Carries: ${
+    world_subtree(world, character.id)
+      .filter((t) => !t.gone)
+      .map((t) => link(t.name, t.id))
+      .join(", ") || "nothing"
+  }
+
+# World
+${world_text(world, cast)}`;
+  return messages(system, round_text(world, round) + `\n\nRecord the changes for ${character.name}.`);
+}
+export const schema_scribe_character = (world: WorldRead, character: Id): Schema =>
+  schema_object({ changes: world_change_schema(world, SchemaFor.ScribeCharacter, character) });
+
+export interface ScribesReply {
+  changes: Change[];
 }
 
-export const schema_scribes = (world: WorldRead): Schema => schema_object({ changes: world_change_schema(world, SchemaFor.Scribes) });
-export interface ScribesReply {
-  changes: import("#world").Change[];
+//      _      ________      ________ _        _    _ _____
+//     | |    |  ____\ \    / /  ____| |      | |  | |  __ \
+//     | |    | |__   \ \  / /| |__  | |      | |  | | |__) |
+//     | |    |  __|   \ \/ / |  __| | |      | |  | |  ___/
+//     | |____| |____   \  /  | |____| |____  | |__| | |
+//     |______|______|   \/   |______|______|  \____/|_|
+
+/**Prompt for an AI character spending its skill points*/
+export function prompt_level_up(world: WorldRead, character: Character): LlmMessage[] {
+  const system = `You play ${character.name} in an interactive story.
+${character.bio}
+Personality: ${character.personality}
+Goals: ${character.goals}
+
+${character.name} has grown and has ${character.skill_points} skill points to spend. Each point raises a skill by one, no skill goes over 100. Choose the skills ${character.name} would grow in, from what they did and what they want. Spend all points.
+
+# Skills now
+${lines(world.skills().map((s) => `- ${s.id}: ${s.name} ${world_skill_total(world, character, s.id)}: ${s.description}`))}
+
+# What ${character.name} remembers lately
+${lines(world.memories(character.id).slice(-10).map((m) => "- " + m), "- nothing yet")}`;
+  return messages(system, "Which skills do you raise, and by how many points?");
+}
+export function schema_level_up(world: WorldRead): Schema {
+  const skills = world.skills().map((s) => s.id);
+  return schema_object({
+    raises: { type: "array", items: schema_object({ skill: { type: "string", enum: skills.length ? skills : [""] }, points: { type: "integer" } }) },
+  });
+}
+export interface LevelUpReply {
+  raises: { skill: Id; points: number }[];
 }
 
 //      ____  _    _ _____ _      _____  ______ _____
@@ -350,6 +493,6 @@ export const schema_builder = (): Schema =>
 export interface BuilderReply {
   message: string;
   name: string;
-  changes: import("#world").Change[];
+  changes: Change[];
   opening: Chunk[];
 }

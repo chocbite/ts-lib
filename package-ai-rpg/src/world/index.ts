@@ -84,9 +84,24 @@ export interface Ability {
   description: string;
 }
 
+/**A change of a number attribute or a skill that lasts until a time, the base value is left alone*/
+export interface Effect {
+  /**Local to the thing*/
+  id: Id;
+  /**Id of the attribute or skill it changes*/
+  target: Id;
+  amount: number;
+  /**Time it ends, minutes since the start of day 1*/
+  until: number;
+  /**What causes it, like "potion"*/
+  reason: string;
+}
+
 interface ThingBase extends NodeBase {
   description: string;
   attributes: AttributeValue[];
+  /**Active effects, dropped when time passes their end*/
+  effects: Effect[];
 }
 
 export interface Location extends ThingBase {
@@ -390,6 +405,11 @@ export type Change =
   | { op: "update_ability"; character: Id; ability: Id; field: "name" | "description"; value: string }
   | { op: "remove_ability"; character: Id; ability: Id }
   | { op: "award_exp"; character: Id; amount: ExpAward; reason: string }
+  /**Raises a skill of a character with its unspent skill points*/
+  | { op: "spend_skill_points"; character: Id; skill: Id; points: number }
+  /**A change of a number attribute or skill that ends after the duration*/
+  | { op: "add_effect"; thing: Id; target: Id; amount: number; duration: number; unit: TimeUnit; reason: string }
+  | { op: "remove_effect"; thing: Id; effect: Id }
   //Time and settings
   | { op: "set_time"; day: number; hour: number; minute: number }
   | { op: "pass_time"; amount: number; unit: TimeUnit }
@@ -399,29 +419,35 @@ export type Change =
 export const NEW_ID_PATTERN = "^new:[a-z0-9]+(-[a-z0-9]+)*$";
 
 /**Who a change schema is for, each gets the changes it may make*/
-export const SchemaFor = { Builder: "builder", Scribes: "scribes" } as const;
+export const SchemaFor = {
+  Builder: "builder",
+  /**New things, and changes to things outside the characters of the scene*/
+  ScribeWorld: "scribe_world",
+  /**Changes to one character and what it carries, see world_change_schema*/
+  ScribeCharacter: "scribe_character",
+} as const;
 export type SchemaFor = (typeof SchemaFor)[keyof typeof SchemaFor];
 
-/**Schema of a change list, ids are limited to the existing ones and new: ids, so a model forced into it can not make up ids*/
-export function world_change_schema(world: WorldRead, role: SchemaFor = SchemaFor.Scribes): Schema {
-  const builder = role === SchemaFor.Builder;
-  const ref = (ids: string[]): Schema => {
+/**Schema of a change list, ids are limited to the existing ones and new: ids, so a model forced into it can not make up ids
+ * @param self the character a character scribe is for*/
+export function world_change_schema(world: WorldRead, role: SchemaFor, self?: Id): Schema {
+  const ref = (ids: string[], allow_new = true): Schema => {
     const pattern: SchemaString = { type: "string", pattern: NEW_ID_PATTERN };
+    if (!allow_new) return { type: "string", enum: ids.length ? ids : [""] };
     return ids.length ? { anyOf: [{ type: "string", enum: ids }, pattern] } : pattern;
   };
   const living = world.things().filter((t) => !t.gone);
-  const character = ref(world.characters().map((c) => c.id));
-  const item = ref(living.filter((t) => t.kind === Kind.Item).map((t) => t.id));
-  const thing = ref(living.map((t) => t.id));
-  const attribute = ref(world.attributes().map((a) => a.id));
-  const skill = ref(world.skills().map((s) => s.id));
-  const location_or_top = ref(["", ...world.locations().map((l) => l.id)]);
+  const all_things = ref(living.map((t) => t.id));
   const text: Schema = { type: "string" };
   const number: Schema = { type: "number" };
   const value: Schema = { anyOf: [number, text, { type: "boolean" }] };
   const type: Schema = { type: "string", enum: Object.values(AttributeType) };
   const op = (name: string): Schema => ({ type: "string", enum: [name] });
   const new_id: Schema = { type: "string", pattern: NEW_ID_PATTERN };
+  const attribute = ref(world.attributes().map((a) => a.id));
+  const skill = ref(world.skills().map((s) => s.id));
+  const unit: Schema = { type: "string", enum: Object.values(TimeUnit) };
+  const add_location = schema_object({ op: op("add_location"), id: new_id, name: text, description: text, in: ref(["", ...world.locations().map((l) => l.id)]) });
   const add_character = {
     op: op("add_character"),
     id: new_id,
@@ -431,48 +457,89 @@ export function world_change_schema(world: WorldRead, role: SchemaFor = SchemaFo
     bio: text,
     personality: text,
     goals: text,
-    in: thing,
+    in: all_things,
   };
+  const add_item = schema_object({ op: op("add_item"), id: new_id, name: text, description: text, in: all_things });
+  const define_skill = schema_object({ op: op("define_skill"), id: new_id, name: text, description: text });
+  /**Changes of attributes and effects of the things*/
+  const values = (things: Schema) => [
+    schema_object({ op: op("set_attribute"), thing: things, attribute, value }),
+    schema_object({ op: op("add_to_attribute"), thing: things, attribute, amount: number }),
+    schema_object({ op: op("set_local_attribute"), thing: things, name: text, type, unit: text, value }),
+    schema_object({ op: op("remove_attribute"), thing: things, attribute: text }),
+    schema_object({ op: op("add_effect"), thing: things, target: text, amount: number, duration: number, unit, reason: text }),
+  ];
+
+  if (role === SchemaFor.Builder) {
+    const character = ref(world.characters().map((c) => c.id));
+    return {
+      type: "array",
+      items: {
+        anyOf: [
+          add_location,
+          schema_object({ ...add_character, controller: { type: "string", enum: Object.values(Controller) } }),
+          add_item,
+          schema_object({ op: op("set_relationship"), character, other: character, known_as: text, opinion: text }),
+          schema_object({
+            op: op("define_attribute"),
+            id: new_id,
+            name: text,
+            description: text,
+            type,
+            unit: text,
+            kinds: { type: "array", items: { type: "string", enum: THING_KINDS } },
+          }),
+          define_skill,
+          schema_object({ op: op("set_attribute"), thing: all_things, attribute, value }),
+          schema_object({ op: op("set_local_attribute"), thing: all_things, name: text, type, unit: text, value }),
+          schema_object({ op: op("set_skill"), thing: all_things, skill, value: number }),
+          schema_object({ op: op("add_ability"), character, name: text, description: text }),
+          schema_object({ op: op("set_time"), day: number, hour: number, minute: number }),
+        ],
+      },
+    };
+  }
+
+  if (role === SchemaFor.ScribeWorld) {
+    //Everything but the characters themselves, those are for their own scribes
+    const not_characters = ref(living.filter((t) => t.kind !== Kind.Character).map((t) => t.id));
+    return {
+      type: "array",
+      items: {
+        anyOf: [
+          add_location,
+          schema_object(add_character),
+          add_item,
+          schema_object({ op: op("update"), thing: not_characters, field: { type: "string", enum: ["name", "description"] }, value: text }),
+          schema_object({ op: op("move"), thing: not_characters, in: ref(["", ...living.map((t) => t.id)]) }),
+          schema_object({ op: op("remove"), thing: not_characters }),
+          define_skill,
+          schema_object({ op: op("set_skill"), thing: ref(living.filter((t) => t.kind === Kind.Item).map((t) => t.id)), skill, value: number }),
+          ...values(not_characters),
+        ],
+      },
+    };
+  }
+
+  //A character scribe changes its character and what it carries, and moves what it sees
+  const me = self ? world.character(self) : undefined;
+  const own = me ? [me.id, ...world_subtree(world, me.id).filter((t) => !t.gone).map((t) => t.id)] : [];
+  const seen = me ? world_visible(world, me.id).map((t) => t.id) : [];
+  const just_me = ref(me ? [me.id] : [], false);
+  const others = ref(world.characters().filter((c) => c.id !== me?.id).map((c) => c.id));
   return {
     type: "array",
     items: {
       anyOf: [
-        schema_object({ op: op("add_location"), id: new_id, name: text, description: text, in: location_or_top }),
-        schema_object(builder ? { ...add_character, controller: { type: "string", enum: Object.values(Controller) } } : add_character),
-        schema_object({ op: op("add_item"), id: new_id, name: text, description: text, in: thing }),
-        schema_object({ op: op("update"), thing, field: { type: "string", enum: FIELD_NAMES }, value: text }),
-        schema_object({ op: op("move"), thing, in: ref(["", ...living.map((t) => t.id)]) }),
-        schema_object({ op: op("remove"), thing }),
-        schema_object({ op: op("add_memory"), character, memory: text }),
-        schema_object({ op: op("set_relationship"), character, other: character, known_as: text, opinion: text }),
-        ...(builder
-          ? [
-              schema_object({
-                op: op("define_attribute"),
-                id: new_id,
-                name: text,
-                description: text,
-                type,
-                unit: text,
-                kinds: { type: "array", items: { type: "string", enum: THING_KINDS } },
-              }),
-            ]
-          : []),
-        schema_object({ op: op("define_skill"), id: new_id, name: text, description: text }),
-        schema_object({ op: op("set_attribute"), thing, attribute, value }),
-        schema_object({ op: op("add_to_attribute"), thing, attribute, amount: number }),
-        schema_object({ op: op("set_local_attribute"), thing, name: text, type, unit: text, value }),
-        schema_object({ op: op("remove_attribute"), thing, attribute: text }),
-        //Characters get their skills from levels, the scribes only give items bonuses
-        schema_object({ op: op("set_skill"), thing: builder ? thing : item, skill, value: number }),
-        schema_object({ op: op("add_ability"), character, name: text, description: text }),
-        schema_object({ op: op("remove_ability"), character, ability: text }),
-        ...(builder
-          ? [schema_object({ op: op("set_time"), day: number, hour: number, minute: number })]
-          : [
-              schema_object({ op: op("award_exp"), character, amount: { type: "string", enum: Object.values(ExpAward) }, reason: text }),
-              schema_object({ op: op("pass_time"), amount: number, unit: { type: "string", enum: Object.values(TimeUnit) } }),
-            ]),
+        schema_object({ op: op("add_memory"), character: just_me, memory: text }),
+        schema_object({ op: op("set_relationship"), character: just_me, other: others, known_as: text, opinion: text }),
+        schema_object({ op: op("update"), thing: just_me, field: { type: "string", enum: FIELD_NAMES }, value: text }),
+        schema_object({ op: op("move"), thing: ref([...own, ...seen]), in: ref(["", ...living.map((t) => t.id)]) }),
+        schema_object({ op: op("remove"), thing: ref(own.filter((id) => id !== me?.id)) }),
+        schema_object({ op: op("award_exp"), character: just_me, amount: { type: "string", enum: Object.values(ExpAward) }, reason: text }),
+        schema_object({ op: op("add_ability"), character: just_me, name: text, description: text }),
+        schema_object({ op: op("remove_ability"), character: just_me, ability: text }),
+        ...values(ref(own)),
       ],
     },
   };
@@ -644,7 +711,7 @@ export function world_apply(world: WorldRead, changes: readonly Change[]): World
   };
 
   const add_thing = (change: AddThing, id: Id) => {
-    const base = { id, name: change.name, description: text(change.description), parent: "", children: [], gone: false, attributes: [] };
+    const base = { id, name: change.name, description: text(change.description), parent: "", children: [], gone: false, attributes: [], effects: [] };
     const t: Thing =
       change.op === "add_character"
         ? {
@@ -880,6 +947,41 @@ export function world_apply(world: WorldRead, changes: readonly Change[]): World
         }
         return;
       }
+      case "spend_skill_points": {
+        const c = character(change.character);
+        const s = skill(change.skill);
+        if (!Number.isInteger(change.points) || change.points < 1) fail(`${change.points} is not a number of points to spend`);
+        if (change.points > c.skill_points) fail(`${c.name} has only ${c.skill_points} skill points`);
+        const edited = next.edit(c);
+        const existing = edited.skills.find((v) => v.skill === s.id);
+        if ((existing?.value ?? 0) + change.points > 100) fail(`${s.name} can not go over 100`);
+        if (existing) existing.value += change.points;
+        else edited.skills.push({ skill: s.id, value: change.points });
+        edited.skill_points -= change.points;
+        return;
+      }
+      case "add_effect": {
+        const t = thing(change.thing);
+        const target = real(change.target);
+        const local = t.attributes.find((v) => v.id === target)?.local;
+        const def = next.node(target);
+        if (local ? local.type !== AttributeType.Number : !(def?.kind === Kind.Skill || (def?.kind === Kind.Attribute && def.type === AttributeType.Number)))
+          fail(`${change.target} is not a number attribute or skill`);
+        if (!Number.isFinite(change.amount) || change.amount === 0) fail(`an effect of ${change.amount} changes nothing`);
+        const minutes = MINUTES[change.unit];
+        if (!minutes || !Number.isFinite(change.duration) || change.duration <= 0) fail(`an effect can not last ${change.duration} ${change.unit}`);
+        const effects = next.edit(t).effects;
+        const id = id_make("effect", change.reason || "effect", (id) => effects.some((e) => e.id === id));
+        effects.push({ id, target, amount: change.amount, until: next.time + Math.round(change.duration * minutes), reason: change.reason });
+        return;
+      }
+      case "remove_effect": {
+        const t = thing(change.thing);
+        const i = t.effects.findIndex((e) => e.id === change.effect);
+        if (i < 0) fail(`${t.name} has no effect ${change.effect}`);
+        next.edit(t).effects.splice(i, 1);
+        return;
+      }
       case "set_time": {
         const parts = [change.day, change.hour, change.minute];
         if (parts.some((p) => !Number.isInteger(p) || p < 0) || change.day < 1 || change.hour > 23 || change.minute > 59)
@@ -930,6 +1032,10 @@ export function world_apply(world: WorldRead, changes: readonly Change[]): World
   }
   for (const i of waiting) problems[i] = `${target_of(changes[i] as Add)} is never added`;
   for (const i of changes.keys()) if (!is_add(changes[i])) run(i);
+  //Effects whose time has passed are dropped, when the time changed
+  if (next.time !== world.time)
+    for (const t of next.things())
+      if (t.effects.some((e) => e.until <= next.time)) next.edit(t).effects = t.effects.filter((e) => e.until > next.time);
 
   return {
     world: next,
@@ -986,24 +1092,66 @@ export function world_visible(world: WorldRead, viewer: Id): Thing[] {
   return outside ? [...here, outside] : here;
 }
 
-/**Name, value and unit of each attribute of the thing, "Height: 185 cm"*/
+/**Effects on a target, as text, "+5 from potion for 40 min"*/
+function effect_texts(world: WorldRead, thing: Thing, target: Id): string[] {
+  return thing.effects
+    .filter((e) => e.target === target)
+    .map((e) => `${e.amount >= 0 ? "+" : ""}${e.amount} from ${e.reason || "an effect"} for ${duration_text(e.until - world.time)}`);
+}
+
+/**A duration in minutes as text, "40 min", "3 h", "2 days"*/
+export function world_duration_text(minutes: number): string {
+  if (minutes < 60) return `${Math.max(0, Math.round(minutes))} min`;
+  if (minutes < MINUTES.days) return `${Math.round(minutes / 60)} h`;
+  const days = Math.round(minutes / MINUTES.days);
+  return `${days} day${days === 1 ? "" : "s"}`;
+}
+const duration_text = world_duration_text;
+
+/**Sum of the active effects on a target*/
+const effect_sum = (thing: Thing, target: Id) => thing.effects.filter((e) => e.target === target).reduce((sum, e) => sum + e.amount, 0);
+
+/**Name, value and unit of each attribute of the thing, effects added to the value, "Height: 185 cm (180, +5 from potion for 40 min)"*/
 export function world_attribute_texts(world: WorldRead, thing: Thing): string[] {
   return thing.attributes.map((v) => {
     const def = v.local ?? world.attribute(v.id);
-    const value = typeof v.value === "boolean" ? (v.value ? "yes" : "no") : String(v.value);
-    return `${def?.name ?? v.id}: ${value}${def?.unit ? " " + def.unit : ""}`;
+    const unit = def?.unit ? " " + def.unit : "";
+    if (typeof v.value === "number") {
+      const effects = effect_texts(world, thing, v.id);
+      const total = v.value + effect_sum(thing, v.id);
+      return `${def?.name ?? v.id}: ${total}${unit}${effects.length ? ` (${v.value}, ${effects.join(", ")})` : ""}`;
+    }
+    const value = typeof v.value === "boolean" ? (v.value ? "yes" : "no") : v.value;
+    return `${def?.name ?? v.id}: ${value}${unit}`;
   });
 }
 
-/**Skill levels of a character, with the bonuses of the items directly inside it, "Climbing 40 (+10 from Rope)"*/
+/**Items directly inside a character, the ones that count for its skills*/
+const held = (world: WorldRead, thing: Thing) =>
+  thing.kind === Kind.Character ? world.inside(thing.id).filter((t): t is Item => t.kind === Kind.Item && !t.gone) : [];
+
+/**Total of a skill of a character: its level, the bonuses of the items directly inside it and the active effects*/
+export function world_skill_total(world: WorldRead, character: Character, skill: Id): number {
+  const own = character.skills.find((s) => s.skill === skill)?.value ?? 0;
+  const items = held(world, character).reduce((sum, i) => sum + (i.skills.find((s) => s.skill === skill)?.value ?? 0), 0);
+  return own + items + effect_sum(character, skill);
+}
+
+/**Skills of a character, with the bonuses of the items directly inside it and effects, "Climbing 50 (40, +10 from Rope)",
+ * or the skill bonuses of an item*/
 export function world_skill_texts(world: WorldRead, thing: Character | Item): string[] {
-  const items = thing.kind === Kind.Character ? world.inside(thing.id).filter((t): t is Item => t.kind === Kind.Item && !t.gone) : [];
-  const ids = [...new Set([...thing.skills.map((s) => s.skill), ...items.flatMap((i) => i.skills.map((s) => s.skill))])];
+  if (thing.kind === Kind.Item) return thing.skills.map((s) => `${world.skill(s.skill)?.name ?? s.skill} ${s.value >= 0 ? "+" : ""}${s.value}`);
+  const items = held(world, thing);
+  const ids = [...new Set([...thing.skills.map((s) => s.skill), ...items.flatMap((i) => i.skills.map((s) => s.skill)), ...thing.effects.map((e) => e.target)])].filter(
+    (id) => world.skill(id),
+  );
   return ids.map((id) => {
     const own = thing.skills.find((s) => s.skill === id)?.value ?? 0;
-    const bonuses = items.flatMap((i) => i.skills.filter((s) => s.skill === id).map((s) => `${s.value >= 0 ? "+" : ""}${s.value} from ${i.name}`));
-    const name = world.skill(id)?.name ?? id;
-    return thing.kind === Kind.Item ? `${name} ${own >= 0 ? "+" : ""}${own}` : `${name} ${own}${bonuses.length ? ` (${bonuses.join(", ")})` : ""}`;
+    const extra = [
+      ...items.flatMap((i) => i.skills.filter((s) => s.skill === id).map((s) => `${s.value >= 0 ? "+" : ""}${s.value} from ${i.name}`)),
+      ...effect_texts(world, thing, id),
+    ];
+    return `${world.skill(id)!.name} ${world_skill_total(world, thing, id)}${extra.length ? ` (${own}, ${extra.join(", ")})` : ""}`;
   });
 }
 
@@ -1053,6 +1201,12 @@ export function world_change_text(world: WorldRead, change: Change): string {
       return `${name(change.character)} loses ability ${change.ability}`;
     case "award_exp":
       return `${name(change.character)} gains ${change.amount} experience: ${change.reason}`;
+    case "spend_skill_points":
+      return `${name(change.character)} raises ${name(change.skill)} by ${change.points}`;
+    case "add_effect":
+      return `${name(change.thing)}, ${name(change.target)} ${change.amount >= 0 ? "+" : ""}${change.amount} for ${change.duration} ${change.unit}: ${change.reason}`;
+    case "remove_effect":
+      return `${name(change.thing)} loses effect ${change.effect}`;
     case "set_time":
       return `Time: ${world_time_text((change.day - 1) * MINUTES.days + change.hour * 60 + change.minute)}`;
     case "pass_time":

@@ -74,6 +74,7 @@ The build is a single self contained `dist/index.html`: code, css, fonts and ima
   - `game`: stored records, rounds and phases
   - `options`: user settings
   - `prompts`: prompt and reply schema of every role
+  - `rules`: what the code decides, rolling skillchecks
   - `store`: IndexedDB layout, continuous saving, save files
   - `engine`: runs the rounds, the only place game state changes. Every game object is its own state and a change sets and saves only what changed, keep it that way (see State and storage model in `DESIGN.md`)
   - `ui`: the views

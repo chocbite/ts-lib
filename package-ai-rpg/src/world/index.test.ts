@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { schema_check } from "#lib/schema";
 import {
   GLOBAL,
+  SchemaFor,
   SKILLS,
   world_apply,
+  world_attribute_texts,
   world_change_schema,
   world_chunks_ids,
   world_empty,
@@ -160,13 +162,21 @@ describe("world", () => {
     expect(world_known_as(world, "char:mara", "char:mara")).toBe("Mara");
   });
 
-  it("limits ids in the change schema to existing ones and new ones", () => {
+  it("gives each scribe a schema with only its own changes", () => {
     const world = built();
-    const schema = { type: "object", properties: { changes: world_change_schema(world) }, required: ["changes"] } as const;
-    expect(schema_check(schema, { changes: [{ op: "add_memory", character: "char:mara", memory: "x" }] }).ok).toBe(true);
-    expect(schema_check(schema, { changes: [{ op: "add_memory", character: "char:bob", memory: "x" }] }).err).toBe(true);
-    expect(schema_check(schema, { changes: [{ op: "move", thing: "new:bob", in: "new:hill" }] }).ok).toBe(true);
-    expect(schema_check(schema, { changes: [{ op: "move", thing: "item:key", in: "char:mara" }] }).ok).toBe(true);
+    const check = (schema: ReturnType<typeof world_change_schema>, changes: unknown[]) =>
+      schema_check({ type: "object", properties: { changes: schema }, required: ["changes"] }, { changes }).ok;
+    const mara = world_change_schema(world, SchemaFor.ScribeCharacter, "char:mara");
+    expect(check(mara, [{ op: "add_memory", character: "char:mara", memory: "x" }])).toBe(true);
+    //Only its own character
+    expect(check(mara, [{ op: "add_memory", character: "char:mara-2", memory: "x" }])).toBe(false);
+    //What it sees can be picked up, what is inside the chest it can not see
+    expect(check(mara, [{ op: "move", thing: "item:chest", in: "char:mara" }])).toBe(true);
+    expect(check(mara, [{ op: "move", thing: "item:key", in: "char:mara" }])).toBe(false);
+    const scribe_world = world_change_schema(world, SchemaFor.ScribeWorld);
+    expect(check(scribe_world, [{ op: "move", thing: "new:bob", in: "new:hill" }])).toBe(true);
+    expect(check(scribe_world, [{ op: "move", thing: "char:mara", in: "loc:town" }])).toBe(false);
+    expect(check(scribe_world, [{ op: "add_memory", character: "char:mara", memory: "x" }])).toBe(false);
   });
 
   it("rewrites ids in chunks", () => {
@@ -208,7 +218,7 @@ describe("world", () => {
       { op: "set_skill", thing: "new:rope", skill: "new:climb", value: 10 },
       { op: "set_skill", thing: "new:hook", skill: "new:climb", value: 20 },
     ]).world;
-    expect(world_skill_texts(world, world.character("char:mara")!)).toEqual(["Climbing 40 (+10 from Rope)"]);
+    expect(world_skill_texts(world, world.character("char:mara")!)).toEqual(["Climbing 50 (40, +10 from Rope)"]);
   });
 
   it("awards experience in words and levels up in code", () => {
@@ -231,5 +241,36 @@ describe("world", () => {
     expect(result.world.character("char:mara")?.abilities.map((a) => a.id)).toEqual(["ability:night-sight", "ability:night-sight-2"]);
     expect(world_time_text(result.world.time)).toBe("Day 2, 08:35");
     expect(result.nodes.map((n) => n.id)).toEqual(["char:mara", GLOBAL]);
+  });
+
+  it("adds effects on top of values and drops them when their time has passed", () => {
+    const world = world_apply(built(), [
+      { op: "define_attribute", id: "new:height", name: "Height", description: "", type: "number", unit: "cm", kinds: ["character"] },
+      { op: "set_attribute", thing: "char:mara", attribute: "new:height", value: 170 },
+      { op: "add_effect", thing: "char:mara", target: "new:height", amount: 5, duration: 1, unit: "hours", reason: "potion" },
+    ]).world;
+    expect(world_attribute_texts(world, world.thing("char:mara")!)).toEqual(["Height: 175 cm (170, +5 from potion for 1 h)"]);
+    const later = world_apply(world, [{ op: "pass_time", amount: 30, unit: "minutes" }]).world;
+    expect(world_attribute_texts(later, later.thing("char:mara")!)).toEqual(["Height: 175 cm (170, +5 from potion for 30 min)"]);
+    const gone = world_apply(later, [{ op: "pass_time", amount: 30, unit: "minutes" }]);
+    expect(world_attribute_texts(gone.world, gone.world.thing("char:mara")!)).toEqual(["Height: 170 cm"]);
+    expect(gone.nodes.map((n) => n.id).sort()).toEqual(["char:mara", GLOBAL]);
+    expect(world_apply(world, [{ op: "add_effect", thing: "char:mara", target: "new:nothing", amount: 1, duration: 1, unit: "hours", reason: "" }]).problems[0]).toBe(
+      "new:nothing is not a number attribute or skill",
+    );
+  });
+
+  it("spends skill points within the points and the 100 limit", () => {
+    const world = world_apply(built(), [
+      { op: "define_skill", id: "new:climb", name: "Climbing", description: "" },
+      { op: "set_skill", thing: "char:mara", skill: "new:climb", value: 97 },
+      { op: "award_exp", character: "char:mara", amount: "large", reason: "" },
+    ]).world;
+    expect(world.character("char:mara")?.skill_points).toBe(5);
+    const problem = (points: number) => world_apply(world, [{ op: "spend_skill_points", character: "char:mara", skill: "skill:climbing", points }]).problems[0];
+    expect(problem(4)).toBe("Climbing can not go over 100");
+    expect(problem(6)).toBe("Mara has only 5 skill points");
+    const spent = world_apply(world, [{ op: "spend_skill_points", character: "char:mara", skill: "skill:climbing", points: 3 }]).world.character("char:mara")!;
+    expect([spent.skills[0].value, spent.skill_points]).toEqual([100, 2]);
   });
 });

@@ -43,6 +43,7 @@ export const COWRITER = SETTINGS.register(
 export const Roles = {
   Builder: "builder",
   Character: "character",
+  Skillcheck: "skillcheck",
   Storyteller: "storyteller",
   Scribes: "scribes",
 } as const;
@@ -51,6 +52,7 @@ export type Roles = (typeof Roles)[keyof typeof Roles];
 export const ROLE_NAMES: { [R in Roles]: string } = {
   builder: "Game builder",
   character: "Characters",
+  skillcheck: "Skillcheck",
   storyteller: "Storyteller",
   scribes: "Scribes",
 };
@@ -58,6 +60,7 @@ export const ROLE_NAMES: { [R in Roles]: string } = {
 const DEFAULT_THINKING: { [R in Roles]: LlmThinking } = {
   builder: LlmThinking.Low,
   character: LlmThinking.Off,
+  skillcheck: LlmThinking.Off,
   storyteller: LlmThinking.Low,
   scribes: LlmThinking.Off,
 };

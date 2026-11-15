@@ -12,6 +12,7 @@ import {
   Kind,
   SETTINGS_FIELDS,
   THING_KINDS,
+  world_duration_text,
   world_level_exp,
   type Ability,
   type AttributeDef,
@@ -19,6 +20,7 @@ import {
   type Change,
   type Character,
   type Definition,
+  type Effect,
   type Field,
   type GlobalNode,
   type Id,
@@ -341,7 +343,29 @@ function thing_form(thing: Thing): HTMLElement[] {
     field("Attributes", attribute_list(thing)),
     ...(thing.kind !== Kind.Location ? [field(thing.kind === Kind.Character ? "Skills" : "Skill bonuses", skill_list(thing))] : []),
     ...(thing.kind === Kind.Character ? [field("Abilities", ability_list(thing))] : []),
+    field("Effects", effect_list(thing), "Changes that wear off, made by the story, like a potion"),
   ];
+}
+
+function effect_list(thing: Thing) {
+  const world = ENGINE.world;
+  return list.container(
+    { target: list.column_string("Changes", { align: "left" }), amount: list.column_string("By"), left: list.column_string("For") },
+    (entry_state: StateROS<Effect>) => {
+      const e = entry_state.ok();
+      const local = world.thing(thing.id)?.attributes.find((v) => v.id === e.target)?.local;
+      return ok({
+        values: {
+          target: `${local?.name ?? world.node(e.target)?.name ?? e.target}, from ${e.reason || "an effect"}`,
+          amount: (e.amount >= 0 ? "+" : "") + e.amount,
+          left: world_duration_text(e.until - world.time),
+        },
+        context_menu: ctm.menu([ctm.line("Remove", () => edit([{ op: "remove_effect", thing: thing.id, effect: e.id }]), material_delete_rounded())]),
+      });
+    },
+    ENGINE.effects(thing.id),
+    { headless: true },
+  );
 }
 
 /**Level and experience of a character*/

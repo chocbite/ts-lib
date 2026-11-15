@@ -30,11 +30,13 @@ Proposed: the action of an AI character can be edited, which replaces what its L
 
 ## A round
 
-Decided: a round runs in three phases, each with its own LLM calls.
+Decided: a round runs in phases, each with its own LLM calls.
 
+0. **Level up**, only when a character has skill points to spend, see [Experience and levels](#experience-and-levels).
 1. **Characters.** One LLM call per AI character, each with its own context: who it is, its personality, what it knows, the situation it is in. It answers what it wants to do and say. Characters do not know each other's actions or the player's, so the calls start right when the round starts and run while the player is reading and typing. The phase ends when every player character has submitted its action. If an AI character has not decided by then, the game waits for it.
-2. **Storyteller.** Gets all actions and the world state and decides what happens. Its text is the story shown to the player: what happens, what the characters say.
-3. **Scribes.** Take what the storyteller decided and update the world: add characters, change locations, update bios, memories and relationships. The scribes only record what the storyteller decided, they do not invent.
+2. **Skillcheck.** Decides which actions need a roll, the code rolls, see [Skillcheck](#skillcheck).
+3. **Storyteller.** Gets all actions, the results of the rolls and the world state and decides what happens. Its text is the story shown to the player: what happens, what the characters say.
+4. **Scribes.** Take what the storyteller decided and update the world: add characters, change locations, update bios, memories and relationships. The scribes only record what the storyteller decided, they do not invent. They are split in sub scribes, see [Sub scribes](#sub-scribes).
 
 The player only waits for the storyteller. Without cowriter mode the scribes run in the background while the player clicks through the story, and must finish before the next round's character phase.
 
@@ -96,7 +98,7 @@ One world editor, a dialog with a sidebar (can be hidden) holding the tree in a 
 
 ## Attributes, skills and time
 
-Decided. Built: global node, attributes, skills, abilities, experience and levels as data, numeric time. Not built yet: the skillcheck step, the level up phase, effects, sub scribes. The principle: **the LLMs pick, the code does the numbers**. LLMs are bad at arithmetic and at randomness.
+Decided and built. The principle: **the LLMs pick, the code does the numbers**. LLMs are bad at arithmetic and at randomness.
 
 ### Global
 
@@ -136,16 +138,18 @@ A step between the characters and the storyteller.
 
 Cowriter mode shows the rolls and they can be changed before the storyteller runs.
 
+The numbers: the total of a skill is the character's level plus the bonuses of its items and the active effects on it. The best chosen skill counts. The chance is the total plus 30, plus the difficulty (trivial +40, easy +20, normal 0, hard -20, extreme -40), kept between 5 and 95. A d100 at or under the chance succeeds. The margin (chance minus roll) says how: 30 or more easily, 10 or less barely. So an untrained character succeeds a normal check 30% of the time, a skilled one (50) 80%.
+
 ### Experience and levels
 
 - The scribes award experience per character in words (none, small, medium, large) with a reason, the code turns the word into a number. No cap per round.
 - The code levels characters up on a threshold curve, each level gives skill points.
-- A **level up phase** after the round, only when someone has points: the player spends them in a window, AI characters are asked in character which skills they raise. The code checks the total and the 100 limit.
+- A **level up phase** at the start of the next round, only when someone has points: the player spends them in a window and says when done (points may be kept), AI characters are asked in character which skills they raise. The code checks the total and the 100 limit (`spend_skill_points`).
 
 ### Time
 
 - Time is a number, minutes since the start of day 1, kept in the Global settings. The builder sets the start with `set_time` (day, hour, minute), `pass_time` (an amount and a unit) moves it on. Shown as "Day 3, 14:20".
-- **Effects** are changes with an end time: height +5 cm for an hour, climbing +20 until dawn. They are stored on the thing, a value is the base value plus the active effects, and the code drops effects whose time has passed. Nothing has to be undone. LLMs see "Height: 185 cm (180 + potion, 40 min left)".
+- **Effects** are changes with an end time: height +5 cm for an hour, climbing +20 until dawn (`add_effect` with an amount, a duration and a reason). They are stored on the thing, on number attributes and skills, a value is the base value plus the active effects, and the code drops effects whose time has passed when time moves on. Nothing has to be undone. LLMs see "Height: 185 cm (180, +5 from potion for 40 min)".
 
 ### Sub scribes
 
@@ -155,7 +159,7 @@ One scribe for everything is too hard for one LLM, the work is split, in this or
 2. **scribe_world**: creates new characters, items and locations, and changes things outside characters (a broken door, a burned house). Runs before the character scribes so they can use the new ids.
 3. **scribe_character**, one per character in the scene, run together: its memories, experience, relationships, its own fields, where it went, what it picked up, dropped or handed over. When two take the same item, the changes apply in order and the second shows as a problem in the review.
 
-The cowriter review groups the changes by scribe.
+Each scribe gets its own schema with only the changes it may make, the character scribes with ids limited to their character and what it carries or sees. Results of finished scribes are kept in the round, so a reload only runs the ones that were not done. The cowriter review groups the changes by scribe.
 
 ### References
 
@@ -283,7 +287,7 @@ Decided while building:
 - The builder's opening is stored as the story of round 0.
 - A failed call stops the round with the error shown and a retry button, nothing is retried by itself.
 
-Not built yet: dice rolls, images, a story log of earlier rounds, editing characters outside the builder, opening the builder on a running game, a way to tune prompts without code.
+Not built yet: images, a story log of earlier rounds, editing characters outside the builder, opening the builder on a running game, a way to tune prompts without code.
 
 Known problems: none.
 

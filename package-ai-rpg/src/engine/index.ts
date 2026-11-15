@@ -2,7 +2,7 @@
 //Everything the UI shows comes from the states here, everything the player does goes through the methods here.
 //Every game object is its own state, a change sets only the states of what changed and saves only those records,
 //see State and storage model in DESIGN.md.
-import { ActionSource, Phase, type Call, type Game, type MemoryRecord, type Round, type ThingRecord } from "#game";
+import { ActionSource, Phase, type Call, type Game, type MemoryRecord, type Roll, type Round, type Scribed, type ThingRecord } from "#game";
 import { Keyed } from "#lib/keyed";
 import { Tree, type TreeRows } from "#lib/tree";
 import { id_random } from "#lib/ids";
@@ -12,14 +12,26 @@ import { schema_check, type Schema } from "#lib/schema";
 import { COWRITER, ROLES, Roles, SERVER_KEY, SERVER_URL } from "#options";
 import {
   prompt_character,
-  prompt_scribes,
+  prompt_level_up,
+  prompt_scribe_character,
+  prompt_scribe_time,
+  prompt_scribe_world,
+  prompt_skillcheck,
   prompt_storyteller,
-  schema_scribes,
+  schema_level_up,
+  schema_scribe_character,
+  schema_scribe_time,
+  schema_scribe_world,
+  schema_skillcheck,
   schema_storyteller,
   type BuilderReply,
+  type LevelUpReply,
   type ScribesReply,
+  type ScribeTimeReply,
+  type SkillcheckReply,
   type StorytellerReply,
 } from "#prompts";
+import { rules_d100 } from "#rules";
 import { store_load, store_put_call, store_put_round, store_write, type GameWrite } from "#store";
 import {
   Controller,
@@ -31,6 +43,7 @@ import {
   WorldRead,
   type Ability,
   type AttributeValue,
+  type Effect,
   type Change,
   type Character,
   type Chunk,
@@ -58,15 +71,20 @@ function cast_of(world: WorldRead): Id[] {
   return [...players, ...living.filter((c) => c.controller === Controller.Ai && places.has(world.place(c.id)?.id))].map((c) => c.id);
 }
 
-const new_round = (game: string, n: number, world: WorldRead): Round => ({
-  game,
-  n,
-  phase: Phase.Characters,
-  cast: cast_of(world),
-  actions: {},
-  story: [],
-  changes: [],
-});
+/**A new round, it starts with the level up phase when a character has skill points to spend*/
+function new_round(game: string, n: number, world: WorldRead): Round {
+  const leveling = world.characters().filter((c) => c.skill_points > 0).map((c) => c.id);
+  return {
+    game,
+    n,
+    phase: leveling.length ? Phase.LevelUp : Phase.Characters,
+    cast: cast_of(world),
+    actions: {},
+    ...(leveling.length ? { leveling } : {}),
+    story: [],
+    changes: [],
+  };
+}
 
 /**Some models put their thinking in the reply text instead of a separate field*/
 const without_thinking = (text: string) => text.replace(/^\s*<think>[\s\S]*?<\/think>\s*/, "");
@@ -74,9 +92,9 @@ const without_thinking = (text: string) => text.replace(/^\s*<think>[\s\S]*?<\/t
 /**Strips the game id stored with world records*/
 const without_game = ({ game: _game, ...rest }: ThingRecord) => rest;
 
-type Entries = "attributes" | "skills" | "abilities";
-const ENTRIES: Entries[] = ["attributes", "skills", "abilities"];
-type Entry = AttributeValue | SkillValue | Ability;
+type Entries = "attributes" | "skills" | "abilities" | "effects";
+const ENTRIES: Entries[] = ["attributes", "skills", "abilities", "effects"];
+type Entry = AttributeValue | SkillValue | Ability | Effect;
 /**Key of an entry, an entry keeps its state while its key stays*/
 const entry_key = (e: Entry) => ("skill" in e ? e.skill : e.id);
 /**Entries of a list of a node, empty when the node has no such list*/
@@ -162,6 +180,11 @@ class Engine {
   /**Abilities of a character*/
   abilities(id: Id): StateROS<StateROS<Ability>[]> {
     return this.#keyed(id, "abilities") as Keyed<Ability>["rows"];
+  }
+
+  /**Active effects on a thing*/
+  effects(id: Id): StateROS<StateROS<Effect>[]> {
+    return this.#keyed(id, "effects") as Keyed<Effect>["rows"];
   }
 
   #keyed(id: Id, field: Entries) {
@@ -299,6 +322,23 @@ class Engine {
     this.#update_round((r) => delete r.actions[character]);
   }
 
+  /**Replaces the rolls of the round, while they are reviewed*/
+  edit_rolls(rolls: Roll[]) {
+    if (this.#r?.phase !== Phase.RollsReview) return;
+    this.#update_round((r) => (r.rolls = rolls), true);
+  }
+
+  /**Spends skill points of a character by hand, like in the level up window*/
+  spend(character: Id, skill: Id, points: number) {
+    return this.edit_world([{ op: "spend_skill_points", character, skill, points }]);
+  }
+
+  /**A character is done spending its skill points, the round goes on when everyone is*/
+  level_done(character: Id) {
+    if (this.#r?.phase !== Phase.LevelUp) return;
+    this.#update_round((r) => (r.leveling = (r.leveling ?? []).filter((id) => id !== character)));
+  }
+
   /**Replaces the story of the round, while it is reviewed*/
   edit_story(story: Chunk[]) {
     if (this.#r?.phase !== Phase.StoryReview) return;
@@ -306,10 +346,11 @@ class Engine {
   }
 
   /**Replaces the changes of the round, while they are reviewed*/
-  edit_changes(changes: Change[]) {
+  edit_changes(changes: Change[], sources: string[]) {
     if (this.#r?.phase !== Phase.ChangesReview) return;
     this.#update_round((r) => {
       r.changes = changes;
+      r.sources = sources;
       r.problems = world_apply(this.world, changes).problems;
     }, true);
   }
@@ -330,14 +371,20 @@ class Engine {
   /**Goes on from a review*/
   next() {
     const r = this.#r;
-    if (r?.phase === Phase.StoryReview) this.#update_round((r) => (r.phase = Phase.Scribes));
-    else if (r?.phase === Phase.ChangesReview) this.#finish(r.changes);
+    if (r?.phase === Phase.RollsReview) this.#update_round((r) => (r.phase = Phase.Storyteller));
+    else if (r?.phase === Phase.StoryReview) this.#update_round((r) => (r.phase = Phase.Scribes));
+    else if (r?.phase === Phase.ChangesReview) this.#finish(r.changes, r.sources ?? []);
   }
 
-  /**Runs the storyteller or scribes again, from their review*/
+  /**Runs the skillcheck, storyteller or scribes again, from their review*/
   redo() {
     const r = this.#r;
-    if (r?.phase === Phase.StoryReview)
+    if (r?.phase === Phase.RollsReview)
+      this.#update_round((r) => {
+        r.phase = Phase.Skillcheck;
+        r.rolls = [];
+      });
+    else if (r?.phase === Phase.StoryReview)
       this.#update_round((r) => {
         r.phase = Phase.Storyteller;
         r.story = [];
@@ -346,6 +393,8 @@ class Engine {
       this.#update_round((r) => {
         r.phase = Phase.Scribes;
         r.changes = [];
+        r.sources = undefined;
+        r.scribed = undefined;
         r.problems = undefined;
       });
   }
@@ -449,13 +498,13 @@ class Engine {
   }
 
   /**Applies the changes, ends the round and starts the next, the world, the finished round and the next round are saved together*/
-  #finish(changes: Change[]) {
+  #finish(changes: Change[], sources: string[]) {
     this.#queued(async () => {
       const g = this.#g;
       const r = this.#r;
       if (!g || !r) return;
       const applied = world_apply(this.world, changes);
-      const done: Round = { ...structuredClone(r), changes, problems: applied.problems, phase: Phase.Done };
+      const done: Round = { ...structuredClone(r), changes, sources, problems: applied.problems, phase: Phase.Done };
       const next = new_round(g.id, r.n + 1, applied.world);
       const saved = await this.#commit(applied, { game: { ...g, round: next.n }, rounds: [done, next] }, () => {
         this.#history.array.push(done);
@@ -471,20 +520,31 @@ class Engine {
     const r = this.#r;
     if (!this.#g || !r || r.error) return;
     switch (r.phase) {
+      case Phase.LevelUp: {
+        const leveling = r.leveling ?? [];
+        if (!leveling.length) return this.#update_round((r) => (r.phase = Phase.Characters));
+        for (const id of leveling) {
+          const c = this.world.character(id);
+          if (c?.controller === Controller.Ai && !this.#calls.has("level:" + id)) this.#level_up(c);
+        }
+        return;
+      }
       case Phase.Characters: {
         for (const id of r.cast) {
           const c = this.world.character(id);
           if (c?.controller === Controller.Ai && !r.actions[id] && !this.#calls.has("char:" + id)) this.#decide(c);
         }
-        if (r.cast.every((id) => r.actions[id])) this.#update_round((r) => (r.phase = Phase.Storyteller));
+        if (r.cast.every((id) => r.actions[id])) this.#update_round((r) => (r.phase = Phase.Skillcheck));
         return;
       }
+      case Phase.Skillcheck:
+        if (!this.#calls.has("skillcheck")) this.#skillcheck();
+        return;
       case Phase.Storyteller:
         if (!this.#calls.has("storyteller")) this.#tell();
         return;
       case Phase.Scribes:
-        if (!this.#calls.has("scribes")) this.#scribe();
-        return;
+        return this.#scribes(r);
     }
   }
 
@@ -495,6 +555,25 @@ class Engine {
     const text = without_thinking(reply.value.text).trim();
     if (this.#r?.phase === Phase.Characters && !this.#r.actions[character.id])
       this.#update_round((r) => (r.actions[character.id] = { text, source: ActionSource.Ai }));
+  }
+
+  async #skillcheck() {
+    const r = this.#r!;
+    const schema = schema_skillcheck(this.world, r);
+    const reply = await this.#call("skillcheck", Roles.Skillcheck, prompt_skillcheck(this.world, r), { name: "checks", schema });
+    if (reply.err) return;
+    const checks = parse<SkillcheckReply>(reply.value, schema);
+    if (checks.err) return this.#update_round((r) => (r.error = "The skillcheck's reply did not fit: " + checks.error));
+    if (this.#r?.phase !== Phase.Skillcheck) return;
+    //One check per character of the cast, the code rolls
+    const seen = new Set<Id>();
+    const rolls: Roll[] = checks.value.checks
+      .filter((c) => r.cast.includes(c.character) && !seen.has(c.character) && seen.add(c.character))
+      .map((c) => ({ ...c, skills: c.skills.filter((s) => this.world.skill(s)), roll: rules_d100() }));
+    this.#update_round((r) => {
+      r.rolls = rolls;
+      r.phase = COWRITER.ok() ? Phase.RollsReview : Phase.Storyteller;
+    });
   }
 
   async #tell() {
@@ -513,21 +592,88 @@ class Engine {
     });
   }
 
-  async #scribe() {
-    const r = this.#r!;
-    const schema = schema_scribes(this.world);
-    const reply = await this.#call("scribes", Roles.Scribes, prompt_scribes(this.world, r), { name: "changes", schema });
-    if (reply.err) return;
-    const changes = parse<ScribesReply>(reply.value, schema);
-    if (changes.err) return this.#update_round((r) => (r.error = "The scribes' reply did not fit: " + changes.error));
-    if (this.#r?.phase !== Phase.Scribes) return;
+  /**Runs the sub scribes that have not recorded yet: time and world together, then every character of the cast together,
+   * on the world with the world scribe's changes. When all are done, their changes go to review or are applied.*/
+  #scribes(r: Round) {
+    const scribed = r.scribed ?? { characters: {} };
+    if (!scribed.time && !this.#calls.has("scribe:time")) this.#scribe_time();
+    if (!scribed.world && !this.#calls.has("scribe:world")) this.#scribe_world();
+    if (!scribed.world) return;
+    const cast = r.cast.filter((id) => this.world.character(id) && !this.world.character(id)!.gone);
+    const after_world = world_apply(this.world, scribed.world).world;
+    for (const id of cast) {
+      const c = after_world.character(id);
+      if (c && !scribed.characters[id] && !this.#calls.has("scribe:char:" + id)) this.#scribe_character(after_world, c);
+    }
+    if (!scribed.time || cast.some((id) => !scribed.characters[id])) return;
+    const changes = [...scribed.time, ...scribed.world, ...cast.flatMap((id) => scribed.characters[id])];
+    const sources = [...scribed.time.map(() => "time"), ...scribed.world.map(() => "world"), ...cast.flatMap((id) => scribed.characters[id].map(() => id))];
     if (COWRITER.ok())
       this.#update_round((r) => {
-        r.changes = changes.value.changes;
-        r.problems = world_apply(this.world, r.changes).problems;
+        r.changes = changes;
+        r.sources = sources;
+        r.problems = world_apply(this.world, changes).problems;
         r.phase = Phase.ChangesReview;
       });
-    else this.#finish(changes.value.changes);
+    else this.#finish(changes, sources);
+  }
+
+  /**Keeps what a scribe recorded, while the round is still with the scribes*/
+  #scribed(record: (scribed: Scribed) => void) {
+    if (this.#r?.phase !== Phase.Scribes) return;
+    this.#update_round((r) => record((r.scribed ??= { characters: {} })));
+  }
+
+  async #scribe_time() {
+    const r = this.#r!;
+    const schema = schema_scribe_time();
+    const reply = await this.#call("scribe:time", Roles.Scribes, prompt_scribe_time(this.world, r), { name: "time", schema });
+    if (reply.err) return;
+    const time = parse<ScribeTimeReply>(reply.value, schema);
+    if (time.err) return this.#update_round((r) => (r.error = "The time scribe's reply did not fit: " + time.error));
+    this.#scribed((s) => (s.time = time.value.amount > 0 ? [{ op: "pass_time", amount: time.value.amount, unit: time.value.unit }] : []));
+  }
+
+  async #scribe_world() {
+    const r = this.#r!;
+    const schema = schema_scribe_world(this.world);
+    const reply = await this.#call("scribe:world", Roles.Scribes, prompt_scribe_world(this.world, r), { name: "changes", schema });
+    if (reply.err) return;
+    const changes = parse<ScribesReply>(reply.value, schema);
+    if (changes.err) return this.#update_round((r) => (r.error = "The world scribe's reply did not fit: " + changes.error));
+    this.#scribed((s) => (s.world = changes.value.changes));
+  }
+
+  /**@param world the world with the world scribe's changes, so the character scribe can use what it added*/
+  async #scribe_character(world: WorldRead, character: Character) {
+    const r = this.#r!;
+    const schema = schema_scribe_character(world, character.id);
+    const reply = await this.#call(
+      "scribe:char:" + character.id,
+      Roles.Scribes,
+      prompt_scribe_character(world, r, character),
+      { name: "changes", schema },
+      character.id,
+    );
+    if (reply.err) return;
+    const changes = parse<ScribesReply>(reply.value, schema);
+    if (changes.err) return this.#update_round((r) => (r.error = `The scribe of ${character.name}'s reply did not fit: ${changes.error}`));
+    this.#scribed((s) => (s.characters[character.id] = changes.value.changes));
+  }
+
+  /**Lets an AI character spend its skill points, raises that do not fit are left out*/
+  async #level_up(character: Character) {
+    const schema = schema_level_up(this.world);
+    const reply = await this.#call("level:" + character.id, Roles.Character, prompt_level_up(this.world, character), { name: "raises", schema }, character.id);
+    if (reply.err) return;
+    const raises = parse<LevelUpReply>(reply.value, schema);
+    if (raises.err) return this.#update_round((r) => (r.error = `${character.name}'s level up did not fit: ${raises.error}`));
+    const changes: Change[] = raises.value.raises
+      .filter((x) => x.points > 0)
+      .map((x) => ({ op: "spend_skill_points", character: character.id, skill: x.skill, points: x.points }));
+    const fitting = changes.filter((_, i) => world_apply(this.world, changes).problems[i] === undefined);
+    if (fitting.length) await this.edit_world(fitting);
+    this.level_done(character.id);
   }
 
   //       _____          _      _       _____
