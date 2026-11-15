@@ -1,4 +1,4 @@
-//Mentions are markdown links with an id as target, [Mara](char:mara-2),
+//Mentions are markdown links with an id as target, [Mara](char:k7qm),
 //so text written by and for LLMs refers to things without ambiguity.
 
 /**A piece of text, a mention when id is set*/

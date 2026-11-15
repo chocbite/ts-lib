@@ -57,7 +57,7 @@ The build is a single self contained `dist/index.html`: code, css, fonts and ima
 - `index.html`, `src/main.ts`: entry.
 - Code is split into modules, `src/<module>/index.ts`, imported within the game as `#<module>` (the `imports` field in `package.json`). No `../` paths between modules.
 - `src/lib/<module>/`, imported as `#lib/<module>`: everything generic, with nothing game specific in it, the candidates for the library. Anything library like goes here and nowhere else, so the user can review it in one place, and lib modules never import game modules.
-  - `ids`: readable ids (`char:mara-2`) and random record ids
+  - `ids`: short scrambled codes from a counter for ids an LLM sees (`char:k7qm`), and random record ids
   - `mention`: `[Name](id)` mentions in text
   - `schema`: a JSON schema subset, sent to the LLM and used to check its reply
   - `db`: promise based IndexedDB with results

@@ -1,18 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { ID_PATTERN, id_make, id_slug } from "./index";
+import { ID_PATTERN, id_code } from "./index";
 
 describe("ids", () => {
-  it("slugs names to lowercase ascii", () => {
-    expect(id_slug("Mara Ølgaard-Søn")).toBe("mara-olgaard-son");
-    expect(id_slug("Éowyn the Brave!")).toBe("eowyn-the-brave");
-    expect(id_slug("???")).toBe("");
+  it("makes short codes that never repeat and do not look alike", () => {
+    const codes = Array.from({ length: 20000 }, (_, n) => id_code(n + 1));
+    expect(new Set(codes).size).toBe(codes.length);
+    expect(codes.every((c) => c.length === 4 && ID_PATTERN.test("char:" + c))).toBe(true);
+    //Neighbours share no character in place
+    const [a, b] = [id_code(1), id_code(2)];
+    expect([...a].filter((c, i) => b[i] === c).length).toBeLessThan(2);
   });
-  it("adds a number while the id is taken", () => {
-    const taken = new Set(["char:mara", "char:mara-2"]);
-    expect(id_make("char", "Mara", (id) => taken.has(id))).toBe("char:mara-3");
-    expect(id_make("loc", "!!", () => false)).toBe("loc:unnamed");
-  });
-  it("makes ids matching the pattern", () => {
-    for (const name of ["Mara", "Old Mill", "  x  ", "Ølgaard"]) expect(id_make("char", name, () => false)).toMatch(ID_PATTERN);
+  it("grows past the 4 character space", () => {
+    expect(id_code(31 ** 4)).toHaveLength(5);
+    expect(id_code(31 ** 4)).not.toBe(id_code(31 ** 4 + 1));
   });
 });

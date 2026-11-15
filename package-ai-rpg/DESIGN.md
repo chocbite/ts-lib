@@ -168,11 +168,11 @@ Decided: every game object has an id, so two characters with the same name are n
 Proposed:
 
 - **The game makes ids, never an LLM.** An id is made when the object is created and never changes, also when the name changes. Ids are never reused: removed objects are marked gone, not deleted, so old rounds keep pointing at something.
-- **Readable ids**: a type prefix and a slug of the name, with a number when taken, `char:mara`, `char:mara-2`, `loc:old-mill`. LLMs copy random ids badly and mix up similar ones, readable ids carry meaning and cost few tokens.
+- **Ids are a type prefix and a short code**, `char:k7qm`, `loc:w2nd`. The code is a counter kept in the Global node, scrambled into 4 lowercase letters and digits without look alikes (0 o 1 l i), so neighbours look nothing alike and a model does not mix up `char:1` and `char:2`. An id never changes and never says anything about the name, so a rename never makes it wrong. The name is always next to it in prompts and mentions. Decided after ids made from the name went stale when things were renamed.
 - **Every prompt has a roster** of the objects it may refer to: id, name and a short description that tells look alikes apart, and is told to refer to them by id.
-- **Mentions in text are markdown links**, `[Mara](char:mara-2) slams the door.` LLMs write these reliably. The game shows the name only, and can later show more on hover. A chunk's `speaker` is an id.
+- **Mentions in text are markdown links**, `[Mara](char:k7qm) slams the door.` LLMs write these reliably. The game shows the name only, and can later show more on hover. A chunk's `speaker` is an id.
 - **Ids in JSON replies are restricted by the schema.** llama.cpp turns the JSON schema into a grammar, so an `enum` of the existing ids makes an unknown id impossible to generate. Ids in mentions inside free text cannot be restricted that way, the game checks them and flags unknown ones.
-- **New objects get temporary ids** from the scribes, `new:guard`, used by the other changes in the same batch. Applying the changes gives the real id (`char:guard`, `char:guard-2`) and rewrites every reference.
+- **New objects get temporary ids** from the scribes, `new:guard`, used by the other changes in the same batch. Applying the changes gives the real id from the counter and rewrites every reference.
 - **Characters see the names they know.** A relationship stores `known_as`, so a character who only knows Mara as "the hooded woman" gets that name in its prompt, with the same id. The storyteller and scribes see true names. When a name is revealed, the scribes update `known_as`.
 
 ### LLM replies

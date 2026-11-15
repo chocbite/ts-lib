@@ -3,7 +3,7 @@
 //Changes are what the scribes, the game builder and the editors produce, applying them is the only way the world changes.
 //The world is read through WorldRead, so a running game can serve it from its states without copying anything.
 //See World tree and Attributes, skills and time in DESIGN.md.
-import { id_make } from "#lib/ids";
+import { id_code } from "#lib/ids";
 import { mention_map } from "#lib/mention";
 import { schema_object, type Schema, type SchemaString } from "#lib/schema";
 
@@ -170,6 +170,8 @@ export const SETTINGS_FIELDS = Object.keys(SETTINGS_DEFAULT).filter((k) => k !==
 export interface GlobalNode extends NodeBase {
   kind: typeof Kind.Global;
   settings: Settings;
+  /**The last number given to an id, every new id takes the next one, see id_code*/
+  counter: number;
 }
 
 /**A group of definitions under the Global node*/
@@ -201,7 +203,7 @@ const is_thing = (n: Node | undefined): n is Thing => !!n && (THING_KINDS as rea
 /**Nodes every world has: the Global node and its groups*/
 export function world_base_nodes(): Node[] {
   return [
-    { id: GLOBAL, kind: Kind.Global, name: "Global", parent: "", children: [ATTRIBUTES, SKILLS], gone: false, settings: { ...SETTINGS_DEFAULT } },
+    { id: GLOBAL, kind: Kind.Global, name: "Global", parent: "", children: [ATTRIBUTES, SKILLS], gone: false, settings: { ...SETTINGS_DEFAULT }, counter: 0 },
     { id: ATTRIBUTES, kind: Kind.Group, name: "Attributes", parent: GLOBAL, children: [], gone: false },
     { id: SKILLS, kind: Kind.Group, name: "Skills", parent: GLOBAL, children: [], gone: false },
   ];
@@ -657,16 +659,15 @@ export function world_apply(world: WorldRead, changes: readonly Change[]): World
   const next = new WorldOverlay(world);
   const problems: (string | undefined)[] = changes.map(() => undefined);
   const ids = new Map<string, Id>();
-  const given = new Set<Id>();
-  const taken = (id: string) => !!next.node(id) || given.has(id);
+  /**A new id from the counter of the Global node, never given before, removed things included*/
+  const new_id = (prefix: string) => {
+    const global = next.edit(next.node(GLOBAL) as GlobalNode);
+    return `${prefix}:${id_code(++global.counter)}`;
+  };
 
   //Real ids first, so text in any change can be rewritten to them
   for (const change of changes)
-    if (is_add(change) && change.id.startsWith("new:") && !ids.has(change.id)) {
-      const id = id_make(PREFIX[kind_of(change)], change.name, taken);
-      ids.set(change.id, id);
-      given.add(id);
-    }
+    if (is_add(change) && change.id.startsWith("new:") && !ids.has(change.id)) ids.set(change.id, new_id(PREFIX[kind_of(change)]));
   const real = (id: string) => ids.get(id) ?? id;
   const text = (t: string) => mention_map(t, (shown, id) => ({ text: shown, id: real(id) }));
 
@@ -893,7 +894,7 @@ export function world_apply(world: WorldRead, changes: readonly Change[]): World
         if (values.some((v, j) => j !== i && same_name(v))) fail(`${t.name} already has ${change.name}`);
         const local = { name: change.name, type: change.type, unit: change.unit };
         if (i >= 0) values[i] = { id: values[i].id, value: change.value, local };
-        else values.push({ id: id_make("local", change.name, (id) => values.some((v) => v.id === id)), value: change.value, local });
+        else values.push({ id: new_id("local"), value: change.value, local });
         return;
       }
       case "remove_attribute": {
@@ -926,8 +927,7 @@ export function world_apply(world: WorldRead, changes: readonly Change[]): World
       case "add_ability": {
         const c = character(change.character);
         const abilities = next.edit(c).abilities;
-        const id = id_make("ability", change.name, (id) => abilities.some((x) => x.id === id));
-        abilities.push({ id, name: change.name, description: text(change.description) });
+        abilities.push({ id: new_id("ability"), name: change.name, description: text(change.description) });
         return;
       }
       case "update_ability": {
@@ -982,8 +982,7 @@ export function world_apply(world: WorldRead, changes: readonly Change[]): World
         const minutes = MINUTES[change.unit];
         if (!minutes || !Number.isFinite(change.duration) || change.duration <= 0) fail(`an effect can not last ${change.duration} ${change.unit}`);
         const effects = next.edit(t).effects;
-        const id = id_make("effect", change.reason || "effect", (id) => effects.some((e) => e.id === id));
-        effects.push({ id, target, amount: change.amount, until: next.time + Math.round(change.duration * minutes), reason: change.reason });
+        effects.push({ id: new_id("effect"), target, amount: change.amount, until: next.time + Math.round(change.duration * minutes), reason: change.reason });
         return;
       }
       case "remove_effect": {

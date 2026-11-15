@@ -1,40 +1,28 @@
-//Readable ids for things an LLM refers to, and random ids for records it never sees.
-//Readable ids are a prefix and a slug of the name, char:mara, char:mara-2, LLMs copy them far better than random ids.
+//Ids for things an LLM refers to, and random ids for records it never sees.
+//Ids an LLM sees are a prefix and a short code made from a counter, char:k7qm. The counter makes them unique and stable,
+//the scramble makes neighbours look nothing alike, so a model does not mix up char:1 and char:2.
 
-/**Pattern every readable id matches, prefix:slug*/
-export const ID_PATTERN = /^[a-z]+:[a-z0-9]+(?:-[a-z0-9]+)*$/;
+/**Letters and digits of codes, lowercase without the ones that look alike (0 o 1 l i)*/
+const ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
+/**Mixes the counter, it shares no factor with the size of the code space, so no two numbers give the same code*/
+const MULTIPLIER = 611953;
+const OFFSET = 98317;
 
-/**Lowercase ascii slug of a name, words joined by -, at most 32 characters, empty when nothing is left*/
-export function id_slug(name: string): string {
-  return name
-    .normalize("NFKD")
-    //Drops the accents NFKD split off the letters
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    //Letters NFKD does not split
-    .replace(/[øæåßđł]/g, (c) => ({ ø: "o", æ: "ae", å: "a", ß: "ss", đ: "d", ł: "l" })[c] ?? c)
-    //Apostrophes join, "warden's" is one word
-    .replace(/['’]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .slice(0, 32)
-    .replace(/^-+|-+$/g, "");
-}
+/**Pattern every id an LLM sees matches, prefix:code*/
+export const ID_PATTERN = /^[a-z]+:[a-hj-km-np-z2-9]{4,}$/;
 
-/**Makes a readable id, prefix:slug of the name, with -2, -3 and so on added while it is taken
- * @param prefix type of the thing, like char or loc
- * @param name name to make the slug from, a name without letters or digits gives prefix:unnamed
- * @param taken tells if an id is in use, ids must never be reused, so this includes removed things*/
-export function id_make(
-  prefix: string,
-  name: string,
-  taken: (id: string) => boolean,
-): string {
-  const base = `${prefix}:${id_slug(name) || "unnamed"}`;
-  if (!taken(base)) return base;
-  for (let i = 2; ; i++) {
-    const id = `${base}-${i}`;
-    if (!taken(id)) return id;
+/**Code of a counter value, 4 characters while the counter is below 31^4, more after, never the same code for two values*/
+export function id_code(n: number): string {
+  let length = 4;
+  while (ALPHABET.length ** length <= n) length++;
+  const size = ALPHABET.length ** length;
+  let x = Number((BigInt(n) * BigInt(MULTIPLIER) + BigInt(OFFSET)) % BigInt(size));
+  let code = "";
+  for (let i = 0; i < length; i++) {
+    code += ALPHABET[x % ALPHABET.length];
+    x = Math.floor(x / ALPHABET.length);
   }
+  return code;
 }
 
 /**Random id for records, unique enough for one browser, crypto.randomUUID is not used as it needs a secure context*/

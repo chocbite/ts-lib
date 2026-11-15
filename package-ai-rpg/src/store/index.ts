@@ -19,10 +19,10 @@ export interface Build {
   proposal?: BuilderReply;
 }
 
-//Version 4 added the Global node, definitions and numeric time, older databases are reset
+//Version 5 made ids codes from a counter, older databases are reset
 const DB = await Db.open(
   "ai-rpg",
-  4,
+  5,
   {
     games: { key: "id" },
     things: { key: ["game", "id"] },
@@ -31,7 +31,7 @@ const DB = await Db.open(
     calls: { key: ["game", "round", "id"] },
     builds: { key: "id" },
   },
-  { reset_before: 4 },
+  { reset_before: 5 },
 );
 
 /**Shown when storage fails, so it is never silent*/
@@ -136,7 +136,7 @@ export const store_delete_build = async (id: string) => report(await db().delete
 //     |_____/_/    \_\    \/   |______| |_|    |_____|______|______|_____/
 
 const FORMAT = "ai-rpg-save";
-const VERSION = 4;
+const VERSION = 5;
 
 interface SaveFile extends GameRecords {
   format: typeof FORMAT;
