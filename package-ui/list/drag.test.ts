@@ -39,6 +39,7 @@ function tree(
     multi?: boolean;
     can_drop?: (data: Node, target: ListDropTarget<Node>) => boolean;
     group?: ReturnType<typeof list.drag_group<Node>>;
+    no_remove?: boolean;
   } = {},
 ) {
   const container = list.container(
@@ -52,7 +53,11 @@ function tree(
     rows,
     {
       sub_rows: true,
-      reorder: { can_drop: options.can_drop, group: options.group },
+      reorder: {
+        can_drop: options.can_drop,
+        group: options.group,
+        no_remove: options.no_remove,
+      },
       selection: options.multi
         ? { mode: "multi", key: (data) => data.id }
         : undefined,
@@ -503,6 +508,46 @@ describe("List reorder between lists", () => {
     await drag(row_named(first, "n1"), at(row_named(second, "n3"), 0.9));
     expect(ids(a)).toEqual([2]);
     expect(ids(b)).toEqual([3, 1, 4]);
+  });
+
+  it("only inserts with no_remove, for apps that remove the rows themselves", async () => {
+    const group = list.drag_group<Node>();
+    const a = nodes(1, 2);
+    const b = nodes(3, 4);
+    const first = tree(a, { group, no_remove: true });
+    const second = tree(b, { group });
+    //The app removes the row from where it came from after it is added to the second list
+    const removed = new Promise<void>((done) =>
+      b.sub(() =>
+        setTimeout(() => {
+          void a.write(state.a.write.splice(0, 1));
+          done();
+        }, 0),
+      ),
+    );
+    await drag(row_named(first, "n1"), at(row_named(second, "n3"), 0.9));
+    await removed;
+    expect(ids(a)).toEqual([2]);
+    expect(ids(b)).toEqual([3, 1, 4]);
+  });
+
+  it("does not remove a row the app already removed during the insert", async () => {
+    const group = list.drag_group<Node>();
+    const a = nodes(1, 2);
+    const b = nodes(3, 4);
+    b.sub(() => void a.write(state.a.write.splice(0, 1)));
+    const first = tree(a, { group });
+    const second = tree(b, { group });
+    await drag(row_named(first, "n1"), at(row_named(second, "n3"), 0.9));
+    expect(ids(a)).toEqual([2]);
+    expect(ids(b)).toEqual([3, 1, 4]);
+  });
+
+  it("still moves inside one parent with no_remove", async () => {
+    const a = nodes(1, 2, 3);
+    const container = tree(a, { no_remove: true });
+    await drag(row_named(container, "n1"), at(row_named(container, "n3"), 0.9));
+    expect(ids(a)).toEqual([2, 3, 1]);
   });
 
   it("does not give rows to a list of another group or without group", async () => {

@@ -201,13 +201,13 @@ describe("Key column resizing", () => {
   const text_width = (key: HTMLElement) =>
     key.querySelector<HTMLElement>("span.text")!.getBoundingClientRect().width;
 
-  it("does not get smaller than the icon and 3rem of the text", () => {
+  it("does not get smaller than the icon and 4rem of the text", () => {
     const { header, resize, keys } = tree();
     const icon_width = keys()[0]
       .querySelector("svg")!
       .getBoundingClientRect().width;
     resize(-1000);
-    expect(text_width(keys()[0])).toBeCloseTo(3 * rem(), 0);
+    expect(text_width(keys()[0])).toBeCloseTo(4 * rem(), 0);
     expect(
       keys()[0].querySelector("svg")!.getBoundingClientRect().width,
     ).toBeCloseTo(icon_width, 1);
@@ -223,7 +223,7 @@ describe("Key column resizing", () => {
       .click();
     await new Promise((r) => setTimeout(r, 0));
     expect(keys()).toHaveLength(2);
-    expect(text_width(keys()[1])).toBeCloseTo(3 * rem(), 0);
+    expect(text_width(keys()[1])).toBeCloseTo(4 * rem(), 0);
     expect(header.offsetWidth).toBeGreaterThan(closed);
     expect(keys()[0].offsetWidth).toBe(header.offsetWidth);
   });

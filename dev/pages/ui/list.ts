@@ -732,6 +732,7 @@ function drag_list(
   options: {
     group?: ReturnType<typeof list.drag_group<DragNode>>;
     multi?: boolean;
+    no_remove?: boolean;
   } = {},
 ) {
   return list.container(
@@ -747,6 +748,7 @@ function drag_list(
       sub_rows: true,
       reorder: {
         group: options.group,
+        no_remove: options.no_remove,
         //Only folders take rows, and nothing goes into "Pictures" but pictures
         can_drop: (data, target) =>
           target.parent?.name !== "Pictures" || data.name.endsWith(".png"),
@@ -804,6 +806,38 @@ function drag_list(
   box(r, "plain array", { width: "14rem", height: "16rem", display: "grid" }).appendChild(
     drag_list([drag_file("fixed.txt"), drag_file("rows.txt")]),
   );
+}
+
+{
+  const sec = section(
+    "Reorder between lists, the app removes",
+    "Like an app that takes a row out of one list itself when it is added to the other. The lists have no_remove, so they only insert and the app removes, a row moved between the top levels is gone from the first list once. Without no_remove both would remove and a second row would disappear",
+  );
+  const r = row(sec);
+  const group = list.drag_group<DragNode>();
+  const left = state.ok_w([drag_file("a.txt"), drag_file("b.txt"), drag_file("c.txt")]);
+  const right = state.ok_w([drag_file("d.txt"), drag_file("e.txt")]);
+  //The app logic, a row added to one list is removed from the other
+  const take_out = (
+    from: typeof left,
+    to: typeof left,
+  ) => {
+    to.sub(() => {
+      const added = new Set(to.ok());
+      const index = from.ok().findIndex((node) => added.has(node));
+      if (index >= 0) void from.write(state.a.write.splice(index, 1));
+    });
+  };
+  take_out(left, right);
+  take_out(right, left);
+  box(r, "left", { width: "14rem", height: "12rem", display: "grid" }).appendChild(
+    drag_list(left, { group, no_remove: true }),
+  );
+  box(r, "right", { width: "14rem", height: "12rem", display: "grid" }).appendChild(
+    drag_list(right, { group, no_remove: true }),
+  );
+  drag_show(box(r, "left state"), left);
+  drag_show(box(r, "right state"), right);
 }
 
 {
