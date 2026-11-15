@@ -91,3 +91,4 @@ Packages are published from `dist/ts-lib` and `dist/ts-lib-ui` in the repo root,
 - ts-lib-ui CSS is one `dist/style.css`, imported by every built file.
 - The ts-lib-ui theme applies nothing until the app calls `theme_init` once (deliberate, the app decides if the device has an operating system dark mode). Tests that check applied theme values must call it.
 - Ask the user before modifying files unless they asked for the change.
+- A bug or missing feature found in another module, for example in ts-lib while working on ts-lib-ui, is reported to the user and fixed at its source, never worked around in the calling code or its tests. Stop and ask before continuing past it.
