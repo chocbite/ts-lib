@@ -92,3 +92,66 @@ list-container {
     }
   }
 }
+
+//Hidden input showing write errors with the validation message of the browser, placed over a row by the list
+list-container > input.list-warn {
+  all: unset;
+  visibility: hidden;
+  position: absolute;
+  pointer-events: none;
+}
+
+//      _      ______          _____
+//     | |    |  ____|   /\   |  __ \
+//     | |    | |__     /  \  | |  | |
+//     | |    |  __|   / /\ \ | |  | |
+//     | |____| |____ / ____ \| |__| |
+//     |______|______/_/    \_\_____/
+//Columns in front of the key field column, the drag handles and then the checkboxes or radio buttons
+//They are square and sticky, each starts where the ones before it end
+list-container > div {
+  --list-drag-width: 0px;
+  --list-check-width: 0px;
+  --list-lead-size: var(--list-size-row_min);
+  .touch & {
+    --list-lead-size: var(--list-size-touch_row_min);
+  }
+  &.drag {
+    --list-drag-width: var(--list-lead-size);
+  }
+  &.check {
+    --list-check-width: var(--list-lead-size);
+  }
+
+  list-keyfield,
+  > list-headerrow > .key {
+    left: calc(var(--list-drag-width) + var(--list-check-width));
+  }
+  > list-headerrow > .key {
+    z-index: 3;
+  }
+  > list-headerrow > list-dragfield,
+  > list-headerrow > list-checkfield {
+    z-index: 3;
+  }
+
+  //The error and add rows start after the lead columns
+  @for $lead from 1 through 2 {
+    &.lead-#{$lead} {
+      list-addrow > list-keyfield,
+      list-rowserror > list-keyfield {
+        grid-column: $lead + 1;
+      }
+      list-addrow > span,
+      list-error {
+        grid-column: #{$lead + 1} / -1;
+      }
+      &.sub-rows {
+        list-addrow > span,
+        list-error {
+          grid-column: #{$lead + 2} / -1;
+        }
+      }
+    }
+  }
+}

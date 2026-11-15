@@ -10,6 +10,7 @@ import {
 } from "@chocbite/ts-lib/state";
 import type { Result } from "@chocbite/ts-lib/result";
 import { ListAddRow, type ListAddRowOptions } from "./add_row";
+import { ListDragField, ListReorder, type ListReorderOptions } from "./drag";
 import "./container.scss";
 import { list_rows_error_update, type ListRowsError } from "./error";
 import { list_align_apply } from "./field";
@@ -20,6 +21,7 @@ import {
   type ListSelectionOptions,
 } from "./selection";
 import "./shared";
+import { ListWarn } from "./warn";
 import type {
   ListColumnOptions,
   ListRoot,
@@ -98,6 +100,7 @@ class HeaderRow<
 
   set fields(fields: HeaderField[]) {
     const lead: HTMLElement[] = [];
+    if (this.#drag_header) lead.push(this.#drag_header);
     if (this.#check_header) lead.push(this.#check_header);
     if (this.#key_header) lead.push(this.#key_header);
     this.replaceChildren(...lead, ...fields);
@@ -105,6 +108,8 @@ class HeaderRow<
 
   /**Header of the key field column, only with sub rows */
   #key_header?: HeaderField;
+  /**Empty header of the drag handle column */
+  #drag_header?: ListDragField;
   /**Header of the checkbox or radio button column, in multi mode it selects or deselects all rows */
   #check_header?: ListCheckField;
 
@@ -115,8 +120,10 @@ class HeaderRow<
     super();
     if (root.sub_rows) {
       this.#key_header = new HeaderField();
+      this.#key_header.classList.add("key");
       this.#key_header.sizable(true, key_sizer);
     }
+    if (root.reorder) this.#drag_header = new ListDragField();
     const selection = root.selection;
     if (selection) this.#check_header = new ListCheckField();
     if (selection?.multi) {
@@ -161,6 +168,8 @@ interface ContainerOptions<S extends boolean = false, R = unknown, K = R> {
   observer?: BaseIntersectObserver;
   /**Lets the user select rows, only rows that are visible can be selected */
   selection?: ListSelectionOptions<R, K>;
+  /**Lets the user move rows with a drag handle in front of the rows, rows in a writable array state can be moved */
+  reorder?: ListReorderOptions<R>;
 }
 
 class Container<
@@ -212,6 +221,13 @@ class Container<
     };
 
     this.#child_box = document.createElement("div");
+    //Shows why a write of the selection or a move failed
+    const warn =
+      options?.selection || options?.reorder ? new ListWarn(this) : undefined;
+    if (options?.reorder) {
+      this.#root.reorder = new ListReorder(this, options.reorder, warn!);
+      this.#box.classList.add("drag");
+    }
     if (options?.selection) {
       this.#selection = new ListSelection(options.selection, this.#child_box);
       this.#root.selection = this.#selection;
@@ -219,7 +235,13 @@ class Container<
         "check",
         this.#selection.multi ? "multi" : "single",
       );
+      this.#selection.on_error = (row, message) =>
+        warn!.show(row?.anchor ?? this.#header ?? this.#box, message);
     }
+    //Columns in front of the key field column, the error and add rows start after them
+    const lead =
+      Number(Boolean(options?.reorder)) + Number(Boolean(options?.selection));
+    if (lead) this.#box.classList.add("lead-" + lead);
 
     if (!options?.headless)
       this.#header = this.#box.appendChild(
@@ -285,6 +307,7 @@ class Container<
         this.#key_width ? `${Math.max(this.#key_width, 1)}rem` : "max-content",
       );
     if (this.#selection) widths.unshift("var(--list-check-width)");
+    if (this.#root.reorder) widths.unshift("var(--list-drag-width)");
     this.#box.style.gridTemplateColumns = widths.join(" ");
   }
 

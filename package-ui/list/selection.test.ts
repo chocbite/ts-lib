@@ -398,14 +398,20 @@ describe("List selection state", () => {
     expect([...rows]).toEqual([rows_of(container)[999], rows_of(container)[5]]);
   });
 
-  it("a rejected write changes nothing", async () => {
+  it("a rejected write changes nothing and shows why at the row", async () => {
     const selection = state.rosw<number[]>(ok([]), () =>
       Promise.resolve(err("Not allowed")),
     );
-    const container = create([item(1)], {}, false, selection);
-    click(cell(rows_of(container)[0]));
-    await Promise.resolve();
+    const container = create([item(1), item(2)], {}, false, selection);
+    const row = rows_of(container)[1];
+    click(cell(row));
+    const warn = container.querySelector<HTMLInputElement>("input.list-warn")!;
+    await expect.poll(() => warn.validationMessage).toBe("Not allowed");
     expect(selected(container)).toEqual([]);
+    //Shown at the row the user acted on
+    expect(warn.getBoundingClientRect().top).toBe(
+      row.anchor!.getBoundingClientRect().top,
+    );
   });
 
   it("an async state shows the selection when it gives it back", async () => {

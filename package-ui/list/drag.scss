@@ -1,0 +1,82 @@
+@use "../icons/mixins" as icons;
+
+list-dragfield {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: var(--list-drag-width);
+  user-select: none;
+  //The handle drags, it does not pan the list
+  touch-action: none;
+  border-right: 1px solid var(--list-colors-border-column);
+
+  &::before {
+    @include icons.material-symbols-rounded;
+    font-size: 1.2rem;
+    line-height: 1;
+    color: var(--list-colors-icon-drag);
+
+    .touch & {
+      font-size: 1.8rem;
+    }
+  }
+
+  //Glyph of the icon font, drag_indicator
+  list-row.movable > div > & {
+    cursor: grab;
+
+    &::before {
+      content: "\e945";
+    }
+  }
+}
+
+//Rows being dragged are dimmed where they are until the move comes back from the state
+list-row.dragging > div > * {
+  opacity: 0.4;
+}
+
+//Shows where dragged rows are dropped, a line between rows or a box around the row they go into
+list-container > span.list-drop {
+  display: block;
+  position: absolute;
+  z-index: 1000;
+  pointer-events: none;
+  box-sizing: border-box;
+  //A line, the list sizes it and places it inside the top or bottom edge of the row, starting at the indent of the row
+  background-color: var(--list-colors-focus-normal);
+
+  &[hidden] {
+    display: none;
+  }
+
+  &.into {
+    background-color: transparent;
+    border: 2px solid var(--list-colors-focus-normal);
+  }
+}
+
+//Follows the pointer while dragging, with what is dragged, it is in the body to be above all lists
+span.list-drag-label {
+  display: block;
+  position: fixed;
+  z-index: 10000;
+  pointer-events: none;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.3rem;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  color: var(--list-colors-text-field);
+  background-color: var(--list-colors-background-row_even);
+  border: 1px solid var(--list-colors-border-header);
+  box-shadow: 0 0.1rem 0.3rem var(--list-colors-border-header);
+
+  //Nowhere to drop
+  &.none {
+    opacity: 0.5;
+  }
+}

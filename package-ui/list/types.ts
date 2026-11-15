@@ -4,6 +4,7 @@ import type { State } from "@chocbite/ts-lib/state";
 import list from ".";
 import type { ListField, ListTextField } from "./field";
 import type { ListRow, ListRowOptions } from "./row";
+import type { ListReorder } from "./drag";
 import type { ListSelection } from "./selection";
 
 export type ListType<R> = R[] | State<R[]>;
@@ -16,8 +17,7 @@ export type ListTypeExtract<A extends ListType<any>> = A extends (infer U)[]
 
 /**Rows of a row parent, the top level rows or sub rows, which can be an array or a state regardless of the top level rows */
 export type ListParentRows<A extends ListType<any>> =
-  | A
-  | ListType<ListTypeExtract<A>>;
+  A | ListType<ListTypeExtract<A>>;
 
 export const ListDataType = {
   number: "number",
@@ -107,6 +107,8 @@ export interface ListRoot<
   observer?: BaseIntersectObserver;
   /**Selection of rows, when enabled */
   selection?: ListSelection<any>;
+  /**Moving of rows, when enabled */
+  reorder?: ListReorder<R>;
 }
 
 export interface ListRowParent<A extends ListType<any>> {
