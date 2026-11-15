@@ -31,6 +31,9 @@ import type {
   ListTypeExtract,
 } from "./types.ts";
 
+/**Most rows open all opens at a time, a mistake making the sub rows recursive would otherwise never end */
+const OPEN_ALL_LIMIT = 1000;
+
 class HeaderField extends Base {
   static element_name() {
     return "headerfield";
@@ -46,6 +49,11 @@ class HeaderField extends Base {
   constructor(text?: string) {
     super();
     if (text) this.text = text;
+  }
+
+  /**Elements shown instead of the text */
+  set nodes(nodes: Node[]) {
+    this.#text.replaceChildren(...nodes);
   }
 
   set text(value: string) {
@@ -117,6 +125,11 @@ class HeaderRow<
   }
 
   /**Header of the key field column, only with sub rows */
+  get key_header(): HTMLElement | undefined {
+    return this.#key_header;
+  }
+
+  /**Header of the key field column, only with sub rows */
   #key_header?: HeaderField;
   /**Empty header of the drag handle column */
   #drag_header?: ListDragField;
@@ -129,9 +142,26 @@ class HeaderRow<
   ) {
     super();
     if (root.sub_rows) {
-      this.#key_header = new HeaderField();
-      this.#key_header.classList.add("key");
-      this.#key_header.sizable(true, key_sizer);
+      const key = (this.#key_header = new HeaderField());
+      key.classList.add("key");
+      const button = (kind: string, action: () => void) => {
+        const span = document.createElement("span");
+        span.className = `list-${kind}-all`;
+        span.onclick = action;
+        return span;
+      };
+      key.nodes = [
+        button("close", () => root.close_all()),
+        button("open", () => root.open_all()),
+      ];
+      ctm.attach(
+        key,
+        ctm.menu([
+          ctm.line("Open all", () => root.open_all()),
+          ctm.line("Close all", () => root.close_all()),
+        ]),
+      );
+      key.sizable(true, key_sizer);
     }
     if (root.reorder) this.#drag_header = new ListDragField();
     const selection = root.selection;
@@ -208,6 +238,8 @@ class Container<
   #state_sub?: StateInferSub<State<R[]>>;
   /**Width of the key field column in rem set by resizing, fits the key fields when undefined */
   #key_width?: number;
+  /**Shows why a write failed, or that open all stopped */
+  #warn?: ListWarn;
 
   constructor(
     columns: { [C in keyof T]: ListColumnOptions<T[C], any> },
@@ -222,6 +254,9 @@ class Container<
       columns_visible: [],
       transform,
       observer: options?.observer,
+      open_all: () => this.open_all(),
+      close_all: () => this.close_all(),
+      any_open: () => this.#open_rows().length > 0,
     };
     this.#parent = {
       depth: -1,
@@ -233,7 +268,10 @@ class Container<
     this.#child_box = document.createElement("div");
     //Shows why a write of the selection or a move failed
     const warn =
-      options?.selection || options?.reorder ? new ListWarn(this) : undefined;
+      options?.selection || options?.reorder || options?.sub_rows
+        ? new ListWarn(this)
+        : undefined;
+    this.#warn = warn;
     if (options?.reorder) {
       this.#root.reorder = new ListReorder(this, options.reorder, warn!);
       this.#box.classList.add("drag");
@@ -320,6 +358,45 @@ class Container<
       this.#root.columns.get(this.#root.columns_visible[i])!.init_width =
         widths[j];
     });
+  }
+
+  /**Opens every openable row, level by level so the upper levels are open first
+   * Stops with a warning after opening OPEN_ALL_LIMIT rows, against huge or recursive sub rows, opening all again continues */
+  open_all() {
+    let opened = 0;
+    let level = this.#top_rows();
+    while (level.length) {
+      const next: ListRow<R, T, A, S>[] = [];
+      for (const row of level) {
+        if (row.openable && !row.open) {
+          if (opened >= OPEN_ALL_LIMIT) {
+            this.#warn?.show(
+              this.#header?.key_header ?? this.#box,
+              `Stopped after opening ${OPEN_ALL_LIMIT} rows, open all again for more`,
+            );
+            return;
+          }
+          row.open = true;
+          opened += row.amount_rows();
+        }
+        for (let sub = row.first_sub_row; sub; sub = sub.next_row)
+          next.push(sub);
+      }
+      level = next;
+    }
+  }
+
+  /**Closes every open row, closing the top rows removes everything below them */
+  close_all() {
+    for (const row of this.#open_rows()) row.open = false;
+  }
+
+  #top_rows(): ListRow<R, T, A, S>[] {
+    return [...this.#child_box.children] as ListRow<R, T, A, S>[];
+  }
+
+  #open_rows(): ListRow<R, T, A, S>[] {
+    return this.#top_rows().filter((row) => row.open);
   }
 
   #update_column_widths() {

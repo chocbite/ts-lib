@@ -1,3 +1,5 @@
+@use "../icons/mixins" as icons;
+
 list-container {
   $sizer_width: 0.5rem;
   $sizer_touch_width: 1.5rem;
@@ -115,6 +117,41 @@ list-container {
     > div {
       display: contents;
     }
+  }
+}
+
+//Open all and close all buttons in the header of the key column, glyphs of the icon font like the opener
+list-container > div > list-headerrow > .key > div > span {
+  justify-content: flex-start;
+
+  > span {
+    @include icons.material-symbols-rounded;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: var(--list-size-row_min);
+    height: var(--list-size-row_min);
+    border-radius: 0.2rem;
+    font-size: 1.2rem;
+    cursor: pointer;
+    color: var(--list-colors-icon-sub_opener);
+
+    .touch & {
+      width: var(--list-size-touch_row_min);
+      height: var(--list-size-touch_row_min);
+      font-size: 2rem;
+    }
+
+    &:hover {
+      background-color: var(--list-colors-background-row_hover);
+    }
+  }
+  > .list-open-all::before {
+    content: "\e5d7";
+  }
+  > .list-close-all::before {
+    content: "\e5d6";
   }
 }
 

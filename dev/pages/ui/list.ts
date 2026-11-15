@@ -348,6 +348,48 @@ const word = (i: number) => WORDS[i % WORDS.length];
   controls(sec, { Reset: () => location.reload() });
 }
 
+{
+  const sec = section(
+    "Open all and close all",
+    "The buttons in the key column header open and close all rows, right click the header for the same in a menu. While a row is open every row menu has close all, the headerless list has only that and the buttons under it, which call open_all and close_all like app code. The endless list has three sub rows in every row, open all stops after 1000 rows with a warning at the header and opening again continues, upper levels first",
+  );
+  interface TreeNode {
+    name: string;
+    sub?: TreeNode[];
+  }
+  const tree = (): TreeNode[] => [
+    { name: "Documents", sub: [{ name: "Old", sub: [{ name: "2019.txt" }] }, { name: "notes.md" }] },
+    { name: "Pictures", sub: [{ name: "cat.png" }] },
+    { name: "readme.md" },
+  ];
+  const endless = (name: string): TreeNode => ({
+    name,
+    get sub() {
+      return [endless(name + ".1"), endless(name + ".2"), endless(name + ".3")];
+    },
+  });
+  const tree_list = (rows: TreeNode[], headless: boolean) =>
+    list.container(
+      {},
+      (data: TreeNode) =>
+        ok({ openable: Boolean(data.sub), key_field: { text: data.name }, sub_rows: () => data.sub ?? [], values: {} }),
+      rows,
+      { sub_rows: true, headless },
+    );
+  const r = row(sec);
+  box(r, "header", { width: "14rem" }).appendChild(tree_list(tree(), false));
+  const headless = tree_list(tree(), true);
+  const b = box(r, "headless, app buttons", { width: "14rem" });
+  b.appendChild(headless);
+  controls(b, {
+    "Open all": () => headless.open_all(),
+    "Close all": () => headless.close_all(),
+  });
+  box(r, "endless", { width: "18rem", height: "20rem", display: "grid" }).appendChild(
+    tree_list([endless("x")], false),
+  );
+}
+
 //     _  __________     __  ______ _____ ______ _      _____
 //    | |/ /  ____\ \   / / |  ____|_   _|  ____| |    |  __ \
 //    | ' /| |__   \ \_/ /  | |__    | | | |__  | |    | |  | |

@@ -922,8 +922,11 @@ describe("List selection in the row menu", () => {
     expect(texts()).toEqual(["Open"]);
     choose("Open");
     expect(rows_of(plain).length).toBe(3);
-    //Not openable and nothing else gives no menu
+    //Not openable and nothing else gives only close all while a row is open
     right_click(cell(rows_of(plain)[2]));
+    expect(texts()).toEqual(["Close all"]);
+    choose("Close all");
+    right_click(cell(rows_of(plain)[1]));
     expect(options()).toEqual([]);
   });
 

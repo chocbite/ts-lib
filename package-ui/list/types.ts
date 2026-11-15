@@ -109,6 +109,12 @@ export interface ListRoot<
   selection?: ListSelection<any>;
   /**Moving of rows, when enabled */
   reorder?: ListReorder<R>;
+  /**Opens every openable row, a limited amount of rows at a time */
+  open_all(): void;
+  /**Closes every open row */
+  close_all(): void;
+  /**Whether any row is open */
+  any_open(): boolean;
 }
 
 export interface ListRowParent<A extends ListType<any>> {
