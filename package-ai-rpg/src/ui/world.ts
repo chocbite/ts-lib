@@ -3,12 +3,9 @@
 import { ENGINE } from "#engine";
 import { local_get, local_set } from "#lib/local";
 import {
-  Controller,
   FIELDS,
   Kind,
-  world_subtree,
   type Change,
-  type Character,
   type Field,
   type Id,
   type Thing,
@@ -42,16 +39,9 @@ const KIND_NAMES = {
   [Kind.Item]: "item",
 };
 
-/**What each field is for, shown under it*/
-const NOTES: { [F in Field]: string } = {
-  name: "The id stays when the name changes",
-  description:
-    "What the storyteller and the scribes are told about it. Mentions are written as [Name](char:id)",
-  appearance:
-    "What others see before they know this character, used as its name until they learn the real one",
-  bio: "",
-  personality: "",
-  goals: "",
+/**What a field is for, shown under it, only where the name does not say it*/
+const NOTES: { [F in Field]?: string } = {
+  appearance: "What others see before they know this character",
 };
 
 /**Applies hand made changes, problems are shown and nothing is changed*/
@@ -87,29 +77,6 @@ async function add(kind: Kind, parent: Id): Promise<Id | undefined> {
   return added.ok ? added.value.ids.get("new:thing") : undefined;
 }
 
-/**Things the thing can be put in, with the path to each as text, the top level as an empty id*/
-function targets(thing: Thing): { value: Id; text: string }[] {
-  const world = ENGINE.world;
-  const own = new Set([
-    thing.id,
-    ...world_subtree(world, thing.id).map((t) => t.id),
-  ]);
-  const all = world_subtree(world, "").filter(
-    (t) =>
-      !own.has(t.id) &&
-      !t.gone &&
-      (thing.kind !== Kind.Location || t.kind === Kind.Location),
-  );
-  const text = (t: Thing) =>
-    [...world.path(t.id).reverse(), t].map((p) => p.name).join(" › ");
-  return [
-    ...(thing.kind === Kind.Location
-      ? [{ value: "", text: "The top level" }]
-      : []),
-    ...all.map((t) => ({ value: t.id, text: text(t) })),
-  ];
-}
-
 /**Opens the world editor
  * @param select thing to show first, the first location when not given*/
 export function world_panel(select?: Id) {
@@ -136,7 +103,11 @@ export function world_panel(select?: Id) {
   const choose = (id: Id | undefined) => id && selected.write([id]);
 
   /**Adds a thing inside the thing of a row, opens the row so it shows, and selects it*/
-  const add_inside = async (kind: Kind, thing: Thing, row: { open: boolean }) => {
+  const add_inside = async (
+    kind: Kind,
+    thing: Thing,
+    row: { open: boolean },
+  ) => {
     const id = await add(kind, thing.id);
     if (!id) return;
     row.open = true;
@@ -192,6 +163,11 @@ export function world_panel(select?: Id) {
           mode: "single",
           key: (thing_state) => thing_state.ok().id,
         },
+        add_row: {
+          text: "New location",
+          icon: material_add_location_rounded,
+          on_add: async () => choose(await add(Kind.Location, "")),
+        },
         reorder: {
           //The engine takes a moved thing out of its old parent itself
           no_remove: true,
@@ -206,14 +182,7 @@ export function world_panel(select?: Id) {
       },
     )
     .bind({ selection: selected });
-  sidebar.append(
-    tree,
-    form.button({
-      text: "New location",
-      icon: material_add_location_rounded,
-      on_click: async () => choose(await add(Kind.Location, "")),
-    }),
-  );
+  sidebar.append(tree);
 
   /**Shows the fields of the selected thing, values are written when a field is left*/
   function show() {
@@ -226,7 +195,8 @@ export function world_panel(select?: Id) {
       el(
         "h3",
         undefined,
-        `${KIND_NAMES[thing.kind][0].toUpperCase()}${KIND_NAMES[thing.kind].slice(1)}, ${thing.id}`,
+        KIND_NAMES[thing.kind][0].toUpperCase() +
+          KIND_NAMES[thing.kind].slice(1),
       ),
     );
     for (const name of Object.keys(FIELDS) as Field[]) {
@@ -239,39 +209,9 @@ export function world_panel(select?: Id) {
           ? form.text_input({ value, change })
           : form.text_multiline({ value, change });
       details.append(
-        field(
-          name[0].toUpperCase() + name.slice(1),
-          input,
-          NOTES[name] || undefined,
-        ),
+        field(name[0].toUpperCase() + name.slice(1), input, NOTES[name]),
       );
     }
-    details.append(
-      field(
-        "Inside",
-        form.dropdown({
-          selections: targets(thing),
-          value: thing.parent,
-          change: async (to) => {
-            if ((await edit([{ op: "move", thing: thing.id, in: to }])).ok)
-              show();
-          },
-        }),
-        "Moving it takes everything inside along",
-      ),
-    );
-    if (thing.kind === Kind.Character) details.append(...character_info(thing));
-    details.append(
-      el(
-        "div",
-        "row",
-        form.button({
-          text: `Remove ${KIND_NAMES[thing.kind]}`,
-          icon: material_delete_rounded,
-          on_click: () => edit([{ op: "remove", thing: thing.id }]),
-        }),
-      ),
-    );
   }
   selected.sub(() => show());
   //A removed thing leaves the tree, the selection is cleared instead of showing it
@@ -280,28 +220,4 @@ export function world_panel(select?: Id) {
     if (id && ENGINE.world.thing(id)?.gone) selected.write([]);
   });
   show();
-}
-
-/**What can not be edited here yet: who plays the character, who it knows and what it remembers*/
-function character_info(c: Character) {
-  const world = ENGINE.world;
-  const knows = Object.entries(c.relationships).map(
-    ([id, r]) =>
-      `${world.thing(id)?.name ?? id} as "${r.known_as}", ${r.opinion}`,
-  );
-  const memories = world.memories(c.id);
-  return [
-    field(
-      "Played by",
-      form.text({
-        text: c.controller === Controller.Player ? "The player" : "The AI",
-      }),
-    ),
-    field("Knows", form.text({ text: knows.join("\n") || "Nobody" })),
-    field(
-      "Remembers",
-      form.text({ text: memories.slice(-10).join("\n") || "Nothing yet" }),
-      memories.length > 10 ? `The last 10 of ${memories.length}` : undefined,
-    ),
-  ];
 }

@@ -89,10 +89,10 @@ Nothing goes into itself or anything inside it. There can be several top level l
 
 One world editor, a dialog with a sidebar (can be hidden) holding the tree in a `list`, and a form for the selected thing on the right.
 
-- Each kind has an icon in the list, and the form has the fields of its kind.
+- Each kind has an icon in the list, and the form has the editable fields of its kind, nothing internal (no ids, no engine details).
 - Single selection, the selection state holds ids.
-- The row context menu adds a location, character or item inside the row, and removes. New top level locations come from a button under the list.
-- Rows are dragged anywhere the rules allow, also to another parent, or moved in the form. A drag inside a parent is a `move` write to its children state, a drag to another parent only an insert into the target (the list's `no_remove`), the engine takes the thing out of its old parent itself. Either way it is one checked and saved `move` change.
+- The row context menu adds a location, character or item inside the row, and removes. New top level locations come from the list's add row.
+- Things are moved only by dragging rows, anywhere the rules allow, also to another parent. A drag inside a parent is a `move` write to its children state, a drag to another parent only an insert into the target (the list's `no_remove`), the engine takes the thing out of its old parent itself. Either way it is one checked and saved `move` change.
 
 ## Attributes, skills and time
 
