@@ -1,4 +1,5 @@
 import { sleep } from "#common";
+import { err, ok } from "#result";
 import state, {
   type StateArrayReadTypes,
   type StateREA,
@@ -8,6 +9,7 @@ import state, {
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   FETCH_PARSE,
+  fetch_result,
   make_fetch_parser,
   type FetchArrayOptions,
   type FetchFunction,
@@ -23,7 +25,7 @@ describe("make_fetch_parser", () => {
       () => "/user",
       1_000,
       { id: "n", name: "sw" },
-      { write: async () => {} },
+      { write: async () => ok(undefined) },
     );
 
     const read_only: StateREA<number> = parsed.id;
@@ -39,7 +41,7 @@ describe("make_fetch_parser", () => {
       () => "/user",
       1_000,
       { id: "n", age: "?nw", nick: ["?", "s"], count: ["?", "n", () => 0], address: { zip: "?n" } },
-      { write: async () => {} },
+      { write: async () => ok(undefined) },
     );
 
     expectTypeOf<StateRV<(typeof parsed)[typeof FETCH_PARSE]>>().toEqualTypeOf<{
@@ -56,14 +58,16 @@ describe("make_fetch_parser", () => {
     expect(age).toBeDefined();
   });
 
-  it("resolves a one-shot read with an error when fetch rejects", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+  it("resolves a one-shot read with a fetch error when the global fetch rejects", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")));
+    const console_error = vi.spyOn(console, "error").mockImplementation(() => {});
     const parsed = make_fetch_parser(() => "/user", 1_000, { name: "s" });
 
     const result = await parsed.name;
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toBe("offline");
+    expect(!result.ok && result.error).toBe("Fetch failed: offline");
+    expect(console_error).not.toHaveBeenCalled();
+    console_error.mockRestore();
     vi.unstubAllGlobals();
   });
 
@@ -76,15 +80,16 @@ describe("make_fetch_parser", () => {
 
     const result = await parsed.name;
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toBe("Fetch failed: HTTP 500");
+    expect(!result.ok && result.error).toBe("Fetch failed: HTTP 500");
     vi.unstubAllGlobals();
   });
 
-  it("resolves a one-shot read with an error when the request factory fails", async () => {
+  it("logs a throwing request factory and resolves a one-shot read with an error", async () => {
+    const thrown = new Error("no url");
+    const console_error = vi.spyOn(console, "error").mockImplementation(() => {});
     const parsed = make_fetch_parser(
       () => {
-        throw new Error("no url");
+        throw thrown;
       },
       1_000,
       { name: "s" },
@@ -92,8 +97,9 @@ describe("make_fetch_parser", () => {
 
     const result = await parsed.name;
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toBe("no url");
+    expect(!result.ok && result.error).toBe("Unexpected error in request");
+    expect(console_error).toHaveBeenCalledWith(expect.anything(), thrown);
+    console_error.mockRestore();
   });
 
   it("fetches once for a leaf subscription and projects its value", async () => {
@@ -117,11 +123,9 @@ describe("make_fetch_parser", () => {
   it("fetches through a custom fetch function instead of the global fetch", async () => {
     const global_fetch = vi.fn();
     vi.stubGlobal("fetch", global_fetch);
-    const custom_fetch = vi.fn<FetchFunction>(async () => ({
-      ok: true,
-      status: 200,
-      text: async () => '{"name":"Ada"}',
-    }));
+    const custom_fetch = vi.fn<FetchFunction>(async () =>
+      ok(new Response('{"name":"Ada"}')),
+    );
     const user = make_fetch_parser(
       () => ["/user", { headers: { auth: "x" } }],
       60_000,
@@ -161,12 +165,90 @@ describe("make_fetch_parser", () => {
 
   it("reports a failed http status from a custom fetch", async () => {
     const user = make_fetch_parser(() => "/user", 1_000, { name: "s" }, {
-      fetch: async () => ({ ok: false, status: 404, text: async () => "" }),
+      fetch: async () => ok(new Response("", { status: 404 })),
     });
 
     const result = await user.name;
 
     expect(!result.ok && result.error).toBe("Fetch failed: HTTP 404");
+  });
+
+  it("gives the error of a custom fetch as the read error without logging", async () => {
+    const console_error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const user = make_fetch_parser(() => "/user", 1_000, { name: "s" }, {
+      fetch: async () => err("Timed out"),
+    });
+
+    const result = await user.name;
+
+    expect(!result.ok && result.error).toBe("Timed out");
+    expect(console_error).not.toHaveBeenCalled();
+    console_error.mockRestore();
+  });
+
+  it("logs a throwing custom fetch and resolves a one-shot read with an error", async () => {
+    const thrown = new TypeError("Cannot read properties of undefined (reading 'url')");
+    const console_error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const user = make_fetch_parser(() => "/user", 1_000, { name: "s" }, {
+      fetch: () => Promise.reject(thrown),
+    });
+
+    const result = await user.name;
+
+    expect(!result.ok && result.error).toBe("Unexpected error in fetch");
+    expect(console_error).toHaveBeenCalledWith(expect.anything(), thrown);
+    console_error.mockRestore();
+  });
+
+  it("gives a body that fails to load as a fetch error without logging", async () => {
+    const console_error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const response = new Response("{}");
+    vi.spyOn(response, "text").mockRejectedValue(new TypeError("connection reset"));
+    const user = make_fetch_parser(() => "/user", 1_000, { name: "s" }, {
+      fetch: async () => ok(response),
+    });
+
+    const result = await user.name;
+
+    expect(!result.ok && result.error).toBe("Fetch failed: connection reset");
+    expect(console_error).not.toHaveBeenCalled();
+    console_error.mockRestore();
+  });
+
+  it("gives the error of write as the write result without logging", async () => {
+    const console_error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const user = make_fetch_parser(() => "/user", 1_000, { name: "sw" }, {
+      write: async () => err("Rejected by server"),
+    });
+
+    const result = await user.name.write("Ada");
+
+    expect(!result.ok && result.error).toBe("Rejected by server");
+    expect(console_error).not.toHaveBeenCalled();
+    console_error.mockRestore();
+  });
+
+  it("logs a throwing write and gives an error result", async () => {
+    const thrown = new Error("bug");
+    const console_error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const user = make_fetch_parser(() => "/user", 1_000, { name: "sw" }, {
+      write: () => Promise.reject(thrown),
+    });
+
+    const result = await user.name.write("Ada");
+
+    expect(!result.ok && result.error).toBe("Unexpected error in write");
+    expect(console_error).toHaveBeenCalledWith(expect.anything(), thrown);
+    console_error.mockRestore();
+  });
+
+  it("gives network failures of fetch_result as an error result", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
+    const result = await fetch_result("/user", {});
+
+    expect(!result.ok && result.error).toBe("Fetch failed: Failed to fetch");
+    vi.unstubAllGlobals();
   });
 
   it("keeps schema keys separate from the root state API", () => {
@@ -190,7 +272,7 @@ describe("make_fetch_parser", () => {
   });
 
   it("sends nested writable values as a partial object", async () => {
-    const send = vi.fn().mockResolvedValue(undefined);
+    const send = vi.fn().mockResolvedValue(ok(undefined));
     const user = make_fetch_parser(
       () => "/user",
       1_000,
@@ -205,7 +287,7 @@ describe("make_fetch_parser", () => {
   });
 
   it("uses an array write encoder for indexed writable values", async () => {
-    const send = vi.fn().mockResolvedValue(undefined);
+    const send = vi.fn().mockResolvedValue(ok(undefined));
     const user = make_fetch_parser(
       () => "/user",
       1_000,
@@ -222,7 +304,7 @@ describe("make_fetch_parser", () => {
   });
 
   it("limits and checks writable leaves like plain states, for form elements", async () => {
-    const send = vi.fn().mockResolvedValue(undefined);
+    const send = vi.fn().mockResolvedValue(ok(undefined));
     const user = make_fetch_parser(
       () => "/user",
       1_000,
@@ -329,7 +411,7 @@ describe("make_fetch_parser", () => {
   });
 
   it("sends writable record values as a partial object", async () => {
-    const send = vi.fn().mockResolvedValue(undefined);
+    const send = vi.fn().mockResolvedValue(ok(undefined));
     const parsed = make_fetch_parser(
       () => "/scores",
       1_000,
@@ -412,7 +494,7 @@ describe("make_fetch_parser array write options", () => {
       "fetch",
       vi.fn(() => Promise.resolve(new Response(JSON.stringify(PUMPS)))),
     );
-    const send = vi.fn().mockResolvedValue(undefined);
+    const send = vi.fn().mockResolvedValue(ok(undefined));
     const parsed = make_fetch_parser(
       () => "/pumps",
       60_000,
@@ -434,7 +516,7 @@ describe("make_fetch_parser array write options", () => {
   });
 
   it("write single uses the encode option for primitive items", async () => {
-    const send = vi.fn().mockResolvedValue(undefined);
+    const send = vi.fn().mockResolvedValue(ok(undefined));
     const parsed = make_fetch_parser(
       () => "/tags",
       60_000,
@@ -474,7 +556,7 @@ describe("make_fetch_parser array write options", () => {
   });
 
   it("write all refuses a write before any value is received, without calling write", async () => {
-    const send = vi.fn().mockResolvedValue(undefined);
+    const send = vi.fn().mockResolvedValue(ok(undefined));
     const parsed = make_fetch_parser(
       () => "/pumps",
       60_000,
@@ -539,7 +621,7 @@ describe("make_fetch_parser array write options", () => {
       ),
     );
     try {
-      const send = vi.fn().mockResolvedValue(undefined);
+      const send = vi.fn().mockResolvedValue(ok(undefined));
       const parsed = make_fetch_parser(
         () => "/plant",
         60_000,
@@ -564,7 +646,7 @@ describe("make_fetch_parser array write options", () => {
         all: [0, { id: "n", name: "sw" }, { write: "all" }],
         single: [0, { id: "n", name: "sw" }, { write: "single" }],
       },
-      { write: async () => {} },
+      { write: async () => ok(undefined) },
     );
     expectTypeOf<Parameters<typeof parsed.all.write>[0]>().toEqualTypeOf<
       { id: number; name: string }[]
@@ -592,7 +674,7 @@ describe("make_fetch_parser keyed arrays", () => {
       "fetch",
       vi.fn(() => Promise.resolve(new Response(JSON.stringify(server)))),
     );
-    const send = vi.fn().mockResolvedValue(undefined);
+    const send = vi.fn().mockResolvedValue(ok(undefined));
     const parsed = make_fetch_parser(
       () => "/pumps",
       100,
@@ -744,7 +826,7 @@ describe("make_fetch_parser keyed arrays", () => {
   });
 
   it("with a key, index access gives the item at that position of the last received value", async () => {
-    const send = vi.fn().mockResolvedValue(undefined);
+    const send = vi.fn().mockResolvedValue(ok(undefined));
     const parsed = make_fetch_parser(
       () => "/pumps",
       60_000,
@@ -771,7 +853,7 @@ describe("make_fetch_parser optional members", () => {
       "fetch",
       vi.fn(() => Promise.resolve(new Response(JSON.stringify(response)))),
     );
-    const send = vi.fn().mockResolvedValue(undefined);
+    const send = vi.fn().mockResolvedValue(ok(undefined));
     return { parsed: make_fetch_parser(() => "/x", 60_000, schema, { write: send }), send };
   };
   const value_of = async (s: PromiseLike<StateResult<unknown>>) => {

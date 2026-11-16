@@ -5,8 +5,9 @@ import {
   make_fetch_parser,
   make_parser,
   type FetchFunction,
+  type FetchWrite,
 } from "@chocbite/ts-lib/parse";
-import { ok } from "@chocbite/ts-lib/result";
+import { err, ok } from "@chocbite/ts-lib/result";
 import state, { type StateREA } from "@chocbite/ts-lib/state";
 import { box, controls, row, section } from "../../helpers";
 
@@ -265,8 +266,24 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
     return respond(200, JSON.stringify(device));
   };
 
-  //The fake server is given to the parsers as their fetch, the global fetch is left alone
-  const api_fetch: FetchFunction = (_url, init) => server(init);
+  //The fake server is given to the parsers as their fetch, the global fetch is left alone.
+  //It rejects like fetch when offline, that is an expected failure so it becomes an error
+  const api_fetch: FetchFunction = (_url, init) =>
+    server(init).then(
+      (response) => ok(response),
+      (cause: unknown) =>
+        err(`Fetch failed: ${cause instanceof Error ? cause.message : String(cause)}`),
+    );
+
+  const patch_device: FetchWrite = async (payload) => {
+    const response = await api_fetch("/api/device", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    if (response.err) return response;
+    if (!response.value.ok) return err(await response.value.text());
+    return ok(undefined);
+  };
 
   const parsed = make_fetch_parser(
     () => "/api/device",
@@ -286,16 +303,7 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
       zones: [2, { name: "s", setpoint: "nw" }],
       tags: [0, "sw", { encode: (tag: string, index: number) => ({ index, tag }) }],
     },
-    {
-      write: async (payload) => {
-        const response = await api_fetch("/api/device", {
-          method: "PATCH",
-          body: JSON.stringify(payload),
-        });
-        if (!response.ok) throw new Error(await response.text());
-      },
-      fetch: api_fetch,
-    },
+    { write: patch_device, fetch: api_fetch },
   );
 
   controls(sec, {
@@ -468,13 +476,6 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
     );
   pump_list("pumps: [0, { id: n, name: sw, running: bw, speed: nw }], no key, write single", parsed.pumps);
 
-  const patch_device = async (payload: unknown) => {
-    const response = await api_fetch("/api/device", {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) throw new Error(await response.text());
-  };
   //More parsers of the same server, with the other array options
   const parsed_keyed = make_fetch_parser(
     () => "/api/device",

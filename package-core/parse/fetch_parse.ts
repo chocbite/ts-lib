@@ -1,5 +1,11 @@
 import type { Prettify } from "#common";
-import { err, ok, type Option } from "#result";
+import {
+  err,
+  ok,
+  type Option,
+  type Result,
+  type ResultErr,
+} from "#result";
 import {
   state,
   STATE_ARRAY_READ_KEY,
@@ -219,25 +225,46 @@ export type FetchParsed<S extends FetchSchema> = FetchContainer<ResolveSchema<S>
       : {});
 
 export type FetchRequest = string | readonly [string, RequestInit];
-export type FetchWrite = (payload: unknown) => PromiseLike<void>;
+/**Sends a write. An expected failure, like a rejection by the server, is returned as an error,
+ * a throw is a bug and is logged with console.error*/
+export type FetchWrite = (payload: unknown) => PromiseLike<Result<void, string>>;
 
-/**Fetches a request, the global fetch fits. Only ok, status and text are used from the response.
+/**Fetches a request. An expected failure, like a network error or a timeout, is returned as an error,
+ * a throw is a bug and is logged with console.error. The status of the response is checked by the parser.
  * init holds the signal that aborts the fetch when polling stops*/
 export type FetchFunction = (
   url: string,
   init: RequestInit,
-) => PromiseLike<{
-  readonly ok: boolean;
-  readonly status: number;
-  text(): PromiseLike<string>;
-}>;
+) => PromiseLike<Result<Response, string>>;
 
 export type FetchParserOptions = {
   /**Sends a write, required when the schema contains writable values*/
   readonly write?: FetchWrite;
-  /**Used in place of the global fetch for reads*/
+  /**Used in place of fetch_result for reads*/
   readonly fetch?: FetchFunction;
 };
+
+const message_of = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : String(cause);
+
+/**The global fetch as a FetchFunction, a rejection becomes an error.
+ * The default fetch of make_fetch_parser, and a base for custom fetch functions*/
+export async function fetch_result(
+  url: string,
+  init: RequestInit,
+): Promise<Result<Response, string>> {
+  try {
+    return ok(await fetch(url, init));
+  } catch (cause) {
+    return err(`Fetch failed: ${message_of(cause)}`);
+  }
+}
+
+/**Logs a throw from code given to make_fetch_parser, it is a bug, and gives the error result for it*/
+function unexpected(where: string, cause: unknown): ResultErr<string> {
+  console.error(`make_fetch_parser: unexpected error in ${where}`, cause);
+  return err(`Unexpected error in ${where}`);
+}
 
 /**Path part of a keyed array item, the occurrence-th item whose key member equals value*/
 class ItemKey {
@@ -489,30 +516,43 @@ export function make_fetch_parser<const S extends FetchSchema>(
   const parse = make_parser(
     strip_writable(schema) as RuntimeSchema & Record<string, never>,
   );
-  //Looked up per fetch when not given, so a global fetch replaced later is used
-  const fetch_with: FetchFunction = options?.fetch ?? ((url, init) => fetch(url, init));
+  const fetch_with: FetchFunction = options?.fetch ?? fetch_result;
   let timer: ReturnType<typeof setTimeout> | undefined;
   //Each subscription gets its own controller, ending it aborts its fetches and stops its polling
   let subscription: AbortController | undefined;
-  const fetch_result = async (
-    signal?: AbortSignal,
-  ): Promise<StateResult<unknown>> => {
+  //Expected failures arrive as errors, a throw from request or fetch is a bug
+  const read = async (signal?: AbortSignal): Promise<StateResult<unknown>> => {
+    let url: string;
+    let init: RequestInit | undefined;
     try {
-      const [url, init] = request_parts(request());
-      const response = await fetch_with(url, { ...init, signal });
-      if (!response.ok) return err(`Fetch failed: HTTP ${response.status}`);
-      return parse(await response.text());
+      [url, init] = request_parts(request());
     } catch (cause) {
-      // fetch, response.text and request can reject, convert to a result here
-      return err(cause instanceof Error ? cause.message : String(cause));
+      return unexpected("request", cause);
     }
+    let response: Result<Response, string>;
+    try {
+      response = await fetch_with(url, { ...init, signal });
+    } catch (cause) {
+      return unexpected("fetch", cause);
+    }
+    if (response.err) return response;
+    if (!response.value.ok)
+      return err(`Fetch failed: HTTP ${response.value.status}`);
+    let body: string;
+    try {
+      body = await response.value.text();
+    } catch (cause) {
+      //The connection failed while the body was loading
+      return err(`Fetch failed: ${message_of(cause)}`);
+    }
+    return parse(body);
   };
 
   // One-shot reads always answer so pending reads resolve, subscription fetches only notify while that subscription lasts
   //The last received value, write "all" arrays build their payload from it
   let latest: StateResult<unknown> = err("No value received yet");
   const load = async (owner: RemoteOwner, signal?: AbortSignal) => {
-    const result = await fetch_result(signal);
+    const result = await read(signal);
     if (signal?.aborted) return;
     if (result.ok) latest = result;
     owner.update_single(result, Boolean(signal));
@@ -541,11 +581,11 @@ export function make_fetch_parser<const S extends FetchSchema>(
     },
     async (payload) => {
       if (payload instanceof UnsentWrite) return err(payload.reason);
+      if (!options?.write) return err("No write function given");
       try {
-        await options?.write?.(payload);
-        return ok(undefined);
+        return await options.write(payload);
       } catch (cause) {
-        return err(cause instanceof Error ? cause.message : String(cause));
+        return unexpected("write", cause);
       }
     },
   ) as StateREAW<ResolveSchema<S>, any, unknown>;

@@ -1,3 +1,4 @@
+import { ok } from "#result";
 import { array_from_length } from "#common";
 import { FETCH_PARSE, make_fetch_parser } from "./fetch_parse";
 
@@ -43,6 +44,7 @@ const yo = make_fetch_parser(
   },
   { write: async (a) => {
     console.warn(a);
+    return ok(undefined);
   } },
 );
 

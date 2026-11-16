@@ -107,7 +107,8 @@ The error of a function spec is wrapped in the member path: `Failed to parse due
 
 ```typescript
 import form from "@chocbite/ts-lib-ui/form";
-import { make_fetch_parser } from "@chocbite/ts-lib/parse";
+import { fetch_result, make_fetch_parser } from "@chocbite/ts-lib/parse";
+import { err, ok } from "@chocbite/ts-lib/result";
 
 const device = make_fetch_parser(
   () => "/api/device",
@@ -115,8 +116,9 @@ const device = make_fetch_parser(
   { name: "sw", speed: "nw", temperature: "n", settings: { eco: "bw" } },
   {
     write: async (payload) => {
-      const response = await fetch("/api/device", { method: "PATCH", body: JSON.stringify(payload) });
-      if (!response.ok) throw new Error(await response.text());
+      const response = await fetch_result("/api/device", { method: "PATCH", body: JSON.stringify(payload) });
+      if (response.err) return response;
+      return response.value.ok ? ok(undefined) : err(`Write failed: HTTP ${response.value.status}`);
     },
   },
 );
@@ -130,16 +132,22 @@ form.switch().bind({ value: device.settings.eco }); // writable, nested
 ### Fetching
 
 - **`request`** returns the URL, or `[url, init]` for `fetch` options. It's called for every fetch, so it can change.
-- **`fetch`** is used in place of the global `fetch`, for example to add authentication, retry, or answer from a fake server in tests. It's called as `(url, init)` and only `ok`, `status` and `text()` of what it returns are used, so the global `fetch` fits as is. `init.signal` aborts when polling stops. A fetch that ignores it runs to the end and its result is thrown away. `write` doesn't go through `fetch`, it sends however it wants.
+- **`fetch`** is the function that sends the request, `(url, init) => PromiseLike<Result<Response, string>>`. The default is `fetch_result`, the global `fetch` with a rejection turned into the error `Fetch failed: <message>`. A custom one can add authentication, retry, a timeout, or answer from a fake server in tests. `init.signal` aborts when polling stops. A fetch that ignores it runs to the end and its result is thrown away. `write` doesn't go through `fetch`, it sends however it wants.
 
   ```typescript
   const device = make_fetch_parser(() => "/api/device", 1000, { temperature: "n" }, {
-    fetch: (url, init) => fetch(url, { ...init, headers: { Authorization: `Bearer ${token()}` } }),
+    fetch: (url, init) => fetch_result(url, { ...init, headers: { Authorization: `Bearer ${token()}` } }),
   });
   ```
 - **Polling only runs while something is subscribed** to any of the states. The first subscription fetches at once, then the next fetch starts `update_rate` ms after the previous one finished. When the last subscriber is gone, polling stops and a fetch still running is ignored.
 - **Awaiting a state without subscribing fetches once.**
-- **The response body is parsed** with `make_parser` and the schema, without the `w` markers. A failed fetch, an HTTP error (`Fetch failed: HTTP 404`) or a parse error becomes the error of every state.
+- **The response is checked and parsed by the parser.** A status that isn't ok gives `Fetch failed: HTTP 404`. A body that fails to load gives `Fetch failed: <message>`. The body is parsed with `make_parser` and the schema, without the `w` markers. Any of these errors becomes the error of every state.
+
+### Errors and bugs
+
+JavaScript throws the same `TypeError` for a network failure as for a bug, so `fetch` and `write` return expected failures as a `Result` error instead of throwing. That error becomes the state's error unchanged.
+
+**A throw from `request`, `fetch` or `write` is treated as a bug.** It's logged with `console.error` and its stack, and the state gets the error `Unexpected error in request`, `Unexpected error in fetch` or `Unexpected error in write`, so a pending read or write still finishes. A custom `fetch` should therefore catch the failures of the request it sends and return them as errors, as `fetch_result` does, and let nothing else throw.
 
 ### The parsed tree
 
@@ -164,7 +172,7 @@ form.switch().bind({ value: device.settings.eco }); // writable, nested
 A type string ending in `w` makes the member writable. A schema with writable members needs the `write` option, `make_fetch_parser` throws without it.
 
 - **A write sends a partial object** with only the changed value at its path: `device.settings.eco.write(true)` calls `write({ settings: { eco: true } })`.
-- **If `write` throws or rejects,** the write's result is an error with the message, and form elements show it as a warning.
+- **`write` returns `PromiseLike<Result<void, string>>`.** An error is the write's result, and form elements show it as a warning. A throw is a bug, see [Errors and bugs](#errors-and-bugs).
 - **Nothing changes locally until the next poll** shows what the server kept.
 - **Writable states have `limit` and `check`** like any state, so every form element can write through them.
 
@@ -196,7 +204,13 @@ const plant = make_fetch_parser(
   () => "/api/plant",
   1000,
   { pumps: [0, { id: "n", name: "sw" }, { write: "all", key: "id" }] },
-  { write: async (payload) => void (await fetch("/api/plant", { method: "PATCH", body: JSON.stringify(payload) })) },
+  {
+    write: async (payload) => {
+      const response = await fetch_result("/api/plant", { method: "PATCH", body: JSON.stringify(payload) });
+      if (response.err) return response;
+      return response.value.ok ? ok(undefined) : err(`Write failed: HTTP ${response.value.status}`);
+    },
+  },
 );
 
 plant.pumps.write(state.a.write.push({ id: 5, name: "Pump 5" }));
