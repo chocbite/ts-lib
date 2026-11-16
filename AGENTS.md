@@ -27,7 +27,7 @@ Bundling is fine, but unused icons must still be tree-shakeable by the consumer'
 Each module is a folder `<folder>/<module>/` directly in the package folder, with an `index.ts` and its own `README.md`. A package folder holds only its modules, `package.json` and `README.md`.
 Every module is published as a subpath export, e.g. `@chocbite/ts-lib/state` and `@chocbite/ts-lib-ui/theme`. There is no root export.
 
-- ts-lib: `colors common depot event math parse result state string`
+- ts-lib: `colors common depot event math parse result safe state string`
 - ts-lib-ui: `base canvas context-menu document dom form icons keyboard list selection settings spinner state_ui svg theme`
 
 ## Imports

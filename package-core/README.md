@@ -28,5 +28,6 @@ import { ok, err } from "@chocbite/ts-lib/result";
 - `@chocbite/ts-lib/math`
 - `@chocbite/ts-lib/parse`
 - `@chocbite/ts-lib/result`
+- `@chocbite/ts-lib/safe`
 - `@chocbite/ts-lib/state`
 - `@chocbite/ts-lib/string`

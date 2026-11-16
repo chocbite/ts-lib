@@ -107,18 +107,18 @@ The error of a function spec is wrapped in the member path: `Failed to parse due
 
 ```typescript
 import form from "@chocbite/ts-lib-ui/form";
-import { fetch_result, make_fetch_parser } from "@chocbite/ts-lib/parse";
-import { ok } from "@chocbite/ts-lib/result";
+import { make_fetch_parser } from "@chocbite/ts-lib/parse";
+import { fetch_text_safe } from "@chocbite/ts-lib/safe";
 
 const device = make_fetch_parser(
   () => "/api/device",
   1000,
   { name: "sw", speed: "nw", temperature: "n", settings: { eco: "bw" } },
   {
-    write: async (payload) => {
-      const sent = await fetch_result("/api/device", { method: "PATCH", body: JSON.stringify(payload) });
-      return sent.err ? sent : ok(undefined);
-    },
+    write: async (payload) =>
+      (await fetch_text_safe("/api/device", { method: "PATCH", body: JSON.stringify(payload) }))
+        .map(() => undefined)
+        .map_err((e) => `Write failed: ${e.message}`),
   },
 );
 
@@ -131,15 +131,16 @@ form.switch().bind({ value: device.settings.eco }); // writable, nested
 ### Fetching
 
 - **`request`** returns the URL, or `[url, init]` for `fetch` options. It's called for every fetch, so it can change.
-- **`fetch`** sends the request and gives the body text, `(url, init) => PromiseLike<Result<string, string>>`. The default is `fetch_result`, which uses the global `fetch` and gives these errors:
-  - `Fetch failed: HTTP 404` for a status that isn't ok.
-  - `Fetch failed: <message>` when the request or the body fails to load.
+- **`fetch`** sends the request and gives the body text, `(url, init) => PromiseLike<Result<string, string>>`. The default is [`fetch_text_safe`](../safe/README.md) from `@chocbite/ts-lib/safe`, with its error as `Fetch failed: <message>`, for example `Fetch failed: HTTP 404` or `Fetch failed: Failed to fetch`.
 
-  A custom one can add authentication, retry, a timeout, or answer from a fake server in tests, usually by calling `fetch_result` with changed arguments. `init.signal` aborts when polling stops. A fetch that ignores it runs to the end and its result is thrown away. `write` doesn't go through `fetch`, it sends however it wants, and can use `fetch_result` too.
+  A custom one can add authentication, retry, a timeout, or answer from a fake server in tests, usually by calling `fetch_text_safe` with changed arguments. `init.signal` aborts when polling stops. A fetch that ignores it runs to the end and its result is thrown away. `write` doesn't go through `fetch`, it sends however it wants, and can use `fetch_text_safe` too.
 
   ```typescript
   const device = make_fetch_parser(() => "/api/device", 1000, { temperature: "n" }, {
-    fetch: (url, init) => fetch_result(url, { ...init, headers: { Authorization: `Bearer ${token()}` } }),
+    fetch: async (url, init) =>
+      (await fetch_text_safe(url, { ...init, headers: { Authorization: `Bearer ${token()}` } })).map_err(
+        (e) => `Fetch failed: ${e.message}`,
+      ),
   });
   ```
 - **Polling only runs while something is subscribed** to any of the states. The first subscription fetches at once, then the next fetch starts `update_rate` ms after the previous one finished. When the last subscriber is gone, polling stops and a fetch still running is ignored.
@@ -150,7 +151,7 @@ form.switch().bind({ value: device.settings.eco }); // writable, nested
 
 JavaScript throws the same `TypeError` for a network failure as for a bug, so `fetch` and `write` return expected failures as a `Result` error instead of throwing. That error becomes the state's error unchanged.
 
-**A throw from `request`, `fetch` or `write` is treated as a bug.** It's logged with `console.error` and its stack, and the state gets the error `Unexpected error in request`, `Unexpected error in fetch` or `Unexpected error in write`, so a pending read or write still finishes. A custom `fetch` should therefore catch the failures of the request it sends and return them as errors, as `fetch_result` does, and let nothing else throw.
+**A throw from `request`, `fetch` or `write` is treated as a bug.** It's logged with `console.error` and its stack, and the state gets the error `Unexpected error in request`, `Unexpected error in fetch` or `Unexpected error in write`, so a pending read or write still finishes. A custom `fetch` should therefore catch only the failures of the request it sends and return them as errors, and let nothing else throw. `fetch_text_safe` does exactly that, so a custom `fetch` built on it needs no `try` of its own. A `try` around the whole function would turn its bugs into fetch errors too.
 
 **What `fetch` and `write` return is also checked at runtime,** because `any` and plain JavaScript get past the types. These are bugs too, logged with a message saying what went wrong:
 - Not returning a `Result`.
@@ -214,10 +215,10 @@ const plant = make_fetch_parser(
   1000,
   { pumps: [0, { id: "n", name: "sw" }, { write: "all", key: "id" }] },
   {
-    write: async (payload) => {
-      const sent = await fetch_result("/api/plant", { method: "PATCH", body: JSON.stringify(payload) });
-      return sent.err ? sent : ok(undefined);
-    },
+    write: async (payload) =>
+      (await fetch_text_safe("/api/plant", { method: "PATCH", body: JSON.stringify(payload) }))
+        .map(() => undefined)
+        .map_err((e) => `Write failed: ${e.message}`),
   },
 );
 

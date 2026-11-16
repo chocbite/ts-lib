@@ -9,7 +9,6 @@ import state, {
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   FETCH_PARSE,
-  fetch_result,
   make_fetch_parser,
   type FetchArrayOptions,
   type FetchFunction,
@@ -259,44 +258,6 @@ describe("make_fetch_parser", () => {
     expect(!result.ok && result.error).toBe("Unexpected error in write");
     expect(console_error).toHaveBeenCalledWith(expect.anything(), thrown);
     console_error.mockRestore();
-  });
-
-  it("gives network failures of fetch_result as an error result", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
-
-    const result = await fetch_result("/user", {});
-
-    expect(!result.ok && result.error).toBe("Fetch failed: Failed to fetch");
-    vi.unstubAllGlobals();
-  });
-
-  it("gives the body text from fetch_result", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response('{"name":"Ada"}')));
-
-    const result = await fetch_result("/user", {});
-
-    expect(result.ok && result.value).toBe('{"name":"Ada"}');
-    vi.unstubAllGlobals();
-  });
-
-  it("gives a failed http status from fetch_result as an error", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 404 })));
-
-    const result = await fetch_result("/user", {});
-
-    expect(!result.ok && result.error).toBe("Fetch failed: HTTP 404");
-    vi.unstubAllGlobals();
-  });
-
-  it("gives a body that fails to load in fetch_result as an error", async () => {
-    const response = new Response("{}");
-    vi.spyOn(response, "text").mockRejectedValue(new TypeError("connection reset"));
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
-
-    const result = await fetch_result("/user", {});
-
-    expect(!result.ok && result.error).toBe("Fetch failed: connection reset");
-    vi.unstubAllGlobals();
   });
 
   it("keeps schema keys separate from the root state API", () => {

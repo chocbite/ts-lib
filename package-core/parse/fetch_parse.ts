@@ -1,4 +1,5 @@
-import type { Prettify } from "#common";
+import { is_promise_like, type Prettify } from "#common";
+import { fetch_text_safe } from "#safe";
 import {
   err,
   ok,
@@ -241,28 +242,14 @@ export type FetchFunction = (
 export type FetchParserOptions = {
   /**Sends a write, required when the schema contains writable values*/
   readonly write?: FetchWrite;
-  /**Used in place of fetch_result for reads*/
+  /**Used in place of the default, fetch_text_safe with its error as "Fetch failed: <message>"*/
   readonly fetch?: FetchFunction;
 };
 
-const message_of = (cause: unknown): string =>
-  cause instanceof Error ? cause.message : String(cause);
-
-/**The global fetch as a FetchFunction, gives the body text.
- * A rejection, a failed status or a body that fails to load becomes an error.
- * The default fetch of make_fetch_parser, and a base for custom fetch functions*/
-export async function fetch_result(
-  url: string,
-  init: RequestInit,
-): Promise<Result<string, string>> {
-  try {
-    const response = await fetch(url, init);
-    if (!response.ok) return err(`Fetch failed: HTTP ${response.status}`);
-    return ok(await response.text());
-  } catch (cause) {
-    return err(`Fetch failed: ${message_of(cause)}`);
-  }
-}
+const default_fetch: FetchFunction = async (url, init) =>
+  (await fetch_text_safe(url, init)).map_err(
+    (error) => `Fetch failed: ${error.message}`,
+  );
 
 /**Logs a bug in code given to make_fetch_parser and gives the error result for it*/
 function bug(where: string, message: string, value: unknown): ResultErr<string> {
@@ -282,14 +269,10 @@ function checked_body(
   if (typeof Response !== "undefined" && body instanceof Response)
     return bug(
       "fetch",
-      "fetch returned a Response in its Result, return the body text instead, for example with fetch_result",
+      "fetch returned a Response in its Result, return the body text instead, for example with fetch_text_safe from @chocbite/ts-lib/safe",
       body,
     );
-  if (
-    body !== null &&
-    (typeof body === "object" || typeof body === "function") &&
-    typeof (body as { then?: unknown }).then === "function"
-  )
+  if (is_promise_like(body))
     return bug(
       "fetch",
       "fetch returned a promise in its Result, await it before wrapping it in ok",
@@ -554,7 +537,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
   const parse = make_parser(
     strip_writable(schema) as RuntimeSchema & Record<string, never>,
   );
-  const fetch_with: FetchFunction = options?.fetch ?? fetch_result;
+  const fetch_with: FetchFunction = options?.fetch ?? default_fetch;
   let timer: ReturnType<typeof setTimeout> | undefined;
   //Each subscription gets its own controller, ending it aborts its fetches and stops its polling
   let subscription: AbortController | undefined;
