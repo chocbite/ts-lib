@@ -11,7 +11,10 @@ import state, {
 import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
 import {
   ExampleBase,
+  type ExampleEditorCreateOptions,
   type ExampleEditorOptions,
+  type ExampleGroupCreateOptions,
+  type ExampleGroupOptions,
   type ExampleLabelBoxOptions,
   type ExampleSliderOptions,
   example_box,
@@ -35,6 +38,15 @@ afterEach(() => {
 });
 
 describe("set", () => {
+  it("the factory applies its options like set", () => {
+    const width = state.ok_w(120);
+    const from_factory = attach(example_box({ width, label: "a" }));
+    const from_set = attach(example_box().set({ width, label: "a" }));
+    expect(from_factory.style.width).toBe(from_set.style.width);
+    expect(from_factory.textContent).toBe(from_set.textContent);
+    expect(width.amount()).toBe(2);
+  });
+
   it("shows the constructor defaults before set", () => {
     const box = example_box();
     expect(box.style.width).toBe("100px");
@@ -42,14 +54,14 @@ describe("set", () => {
   });
 
   it("applies fixed values right away", () => {
-    const box = example_box().set({ width: 120, label: "a" });
+    const box = example_box({ width: 120, label: "a" });
     expect(box.style.width).toBe("120px");
     expect(box.textContent).toBe("a");
   });
 
   it("applies states on connect and follows them", () => {
     const width = state.ok_w(120);
-    const box = example_box().set({ width });
+    const box = example_box({ width });
     expect(box.style.width).toBe("100px");
     attach(box);
     expect(box.style.width).toBe("120px");
@@ -59,7 +71,7 @@ describe("set", () => {
 
   it("only holds subscriptions while connected", () => {
     const width = state.ok_w(120);
-    const box = attach(example_box().set({ width }));
+    const box = attach(example_box({ width }));
     expect(width.amount()).toBe(1);
     box.remove();
     expect(width.amount()).toBe(0);
@@ -68,7 +80,7 @@ describe("set", () => {
   });
 
   it("leaves options that are not given unchanged", () => {
-    const box = example_box().set({ width: 120, label: "a" });
+    const box = example_box({ width: 120, label: "a" });
     box.set({ label: "b" });
     expect(box.style.width).toBe("120px");
     expect(box.textContent).toBe("b");
@@ -77,7 +89,7 @@ describe("set", () => {
   it("setting a state again replaces the previous state", () => {
     const first = state.ok_w(120);
     const second = state.ok_w(80);
-    const box = attach(example_box().set({ width: first }));
+    const box = attach(example_box({ width: first }));
     box.set({ width: second });
     expect(first.amount()).toBe(0);
     expect(second.amount()).toBe(1);
@@ -88,7 +100,7 @@ describe("set", () => {
 
   it("setting a fixed value detaches the previous state", () => {
     const width = state.ok_w(120);
-    const box = attach(example_box().set({ width }));
+    const box = attach(example_box({ width }));
     box.set({ width: 60 });
     expect(width.amount()).toBe(0);
     width.set_ok(10);
@@ -111,7 +123,7 @@ describe("set", () => {
   it("a set again while disconnected subscribes only the new state on connect", () => {
     const first = state.ok_w("a");
     const second = state.ok_w("b");
-    const box = attach(example_box().set({ label: first }));
+    const box = attach(example_box({ label: first }));
     box.remove();
     box.set({ label: second });
     attach(box);
@@ -121,26 +133,26 @@ describe("set", () => {
   });
 
   it("applies inputs of a subclass", () => {
-    const box = example_label_box().set({ label: "a", badge: "b" });
+    const box = example_label_box({ label: "a", badge: "b" });
     expect(box.textContent).toBe("ba");
   });
 
   it("an override can use fields of the subclass with a fixed value", () => {
-    const box = example_override_box().set({ prefix: "p", label: "a" });
+    const box = example_override_box({ prefix: "p", label: "a" });
     expect(box.textContent).toBe("pa");
   });
 
   it("an override can use fields of the subclass with a state", () => {
     const box = attach(
-      example_override_box().set({ prefix: "p", label: state.ok("a") }),
+      example_override_box({ prefix: "p", label: state.ok("a") }),
     );
     expect(box.textContent).toBe("pa");
   });
 
   it("links a slider and a box through a shared state", async () => {
     const width = state.ok_w(50);
-    const box = attach(example_box().set({ width }));
-    const slider = attach(example_slider().set({ value: width, max: 200 }));
+    const box = attach(example_box({ width }));
+    const slider = attach(example_slider({ value: width, max: 200 }));
     const input = slider.querySelector("input")!;
     expect(input.value).toBe("50");
     input.value = "150";
@@ -228,16 +240,20 @@ describe("options from keys", () => {
     expectTypeOf<InputOf<typeof key>>().toEqualTypeOf<StateOrValROSW<number>>();
     expectTypeOf<InputOf<string>>().toBeNever();
     expectTypeOf<ExampleEditorOptions>().toEqualTypeOf<{
-      scale?: StateOrValROSW<number>;
+      min?: StateOrVal<number>;
+      max?: StateOrVal<number>;
     }>();
+    expectTypeOf<ExampleEditorCreateOptions["scale"]>().toEqualTypeOf<
+      StateOrValROSW<number> | undefined
+    >();
   });
 
   it("applies plain value options through their keys", () => {
-    const slider = example_slider().set({ step: 5 });
+    const slider = example_slider({ step: 5 });
     expect(slider.querySelector("input")!.step).toBe("5");
-    expect(
-      example_override_box().set({ prefix: "> ", label: "a" }).textContent,
-    ).toBe("> a");
+    expect(example_override_box({ prefix: "> ", label: "a" }).textContent).toBe(
+      "> a",
+    );
   });
 });
 
@@ -262,7 +278,7 @@ describe("input_state", () => {
   it("lets the slider write to the state it has now", async () => {
     const first = state.ok_w(10);
     const second = state.ok_w(20);
-    const slider = attach(example_slider().set({ value: first, max: 100 }));
+    const slider = attach(example_slider({ value: first, max: 100 }));
     const input = slider.querySelector("input")!;
     slider.set({ value: second });
     input.value = "70";
@@ -287,7 +303,7 @@ describe("errors", () => {
 
   it("keeps the last good width when a state gives an error", () => {
     const width = state.from_w<number>(120);
-    const box = attach(example_box().set({ width }));
+    const box = attach(example_box({ width }));
     width.set_err("gone");
     expect(box.style.width).toBe("120px");
   });
@@ -295,7 +311,7 @@ describe("errors", () => {
   it("each input of the box handles errors its own way", () => {
     const label = state.from_w("a");
     const color = state.from_w("red");
-    const box = attach(example_box().set({ label, color }));
+    const box = attach(example_box({ label, color }));
     expect(box.textContent).toBe("a");
     label.set_err("gone");
     expect(box.textContent).toBe("⚠ gone");
@@ -310,7 +326,7 @@ describe("errors", () => {
 
 describe("fixed values that can not change", () => {
   it("a fixed slider value disables the slider, a state enables it", () => {
-    const slider = attach(example_slider().set({ value: 30 }));
+    const slider = attach(example_slider({ value: 30 }));
     const input = slider.querySelector("input")!;
     expect(input.disabled).toBe(true);
     expect(input.value).toBe("30");
@@ -322,10 +338,10 @@ describe("fixed values that can not change", () => {
   });
 
   it("a watcher shows a fixed list of a group", () => {
-    const group = example_group().set({
+    const group = example_group({
       items: [example_box(), example_box()],
     });
-    const watcher = attach(example_watcher().set({ group }));
+    const watcher = attach(example_watcher({ group }));
     expect(watcher.textContent).toBe("2 items, fixed");
   });
 });
@@ -334,16 +350,46 @@ describe("nested subscriptions", () => {
   const setup = () => {
     const items_a = state.ok_w<ExampleBox[]>([example_box()]);
     const items_b = state.ok_w<ExampleBox[]>([example_box(), example_box()]);
-    const a = example_group().set({ items: items_a });
-    const b = example_group().set({ items: items_b });
+    const a = example_group({ items: items_a });
+    const b = example_group({ items: items_b });
     const group = state.ok_w<ExampleGroup | null>(a);
-    const watcher = example_watcher().set({ group });
+    const watcher = example_watcher({ group });
     return { items_a, items_b, a, b, group, watcher };
   };
 
   it("hands out the items it was given", () => {
     const { a, items_a } = setup();
     expect(a.items).toBe(items_a);
+  });
+
+  it("takes the items only at creation, other inputs can be set again", () => {
+    const { a, items_a, watcher } = setup();
+    attach(watcher);
+    // @ts-expect-error the items are handed out, so set can not replace them
+    a.set({ items: [] });
+    a.set({ gap: 12 });
+    expect(a.items).toBe(items_a);
+    expect(a.style.gap).toBe("12px");
+    expect(watcher.textContent).toBe("1 items");
+  });
+
+  it("applies the set options given to the factory with the creation inputs", () => {
+    const gap = state.ok_w(6);
+    const group = attach(example_group({ items: [example_box()], gap }));
+    expect(group.children.length).toBe(1);
+    expect(group.style.gap).toBe("6px");
+    gap.set_ok(2);
+    expect(group.style.gap).toBe("2px");
+  });
+
+  it("derives the options of set without the creation inputs", () => {
+    expectTypeOf<ExampleGroupOptions>().toEqualTypeOf<{
+      gap?: StateOrVal<number>;
+    }>();
+    expectTypeOf<ExampleGroupCreateOptions>().toMatchTypeOf<{
+      gap?: StateOrVal<number>;
+      items?: StateOrVal<ExampleBox[]>;
+    }>();
   });
 
   it("follows the list of the group", () => {
@@ -370,7 +416,7 @@ describe("nested subscriptions", () => {
   it("drops the inner subscription for a group with a fixed list", () => {
     const { items_a, group, watcher } = setup();
     attach(watcher);
-    group.set_ok(example_group().set({ items: [example_box()] }));
+    group.set_ok(example_group({ items: [example_box()] }));
     expect(items_a.amount()).toBe(0);
     expect(watcher.textContent).toBe("1 items, fixed");
   });
@@ -422,7 +468,7 @@ describe("editor", () => {
   });
 
   it("hands out a fixed scale as a state and disables the slider", () => {
-    const editor = attach(example_editor().set({ scale: 2 }));
+    const editor = attach(example_editor({ scale: 2 }));
     expect(editor.scale.ok()).toBe(2);
     const { square, input, label } = parts(editor);
     expect(square.style.transform).toBe("scale(2)");
@@ -432,7 +478,7 @@ describe("editor", () => {
 
   it("hands out a given state and passes it on unchanged", async () => {
     const scale = state.ok_w(1);
-    const editor = attach(example_editor().set({ scale }));
+    const editor = attach(example_editor({ scale }));
     expect(editor.scale).toBe(scale);
     const { square, input, label } = parts(editor);
     input.value = "1.5";
@@ -443,18 +489,22 @@ describe("editor", () => {
     expect(label.textContent).toBe("scale 1.50");
   });
 
-  it("setting the scale again releases the previous state", () => {
-    const first = state.ok_w(1);
-    const editor = attach(example_editor().set({ scale: first }));
-    expect(first.amount()).toBeGreaterThan(0);
+  it("takes the scale only at creation, the limits can be set again", () => {
+    const scale = state.ok_w(1);
+    const editor = attach(example_editor({ scale, max: 2 }));
+    const { input } = parts(editor);
+    expect(input.max).toBe("2");
+    // @ts-expect-error the scale is handed out, so set can not replace it
     editor.set({ scale: 2 });
-    expect(first.amount()).toBe(0);
-    expect(parts(editor).square.style.transform).toBe("scale(2)");
+    editor.set({ max: 4 });
+    expect(input.max).toBe("4");
+    expect(editor.scale).toBe(scale);
+    expect(parts(editor).square.style.transform).toBe("scale(1)");
   });
 
   it("holds no subscriptions on the scale while disconnected", () => {
     const scale = state.ok_w(1);
-    const editor = attach(example_editor().set({ scale }));
+    const editor = attach(example_editor({ scale }));
     editor.remove();
     expect(scale.amount()).toBe(0);
   });

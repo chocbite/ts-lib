@@ -35,27 +35,18 @@ export class FormSwitch<ID extends string | undefined> extends FormValueWrite<
 
     this.appendChild(this.warn_input);
     this.#switch.setAttribute("tabindex", "0");
+    //Space toggles, Enter is left to parents, like a form submitting
     this.#switch.onkeydown = (e) => {
-      switch (e.key) {
-        case "Enter":
-        case " ": {
-          e.stopPropagation();
-          e.preventDefault();
-          this.onkeyup = (e) => {
-            switch (e.key) {
-              case "Enter":
-              case " ": {
-                e.stopPropagation();
-                e.preventDefault();
-                this.onkeyup = null;
-                this.set_value_check(!this.buffer);
-                break;
-              }
-            }
-          };
-          break;
-        }
-      }
+      if (e.key !== " ") return;
+      e.stopPropagation();
+      e.preventDefault();
+      this.onkeyup = (e) => {
+        if (e.key !== " ") return;
+        e.stopPropagation();
+        e.preventDefault();
+        this.onkeyup = null;
+        this.set_value_check(!this.buffer);
+      };
     };
 
     this.#switch.onpointerdown = (e) => {
@@ -106,6 +97,11 @@ export class FormSwitch<ID extends string | undefined> extends FormValueWrite<
       this.set_value_check(!this.buffer);
       return;
     };
+  }
+
+  /**Focuses the knob, the input for warnings is hidden and can not take the focus*/
+  focus(options?: FocusOptions): void {
+    this.#switch.focus(options);
   }
 
   /**Changes the icon of the switch*/

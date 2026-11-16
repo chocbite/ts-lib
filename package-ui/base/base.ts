@@ -8,7 +8,13 @@ import {
   type StateSub,
 } from "@chocbite/ts-lib/state";
 import { AccessTypes } from "./access";
-import type { InputKey, InputResult, InputState, InputValue } from "./input";
+import {
+  CREATE,
+  type InputKey,
+  type InputResult,
+  type InputState,
+  type InputValue,
+} from "./input";
 import {
   BaseIntersectObserver,
   type BaseIntersectObserverOptions,
@@ -37,11 +43,12 @@ const base_resize_observer = new ResizeObserver((e) => {
  * constructors add children and attributes, which document.createElement and the HTML parser do not allow
  *
  * New elements, and elements being reworked, follow the element pattern in package-ui/PATTERN.md:
- * The class is only exported as a type, a factory function without arguments creates it
+ * The class is only exported as a type, a factory function taking optional options creates it with create
  * The constructor takes no arguments, it builds the children and sets the defaults
  * The inputs are an object of keys made with input_key, the options type is InputOptions of it
  * set takes the options, each a fixed value or a state (StateOrVal), and applies them with set_input
- * so element_factory().set({ width: 100, label: label_state })
+ * Inputs handed out to other elements are given once, at creation, and applied by overriding [CREATE]
+ * so element_factory({ width: 100, label: label_state }).set({ width: 120 })
  * A fixed value never changes, anything that changes must be a state
  *
  * All none abstracts classes must override the static method element_name to return the name of the element
@@ -119,6 +126,24 @@ export abstract class Base extends HTMLElement {
   set(_options: object): this {
     return this;
   }
+
+  /**Creates the element, applies the creation inputs with [CREATE] and then the rest with set
+   * Factories call it, and called on a subclass it creates the subclass, so a user subclass is made with MyElement.create(options)
+   * The options are those of [CREATE] and set together, both run after every constructor has finished
+   * The constructor must take no arguments, abstract classes can not be created*/
+  static create<T extends Base>(
+    this: new () => T,
+    options: Parameters<T[typeof CREATE]>[0] & Parameters<T["set"]>[0] = {},
+  ): T {
+    const element = new this();
+    element[CREATE](options);
+    return element.set(options);
+  }
+
+  /**Applies the inputs given at creation, called once by create before set
+   * Inputs other elements follow are given here, and left out of the options of set, so they can never be replaced
+   * Elements override it with their own options type and call super[CREATE] with the options, like set*/
+  [CREATE](_options: object): void {}
 
   /**Sets an input that is either a fixed value or a state, see set
    * undefined leaves the input unchanged

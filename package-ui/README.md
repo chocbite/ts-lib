@@ -50,6 +50,7 @@ SCSS mixins are available for use in your own styles:
 
 - `@chocbite/ts-lib-ui/base`
 - `@chocbite/ts-lib-ui/canvas`
+- `@chocbite/ts-lib-ui/composition`
 - `@chocbite/ts-lib-ui/context-menu`
 - `@chocbite/ts-lib-ui/document`
 - `@chocbite/ts-lib-ui/dom`
@@ -57,8 +58,10 @@ SCSS mixins are available for use in your own styles:
 - `@chocbite/ts-lib-ui/icons`
 - `@chocbite/ts-lib-ui/keyboard`
 - `@chocbite/ts-lib-ui/list`
+- `@chocbite/ts-lib-ui/prompts`
 - `@chocbite/ts-lib-ui/selection`
 - `@chocbite/ts-lib-ui/settings`
 - `@chocbite/ts-lib-ui/spinner`
+- `@chocbite/ts-lib-ui/state_ui`
 - `@chocbite/ts-lib-ui/svg`
 - `@chocbite/ts-lib-ui/theme`

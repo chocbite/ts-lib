@@ -1,6 +1,11 @@
 import { define_element } from "#base";
 import { sync_resolve } from "@chocbite/ts-lib/common";
-import { get_cursor_position, set_cursor_end, set_cursor_position, set_selection_all } from "#selection";
+import {
+  get_cursor_position,
+  set_cursor_end,
+  set_cursor_position,
+  set_selection_all,
+} from "#selection";
 import { number_step_start_decimal } from "@chocbite/ts-lib/math";
 import { err, type Result } from "@chocbite/ts-lib/result";
 import {
@@ -64,6 +69,8 @@ export class FormNumberInput<
     this.onkeydown = (e) => {
       if (e.key === "Enter") this.#set(true);
       else if (e.key === "Escape") {
+        //With nothing typed to revert, escape is left to parents, like a prompt closing
+        if ((this.#value_box.textContent || "") === this.#shown) return;
         if (this.buffer !== undefined) this.new_value(this.buffer);
         else this.clear_value();
       } else if (e.key === "ArrowUp") this.#step_value(true);

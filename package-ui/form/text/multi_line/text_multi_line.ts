@@ -108,6 +108,8 @@ export class FormTextMultiline<
     };
     this.#value_box.onkeydown = (e) => {
       if (e.key === "Escape") {
+        //With nothing typed to revert, escape is left to parents, like a prompt closing
+        if (this.#value_box.value === (this.buffer ?? "")) return;
         e.preventDefault();
         e.stopPropagation();
         if (this.buffer) this.new_value(this.buffer);

@@ -10,7 +10,7 @@ import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { ACCESSTYPESINFO, AccessTypes } from "./access";
 import { Base } from "./base";
 import { define_element } from "./define_element";
-import { input_key, type InputOf, type InputOptions } from "./input";
+import { CREATE, input_key, type InputOf, type InputOptions } from "./input";
 import "./index.scss";
 import { BaseIntersectObserver } from "./intersect_observer";
 
@@ -901,6 +901,126 @@ class SetPrefix extends SetProbe {
   }
 }
 define_element(SetPrefix);
+
+const CREATE_PROBE = {
+  /**Handed out, so given at creation*/
+  items: input_key<StateOrVal<string[]>>(),
+};
+type CreateProbeCreateOptions = SetProbeOptions &
+  InputOptions<typeof CREATE_PROBE>;
+
+/**Element with an input given at creation, which it hands out*/
+class CreateProbe extends SetProbe {
+  static element_name() {
+    return "createprobe";
+  }
+  #items: StateOrVal<string[]> = [];
+  #creates = 0;
+  get items() {
+    return this.#items;
+  }
+  get creates() {
+    return this.#creates;
+  }
+  [CREATE](options: CreateProbeCreateOptions) {
+    super[CREATE](options);
+    this.#creates++;
+    if (options.items === undefined) return;
+    this.#items = options.items;
+    this.set_input(CREATE_PROBE.items, options.items, (items) => {
+      this.dataset.items = items.ok ? items.value.join(",") : "error";
+    });
+  }
+}
+define_element(CreateProbe);
+
+const CREATE_SUB = {
+  /**Also given at creation, added by the subclass*/
+  extra: input_key<string>(),
+};
+type CreateSubCreateOptions = CreateProbeCreateOptions &
+  InputOptions<typeof CREATE_SUB>;
+
+/**Subclass adding a creation input, it reads a private field of its own*/
+class CreateSub extends CreateProbe {
+  static element_name() {
+    return "createsub";
+  }
+  #extra = "none";
+  get extra() {
+    return this.#extra;
+  }
+  [CREATE](options: CreateSubCreateOptions) {
+    super[CREATE](options);
+    this.set_input(CREATE_SUB.extra, options.extra, (extra) => {
+      this.#extra = extra.value;
+    });
+  }
+}
+define_element(CreateSub);
+
+abstract class CreateAbstract extends Base {}
+
+describe("Base create", () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+  const attach = <T extends HTMLElement>(element: T): T =>
+    document.body.appendChild(element);
+
+  it("creates the class it is called on, with the set options applied", () => {
+    const element = SetProbe.create({ width: 5, label: "a" });
+    expect(element).toBeInstanceOf(SetProbe);
+    expect(element.style.width).toBe("5px");
+    expect(element.textContent).toBe("a");
+    expect(SetProbe.create().textContent).toBe("default");
+  });
+
+  it("applies the creation inputs once, and the set options with them", () => {
+    const items = st.ok_w(["a"]);
+    const element = attach(CreateProbe.create({ items, width: 3 }));
+    expect(element.creates).toBe(1);
+    expect(element.items).toBe(items);
+    expect(element.dataset.items).toBe("a");
+    expect(element.style.width).toBe("3px");
+    items.set_ok(["a", "b"]);
+    expect(element.dataset.items).toBe("a,b");
+    element.remove();
+    expect(items.amount()).toBe(0);
+  });
+
+  it("set can not replace a creation input", () => {
+    const items = st.ok_w(["a"]);
+    const element = CreateProbe.create({ items });
+    // @ts-expect-error items are given at creation, set does not take them
+    element.set({ items: [] });
+    expect(element.items).toBe(items);
+  });
+
+  it("a subclass adds creation inputs and can use its own fields in them", () => {
+    const element = CreateSub.create({ items: ["x"], extra: "e", label: "l" });
+    expect(element).toBeInstanceOf(CreateSub);
+    expect(element.extra).toBe("e");
+    expect(element.dataset.items).toBe("x");
+    expect(element.textContent).toBe("l");
+    expect(element.creates).toBe(1);
+  });
+
+  it("types the options from [CREATE] and set of the class", () => {
+    const options: CreateSubCreateOptions = { items: [], extra: "e", width: 1 };
+    expectTypeOf(CreateSub.create(options)).toEqualTypeOf<CreateSub>();
+    //Only compiled, these would throw at runtime
+    const compile_only = () => {
+      // @ts-expect-error an option neither [CREATE] nor set takes
+      SetProbe.create({ nope: 1 });
+      // @ts-expect-error an option of the subclass on the parent
+      CreateProbe.create({ extra: "e" });
+      // @ts-expect-error an abstract class can not be created
+      CreateAbstract.create();
+    };
+    expect(compile_only).toBeTypeOf("function");
+  });
+});
 
 describe("Base set", () => {
   afterEach(() => {

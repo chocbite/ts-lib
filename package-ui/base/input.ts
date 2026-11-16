@@ -3,6 +3,10 @@ import type { State, StateResult, StateROA } from "@chocbite/ts-lib/state";
 
 declare const INPUT_TYPE: unique symbol;
 
+/**Key of the method applying the creation inputs of an element, see Base.create
+ * Elements with inputs given at creation override [CREATE] like set, and call super[CREATE] with the options*/
+export const CREATE: unique symbol = Symbol("create");
+
 /**Key identifying an input of an element, carrying the type of the input, a StateOrVal variant or a plain value type
  * Made with input_key, the type property only exists for the types, so a plain symbol is not a key*/
 export type InputKey<S> = symbol & { readonly [INPUT_TYPE]: S };

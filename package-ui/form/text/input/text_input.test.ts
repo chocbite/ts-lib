@@ -189,8 +189,9 @@ describe("Text input user input", () => {
     expect(input.value).toBe("");
   });
 
-  it("escape does not reach parent elements", () => {
-    const { element, input } = make();
+  it("escape that reverts typed text does not reach parent elements", () => {
+    const { element, input } = make({ value: "abc" });
+    input.value = "typed";
     const parent = vi.fn();
     document.body.addEventListener("keydown", parent);
     try {
@@ -201,6 +202,26 @@ describe("Text input user input", () => {
       expect(element.isConnected).toBe(true);
     } finally {
       document.body.removeEventListener("keydown", parent);
+    }
+  });
+
+  it("escape with nothing to revert reaches parent elements, like a prompt closing", () => {
+    for (const options of [{}, { value: "abc" }]) {
+      const { input } = make(options);
+      const parent = vi.fn();
+      document.body.addEventListener("keydown", parent);
+      try {
+        const event = new KeyboardEvent("keydown", {
+          key: "Escape",
+          bubbles: true,
+          cancelable: true,
+        });
+        input.dispatchEvent(event);
+        expect(parent).toHaveBeenCalledTimes(1);
+        expect(event.defaultPrevented).toBe(false);
+      } finally {
+        document.body.removeEventListener("keydown", parent);
+      }
     }
   });
 

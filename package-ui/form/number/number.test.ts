@@ -56,6 +56,21 @@ const key = (target: Element, key: string) => {
   return event;
 };
 
+/**Presses Escape on the target, gives whether it reached the body and was prevented*/
+const escape_to_parent = (target: Element) => {
+  const parent = vi.fn();
+  document.body.addEventListener("keydown", parent);
+  try {
+    const event = key(target, "Escape");
+    return {
+      reached: parent.mock.calls.length > 0,
+      prevented: event.defaultPrevented,
+    };
+  } finally {
+    document.body.removeEventListener("keydown", parent);
+  }
+};
+
 /**Dispatches a cancelable beforeinput event, returns true if it was prevented*/
 const before_input = (target: Element, data: string) => {
   const event = new InputEvent("beforeinput", {
@@ -280,6 +295,26 @@ describe("Number input", () => {
     await type("9", "Escape");
     expect(value_box.textContent).toBe("3");
     expect(element.buffer).toBe(3);
+  });
+
+  it("Escape with nothing typed reaches parent elements, like a prompt closing", () => {
+    for (const options of [{}, { value: 3 }]) {
+      const { value_box } = make_input(options);
+      expect(escape_to_parent(value_box)).toEqual({
+        reached: true,
+        prevented: false,
+      });
+    }
+  });
+
+  it("Escape that reverts typed text does not reach parent elements", () => {
+    const { value_box } = make_input({ value: 3 });
+    value_box.textContent = "9";
+    expect(escape_to_parent(value_box)).toEqual({
+      reached: false,
+      prevented: true,
+    });
+    expect(value_box.textContent).toBe("3");
   });
 
   it("Escape without a value empties the text", async () => {
@@ -688,6 +723,42 @@ describe("Stepper", () => {
     value_box.blur();
     await wait();
     expect(state.ok()).toBe(5);
+  });
+
+  it("Escape with nothing typed reaches parent elements, while editing or not", () => {
+    for (const options of [{}, { value: 1 }]) {
+      const { element, value_box } = make_stepper(options);
+      expect(escape_to_parent(value_box)).toEqual({
+        reached: true,
+        prevented: false,
+      });
+      expect(escape_to_parent(element)).toEqual({
+        reached: true,
+        prevented: false,
+      });
+    }
+  });
+
+  it("Escape that reverts typed text does not reach parent elements", () => {
+    const { value_box } = make_stepper({ value: 1 });
+    value_box.focus();
+    value_box.textContent = "8";
+    expect(escape_to_parent(value_box)).toEqual({
+      reached: false,
+      prevented: true,
+    });
+  });
+
+  it("Escape during a drag undoes it and does not reach parent elements", () => {
+    const { element, text } = make_stepper({ value: 1 });
+    allow_capture(text);
+    text.dispatchEvent(
+      new PointerEvent("pointerdown", { button: 0, pointerId: 1, clientX: 10 }),
+    );
+    expect(escape_to_parent(element)).toEqual({
+      reached: false,
+      prevented: true,
+    });
   });
 
   it("Escape while editing restores the value", () => {

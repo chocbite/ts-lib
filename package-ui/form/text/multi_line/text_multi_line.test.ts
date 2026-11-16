@@ -144,6 +144,21 @@ describe("Text multiline user input", () => {
     expect(area.value).toBe("abc");
   });
 
+  it("escape with nothing typed reaches parent elements, like a prompt closing", () => {
+    for (const options of [{}, { value: "abc" }]) {
+      const { key } = make(options);
+      const parent = vi.fn();
+      document.body.addEventListener("keydown", parent);
+      try {
+        const event = key({ key: "Escape" });
+        expect(parent).toHaveBeenCalledTimes(1);
+        expect(event.defaultPrevented).toBe(false);
+      } finally {
+        document.body.removeEventListener("keydown", parent);
+      }
+    }
+  });
+
   it("escape clears the typed text when there is no value", () => {
     const { area, key } = make();
     area.value = "typed";

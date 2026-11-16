@@ -1,0 +1,344 @@
+@use "../icons/mixins" as font;
+@use "sass:math";
+
+//Children of a panel: sizers, title bar, content box, and the focus catcher of a modal panel
+composition-panel {
+  $radius: 0.8rem;
+  $radius_visible: $radius * 2;
+  $sizer_width: 0.7rem;
+  $sizer_touch: $sizer_width * 2.4;
+
+  --titlebar-height: 1.6rem;
+  .touch & {
+    --titlebar-height: 2.6rem;
+  }
+  &.no-titlebar {
+    --titlebar-height: 0rem;
+  }
+
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  width: fit-content;
+  height: fit-content;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: $radius;
+
+  &.hidden {
+    display: none;
+  }
+
+  &.modal::after {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100dvw;
+    height: 100dvh;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: -1;
+    pointer-events: all;
+  }
+
+  //       _____ _    _          _____   ______          __
+  //      / ____| |  | |   /\   |  __ \ / __ \ \        / /
+  //     | (___ | |__| |  /  \  | |  | | |  | \ \  /\  / /
+  //      \___ \|  __  | / /\ \ | |  | | |  | |\ \/  \/ /
+  //      ____) | |  | |/ ____ \| |__| | |__| | \  /\  /
+  //     |_____/|_|  |_/_/    \_\_____/ \____/   \/  \/
+  &::before {
+    content: "";
+    position: absolute;
+    top: -1px;
+    left: -1px;
+    width: 100%;
+    height: 100%;
+    box-shadow: 0 0 0.3rem 0.01rem var(--composition-colors-shadow);
+    border-radius: $radius;
+    border: 1px solid var(--composition-colors-shadow);
+  }
+
+  &:focus-within::before {
+    box-shadow: 0 0 0.4rem 0.05rem var(--composition-colors-shadowFocus);
+  }
+
+  //In touch mode the sizers are shown, the shadow goes around them
+  .touch &.size-y::before {
+    margin-top: -$sizer_touch;
+    padding-top: $sizer_touch;
+    margin-bottom: -$sizer_touch;
+    padding-bottom: $sizer_touch;
+    border-radius: $radius_visible;
+  }
+
+  .touch &.size-x::before {
+    margin-left: -$sizer_touch;
+    padding-left: $sizer_touch;
+    margin-right: -$sizer_touch;
+    padding-right: $sizer_touch;
+    border-radius: $radius_visible;
+  }
+
+  //      _______ _____ _______ _      ______
+  //     |__   __|_   _|__   __| |    |  ____|
+  //        | |    | |    | |  | |    | |__
+  //        | |    | |    | |  | |    |  __|
+  //        | |   _| |_   | |  | |____| |____
+  //        |_|  |_____|  |_|  |______|______|
+  & > div:nth-child(2) {
+    display: flex;
+    position: relative;
+    pointer-events: all;
+    height: var(--titlebar-height);
+    background-color: var(--composition-colors-titlebar);
+    border-radius: $radius $radius 0 0;
+    cursor: grab;
+    overflow: hidden;
+    flex-shrink: 0;
+
+    &.moving {
+      cursor: grabbing;
+    }
+
+    &:hover {
+      background-color: var(--composition-colors-titlebarHover);
+    }
+
+    > .icon {
+      display: flex;
+      padding: 0.1rem;
+      padding-left: 0.3rem;
+
+      > svg {
+        fill: var(--composition-colors-icons);
+        height: 100%;
+        width: auto;
+      }
+    }
+
+    > .title {
+      color: var(--composition-colors-titlebarText);
+      padding: 0 0.3rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      line-height: var(--titlebar-height);
+      flex-grow: 1;
+
+      //Without an icon the title keeps clear of the rounded corner
+      &:first-child {
+        padding-left: 0.6rem;
+      }
+
+      .touch & {
+        font-size: 1.2rem;
+      }
+    }
+
+    > .close-button {
+      color: var(--composition-colors-icons);
+      font-size: 1.5rem;
+      line-height: var(--titlebar-height);
+      text-align: center;
+      flex-shrink: 0;
+      width: var(--titlebar-height);
+      cursor: pointer;
+      border-radius: math.div($radius, 2) $radius 0 math.div($radius, 2);
+
+      .touch & {
+        font-size: 2rem;
+      }
+
+      &:hover {
+        background-color: var(--composition-colors-titlebarCloseHover);
+      }
+    }
+  }
+
+  &.no-titlebar > div:nth-child(2) {
+    display: none;
+  }
+
+  //       _____ ____  _   _ _______ ______ _   _ _______
+  //      / ____/ __ \| \ | |__   __|  ____| \ | |__   __|
+  //     | |   | |  | |  \| |  | |  | |__  |  \| |  | |
+  //     | |   | |  | | . ` |  | |  |  __| | . ` |  | |
+  //     | |___| |__| | |\  |  | |  | |____| |\  |  | |
+  //      \_____\____/|_| \_|  |_|  |______|_| \_|  |_|
+  & > div:nth-child(3) {
+    position: relative;
+    background-color: var(--composition-colors-background);
+    pointer-events: all;
+    touch-action: none;
+    flex-grow: 1;
+    overflow: auto;
+    border-radius: 0 0 $radius $radius;
+
+    .anim-all & {
+      transition: background-color ease-in-out var(--animation-speed);
+    }
+
+    > * {
+      outline: none;
+      display: block;
+      min-width: 100%;
+      min-height: 100%;
+    }
+  }
+
+  &.no-titlebar > div:nth-child(3) {
+    border-radius: $radius;
+  }
+
+  //       _____ _____ ____________ _____   _____
+  //      / ____|_   _|___  /  ____|  __ \ / ____|
+  //     | (___   | |    / /| |__  | |__) | (___
+  //      \___ \  | |   / / |  __| |  _  / \___ \
+  //      ____) |_| |_ / /__| |____| | \ \ ____) |
+  //     |_____/|_____/_____|______|_|  \_\_____/
+  //The sizer box has the class x when the width can be sized, and y for the height
+  & > div:nth-child(1) {
+    position: absolute;
+    inset: 0;
+    color: var(--composition-colors-icons);
+
+    &.x {
+      left: -$sizer_width;
+      right: -$sizer_width;
+    }
+    &.y {
+      top: -$sizer_width;
+      bottom: -$sizer_width;
+    }
+
+    > div {
+      display: none;
+      pointer-events: all;
+      position: absolute;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+    }
+
+    &.y > .n,
+    &.y > .s,
+    &.x > .e,
+    &.x > .w,
+    &.x.y > .ne,
+    &.x.y > .nw,
+    &.x.y > .se,
+    &.x.y > .sw {
+      display: flex;
+    }
+
+    > .n,
+    > .s {
+      left: 0;
+      right: 0;
+      height: 0.5rem;
+      cursor: ns-resize;
+    }
+    > .n {
+      top: 0.2rem;
+    }
+    > .s {
+      bottom: 0.2rem;
+    }
+
+    > .e,
+    > .w {
+      top: 0;
+      bottom: 0;
+      width: 0.5rem;
+      cursor: ew-resize;
+    }
+    > .e {
+      right: 0.2rem;
+    }
+    > .w {
+      left: 0.2rem;
+    }
+
+    > .ne,
+    > .nw,
+    > .se,
+    > .sw {
+      width: 1.6rem;
+      height: 1.6rem;
+    }
+    > .ne,
+    > .nw {
+      top: 0;
+    }
+    > .nw,
+    > .sw {
+      left: 0;
+    }
+    > .se,
+    > .ne {
+      right: 0;
+    }
+    > .sw,
+    > .se {
+      bottom: 0;
+    }
+    > .ne,
+    > .sw {
+      cursor: nesw-resize;
+    }
+    > .nw,
+    > .se {
+      cursor: nwse-resize;
+    }
+  }
+
+  //In touch mode the sizers are bigger and shown
+  .touch & > div:nth-child(1) {
+    background-color: var(--composition-colors-sizers);
+    border-radius: $radius_visible;
+    font-size: $sizer_touch;
+
+    &.x {
+      left: -$sizer_touch;
+      right: -$sizer_touch;
+    }
+    &.y {
+      top: -$sizer_touch;
+      bottom: -$sizer_touch;
+    }
+
+    > div {
+      opacity: 1;
+      writing-mode: vertical-lr;
+    }
+
+    > .n,
+    > .s {
+      @include font.material-symbols-rounded;
+      height: $sizer_touch;
+    }
+    > .n {
+      top: 0;
+    }
+    > .s {
+      bottom: 0;
+    }
+
+    > .e,
+    > .w {
+      @include font.material-symbols-rounded;
+      width: $sizer_touch;
+
+      > div {
+        transform: rotate(90deg);
+      }
+    }
+    > .e {
+      right: 0;
+    }
+    > .w {
+      left: 0;
+    }
+  }
+}

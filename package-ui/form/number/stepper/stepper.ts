@@ -1,9 +1,6 @@
 import { define_element } from "#base";
 import { sleep, sync_resolve } from "@chocbite/ts-lib/common";
-import {
-  material_add_rounded,
-  material_remove_rounded,
-} from "#icons";
+import { material_add_rounded, material_remove_rounded } from "#icons";
 import { number_step_start_decimal } from "@chocbite/ts-lib/math";
 import { err, type Result } from "@chocbite/ts-lib/result";
 import { set_cursor_end } from "#selection";
@@ -135,9 +132,11 @@ export class FormStepper<ID extends string | undefined> extends FormNumberWrite<
         e.stopPropagation();
         this.#step_value(e.key === "ArrowRight");
       } else if (e.key === "Escape") {
+        //With nothing typed to revert, escape is left to parents, like a prompt closing, a drag is undone
+        if (pointer_id === undefined && this.#unchanged()) return;
         e.preventDefault();
         e.stopPropagation();
-        if (reset) reset();
+        reset();
         if (this.buffer !== undefined) this.new_value(this.buffer);
         else this.clear_value();
       } else {
@@ -154,6 +153,8 @@ export class FormStepper<ID extends string | undefined> extends FormNumberWrite<
       if (e.key === "Enter") {
         HTMLElement.prototype.focus.call(this);
       } else if (e.key === "Escape") {
+        //With nothing typed to revert, escape is left to parents, like a prompt closing
+        if (this.#unchanged()) return;
         e.preventDefault();
         e.stopPropagation();
         if (this.buffer !== undefined) this.new_value(this.buffer);
@@ -174,6 +175,11 @@ export class FormStepper<ID extends string | undefined> extends FormNumberWrite<
           e.preventDefault();
       }
     };
+  }
+
+  /**Whether the text is the one last drawn from the value, nothing typed to revert*/
+  #unchanged(): boolean {
+    return (this.#value_box.textContent || "") === this.#shown;
   }
 
   focus(options?: FocusOptions): void {

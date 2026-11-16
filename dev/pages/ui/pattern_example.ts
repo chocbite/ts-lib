@@ -82,16 +82,16 @@ const output = (parent: HTMLElement): HTMLPreElement => {
   const color = state.from_w("#8e44ad");
   const boxes = row(sec);
   box(boxes, "All fixed").appendChild(
-    example_box().set({ width: 120, height: 40, label: "fixed" }),
+    example_box({ width: 120, height: 40, label: "fixed" }),
   );
   box(boxes, "Width state").appendChild(
-    example_box().set({ width, height: 40, label: "width state" }),
+    example_box({ width, height: 40, label: "width state" }),
   );
   box(boxes, "Label state").appendChild(
-    example_box().set({ width: 120, height: 40, label }),
+    example_box({ width: 120, height: 40, label }),
   );
   box(boxes, "Color state").appendChild(
-    example_box().set({ width: 120, height: 40, label: "color state", color }),
+    example_box({ width: 120, height: 40, label: "color state", color }),
   );
   let count = 0;
   let wide = false;
@@ -124,14 +124,14 @@ const output = (parent: HTMLElement): HTMLPreElement => {
   const label = state.p.ros(width, (value) => ok(`${value.value}px`));
   const boxes = row(sec);
   box(boxes, "Sliders").append(
-    example_slider().set({ value: width, min: 40, max: 300 }),
-    example_slider().set({ value: width, min: 40, max: 300 }),
+    example_slider({ value: width, min: 40, max: 300 }),
+    example_slider({ value: width, min: 40, max: 300 }),
   );
   box(boxes, "Fixed value, disabled").appendChild(
-    example_slider().set({ value: 150, min: 40, max: 300 }),
+    example_slider({ value: 150, min: 40, max: 300 }),
   );
   box(boxes, "Box", { width: "20rem" }).appendChild(
-    example_box().set({ width, height: 40, label }),
+    example_box({ width, height: 40, label }),
   );
 }
 
@@ -148,7 +148,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
   );
   const boxes = row(sec);
   box(boxes, "Own input").appendChild(
-    example_label_box().set({
+    example_label_box({
       width: 140,
       height: 40,
       label: "label",
@@ -156,7 +156,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
     }),
   );
   box(boxes, "Override, label is a state").appendChild(
-    example_override_box().set({
+    example_override_box({
       width: 140,
       height: 40,
       prefix: "prefix ",
@@ -164,7 +164,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
     }),
   );
   box(boxes, "Override, label is fixed").appendChild(
-    example_override_box().set({
+    example_override_box({
       width: 140,
       height: 40,
       prefix: "prefix ",
@@ -182,14 +182,15 @@ const output = (parent: HTMLElement): HTMLPreElement => {
 {
   const sec = section(
     "Nested subscriptions",
-    "The watcher follows the items of whichever group it is given, like a viewport following the widgets of its page. The subscriber counts should be 1 on the watched group, 1 more for a group on screen, and 0 on a list nobody uses",
+    "The watcher follows the items of whichever group it is given, like a viewport following the widgets of its page. The items are given at creation, so the watcher never follows a list the group dropped, while the gap can be set again. The subscriber counts should be 1 on the watched group, 1 more for a group on screen, and 0 on a list nobody uses",
   );
+  const gap = state.ok_w(4);
   const make = (name: string, color: string) => {
     const items = state.ok_w<ExampleBox[]>([]);
     const add = () =>
       items.set_ok([
         ...items.ok(),
-        example_box().set({
+        example_box({
           width: 48,
           height: 32,
           label: String(items.ok().length),
@@ -197,12 +198,12 @@ const output = (parent: HTMLElement): HTMLPreElement => {
         }),
       ]);
     add();
-    return { name, items, group: example_group().set({ items }), add };
+    return { name, items, group: example_group({ items, gap }), add };
   };
   const a = make("A", "#2980b9");
   const b = make("B", "#c0392b");
   const current = state.ok_w<ExampleGroup | null>(a.group);
-  const watcher = example_watcher().set({ group: current });
+  const watcher = example_watcher({ group: current });
 
   const boxes = row(sec);
   box(boxes, "Group A", { width: "16rem", minHeight: "2rem" }).appendChild(
@@ -211,8 +212,8 @@ const output = (parent: HTMLElement): HTMLPreElement => {
   box(boxes, "Group B", { width: "16rem", minHeight: "2rem" }).appendChild(
     b.group,
   );
-  const fixed = example_group().set({
-    items: [example_box().set({ width: 48, height: 32, label: "F" })],
+  const fixed = example_group({
+    items: [example_box({ width: 48, height: 32, label: "F" })],
   });
   box(boxes, "Group F, fixed list", {
     width: "8rem",
@@ -241,6 +242,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
     "Watch B": then(() => current.set_ok(b.group)),
     "Watch F": then(() => current.set_ok(fixed)),
     "Watch nothing": then(() => current.set_ok(null)),
+    "Gap 4 / 12 on A and B": () => gap.set_ok(gap.ok() === 4 ? 12 : 4),
     "Detach / attach watcher": then(() => {
       if (watcher.isConnected) watcher.remove();
       else watcher_box.appendChild(watcher);
@@ -259,12 +261,12 @@ const output = (parent: HTMLElement): HTMLPreElement => {
   const b = state.ok_w(140);
   const boxes = row(sec);
   box(boxes, "State A", { width: "14rem" }).appendChild(
-    example_box().set({ width: a, label: "A", color: "#2980b9" }),
+    example_box({ width: a, label: "A", color: "#2980b9" }),
   );
   box(boxes, "State B", { width: "14rem" }).appendChild(
-    example_box().set({ width: b, label: "B", color: "#c0392b" }),
+    example_box({ width: b, label: "B", color: "#c0392b" }),
   );
-  const slider = example_slider().set({ min: 20, max: 200, value: a });
+  const slider = example_slider({ min: 20, max: 200, value: a });
   box(boxes, "Slider", { width: "14rem" }).appendChild(slider);
   const label = output(sec);
   label.textContent = "slider writes to A";
@@ -293,26 +295,33 @@ const output = (parent: HTMLElement): HTMLPreElement => {
 {
   const sec = section(
     "Editor",
-    "The editor passes its scale on to a view and a slider unchanged, and uses as_state to derive the label and to hand the scale out. A fixed scale disables the slider. The outside readout subscribes to the scale the editor hands out",
+    "The editor passes its scale on to a view and a slider unchanged, and uses as_state to derive the label and to hand the scale out. The scale is given at creation as it is handed out, the slider limits are passed on through set and can change. A fixed scale disables the slider. The outside readout subscribes to the scale the editor hands out",
   );
   const shared = state.ok_w(1);
   const boxes = row(sec);
+  const editors: ReturnType<typeof example_editor>[] = [];
   for (const [name, scale] of [
     ["Fixed 1.5", 1.5],
     ["State", shared],
     ["Same state", shared],
   ] as const) {
-    const editor = example_editor().set({ scale });
-    const readout = example_box().set({
+    const editor = example_editor({ scale });
+    const readout = example_box({
       width: 160,
       height: 24,
       color: "#16a085",
       label: state.p.ros(editor.scale, (v) => ok(`outside ${v.value}`)),
     });
     box(boxes, name).append(editor, readout);
+    editors.push(editor);
   }
+  let max = 3;
   controls(sec, {
     "Reset shared to 1": () => shared.set_ok(1),
+    "Max 3 / 5": () => {
+      max = max === 3 ? 5 : 3;
+      for (const editor of editors) editor.set({ max });
+    },
   });
 }
 
@@ -338,7 +347,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
       : { label: state.ok_w(`state ${i}`), color: state.ok_w(colors[i % 5]) },
   );
   const rows = Array.from({ length: ROWS }, () =>
-    example_box().set({ width: 120, height: 32 }),
+    example_box({ width: 120, height: 32 }),
   );
   const boxes = row(sec);
   for (const r of rows) boxes.appendChild(r);
@@ -387,8 +396,8 @@ const output = (parent: HTMLElement): HTMLPreElement => {
     "Fixed values are applied by the factory, states only after the element is connected, and an async state later still. Does anything feel wrong because of this",
   );
   const status = output(sec);
-  const fixed = example_box().set({ width: 120, height: 32, label: "fixed" });
-  const bound = example_box().set({
+  const fixed = example_box({ width: 120, height: 32, label: "fixed" });
+  const bound = example_box({
     width: state.ok(120),
     height: 32,
     label: "state",
@@ -402,7 +411,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
   controls(sec, {
     "Add box with a width arriving after 1 second": () => {
       delayed.appendChild(
-        example_box().set({
+        example_box({
           width: state.roa(async () => {
             await new Promise((resolve) => setTimeout(resolve, 1000));
             return ok(120);
@@ -432,7 +441,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
     [
       "Fixed values",
       (i) =>
-        example_box().set({
+        example_box({
           width: 40 + (i % 8),
           height: 24,
           label: String(i),
@@ -441,7 +450,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
     [
       "States",
       (i) =>
-        example_box().set({
+        example_box({
           width: state.ok(40 + (i % 8)),
           height: state.ok(24),
           label: state.ok(String(i)),

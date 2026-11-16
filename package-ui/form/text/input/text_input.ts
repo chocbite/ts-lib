@@ -88,6 +88,8 @@ export class FormTextInput<
     };
     this.onkeydown = (e) => {
       if (e.key === "Escape") {
+        //With nothing typed to revert, escape is left to parents, like a prompt closing
+        if (this.warn_input.value === (this.buffer ?? "")) return;
         e.preventDefault();
         e.stopPropagation();
         if (this.buffer) this.new_value(this.buffer);

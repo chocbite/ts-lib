@@ -76,6 +76,12 @@ describe("Switch", () => {
     document.body.replaceChildren();
   });
 
+  it("focus gives the focus to the knob, which the keyboard toggles", () => {
+    const { element, knob } = make_switch();
+    element.focus();
+    expect(document.activeElement).toBe(knob);
+  });
+
   it("toggles when the element is clicked", async () => {
     const { element, change, knob } = make_switch();
     element.click();
@@ -118,11 +124,11 @@ describe("Switch", () => {
     expect(element.buffer).toBe(false);
   });
 
-  it("toggles when Enter or Space is released", async () => {
+  it("toggles when Space is released", async () => {
     const { element, key } = make_switch();
-    key("keydown", "Enter");
+    key("keydown", " ");
     expect(element.buffer).toBe(undefined);
-    key("keyup", "Enter");
+    key("keyup", " ");
     await wait();
     expect(element.buffer).toBe(true);
     key("keydown", " ");
@@ -131,13 +137,34 @@ describe("Switch", () => {
     expect(element.buffer).toBe(false);
   });
 
-  it("toggles when Enter is released after another key", async () => {
+  it("toggles when Space is released after another key", async () => {
     const { element, key } = make_switch();
-    key("keydown", "Enter");
+    key("keydown", " ");
     key("keyup", "Shift");
-    key("keyup", "Enter");
+    key("keyup", " ");
     await wait();
     expect(element.buffer).toBe(true);
+  });
+
+  it("Enter does not toggle and reaches parent elements, like a prompt submitting", async () => {
+    const { element, knob } = make_switch();
+    const parent = vi.fn();
+    document.body.addEventListener("keydown", parent);
+    try {
+      for (const type of ["keydown", "keyup"])
+        knob.dispatchEvent(
+          new KeyboardEvent(type, {
+            key: "Enter",
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+      await wait();
+      expect(element.buffer).toBe(undefined);
+      expect(parent).toHaveBeenCalledTimes(1);
+    } finally {
+      document.body.removeEventListener("keydown", parent);
+    }
   });
 
   it("is no longer active after a cancelled press", () => {

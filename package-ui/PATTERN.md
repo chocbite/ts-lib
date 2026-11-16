@@ -6,19 +6,29 @@ Most existing elements still use an older style: constructor options, setters an
 
 The mechanics live in `Base` (`package-ui/base/base.ts`) and the key helpers in `package-ui/base/input.ts`. **`package-ui/pattern_example` is a complete example of every case below**, with tests. Copy from it when writing an element. It is not exported, and in the repo the dev page `dev/pages/ui/pattern_example.ts` shows it.
 
+## Scope
+
+The pattern is the interface an element gives to users of the library: the inputs they can change while the element lives. Its point is a consistent interface for users, so it does not cover:
+
+- **Configuration that never changes** after creation. It is a plain value, given in the factory options or as a plain input key, never a state.
+- **References up the tree**, like the container, parent or document an element lives in. They are found from the DOM or given directly, never as states.
+- **Internal logic** of a feature: private fields, children wired to each other, communication between the elements of one module. Use what is simplest and fastest.
+
 ## The rules
 
-1. **Anything that changes is a state.** An input is a `StateOrVal<T>`, either a fixed value or a state (see `StateOrVal` in the state README). A fixed value is a constant and never changes. Elements have no setters or getters for their inputs, so an element never deals with properties and states for the same thing.
-2. **A factory without arguments creates the element.** The class is exported only as a type, so nobody outside the module calls `new`.
-3. **The constructor takes no arguments.** It builds the children and sets visible defaults, so an element that never gets inputs still shows something sensible.
+1. **Inputs that change are states.** An input is a `StateOrVal<T>`, either a fixed value or a state (see `StateOrVal` in the state README). A fixed value is a constant and never changes. Elements have no setters or getters for their inputs, so an element never deals with properties and states for the same thing.
+2. **A factory creates the element.** It takes optional options and creates the element with `create`, which applies them. It may take required arguments for things outside the pattern, like the container an element lives in. The class is exported only as a type, unless it is meant to be subclassed, so nobody outside the module calls `new`.
+3. **The constructor takes no arguments.** It builds the children and sets visible defaults, so an element that never gets inputs still shows something sensible. Inputs are never applied in it.
 4. **Inputs are declared as keys.** Each element has a module-level object of keys made with `input_key`, and its options type is `InputOptions` of that object.
-5. **`set(options)` gives the inputs and returns the element.** Each input is applied with `set_input`. `set` can be called any number of times, and options left out stay as they are.
-6. **States are handed down from parent to child.** A parent passes its inputs on to its children unchanged. It does not wrap them or copy their values.
-7. **Every input is its own state.** Use one state per value, like `x`, `y` and `width`, never one state holding an object of them, so each value can be connected to other elements on its own.
+5. **`set(options)` can be called again.** Each input is applied with `set_input`. Options left out stay as they are.
+6. **Handed out inputs are given once.** An input that other elements follow is a creation input, applied by `[CREATE]` and left out of the options of `set`, so it can not be replaced while others follow it.
+7. **States are handed down from parent to child.** A parent passes its inputs on to its children unchanged. It does not wrap them or copy their values.
+8. **Every input is its own state.** Use one state per value, like `x`, `y` and `width`, never one state holding an object of them, so each value can be connected to other elements on its own.
+9. **Writable inputs make a fixed value read only.** An element that writes an input, like a slider or a moveable panel, can not change a fixed value, so it shows it as read only. Give a writable state to make it changeable.
 
 ```ts
-my_box().set({ width: 100, label: label_state });
-row.set({ label: other_state }); // width stays 100
+const box = my_box({ width: 100, label: label_state });
+box.set({ label: other_state }); // width stays 100
 ```
 
 ## Writing an element
@@ -60,10 +70,21 @@ class MyBox extends Base {
 define_element(MyBox);
 
 export type { MyBox };
-export function my_box(): MyBox {
-  return new MyBox();
+export function my_box(options: MyBoxOptions = {}): MyBox {
+  return MyBox.create(options);
 }
 ```
+
+## `create(options)`
+
+`Base.create` is static, every element has it. It creates the element it is called on, then applies the options in two steps, both after every constructor has finished:
+
+1. `[CREATE](options)` applies the creation inputs, see [Inputs given at creation](#inputs-given-at-creation). It runs once, and does nothing for an element without creation inputs.
+2. `set(options)` applies the rest.
+
+Its options type is the options of `[CREATE]` and `set` together, taken from the class it is called on, so `MyBox.create({ nope: 1 })` is a compile error. Called on a subclass it creates the subclass with the subclass's options. An abstract class can not be created.
+
+Every factory calls `create`, also for elements without creation inputs, so all factories look the same. The constructor must take no arguments (rule 3), because `create` calls it without any.
 
 ## Keys
 
@@ -114,9 +135,75 @@ set(options: SliderOptions): this {
 }
 ```
 
+A fixed value is shown read only (rule 9), so there is no separate option to turn writing off. An element that is only sometimes changeable, like a panel that can be moved, is changeable exactly when its inputs are writable states.
+
 ### Plain values
 
 Configuration that never needs a state, like the step of a slider, gets a key with a plain type, `input_key<number>()`, and goes through `set_input` like every other input. Use a plain type only when a state would make no sense. When in doubt, use `StateOrVal`.
+
+## Inputs given at creation
+
+An input that the element hands out to other elements, like the items of a group that a watcher follows, is given once when the element is created (rule 6). If `set` could replace it, everything following the old state would keep following it without knowing. A state given at creation can still change its value, only the state itself can not be swapped.
+
+These inputs get their own keys object, and the element overrides `[CREATE]` (the `CREATE` symbol from `#base`) to apply them, the same way it overrides `set`. `create` calls it once, before `set`. The options of `set` leave the creation inputs out, so TypeScript refuses them there, while the factory takes both.
+
+```ts
+import {
+  Base,
+  CREATE,
+  define_element,
+  input_key,
+  type InputOptions,
+} from "#base";
+
+/**Inputs of the group that can be set again*/
+const GROUP = {
+  /**Space between the boxes in px*/
+  gap: input_key<StateOrVal<number>>(),
+};
+export type GroupOptions = InputOptions<typeof GROUP>;
+/**Inputs of the group given at creation, handed out to other elements*/
+const GROUP_CREATE = {
+  /**Boxes shown in the group, handed out as items*/
+  items: input_key<StateOrVal<Box[]>>(),
+};
+export type GroupCreateOptions = GroupOptions &
+  InputOptions<typeof GROUP_CREATE>;
+
+class Group extends Base {
+  #items: StateOrVal<Box[]> = [];
+  /**Given at creation and never replaced*/
+  get items(): StateOrVal<Box[]> {
+    return this.#items;
+  }
+
+  [CREATE](options: GroupCreateOptions) {
+    super[CREATE](options);
+    if (options.items === undefined) return;
+    this.#items = options.items;
+    this.set_input(GROUP_CREATE.items, options.items, (items) => {
+      if (items.ok) this.replaceChildren(...items.value);
+    });
+  }
+
+  set(options: GroupOptions): this {
+    this.set_input(GROUP.gap, options.gap, (gap) => {
+      if (gap.ok) this.style.gap = gap.value + "px";
+    });
+    return this;
+  }
+}
+
+export function group(options: GroupCreateOptions = {}): Group {
+  return Group.create(options);
+}
+
+group({ items: items_state, gap: 4 }).set({ gap: 8 }); // set({ items }) is a compile error
+```
+
+`[CREATE]` is public in TypeScript, as `create` must call it on the class it is created for, but it is keyed by a symbol, so only code that imports `CREATE` can reach it. That is code writing elements, users of an element never see it.
+
+Only use creation inputs for values others follow. Everything else goes through `set`, so the element can still be reused.
 
 ## Subclasses
 
@@ -142,17 +229,20 @@ class MyLabelBox extends MyBox {
 }
 ```
 
-Inputs are never applied in the constructor. When a base constructor applies a fixed value, a subclass override called from it runs before the subclass's own fields exist. That throws for `#private` fields and silently gives `undefined` for plain fields. `set` runs after every constructor has finished, so overrides called from it can use all fields.
+A subclass that adds creation inputs does the same with `[CREATE]`: its own keys object, an options type combining its creation options with the parent's, and an override calling `super[CREATE](options)` once. `create` takes the options of the subclass automatically.
 
-Elements meant to be subclassed by library users are exported as classes. The user's factory then creates the subclass, and the user calls `set`.
+Inputs are never applied in the constructor. When a base constructor applies a fixed value, a subclass override called from it runs before the subclass's own fields exist. That throws for `#private` fields and silently gives `undefined` for plain fields. `[CREATE]` and `set` run after every constructor has finished, so overrides called from them can use all fields.
+
+Elements meant to be subclassed by library users are exported as classes. The user creates the subclass with `MySubclass.create(options)`, never with `new`, which would skip the creation inputs.
 
 ## Parents and children
 
-- **Children are built in the constructor**, as field initializers or in the constructor body. They get their defaults there too, for example `child().set({ min: 0, max: 3 })`.
-- **A parent's `set` passes inputs on unchanged**, like `this.#view.set({ scale: options.scale })`. Only convert with `state.as_state` when the parent needs a state itself, for example to derive a value with a proxy, or to hand it out.
+- **Children are built in the constructor**, as field initializers or in the constructor body. They get their defaults there too, for example `child({ min: 0, max: 3 })`.
+- **A parent passes inputs on unchanged**, like `this.#view.set({ scale: options.scale })`. Only convert with `state.as_state` when the parent needs a state itself, for example to derive a value with a proxy, or to hand it out.
 - **A parent's options for inputs it only passes on** are written by hand with `InputOf`, so they always match the child: `scale?: InputOf<typeof SLIDER.value>`.
-- **A value an element hands out**, like a state other elements follow, is kept in a private field with a getter. Setting that input again gives a new state, so anything following the old one must read the getter again. Document this on the getter.
+- **A value an element hands out**, like a state other elements follow, is a creation input, kept in a private field with a getter, see [Inputs given at creation](#inputs-given-at-creation).
 - **Inputs inside inputs**, like a group state whose value holds an items state, use their own key for the inner input, typed with `InputOf` of the inner key. Setting the outer input again replaces the inner subscription automatically. Fixed inner values need their own branch, since nothing is subscribed for them.
+- **References up the tree** are outside the pattern. A child that needs its parent or container finds it from the DOM, or the parent gives it directly.
 
 ## Reused elements
 
@@ -168,20 +258,22 @@ Elements created in large numbers, like list rows, list fields and canvas widget
 
 ## Status
 
-- **Done and tested** in `package-ui/base/base.test.ts`: `Base.set`, `Base.set_input`, `Base.input_state`, and the key helpers `input_key`, `InputOptions` and `InputOf`.
-- **Not converted yet:** no production element uses the pattern. Existing elements are converted one at a time, and canvas `Page` and `Viewport` are next, after the depot work.
+- **Done and tested** in `package-ui/base/base.test.ts`: `Base.create` with `[CREATE]`, `Base.set`, `Base.set_input`, `Base.input_state`, and the key helpers `input_key`, `InputOptions` and `InputOf`.
+- **Being converted:** `composition` is the first production module written to the pattern. Other elements are converted one at a time, canvas `Page` and `Viewport` after the depot work.
 - **Example:** `package-ui/pattern_example` is kept as the reference and must stay in line with this file. It is never built or exported, its source reaches consumers through the `SOURCE.md` of the package.
 
 ## Checklist for a new or converted element
 
-- [ ] The class is exported only as a type, and a factory without arguments creates it.
+- [ ] The class is exported only as a type, unless meant to be subclassed, and a factory taking optional options creates it with `create`.
 - [ ] The constructor takes no arguments, builds the children and sets visible defaults.
 - [ ] A module-level keys object made with `input_key` declares every input, with a doc comment on each key.
 - [ ] The options type is `InputOptions<typeof KEYS>`, or `InputOf` for options built by hand.
-- [ ] Every input is applied in `set` with `set_input`.
+- [ ] Every input is applied with `set_input`, in `set`, or in `[CREATE]` for creation inputs.
+- [ ] Inputs handed out to other elements are creation inputs, applied by overriding `[CREATE]`, and left out of the options of `set`.
 - [ ] Each input handles its errors in a way that makes sense to the user.
 - [ ] Writable inputs use `input_state` to write, and fixed values are shown as read only.
-- [ ] Subclasses have their own keys object and call `super.set(options)` once.
+- [ ] Subclasses have their own keys objects and call `super.set(options)` and `super[CREATE](options)` once.
+- [ ] Configuration that never changes, references up the tree and internal logic are kept out of the inputs.
 - [ ] Tests cover fixed values, states, setting again with both, and errors.
 - [ ] A dev page shows fixed values and states side by side.
 - [ ] When the pattern itself changes, this file and `package-ui/pattern_example` change with it.
