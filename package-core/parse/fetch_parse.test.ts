@@ -23,7 +23,7 @@ describe("make_fetch_parser", () => {
       () => "/user",
       1_000,
       { id: "n", name: "sw" },
-      async () => {},
+      { write: async () => {} },
     );
 
     const read_only: StateREA<number> = parsed.id;
@@ -39,7 +39,7 @@ describe("make_fetch_parser", () => {
       () => "/user",
       1_000,
       { id: "n", age: "?nw", nick: ["?", "s"], count: ["?", "n", () => 0], address: { zip: "?n" } },
-      async () => {},
+      { write: async () => {} },
     );
 
     expectTypeOf<StateRV<(typeof parsed)[typeof FETCH_PARSE]>>().toEqualTypeOf<{
@@ -126,7 +126,6 @@ describe("make_fetch_parser", () => {
       () => ["/user", { headers: { auth: "x" } }],
       60_000,
       { name: "s" },
-      undefined,
       { fetch: custom_fetch },
     );
 
@@ -147,7 +146,7 @@ describe("make_fetch_parser", () => {
       signal = init.signal ?? undefined;
       return new Promise(() => {});
     };
-    const user = make_fetch_parser(() => "/user", 60_000, { name: "s" }, undefined, {
+    const user = make_fetch_parser(() => "/user", 60_000, { name: "s" }, {
       fetch: custom_fetch,
     });
     const update = () => {};
@@ -161,7 +160,7 @@ describe("make_fetch_parser", () => {
   });
 
   it("reports a failed http status from a custom fetch", async () => {
-    const user = make_fetch_parser(() => "/user", 1_000, { name: "s" }, undefined, {
+    const user = make_fetch_parser(() => "/user", 1_000, { name: "s" }, {
       fetch: async () => ({ ok: false, status: 404, text: async () => "" }),
     });
 
@@ -196,7 +195,7 @@ describe("make_fetch_parser", () => {
       () => "/user",
       1_000,
       { settings: { newsletter: "bw" } },
-      send,
+      { write: send },
     );
 
     const result = await user.settings.newsletter.write(true);
@@ -213,7 +212,7 @@ describe("make_fetch_parser", () => {
       {
         aliases: [0, "sw", (alias: string) => ({ num: 1, alias })] as const,
       },
-      send,
+      { write: send },
     );
 
     const result = await user.aliases[5]!.write("joe");
@@ -231,7 +230,7 @@ describe("make_fetch_parser", () => {
         settings: { volume: "nw" },
         aliases: [0, "sw", (alias: string) => ({ num: 1, alias })] as const,
       },
-      send,
+      { write: send },
     );
 
     const limited = await user.settings.volume.limit(5);
@@ -335,7 +334,7 @@ describe("make_fetch_parser", () => {
       () => "/scores",
       1_000,
       { scores: ["{}", "nw"] },
-      send,
+      { write: send },
     );
 
     const result = await parsed.scores.alice!.write(5);
@@ -418,7 +417,7 @@ describe("make_fetch_parser array write options", () => {
       () => "/pumps",
       60_000,
       { pumps: [0, { id: "n", name: "sw", speed: "nw" }, options] },
-      send,
+      { write: send },
     );
     await parsed.pumps;
     return { parsed, send };
@@ -440,7 +439,7 @@ describe("make_fetch_parser array write options", () => {
       () => "/tags",
       60_000,
       { tags: [0, "sw", { encode: (tag: string, index: number) => ({ index, tag }) }] },
-      send,
+      { write: send },
     );
     expect((await parsed.tags[3]!.write("x")).ok).toBe(true);
     expect(send).toHaveBeenCalledWith({ tags: { index: 3, tag: "x" } });
@@ -480,7 +479,7 @@ describe("make_fetch_parser array write options", () => {
       () => "/pumps",
       60_000,
       { pumps: [0, { speed: "nw" }, { write: "all" }] },
-      send,
+      { write: send },
     );
     const result = await parsed.pumps[0]!.speed.write(5);
     expect(result.ok).toBe(false);
@@ -545,7 +544,7 @@ describe("make_fetch_parser array write options", () => {
         () => "/plant",
         60_000,
         { plant: { lines: [0, { valves: [0, "bw"] }, { write: "all" }] } },
-        send,
+        { write: send },
       );
       await parsed.plant.lines;
       await parsed.plant.lines[0]!.valves[1]!.write(true);
@@ -565,7 +564,7 @@ describe("make_fetch_parser array write options", () => {
         all: [0, { id: "n", name: "sw" }, { write: "all" }],
         single: [0, { id: "n", name: "sw" }, { write: "single" }],
       },
-      async () => {},
+      { write: async () => {} },
     );
     expectTypeOf<Parameters<typeof parsed.all.write>[0]>().toEqualTypeOf<
       { id: number; name: string }[]
@@ -598,7 +597,7 @@ describe("make_fetch_parser keyed arrays", () => {
       () => "/pumps",
       100,
       { pumps: [0, { id: "n", name: "sw" }, options] },
-      send,
+      { write: send },
     );
     let items: (typeof parsed.pumps)[number][] = [];
     let changes: StateArrayReadTypes<unknown>[] = [];
@@ -750,7 +749,7 @@ describe("make_fetch_parser keyed arrays", () => {
       () => "/pumps",
       60_000,
       { pumps: [0, { id: "n", name: "s" }, { key: "id" }] },
-      send,
+      { write: send },
     );
     expect(parsed.pumps[0]).toBeUndefined();
     const t = await keyed({ key: "id" }, [A, B]);
@@ -773,7 +772,7 @@ describe("make_fetch_parser optional members", () => {
       vi.fn(() => Promise.resolve(new Response(JSON.stringify(response)))),
     );
     const send = vi.fn().mockResolvedValue(undefined);
-    return { parsed: make_fetch_parser(() => "/x", 60_000, schema, send), send };
+    return { parsed: make_fetch_parser(() => "/x", 60_000, schema, { write: send }), send };
   };
   const value_of = async (s: PromiseLike<StateResult<unknown>>) => {
     const r = await s;

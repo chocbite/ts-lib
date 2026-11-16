@@ -233,6 +233,8 @@ export type FetchFunction = (
 }>;
 
 export type FetchParserOptions = {
+  /**Sends a write, required when the schema contains writable values*/
+  readonly write?: FetchWrite;
   /**Used in place of the global fetch for reads*/
   readonly fetch?: FetchFunction;
 };
@@ -476,10 +478,9 @@ export function make_fetch_parser<const S extends FetchSchema>(
   request: () => FetchRequest,
   update_rate: number,
   schema: S,
-  write?: FetchWrite,
   options?: FetchParserOptions,
 ): FetchParsed<S> {
-  if (has_writable(schema) && !write) {
+  if (has_writable(schema) && !options?.write) {
     throw new Error(
       "A write function is required when the schema contains writable values",
     );
@@ -541,7 +542,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
     async (payload) => {
       if (payload instanceof UnsentWrite) return err(payload.reason);
       try {
-        await write?.(payload);
+        await options?.write?.(payload);
         return ok(undefined);
       } catch (cause) {
         return err(cause instanceof Error ? cause.message : String(cause));

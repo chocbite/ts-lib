@@ -103,7 +103,7 @@ The error of a function spec is wrapped in the member path: `Failed to parse due
 
 ## Fetch parser
 
-`make_fetch_parser(request, update_rate, schema, write?, options?)` turns a JSON endpoint into states. Each member of the schema becomes a state that follows that member, and members marked writable send changes back through `write`.
+`make_fetch_parser(request, update_rate, schema, { write?, fetch? })` turns a JSON endpoint into states. Each member of the schema becomes a state that follows that member, and members marked writable send changes back through `write`.
 
 ```typescript
 import form from "@chocbite/ts-lib-ui/form";
@@ -113,9 +113,11 @@ const device = make_fetch_parser(
   () => "/api/device",
   1000,
   { name: "sw", speed: "nw", temperature: "n", settings: { eco: "bw" } },
-  async (payload) => {
-    const response = await fetch("/api/device", { method: "PATCH", body: JSON.stringify(payload) });
-    if (!response.ok) throw new Error(await response.text());
+  {
+    write: async (payload) => {
+      const response = await fetch("/api/device", { method: "PATCH", body: JSON.stringify(payload) });
+      if (!response.ok) throw new Error(await response.text());
+    },
   },
 );
 
@@ -128,10 +130,10 @@ form.switch().bind({ value: device.settings.eco }); // writable, nested
 ### Fetching
 
 - **`request`** returns the URL, or `[url, init]` for `fetch` options. It's called for every fetch, so it can change.
-- **`options.fetch`** is used in place of the global `fetch`, for example to add authentication, retry, or answer from a fake server in tests. It's called as `(url, init)` and only `ok`, `status` and `text()` of what it returns are used, so the global `fetch` fits as is. `init.signal` aborts when polling stops. A fetch that ignores it runs to the end and its result is thrown away. `write` doesn't go through `options.fetch`, it sends however it wants.
+- **`fetch`** is used in place of the global `fetch`, for example to add authentication, retry, or answer from a fake server in tests. It's called as `(url, init)` and only `ok`, `status` and `text()` of what it returns are used, so the global `fetch` fits as is. `init.signal` aborts when polling stops. A fetch that ignores it runs to the end and its result is thrown away. `write` doesn't go through `fetch`, it sends however it wants.
 
   ```typescript
-  const device = make_fetch_parser(() => "/api/device", 1000, { temperature: "n" }, undefined, {
+  const device = make_fetch_parser(() => "/api/device", 1000, { temperature: "n" }, {
     fetch: (url, init) => fetch(url, { ...init, headers: { Authorization: `Bearer ${token()}` } }),
   });
   ```
@@ -159,7 +161,7 @@ form.switch().bind({ value: device.settings.eco }); // writable, nested
 
 ### Writing
 
-A type string ending in `w` makes the member writable. A schema with writable members needs the `write` function, `make_fetch_parser` throws without it.
+A type string ending in `w` makes the member writable. A schema with writable members needs the `write` option, `make_fetch_parser` throws without it.
 
 - **A write sends a partial object** with only the changed value at its path: `device.settings.eco.write(true)` calls `write({ settings: { eco: true } })`.
 - **If `write` throws or rejects,** the write's result is an error with the message, and form elements show it as a warning.
@@ -194,7 +196,7 @@ const plant = make_fetch_parser(
   () => "/api/plant",
   1000,
   { pumps: [0, { id: "n", name: "sw" }, { write: "all", key: "id" }] },
-  async (payload) => void (await fetch("/api/plant", { method: "PATCH", body: JSON.stringify(payload) })),
+  { write: async (payload) => void (await fetch("/api/plant", { method: "PATCH", body: JSON.stringify(payload) })) },
 );
 
 plant.pumps.write(state.a.write.push({ id: 5, name: "Pump 5" }));

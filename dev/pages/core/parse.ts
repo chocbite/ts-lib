@@ -286,14 +286,16 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
       zones: [2, { name: "s", setpoint: "nw" }],
       tags: [0, "sw", { encode: (tag: string, index: number) => ({ index, tag }) }],
     },
-    async (payload) => {
-      const response = await api_fetch("/api/device", {
-        method: "PATCH",
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) throw new Error(await response.text());
+    {
+      write: async (payload) => {
+        const response = await api_fetch("/api/device", {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) throw new Error(await response.text());
+      },
+      fetch: api_fetch,
     },
-    { fetch: api_fetch },
   );
 
   controls(sec, {
@@ -478,8 +480,7 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
     () => "/api/device",
     UPDATE_MS,
     { pumps: [0, { id: "n", name: "sw", running: "bw", speed: "nw" }, { key: "id" }] },
-    patch_device,
-    { fetch: api_fetch },
+    { write: patch_device, fetch: api_fetch },
   );
   parsed_keyed.pumps.sub(log_changes("pumps keyed"));
   pump_list("pumps: [0, { … }, { key: id }], write single", parsed_keyed.pumps);
@@ -494,8 +495,7 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
         { write: "all", key: "id" },
       ],
     },
-    patch_device,
-    { fetch: api_fetch },
+    { write: patch_device, fetch: api_fetch },
   );
   parsed_all.pumps.sub(log_changes("pumps keyed write all"));
   pump_list("pumps: [0, { … }, { write: all, key: id }]", parsed_all.pumps);

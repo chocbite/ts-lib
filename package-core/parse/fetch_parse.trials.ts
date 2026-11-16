@@ -41,9 +41,9 @@ const yo = make_fetch_parser(
       test: "?b",
     },
   },
-  async (a) => {
+  { write: async (a) => {
     console.warn(a);
-  },
+  } },
 );
 
 yo[FETCH_PARSE].then((v) => {
