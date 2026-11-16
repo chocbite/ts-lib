@@ -24,17 +24,23 @@ Bundling is fine, but unused icons must still be tree-shakeable by the consumer'
 
 ## Layout
 
-Each module is a folder `<folder>/<module>/` directly in the package folder, with an `index.ts` and its own `README.md`. A package folder holds only its modules, `package.json` and `README.md`.
+Each module is a folder `<folder>/<module>/` directly in the package folder, with an `index.ts` and its own `README.md`. A package folder holds only its modules, `package.json` and `README.md`, and in `package-ui` also `PATTERN.md`.
 Every module is published as a subpath export, e.g. `@chocbite/ts-lib/state` and `@chocbite/ts-lib-ui/theme`. There is no root export.
 
 - ts-lib: `colors common depot event math parse result state string`
 - ts-lib-ui: `base canvas context-menu document dom form icons keyboard list selection settings spinner state_ui svg theme`
 
+## Element pattern
+
+ts-lib-ui elements take their inputs with one pattern: factory functions without arguments, inputs declared as keys with `input_key`, and `set(options)` with fixed values or states. **Read [package-ui/PATTERN.md](package-ui/PATTERN.md) before writing a new element or reworking an existing one, and copy from its complete example [package-ui/pattern_example](package-ui/pattern_example/index.ts).** It is the pattern to use from now on, new elements must follow it. When the pattern changes, update both. The build puts PATTERN.md in the `AGENTS.md` of the published ts-lib-ui and the example source in its `SOURCE.md`, so agents in consumer projects find them too.
+
+Most existing elements still use the older styles: constructor options, setters and getters, or `opts`. Do not copy them into new code, and do not convert an element nobody asked to change.
+
 ## Imports
 
 - Same package: `import { x } from "#common"` (the `#*` pattern in the `imports` field of the package's `package.json`). No `../../` paths between modules.
 - ts-lib-ui to ts-lib: `import { x } from "@chocbite/ts-lib/common"`. The `development` export condition resolves this to source, so no build is needed while developing.
-- Adding a module: create `<folder>/<name>/index.ts`, nothing else. The `exports` and `imports` of the package are `./*` and `#*` patterns, and the tsdown config builds every folder with an `index.ts`. A folder without an `index.ts` is not a module.
+- Adding a module: create `<folder>/<name>/index.ts`, nothing else. The `exports` and `imports` of the package are `./*` and `#*` patterns, and the tsdown config builds every folder with an `index.ts`. A folder without an `index.ts` is not a module. The one exception is `package-ui/pattern_example`, listed in `NOT_BUILT` in `config/tsdown.config.ts`: it is typechecked, tested and used by its dev page, but never built or exported.
 
 ## Commands
 

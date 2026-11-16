@@ -1,7 +1,8 @@
 //Writes AGENTS.md and SOURCE.md into the dist folder of each package, so agents working in a consumer
 //project have the docs and source of the installed version in node_modules,
 //as two files instead of the whole source tree.
-//AGENTS.md: version, how to report problems, the package README and every module README.
+//AGENTS.md: version, how to report problems, the package README, the element pattern of the package if it has one,
+//and every module README.
 //SOURCE.md: all source files of the package, each under a header with its repo path.
 //Run by the build script, so the files can be inspected without releasing.
 //Usage, from the repo root: node config/write-dist-agent-docs.js <package folder>...
@@ -10,6 +11,14 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const SOURCE_EXTENSIONS = [".ts", ".scss"];
+
+//Module folders that are not built, the same as NOT_BUILT in config/tsdown.config.ts
+//Their README is not a module section, their source is still in SOURCE.md
+const NOT_BUILT = new Set(["pattern_example"]);
+
+//How elements of a package are written, PATTERN.md in the package folder with its example module
+const PATTERN = "PATTERN.md";
+const PATTERN_EXAMPLE = "pattern_example";
 
 //Never part of SOURCE.md
 const is_excluded = (path) =>
@@ -25,14 +34,17 @@ const OMITTED = {
     "exported from `@chocbite/ts-lib-ui/icons`. Search the `.d.mts` files of this package for the available names.",
 };
 
-const git = (command) => execSync(`git ${command}`, { encoding: "utf8" }).trim();
+const git = (command) =>
+  execSync(`git ${command}`, { encoding: "utf8" }).trim();
 
 //Build output and dependencies are never in a package folder, skipped in case they appear
 const SKIPPED_FOLDERS = new Set(["node_modules", "dist"]);
 
 const list_files = (folder) =>
   readdirSync(folder, { withFileTypes: true })
-    .filter((entry) => !(entry.isDirectory() && SKIPPED_FOLDERS.has(entry.name)))
+    .filter(
+      (entry) => !(entry.isDirectory() && SKIPPED_FOLDERS.has(entry.name)),
+    )
     .flatMap((entry) => {
       const path = `${folder}/${entry.name}`;
       return entry.isDirectory() ? list_files(path) : [path];
@@ -41,7 +53,9 @@ const list_files = (folder) =>
 
 //A fence longer than any backtick run in the content, so the content cannot close it
 const fence = (content) =>
-  "`".repeat(Math.max(3, ...(content.match(/`+/g) ?? []).map((run) => run.length + 1)));
+  "`".repeat(
+    Math.max(3, ...(content.match(/`+/g) ?? []).map((run) => run.length + 1)),
+  );
 
 const fenced = (language, content) => {
   const f = fence(content);
@@ -71,7 +85,9 @@ const commit = git("rev-parse --short HEAD");
 const dirty = git("status --porcelain") !== "";
 
 const folders = process.argv.slice(2);
-const packages = folders.map((folder) => read_json(join(folder, "package.json")));
+const packages = folders.map((folder) =>
+  read_json(join(folder, "package.json")),
+);
 const internal = new Set(packages.map((pkg) => pkg.name));
 
 for (const [i, folder] of folders.entries()) {
@@ -89,15 +105,42 @@ for (const [i, folder] of folders.entries()) {
     `commit ${commit}${dirty ? ", with uncommitted changes" : ""}.`;
 
   //AGENTS.md
-  const module_readmes = list_files(folder).filter((path) =>
-    /^[^/]+\/[^/]+\/README\.md$/.test(path),
+  const module_readmes = list_files(folder).filter(
+    (path) =>
+      /^[^/]+\/[^/]+\/README\.md$/.test(path) &&
+      !NOT_BUILT.has(path.split("/")[1]),
   );
+  const pattern = existsSync(join(folder, PATTERN))
+    ? [
+        "## Writing your own elements",
+        `Elements of this package, and elements you write on its \`Base\`, follow the pattern below. ` +
+          `Read it before writing an element. ` +
+          `It names files by their repo path, find them in \`SOURCE.md\` under \`## <path>\`. ` +
+          `The complete example it refers to is \`${folder}/${PATTERN_EXAMPLE}/\` in \`SOURCE.md\`, ` +
+          `it is not exported from the package, copy from it instead of importing it. ` +
+          `Paths under \`dev/\` are dev pages of the library repo and not part of the package.`,
+        demote(readFileSync(join(folder, PATTERN), "utf8").trim(), 2),
+        ...(existsSync(join(folder, PATTERN_EXAMPLE, "README.md"))
+          ? [
+              demote(
+                readFileSync(
+                  join(folder, PATTERN_EXAMPLE, "README.md"),
+                  "utf8",
+                ).trim(),
+                2,
+              ),
+            ]
+          : []),
+      ]
+    : [];
   const agents = [
     `# ${pkg.name}, notes for agents`,
     header,
     "Read the sections for the modules you use before using them. " +
       "The full source of this version is in `SOURCE.md` next to this file, every file under a `## <repo path>` heading, " +
-      "e.g. search it for `## " + folder + "/<module>/` to find a module.",
+      "e.g. search it for `## " +
+      folder +
+      "/<module>/` to find a module.",
     ...internal_deps.map(
       (dep) =>
         `This package builds on \`${dep}\`, its notes and source are in \`node_modules/${dep}/AGENTS.md\` and \`SOURCE.md\`.`,
@@ -113,6 +156,7 @@ for (const [i, folder] of folders.entries()) {
         "so the report is not lost when the conversation ends.",
     ].join("\n"),
     demote(readFileSync(join(folder, "README.md"), "utf8").trim(), 1),
+    ...pattern,
     ...module_readmes.map((path) => {
       const module = path.split("/")[1];
       return `## Module ${pkg.name}/${module}\n\n${demote(readFileSync(path, "utf8").trim(), 2)}`;

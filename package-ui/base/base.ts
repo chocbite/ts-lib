@@ -1,4 +1,4 @@
-import { some, type Option } from "@chocbite/ts-lib/result";
+import { ok, some, type Option } from "@chocbite/ts-lib/result";
 import {
   state,
   type State,
@@ -8,6 +8,7 @@ import {
   type StateSub,
 } from "@chocbite/ts-lib/state";
 import { AccessTypes } from "./access";
+import type { InputKey, InputResult, InputState, InputValue } from "./input";
 import {
   BaseIntersectObserver,
   type BaseIntersectObserverOptions,
@@ -34,6 +35,14 @@ const base_resize_observer = new ResizeObserver((e) => {
  *
  * Elements are only created in code, with new or a factory function, HTML is not supported,
  * constructors add children and attributes, which document.createElement and the HTML parser do not allow
+ *
+ * New elements, and elements being reworked, follow the element pattern in package-ui/PATTERN.md:
+ * The class is only exported as a type, a factory function without arguments creates it
+ * The constructor takes no arguments, it builds the children and sets the defaults
+ * The inputs are an object of keys made with input_key, the options type is InputOptions of it
+ * set takes the options, each a fixed value or a state (StateOrVal), and applies them with set_input
+ * so element_factory().set({ width: 100, label: label_state })
+ * A fixed value never changes, anything that changes must be a state
  *
  * All none abstracts classes must override the static method element_name to return the name of the element
  * Abstract classes should return @abstract@
@@ -86,11 +95,13 @@ export abstract class Base extends HTMLElement {
     //@ts-expect-error Change readonly, in same class
     this.is_connected = false;
     for (const [f, [s, v]] of this.#states) if (!v) s.unsub(f);
-    if (this.#attached_int_observer) this.#attached_int_observer.unobserve(this);
+    if (this.#attached_int_observer)
+      this.#attached_int_observer.unobserve(this);
     this.internal_set_visible(false);
   }
 
-  /**Sets any attribute on the base element, to either a fixed value or a state value */
+  /**Sets any attribute on the base element, to either a fixed value or a state value
+   * Older style, new elements take their inputs with set and set_input, see package-ui/PATTERN.md*/
   opts(opts: WithStateROA<DataProps<this>>): this {
     for (const key in opts) {
       const opt = opts[key] as this[typeof key] | StateROA<this[typeof key]>;
@@ -100,9 +111,42 @@ export abstract class Base extends HTMLElement {
     return this;
   }
 
-  /**Elements that can attach to a writable state can declare them in binds*/
-  bind(_opts: never): this {
+  /**Applies the given options, options that are not given are left unchanged
+   * Can be called any number of times, like when a list reuses an element for other data
+   * Elements override it with their own options type and call super.set with the options,
+   * each option is applied with set_input, so setting an option again replaces the state set before
+   * It runs after every constructor has finished, so overrides called from it can use all fields of the subclass*/
+  set(_options: object): this {
     return this;
+  }
+
+  /**Sets an input that is either a fixed value or a state, see set
+   * undefined leaves the input unchanged
+   * A fixed value is applied right away as an ok result, and detaches any state the key had
+   * A state replaces any state the key had, and is applied while the element is connected
+   * The key decides the type of the input, and the result apply gets:
+   * inputs that can not be errors give ok results, others results the element must handle
+   * @param key the key of the input, made with input_key*/
+  protected set_input<S>(
+    key: InputKey<S>,
+    input: NoInfer<S> | undefined,
+    apply: (value: InputResult<S>) => void,
+  ): void {
+    if (input === undefined) return;
+    if (state.is.state_of(input))
+      this.attach_state_to_symbol(key, input, apply as StateSub<any>);
+    else {
+      this.detach_state_from_symbol(key);
+      apply(ok(input as InputValue<S>) as InputResult<S>);
+    }
+  }
+
+  /**The state an input has now, undefined when it has a fixed value or was never set
+   * Typed by the key, so a writable input gives a writable state to write to,
+   * the element keeps no reference of its own to the state*/
+  protected input_state<S>(key: InputKey<S>): InputState<S> | undefined {
+    const func = this.#props.get(key);
+    return (func && this.#states.get(func)?.[0]) as InputState<S> | undefined;
   }
 
   /**Executes a function with the element as an argument and returns the element

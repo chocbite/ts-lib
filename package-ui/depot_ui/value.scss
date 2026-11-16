@@ -1,0 +1,13 @@
+depot-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  overflow-wrap: anywhere;
+  color: var(--list-colors-text-field);
+
+  &.error {
+    font-style: italic;
+    opacity: 0.6;
+  }
+}
