@@ -10,6 +10,7 @@ import {
   FETCH_PARSE,
   make_fetch_parser,
   type FetchArrayOptions,
+  type FetchFunction,
   type FetchSchema,
 } from "./fetch_parse";
 
@@ -111,6 +112,62 @@ describe("make_fetch_parser", () => {
     expect(first_result?.ok && first_result.value).toBe("Ada");
     user.name.unsub(update);
     vi.unstubAllGlobals();
+  });
+
+  it("fetches through a custom fetch function instead of the global fetch", async () => {
+    const global_fetch = vi.fn();
+    vi.stubGlobal("fetch", global_fetch);
+    const custom_fetch = vi.fn<FetchFunction>(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => '{"name":"Ada"}',
+    }));
+    const user = make_fetch_parser(
+      () => ["/user", { headers: { auth: "x" } }],
+      60_000,
+      { name: "s" },
+      undefined,
+      { fetch: custom_fetch },
+    );
+
+    const result = await user.name;
+
+    expect(result.ok && result.value).toBe("Ada");
+    expect(global_fetch).not.toHaveBeenCalled();
+    expect(custom_fetch).toHaveBeenCalledWith(
+      "/user",
+      expect.objectContaining({ headers: { auth: "x" } }),
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it("gives a custom fetch the signal that aborts when the last subscriber leaves", async () => {
+    let signal: AbortSignal | undefined;
+    const custom_fetch: FetchFunction = (_url, init) => {
+      signal = init.signal ?? undefined;
+      return new Promise(() => {});
+    };
+    const user = make_fetch_parser(() => "/user", 60_000, { name: "s" }, undefined, {
+      fetch: custom_fetch,
+    });
+    const update = () => {};
+
+    user.name.sub(update);
+    await vi.waitFor(() => expect(signal).toBeDefined());
+    expect(signal?.aborted).toBe(false);
+    user.name.unsub(update);
+
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("reports a failed http status from a custom fetch", async () => {
+    const user = make_fetch_parser(() => "/user", 1_000, { name: "s" }, undefined, {
+      fetch: async () => ({ ok: false, status: 404, text: async () => "" }),
+    });
+
+    const result = await user.name;
+
+    expect(!result.ok && result.error).toBe("Fetch failed: HTTP 404");
   });
 
   it("keeps schema keys separate from the root state API", () => {

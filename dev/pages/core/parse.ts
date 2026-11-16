@@ -1,6 +1,11 @@
 import form, { FormColors } from "@chocbite/ts-lib-ui/form";
 import list from "@chocbite/ts-lib-ui/list";
-import { FETCH_PARSE, make_fetch_parser, make_parser } from "@chocbite/ts-lib/parse";
+import {
+  FETCH_PARSE,
+  make_fetch_parser,
+  make_parser,
+  type FetchFunction,
+} from "@chocbite/ts-lib/parse";
 import { ok } from "@chocbite/ts-lib/result";
 import state, { type StateREA } from "@chocbite/ts-lib/state";
 import { box, controls, row, section } from "../../helpers";
@@ -260,12 +265,8 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
     return respond(200, JSON.stringify(device));
   };
 
-  //Only /api/ requests go to the fake server, everything else to the real fetch
-  const real_fetch = globalThis.fetch.bind(globalThis);
-  globalThis.fetch = (input, init) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    return url.startsWith("/api/") ? server(init) : real_fetch(input, init);
-  };
+  //The fake server is given to the parsers as their fetch, the global fetch is left alone
+  const api_fetch: FetchFunction = (_url, init) => server(init);
 
   const parsed = make_fetch_parser(
     () => "/api/device",
@@ -286,12 +287,13 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
       tags: [0, "sw", { encode: (tag: string, index: number) => ({ index, tag }) }],
     },
     async (payload) => {
-      const response = await fetch("/api/device", {
+      const response = await api_fetch("/api/device", {
         method: "PATCH",
         body: JSON.stringify(payload),
       });
       if (!response.ok) throw new Error(await response.text());
     },
+    { fetch: api_fetch },
   );
 
   controls(sec, {
@@ -465,7 +467,7 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
   pump_list("pumps: [0, { id: n, name: sw, running: bw, speed: nw }], no key, write single", parsed.pumps);
 
   const patch_device = async (payload: unknown) => {
-    const response = await fetch("/api/device", {
+    const response = await api_fetch("/api/device", {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
@@ -477,6 +479,7 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
     UPDATE_MS,
     { pumps: [0, { id: "n", name: "sw", running: "bw", speed: "nw" }, { key: "id" }] },
     patch_device,
+    { fetch: api_fetch },
   );
   parsed_keyed.pumps.sub(log_changes("pumps keyed"));
   pump_list("pumps: [0, { … }, { key: id }], write single", parsed_keyed.pumps);
@@ -492,6 +495,7 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
       ],
     },
     patch_device,
+    { fetch: api_fetch },
   );
   parsed_all.pumps.sub(log_changes("pumps keyed write all"));
   pump_list("pumps: [0, { … }, { write: all, key: id }]", parsed_all.pumps);

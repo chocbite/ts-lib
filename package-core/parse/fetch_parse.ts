@@ -221,6 +221,22 @@ export type FetchParsed<S extends FetchSchema> = FetchContainer<ResolveSchema<S>
 export type FetchRequest = string | readonly [string, RequestInit];
 export type FetchWrite = (payload: unknown) => PromiseLike<void>;
 
+/**Fetches a request, the global fetch fits. Only ok, status and text are used from the response.
+ * init holds the signal that aborts the fetch when polling stops*/
+export type FetchFunction = (
+  url: string,
+  init: RequestInit,
+) => PromiseLike<{
+  readonly ok: boolean;
+  readonly status: number;
+  text(): PromiseLike<string>;
+}>;
+
+export type FetchParserOptions = {
+  /**Used in place of the global fetch for reads*/
+  readonly fetch?: FetchFunction;
+};
+
 /**Path part of a keyed array item, the occurrence-th item whose key member equals value*/
 class ItemKey {
   constructor(
@@ -461,6 +477,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
   update_rate: number,
   schema: S,
   write?: FetchWrite,
+  options?: FetchParserOptions,
 ): FetchParsed<S> {
   if (has_writable(schema) && !write) {
     throw new Error(
@@ -471,6 +488,8 @@ export function make_fetch_parser<const S extends FetchSchema>(
   const parse = make_parser(
     strip_writable(schema) as RuntimeSchema & Record<string, never>,
   );
+  //Looked up per fetch when not given, so a global fetch replaced later is used
+  const fetch_with: FetchFunction = options?.fetch ?? ((url, init) => fetch(url, init));
   let timer: ReturnType<typeof setTimeout> | undefined;
   //Each subscription gets its own controller, ending it aborts its fetches and stops its polling
   let subscription: AbortController | undefined;
@@ -479,7 +498,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
   ): Promise<StateResult<unknown>> => {
     try {
       const [url, init] = request_parts(request());
-      const response = await fetch(url, { ...init, signal });
+      const response = await fetch_with(url, { ...init, signal });
       if (!response.ok) return err(`Fetch failed: HTTP ${response.status}`);
       return parse(await response.text());
     } catch (cause) {

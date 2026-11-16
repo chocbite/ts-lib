@@ -103,7 +103,7 @@ The error of a function spec is wrapped in the member path: `Failed to parse due
 
 ## Fetch parser
 
-`make_fetch_parser(request, update_rate, schema, write?)` turns a JSON endpoint into states. Each member of the schema becomes a state that follows that member, and members marked writable send changes back through `write`.
+`make_fetch_parser(request, update_rate, schema, write?, options?)` turns a JSON endpoint into states. Each member of the schema becomes a state that follows that member, and members marked writable send changes back through `write`.
 
 ```typescript
 import form from "@chocbite/ts-lib-ui/form";
@@ -128,6 +128,13 @@ form.switch().bind({ value: device.settings.eco }); // writable, nested
 ### Fetching
 
 - **`request`** returns the URL, or `[url, init]` for `fetch` options. It's called for every fetch, so it can change.
+- **`options.fetch`** is used in place of the global `fetch`, for example to add authentication, retry, or answer from a fake server in tests. It's called as `(url, init)` and only `ok`, `status` and `text()` of what it returns are used, so the global `fetch` fits as is. `init.signal` aborts when polling stops. A fetch that ignores it runs to the end and its result is thrown away. `write` doesn't go through `options.fetch`, it sends however it wants.
+
+  ```typescript
+  const device = make_fetch_parser(() => "/api/device", 1000, { temperature: "n" }, undefined, {
+    fetch: (url, init) => fetch(url, { ...init, headers: { Authorization: `Bearer ${token()}` } }),
+  });
+  ```
 - **Polling only runs while something is subscribed** to any of the states. The first subscription fetches at once, then the next fetch starts `update_rate` ms after the previous one finished. When the last subscriber is gone, polling stops and a fetch still running is ignored.
 - **Awaiting a state without subscribing fetches once.**
 - **The response body is parsed** with `make_parser` and the schema, without the `w` markers. A failed fetch, an HTTP error (`Fetch failed: HTTP 404`) or a parse error becomes the error of every state.
