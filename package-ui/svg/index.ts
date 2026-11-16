@@ -43,4 +43,8 @@ declare global {
   interface ChocbiteStateRegister {
     icon: SVGFunc;
   }
+  /**Types icons of nodes in the @chocbite/ts-lib depot as SVGFunc*/
+  interface ChocbiteDepotRegister {
+    icon: SVGFunc;
+  }
 }

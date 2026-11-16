@@ -91,14 +91,20 @@ describe("Base loop array changes", () => {
 
   it("adds items at the start", () => {
     const { loop, nodes } = loop_with([3, 4]);
-    loop.array = changes([1, 2, 3, 4], [{ type: "added", index: 0, items: [1, 2] }]);
+    loop.array = changes(
+      [1, 2, 3, 4],
+      [{ type: "added", index: 0, items: [1, 2] }],
+    );
     expect(texts(loop)).toEqual(["1", "2", "3", "4"]);
     expect(loop.childNodes[2]).toBe(nodes[0]);
   });
 
   it("adds items in the middle in order", () => {
     const { loop, nodes } = loop_with([1, 4]);
-    loop.array = changes([1, 2, 3, 4], [{ type: "added", index: 1, items: [2, 3] }]);
+    loop.array = changes(
+      [1, 2, 3, 4],
+      [{ type: "added", index: 1, items: [2, 3] }],
+    );
     expect(texts(loop)).toEqual(["1", "2", "3", "4"]);
     expect(loop.childNodes[0]).toBe(nodes[0]);
     expect(loop.childNodes[3]).toBe(nodes[1]);
@@ -106,14 +112,20 @@ describe("Base loop array changes", () => {
 
   it("adds items at the end", () => {
     const { loop } = loop_with([1]);
-    loop.array = changes([1, 2, 3], [{ type: "added", index: 1, items: [2, 3] }]);
+    loop.array = changes(
+      [1, 2, 3],
+      [{ type: "added", index: 1, items: [2, 3] }],
+    );
     expect(texts(loop)).toEqual(["1", "2", "3"]);
   });
 
   it("removes items from the middle and calls the destructor for each", () => {
     const destructor = vi.fn();
     const { loop, nodes } = loop_with([1, 2, 3, 4], { destructor });
-    loop.array = changes([1, 4], [{ type: "removed", index: 1, items: [2, 3] }]);
+    loop.array = changes(
+      [1, 4],
+      [{ type: "removed", index: 1, items: [2, 3] }],
+    );
     expect(texts(loop)).toEqual(["1", "4"]);
     expect_same(
       destructor.mock.calls.map(([node]) => node as Node),
@@ -130,7 +142,10 @@ describe("Base loop array changes", () => {
   it("changed without a change option replaces the nodes and destroys the old ones", () => {
     const destructor = vi.fn();
     const { loop, nodes } = loop_with([1, 2, 3], { destructor });
-    loop.array = changes([1, 8, 9], [{ type: "changed", index: 1, items: [8, 9] }]);
+    loop.array = changes(
+      [1, 8, 9],
+      [{ type: "changed", index: 1, items: [8, 9] }],
+    );
     expect(texts(loop)).toEqual(["1", "8", "9"]);
     expect(loop.childNodes[0]).toBe(nodes[0]);
     expect(loop.childNodes[1]).not.toBe(nodes[1]);
@@ -146,7 +161,10 @@ describe("Base loop array changes", () => {
       element.textContent = "c" + value;
     });
     const { loop, nodes } = loop_with([1, 2, 3], { destructor, change });
-    loop.array = changes([1, 8, 9], [{ type: "changed", index: 1, items: [8, 9] }]);
+    loop.array = changes(
+      [1, 8, 9],
+      [{ type: "changed", index: 1, items: [8, 9] }],
+    );
     expect(texts(loop)).toEqual(["1", "c8", "c9"]);
     expect_same([...loop.childNodes], nodes);
     expect_same(
@@ -159,18 +177,20 @@ describe("Base loop array changes", () => {
 
   it("moves an item forward", () => {
     const { loop, nodes } = loop_with([1, 2, 3, 4]);
-    loop.array = changes([2, 3, 1, 4], [
-      { type: "moved", from_index: 0, to_index: 2, items: [1] },
-    ]);
+    loop.array = changes(
+      [2, 3, 1, 4],
+      [{ type: "moved", from_index: 0, to_index: 2, items: [1] }],
+    );
     expect(texts(loop)).toEqual(["2", "3", "1", "4"]);
     expect(loop.childNodes[2]).toBe(nodes[0]);
   });
 
   it("moves several items backward", () => {
     const { loop, nodes } = loop_with([1, 2, 3, 4, 5]);
-    loop.array = changes([3, 4, 1, 2, 5], [
-      { type: "moved", from_index: 2, to_index: 0, items: [3, 4] },
-    ]);
+    loop.array = changes(
+      [3, 4, 1, 2, 5],
+      [{ type: "moved", from_index: 2, to_index: 0, items: [3, 4] }],
+    );
     expect(texts(loop)).toEqual(["3", "4", "1", "2", "5"]);
     expect(loop.childNodes[0]).toBe(nodes[2]);
     expect(loop.childNodes[1]).toBe(nodes[3]);
@@ -178,19 +198,23 @@ describe("Base loop array changes", () => {
 
   it("moves items to the end", () => {
     const { loop } = loop_with([1, 2, 3, 4]);
-    loop.array = changes([3, 4, 1, 2], [
-      { type: "moved", from_index: 0, to_index: 2, items: [1, 2] },
-    ]);
+    loop.array = changes(
+      [3, 4, 1, 2],
+      [{ type: "moved", from_index: 0, to_index: 2, items: [1, 2] }],
+    );
     expect(texts(loop)).toEqual(["3", "4", "1", "2"]);
   });
 
   it("applies several changes in order", () => {
     const { loop } = loop_with([1, 2, 3]);
-    loop.array = changes([0, 1, 3, 7], [
-      { type: "added", index: 0, items: [0] },
-      { type: "removed", index: 2, items: [2] },
-      { type: "added", index: 3, items: [7] },
-    ]);
+    loop.array = changes(
+      [0, 1, 3, 7],
+      [
+        { type: "added", index: 0, items: [0] },
+        { type: "removed", index: 2, items: [2] },
+        { type: "added", index: 3, items: [7] },
+      ],
+    );
     expect(texts(loop)).toEqual(["0", "1", "3", "7"]);
   });
 

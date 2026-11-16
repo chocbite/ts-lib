@@ -7,6 +7,11 @@ const at_root = (path: string) => resolve(import.meta.dirname, "..", path);
 /**Build output of a package, dist/<name without scope>, where it is published from */
 export const DIST = { core: "dist/ts-lib", ui: "dist/ts-lib-ui" };
 
+/**Module folders that are never built, so they are not exported from the published package
+ * pattern_example is the example of package-ui/PATTERN.md, its source is only shipped in SOURCE.md,
+ * see config/write-dist-agent-docs.js */
+export const NOT_BUILT = new Set(["pattern_example"]);
+
 /**Config shared by both packages, one entry per module folder, published as subpath exports */
 function package_config(
   folder: string,
@@ -21,7 +26,10 @@ function package_config(
     entry: Object.fromEntries(
       readdirSync(root, { withFileTypes: true })
         .filter(
-          (d) => d.isDirectory() && existsSync(`${root}/${d.name}/index.ts`),
+          (d) =>
+            d.isDirectory() &&
+            !NOT_BUILT.has(d.name) &&
+            existsSync(`${root}/${d.name}/index.ts`),
         )
         .map((d) => [`${d.name}/index`, `${d.name}/index.ts`]),
     ),

@@ -1,0 +1,497 @@
+import { ok } from "@chocbite/ts-lib/result";
+import state, { type StateROSW } from "@chocbite/ts-lib/state";
+import {
+  example_box,
+  example_editor,
+  example_group,
+  example_label_box,
+  example_override_box,
+  example_slider,
+  example_watcher,
+  type ExampleBox,
+  type ExampleGroup,
+} from "@chocbite/ts-lib-ui/pattern_example";
+import { Base, define_element } from "@chocbite/ts-lib-ui/base";
+import { box, controls, row, section } from "../../helpers";
+
+/**The box written in the older style, with setters and getters, only for the cost comparison, not part of the example*/
+class SetterBox extends Base {
+  static element_name() {
+    return "setterbox";
+  }
+  static element_name_space() {
+    return "devpage";
+  }
+
+  #width: number = 100;
+  #height: number = 32;
+  #label: string = "";
+  #text = this.appendChild(document.createElement("span"));
+
+  constructor() {
+    super();
+    this.style.cssText =
+      "display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;overflow:hidden;width:100px;height:32px;background:#2980b9;color:white;font:12px sans-serif";
+  }
+
+  set width(width: number) {
+    this.#width = width;
+    this.style.width = width + "px";
+  }
+  get width(): number {
+    return this.#width;
+  }
+
+  set height(height: number) {
+    this.#height = height;
+    this.style.height = height + "px";
+  }
+  get height(): number {
+    return this.#height;
+  }
+
+  set label(label: string) {
+    this.#label = label;
+    this.#text.textContent = label;
+  }
+  get label(): string {
+    return this.#label;
+  }
+}
+define_element(SetterBox);
+
+const output = (parent: HTMLElement): HTMLPreElement => {
+  const pre = parent.appendChild(document.createElement("pre"));
+  pre.style.margin = "0.5rem 0";
+  return pre;
+};
+
+//      __  __ _______   ________ _____
+//     |  \/  |_   _\ \ / /  ____|  __ \
+//     | \  / | | |  \ V /| |__  | |  | |
+//     | |\/| | | |   > < |  __| | |  | |
+//     | |  | |_| |_ / . \| |____| |__| |
+//     |_|  |_|_____/_/ \_\______|_____/
+{
+  const sec = section(
+    "Mixed inputs and errors",
+    "Fixed values and states use the same options. Buttons change the states, only boxes bound to them should react. On an error the width keeps its last value, the label shows the error and the color turns grey",
+  );
+  const width = state.from_w(120);
+  const label = state.from_w("state label");
+  const color = state.from_w("#8e44ad");
+  const boxes = row(sec);
+  box(boxes, "All fixed").appendChild(
+    example_box().set({ width: 120, height: 40, label: "fixed" }),
+  );
+  box(boxes, "Width state").appendChild(
+    example_box().set({ width, height: 40, label: "width state" }),
+  );
+  box(boxes, "Label state").appendChild(
+    example_box().set({ width: 120, height: 40, label }),
+  );
+  box(boxes, "Color state").appendChild(
+    example_box().set({ width: 120, height: 40, label: "color state", color }),
+  );
+  let count = 0;
+  let wide = false;
+  let purple = true;
+  controls(sec, {
+    "Width 120 / 200": () => width.set_ok((wide = !wide) ? 200 : 120),
+    "Change label": () => label.set_ok(`label ${++count}`),
+    "Purple / green": () =>
+      color.set_ok((purple = !purple) ? "#8e44ad" : "#27ae60"),
+    "Error all": () => {
+      width.set_err("no width");
+      label.set_err("no label");
+      color.set_err("no color");
+    },
+  });
+}
+
+//      _      _____ _   _ _  __
+//     | |    |_   _| \ | | |/ /
+//     | |      | | |  \| | ' /
+//     | |      | | | . ` |  <
+//     | |____ _| |_| |\  | . \
+//     |______|_____|_| \_|_|\_\
+{
+  const sec = section(
+    "Linked values",
+    "The main goal: both sliders and the box share one writable state, and the label is derived from it. Moving either slider should move everything",
+  );
+  const width = state.ok_w(150);
+  const label = state.p.ros(width, (value) => ok(`${value.value}px`));
+  const boxes = row(sec);
+  box(boxes, "Sliders").append(
+    example_slider().set({ value: width, min: 40, max: 300 }),
+    example_slider().set({ value: width, min: 40, max: 300 }),
+  );
+  box(boxes, "Fixed value, disabled").appendChild(
+    example_slider().set({ value: 150, min: 40, max: 300 }),
+  );
+  box(boxes, "Box", { width: "20rem" }).appendChild(
+    example_box().set({ width, height: 40, label }),
+  );
+}
+
+//       _____ _    _ ____   _____ _                _____ _____
+//      / ____| |  | |  _ \ / ____| |        /\    / ____/ ____|
+//     | (___ | |  | | |_) | |    | |       /  \  | (___| (___
+//      \___ \| |  | |  _ <| |    | |      / /\ \  \___ \\___ \
+//      ____) | |__| | |_) | |____| |____ / ____ \ ____) |___) |
+//     |_____/ \____/|____/ \_____|______/_/    \_\_____/_____/
+{
+  const sec = section(
+    "Subclasses",
+    "A subclass adds its inputs by overriding set. The override box reads a private field of the subclass from an overridden method, which works for both a fixed value and a state, as set runs after every constructor has finished",
+  );
+  const boxes = row(sec);
+  box(boxes, "Own input").appendChild(
+    example_label_box().set({
+      width: 140,
+      height: 40,
+      label: "label",
+      badge: "B",
+    }),
+  );
+  box(boxes, "Override, label is a state").appendChild(
+    example_override_box().set({
+      width: 140,
+      height: 40,
+      prefix: "prefix ",
+      label: state.ok("label"),
+    }),
+  );
+  box(boxes, "Override, label is fixed").appendChild(
+    example_override_box().set({
+      width: 140,
+      height: 40,
+      prefix: "prefix ",
+      label: "label",
+    }),
+  );
+}
+
+//      _   _ ______  _____ _______ ______ _____
+//     | \ | |  ____|/ ____|__   __|  ____|  __ \
+//     |  \| | |__  | (___    | |  | |__  | |  | |
+//     | . ` |  __|  \___ \   | |  |  __| | |  | |
+//     | |\  | |____ ____) |  | |  | |____| |__| |
+//     |_| \_|______|_____/   |_|  |______|_____/
+{
+  const sec = section(
+    "Nested subscriptions",
+    "The watcher follows the items of whichever group it is given, like a viewport following the widgets of its page. The subscriber counts should be 1 on the watched group, 1 more for a group on screen, and 0 on a list nobody uses",
+  );
+  const make = (name: string, color: string) => {
+    const items = state.ok_w<ExampleBox[]>([]);
+    const add = () =>
+      items.set_ok([
+        ...items.ok(),
+        example_box().set({
+          width: 48,
+          height: 32,
+          label: String(items.ok().length),
+          color: state.ok(color),
+        }),
+      ]);
+    add();
+    return { name, items, group: example_group().set({ items }), add };
+  };
+  const a = make("A", "#2980b9");
+  const b = make("B", "#c0392b");
+  const current = state.ok_w<ExampleGroup | null>(a.group);
+  const watcher = example_watcher().set({ group: current });
+
+  const boxes = row(sec);
+  box(boxes, "Group A", { width: "16rem", minHeight: "2rem" }).appendChild(
+    a.group,
+  );
+  box(boxes, "Group B", { width: "16rem", minHeight: "2rem" }).appendChild(
+    b.group,
+  );
+  const fixed = example_group().set({
+    items: [example_box().set({ width: 48, height: 32, label: "F" })],
+  });
+  box(boxes, "Group F, fixed list", {
+    width: "8rem",
+    minHeight: "2rem",
+  }).appendChild(fixed);
+  const watcher_box = box(boxes, "Watcher", {
+    width: "10rem",
+    minHeight: "2rem",
+  });
+  watcher_box.appendChild(watcher);
+
+  const status = output(sec);
+  const update = () => {
+    status.textContent =
+      `items A subscribers ${a.items.amount()}, items B subscribers ${b.items.amount()}, ` +
+      `group state subscribers ${current.amount()}, watcher connected ${watcher.isConnected}`;
+  };
+  const then = (action: () => void) => () => {
+    action();
+    update();
+  };
+  controls(sec, {
+    "Add to A": then(a.add),
+    "Add to B": then(b.add),
+    "Watch A": then(() => current.set_ok(a.group)),
+    "Watch B": then(() => current.set_ok(b.group)),
+    "Watch F": then(() => current.set_ok(fixed)),
+    "Watch nothing": then(() => current.set_ok(null)),
+    "Detach / attach watcher": then(() => {
+      if (watcher.isConnected) watcher.remove();
+      else watcher_box.appendChild(watcher);
+    }),
+  });
+  update();
+}
+
+//Writing through input_state
+{
+  const sec = section(
+    "Writing to the input state",
+    "The slider keeps no reference to its value state, its input handler writes to whatever state the value key has now through input_state. Switch the slider between the A and B states and drag it: only the box of the state it has moves. A fixed value disables it, as nothing can be written",
+  );
+  const a = state.ok_w(60);
+  const b = state.ok_w(140);
+  const boxes = row(sec);
+  box(boxes, "State A", { width: "14rem" }).appendChild(
+    example_box().set({ width: a, label: "A", color: "#2980b9" }),
+  );
+  box(boxes, "State B", { width: "14rem" }).appendChild(
+    example_box().set({ width: b, label: "B", color: "#c0392b" }),
+  );
+  const slider = example_slider().set({ min: 20, max: 200, value: a });
+  box(boxes, "Slider", { width: "14rem" }).appendChild(slider);
+  const label = output(sec);
+  label.textContent = "slider writes to A";
+  controls(sec, {
+    "Slider on A": () => {
+      slider.set({ value: a });
+      label.textContent = "slider writes to A";
+    },
+    "Slider on B": () => {
+      slider.set({ value: b });
+      label.textContent = "slider writes to B";
+    },
+    "Slider fixed 100": () => {
+      slider.set({ value: 100 });
+      label.textContent = "slider has a fixed value, disabled";
+    },
+  });
+}
+
+//      ______ _____ _____ _______ ____  _____
+//     |  ____|  __ \_   _|__   __/ __ \|  __ \
+//     | |__  | |  | || |    | | | |  | | |__) |
+//     |  __| | |  | || |    | | | |  | |  _  /
+//     | |____| |__| || |_   | | | |__| | | \ \
+//     |______|_____/_____|  |_|  \____/|_|  \_\
+{
+  const sec = section(
+    "Editor",
+    "The editor passes its scale on to a view and a slider unchanged, and uses as_state to derive the label and to hand the scale out. A fixed scale disables the slider. The outside readout subscribes to the scale the editor hands out",
+  );
+  const shared = state.ok_w(1);
+  const boxes = row(sec);
+  for (const [name, scale] of [
+    ["Fixed 1.5", 1.5],
+    ["State", shared],
+    ["Same state", shared],
+  ] as const) {
+    const editor = example_editor().set({ scale });
+    const readout = example_box().set({
+      width: 160,
+      height: 24,
+      color: "#16a085",
+      label: state.p.ros(editor.scale, (v) => ok(`outside ${v.value}`)),
+    });
+    box(boxes, name).append(editor, readout);
+  }
+  controls(sec, {
+    "Reset shared to 1": () => shared.set_ok(1),
+  });
+}
+
+//      _____  ______ _    _  _____ ______ _____
+//     |  __ \|  ____| |  | |/ ____|  ____|  __ \
+//     | |__) | |__  | |  | | (___ | |__  | |  | |
+//     |  _  /|  __| | |  | |\___ \|  __| | |  | |
+//     | | \ \| |____| |__| |____) | |____| |__| |
+//     |_|  \_\______|\____/|_____/|______|_____/
+{
+  const ROWS = 4;
+  const sec = section(
+    "Reused rows",
+    `${ROWS} boxes are rebound to a window of 20 data states, like a list reusing its rows when scrolling. Every other entry is a fixed value. Only the ${ROWS} shown states should have a subscriber, the "Change all" button proves the hidden ones are released`,
+  );
+  const colors = ["#2980b9", "#27ae60", "#8e44ad", "#c0392b", "#d35400"];
+  const data: {
+    label: string | StateROSW<string>;
+    color: string | StateROSW<string>;
+  }[] = Array.from({ length: 20 }, (_, i) =>
+    i % 2
+      ? { label: `fixed ${i}`, color: colors[i % 5] }
+      : { label: state.ok_w(`state ${i}`), color: state.ok_w(colors[i % 5]) },
+  );
+  const rows = Array.from({ length: ROWS }, () =>
+    example_box().set({ width: 120, height: 32 }),
+  );
+  const boxes = row(sec);
+  for (const r of rows) boxes.appendChild(r);
+  const status = output(sec);
+  let offset = 0;
+  let changes = 0;
+  const show = () => {
+    rows.forEach((r, i) => r.set(data[(offset + i) % data.length]));
+    const subscribed = data
+      .map((d, i) =>
+        typeof d.label === "string" || d.label.amount() === 0 ? "" : i,
+      )
+      .filter((i) => i !== "");
+    status.textContent = `showing ${offset} to ${offset + ROWS - 1}, data with subscribers: ${subscribed.join(", ")}`;
+  };
+  controls(sec, {
+    "Scroll by 1": () => {
+      offset = (offset + 1) % data.length;
+      show();
+    },
+    "Scroll by 3": () => {
+      offset = (offset + 3) % data.length;
+      show();
+    },
+    "Change all states": () => {
+      changes++;
+      data.forEach((d, i) => {
+        if (typeof d.label !== "string")
+          void d.label.write(`state ${i} #${changes}`);
+      });
+      show();
+    },
+  });
+  show();
+}
+
+//      _______ _____ __  __ _____ _   _  _____
+//     |__   __|_   _|  \/  |_   _| \ | |/ ____|
+//        | |    | | | \  / | | | |  \| | |  __
+//        | |    | | | |\/| | | | | . ` | | |_ |
+//        | |   _| |_| |  | |_| |_| |\  | |__| |
+//        |_|  |_____|_|  |_|_____|_| \_|\_____|
+{
+  const sec = section(
+    "When values arrive",
+    "Fixed values are applied by the factory, states only after the element is connected, and an async state later still. Does anything feel wrong because of this",
+  );
+  const status = output(sec);
+  const fixed = example_box().set({ width: 120, height: 32, label: "fixed" });
+  const bound = example_box().set({
+    width: state.ok(120),
+    height: 32,
+    label: "state",
+  });
+  const before = `before connect: fixed width "${fixed.style.width}", state width "${bound.style.width}"`;
+  const boxes = row(sec);
+  box(boxes, "Fixed").appendChild(fixed);
+  box(boxes, "State").appendChild(bound);
+  status.textContent = `${before}\nafter connect: fixed width "${fixed.style.width}", state width "${bound.style.width}"`;
+  const delayed = box(boxes, "Async state", { minWidth: "8rem" });
+  controls(sec, {
+    "Add box with a width arriving after 1 second": () => {
+      delayed.appendChild(
+        example_box().set({
+          width: state.roa(async () => {
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            return ok(120);
+          }),
+          height: 32,
+          label: "async",
+        }),
+      );
+    },
+  });
+}
+
+//       _____ ____  _____  _______
+//      / ____/ __ \|  __ \|__   __|
+//     | |   | |  | | |__) |  | |
+//     | |   | |  | |  ___/   | |
+//     | |___| |__| | |      | |
+//      \_____\____/|_|      |_|
+{
+  const AMOUNT = 5000;
+  const RUNS = 7;
+  const sec = section(
+    "Cost",
+    `Creates, connects and removes ${AMOUNT} boxes with 3 inputs each, the variants take turns for ${RUNS} runs and the median is shown in milliseconds. Connect does not include layout`,
+  );
+  const variants: [string, (i: number) => HTMLElement][] = [
+    [
+      "Fixed values",
+      (i) =>
+        example_box().set({
+          width: 40 + (i % 8),
+          height: 24,
+          label: String(i),
+        }),
+    ],
+    [
+      "States",
+      (i) =>
+        example_box().set({
+          width: state.ok(40 + (i % 8)),
+          height: state.ok(24),
+          label: state.ok(String(i)),
+        }),
+    ],
+    [
+      "Setters + opts",
+      (i) =>
+        new SetterBox().opts({
+          width: 40 + (i % 8),
+          height: 24,
+          label: String(i),
+        }),
+    ],
+  ];
+  const median = (values: number[]) =>
+    [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
+  const status = output(sec);
+  status.textContent = "Not run yet";
+  const host = box(sec, "Host", { height: "6rem", overflow: "hidden" });
+  controls(sec, {
+    "Run comparison": () => {
+      const times = variants.map(() => ({
+        create: [] as number[],
+        connect: [] as number[],
+        remove: [] as number[],
+      }));
+      for (let run = 0; run < RUNS; run++) {
+        variants.forEach(([, make], v) => {
+          const start = performance.now();
+          const elements: HTMLElement[] = [];
+          for (let i = 0; i < AMOUNT; i++) elements.push(make(i));
+          const created = performance.now();
+          host.append(...elements);
+          const connected = performance.now();
+          host.replaceChildren();
+          const removed = performance.now();
+          times[v].create.push(created - start);
+          times[v].connect.push(connected - created);
+          times[v].remove.push(removed - connected);
+        });
+      }
+      status.textContent = variants
+        .map(
+          ([name], v) =>
+            `${name.padEnd(16)} create ${median(times[v].create).toFixed(1).padStart(7)}   ` +
+            `connect ${median(times[v].connect).toFixed(1).padStart(7)}   ` +
+            `remove ${median(times[v].remove).toFixed(1).padStart(7)}`,
+        )
+        .join("\n");
+    },
+  });
+}

@@ -1,9 +1,16 @@
-import { none, some } from "@chocbite/ts-lib/result";
-import st from "@chocbite/ts-lib/state";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { none, some, type ResultOk } from "@chocbite/ts-lib/result";
+import st, {
+  type StateOrVal,
+  type StateOrValROS,
+  type StateOrValROSW,
+  type StateResult,
+  type StateROSW,
+} from "@chocbite/ts-lib/state";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { ACCESSTYPESINFO, AccessTypes } from "./access";
 import { Base } from "./base";
 import { define_element } from "./define_element";
+import { input_key, type InputOf, type InputOptions } from "./input";
 import "./index.scss";
 import { BaseIntersectObserver } from "./intersect_observer";
 
@@ -104,7 +111,10 @@ describe("Base intersect observer", () => {
 
   it("defers when visible and hidden deferrals are equal", async () => {
     const { element } = make_element(
-      new BaseIntersectObserver({ deffered_visible: 300, deffered_hidden: 300 }),
+      new BaseIntersectObserver({
+        deffered_visible: 300,
+        deffered_hidden: 300,
+      }),
     );
     document.body.appendChild(element);
     await wait(100);
@@ -490,12 +500,12 @@ describe("Base opts", () => {
     expect(element.value).toBe(7);
   });
 
-  it("bind returns the element and scope runs the function with it", () => {
+  it("set returns the element and scope runs the function with it", () => {
     const element = new ProbeElement();
     const func = vi.fn();
     expect(element.scope(func)).toBe(element);
     expect(func).toHaveBeenCalledWith(element);
-    expect(element.bind(undefined as never)).toBe(element);
+    expect(element.set({})).toBe(element);
   });
 });
 
@@ -825,5 +835,234 @@ describe("Base resize observer", () => {
     await frame();
     await frame();
     expect(element.resize_calls.length).toBe(calls);
+  });
+});
+
+//      ____ _____ _   _ _____
+//     |  _ \_   _| \ | |  __ \
+//     | |_) || | |  \| | |  | |
+//     |  _ < | | | . ` | |  | |
+//     | |_) || |_| |\  | |__| |
+//     |____/_____|_| \_|_____/
+const SET_PROBE = {
+  /**Width in px, keeps the last good value on errors*/
+  width: input_key<StateOrVal<number>>(),
+  label: input_key<StateOrValROS<string>>(),
+};
+type SetProbeOptions = InputOptions<typeof SET_PROBE>;
+
+/**Element using set, width keeps its last value on errors*/
+class SetProbe extends Base {
+  static element_name() {
+    return "setprobe";
+  }
+  static element_name_space() {
+    return "basetest";
+  }
+  constructor() {
+    super();
+    this.style.width = "1px";
+    this.textContent = "default";
+  }
+  set(options: SetProbeOptions): this {
+    this.set_input(SET_PROBE.width, options.width, (width) => {
+      if (width.ok) this.style.width = width.value + "px";
+    });
+    this.set_input(SET_PROBE.label, options.label, (label) => {
+      this.textContent = this.format(label.value);
+    });
+    return this;
+  }
+  protected format(label: string): string {
+    return label;
+  }
+}
+define_element(SetProbe);
+
+const SET_PREFIX = {
+  prefix: input_key<string>(),
+};
+type SetPrefixOptions = SetProbeOptions & InputOptions<typeof SET_PREFIX>;
+
+/**Subclass whose override reads its own private field*/
+class SetPrefix extends SetProbe {
+  static element_name() {
+    return "setprefix";
+  }
+  #prefix = "";
+  set(options: SetPrefixOptions): this {
+    this.set_input(SET_PREFIX.prefix, options.prefix, (prefix) => {
+      this.#prefix = prefix.value;
+    });
+    return super.set(options);
+  }
+  protected format(label: string): string {
+    return this.#prefix + label;
+  }
+}
+define_element(SetPrefix);
+
+describe("Base set", () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+  const attach = <T extends HTMLElement>(element: T): T =>
+    document.body.appendChild(element);
+
+  it("applies fixed values right away", () => {
+    const element = new SetProbe().set({ width: 5, label: "a" });
+    expect(element.style.width).toBe("5px");
+    expect(element.textContent).toBe("a");
+  });
+
+  it("applies states while connected and follows them", () => {
+    const width = st.ok_w(5);
+    const element = new SetProbe().set({ width });
+    expect(element.style.width).toBe("1px");
+    attach(element);
+    expect(element.style.width).toBe("5px");
+    width.set_ok(6);
+    expect(element.style.width).toBe("6px");
+    element.remove();
+    expect(width.amount()).toBe(0);
+  });
+
+  it("leaves options that are not given unchanged", () => {
+    const element = new SetProbe().set({ width: 5, label: "a" });
+    element.set({ label: "b" });
+    expect(element.style.width).toBe("5px");
+    expect(element.textContent).toBe("b");
+    element.set({});
+    expect(element.textContent).toBe("b");
+  });
+
+  it("setting a state again replaces the previous state", () => {
+    const first = st.ok_w(5);
+    const second = st.ok_w(6);
+    const element = attach(new SetProbe().set({ width: first }));
+    element.set({ width: second });
+    expect(first.amount()).toBe(0);
+    expect(second.amount()).toBe(1);
+    first.set_ok(7);
+    expect(element.style.width).toBe("6px");
+  });
+
+  it("setting a fixed value detaches the previous state, also after reconnecting", () => {
+    const width = st.ok_w(5);
+    const element = attach(new SetProbe().set({ width }));
+    element.set({ width: 9 });
+    expect(width.amount()).toBe(0);
+    element.remove();
+    attach(element);
+    expect(width.amount()).toBe(0);
+    expect(element.style.width).toBe("9px");
+  });
+
+  it("a set again while disconnected subscribes only the new state on connect", () => {
+    const first = st.ok_w(5);
+    const second = st.ok_w(6);
+    const element = attach(new SetProbe().set({ width: first }));
+    element.remove();
+    element.set({ width: second });
+    attach(element);
+    expect(first.amount()).toBe(0);
+    expect(second.amount()).toBe(1);
+    expect(element.style.width).toBe("6px");
+  });
+
+  it("a reused element follows only the state it was bound to last", () => {
+    const states = [st.ok_w(1), st.ok_w(2), st.ok_w(3)];
+    const element = attach(new SetProbe());
+    for (const width of states) element.set({ width });
+    expect(states.map((s) => s.amount())).toEqual([0, 0, 1]);
+  });
+
+  it("the error is up to the element", () => {
+    const width = st.from_w(5);
+    const element = attach(new SetProbe().set({ width }));
+    width.set_err("gone");
+    expect(element.style.width).toBe("5px");
+  });
+
+  it("an override can use fields of the subclass, with a fixed value or a state", () => {
+    expect(new SetPrefix().set({ prefix: "p", label: "a" }).textContent).toBe(
+      "pa",
+    );
+    const element = attach(
+      new SetPrefix().set({ prefix: "p", label: st.ok("b") }),
+    );
+    expect(element.textContent).toBe("pb");
+  });
+
+  it("types inputs and results by the key", () => {
+    const KEYS = {
+      plain: input_key<number>(),
+      ok_only: input_key<StateOrValROS<number>>(),
+      writable: input_key<StateOrValROSW<number>>(),
+      errorable: input_key<StateOrVal<number>>(),
+    };
+    class TypeProbe extends Base {
+      static element_name() {
+        return "settypeprobe";
+      }
+      static element_name_space() {
+        return "basetest";
+      }
+      set(options: InputOptions<typeof KEYS>): this {
+        this.set_input(KEYS.plain, options.plain, (value) => {
+          expectTypeOf(value).toEqualTypeOf<ResultOk<number>>();
+        });
+        this.set_input(KEYS.ok_only, options.ok_only, (value) => {
+          expectTypeOf(value).toEqualTypeOf<ResultOk<number>>();
+        });
+        this.set_input(KEYS.writable, options.writable, (value) => {
+          expectTypeOf(value).toEqualTypeOf<ResultOk<number>>();
+        });
+        this.set_input(KEYS.errorable, options.errorable, (value) => {
+          expectTypeOf(value).toEqualTypeOf<StateResult<number>>();
+        });
+        return this;
+      }
+      /**Only compiled, checks what the keys reject and what input_state gives*/
+      key_types(): void {
+        // @ts-expect-error a string input for a number key
+        this.set_input(KEYS.ok_only, "a", () => {});
+        // @ts-expect-error a state that can be an error for an ok only key
+        this.set_input(KEYS.ok_only, st.err<number>("e"), () => {});
+        // @ts-expect-error a read only state for a writable key
+        this.set_input(KEYS.writable, st.ok(1), () => {});
+        // @ts-expect-error a plain symbol is not a key
+        this.set_input(Symbol(), 1, () => {});
+        expectTypeOf(this.input_state(KEYS.writable)).toEqualTypeOf<
+          StateROSW<number> | undefined
+        >();
+        expectTypeOf(this.input_state(KEYS.plain)).toEqualTypeOf<undefined>();
+      }
+      writable_state() {
+        return this.input_state(KEYS.writable);
+      }
+    }
+    expectTypeOf<InputOptions<typeof KEYS>>().toEqualTypeOf<{
+      plain?: number;
+      ok_only?: StateOrValROS<number>;
+      writable?: StateOrValROSW<number>;
+      errorable?: StateOrVal<number>;
+    }>();
+    expectTypeOf<InputOf<typeof KEYS.writable>>().toEqualTypeOf<
+      StateOrValROSW<number>
+    >();
+    define_element(TypeProbe);
+    expect(
+      new TypeProbe().set({ ok_only: 1, writable: st.ok_w(2), errorable: 3 }),
+    ).toBeInstanceOf(TypeProbe);
+
+    //input_state gives the state the input has now, also while not connected
+    const probe = new TypeProbe();
+    expect(probe.writable_state()).toBeUndefined();
+    const writable = st.ok_w(2);
+    probe.set({ writable });
+    expect(probe.writable_state()).toBe(writable);
+    probe.set({ writable: 3 });
+    expect(probe.writable_state()).toBeUndefined();
   });
 });

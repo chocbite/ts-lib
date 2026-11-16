@@ -19,46 +19,43 @@ export class BaseIntersectObserver extends IntersectionObserver {
   #deffered_hidden_queue: Map<Base, number> = new Map();
 
   constructor(options: BaseIntersectObserverOptions) {
-    super(
-      (e) => {
-        if (
-          this.#deffered_hidden_time === 0 &&
-          this.#deffered_visible_time === 0
-        ) {
-          for (let i = 0; i < e.length; i++) {
-            //@ts-expect-error Call of private method, is private to prevent external usage
-            (<Base>e[i].target).internal_set_visible(e[i].isIntersecting);
-          }
-          return;
-        }
-        const now = performance.now();
+    super((e) => {
+      if (
+        this.#deffered_hidden_time === 0 &&
+        this.#deffered_visible_time === 0
+      ) {
         for (let i = 0; i < e.length; i++) {
-          const target = e[i].target as Base;
-          if (e[i].isIntersecting) {
-            this.#deffered_visible_queue.add(target);
-            this.#deffered_hidden_queue.delete(target);
-          } else {
-            this.#deffered_hidden_queue.delete(target);
-            this.#deffered_hidden_queue.set(
-              target,
-              now + this.#deffered_hidden_time,
-            );
-            this.#deffered_visible_queue.delete(target);
-          }
+          //@ts-expect-error Call of private method, is private to prevent external usage
+          (<Base>e[i].target).internal_set_visible(e[i].isIntersecting);
         }
-        if (!this.#deffered_visible_timeout && this.#deffered_visible_queue.size)
-          this.#deffered_visible_timeout = window.setTimeout(() => {
-            for (const element of this.#deffered_visible_queue)
-              //@ts-expect-error Call of private method, is private to prevent external usage
-              element.internal_set_visible(true);
-            this.#deffered_visible_queue.clear();
-            this.#deffered_visible_timeout = null;
-          }, this.#deffered_visible_time);
-        if (!this.#deffered_hidden_timeout && this.#deffered_hidden_queue.size)
-          this.#hide_after(this.#deffered_hidden_time);
-      },
-      options,
-    );
+        return;
+      }
+      const now = performance.now();
+      for (let i = 0; i < e.length; i++) {
+        const target = e[i].target as Base;
+        if (e[i].isIntersecting) {
+          this.#deffered_visible_queue.add(target);
+          this.#deffered_hidden_queue.delete(target);
+        } else {
+          this.#deffered_hidden_queue.delete(target);
+          this.#deffered_hidden_queue.set(
+            target,
+            now + this.#deffered_hidden_time,
+          );
+          this.#deffered_visible_queue.delete(target);
+        }
+      }
+      if (!this.#deffered_visible_timeout && this.#deffered_visible_queue.size)
+        this.#deffered_visible_timeout = window.setTimeout(() => {
+          for (const element of this.#deffered_visible_queue)
+            //@ts-expect-error Call of private method, is private to prevent external usage
+            element.internal_set_visible(true);
+          this.#deffered_visible_queue.clear();
+          this.#deffered_visible_timeout = null;
+        }, this.#deffered_visible_time);
+      if (!this.#deffered_hidden_timeout && this.#deffered_hidden_queue.size)
+        this.#hide_after(this.#deffered_hidden_time);
+    }, options);
     this.#deffered_visible_time = options.deffered_visible ?? 250;
     this.#deffered_hidden_time = options.deffered_hidden ?? 250;
   }

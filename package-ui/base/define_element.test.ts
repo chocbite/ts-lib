@@ -28,14 +28,12 @@ describe("define_element", () => {
       }
     }
     //Firefox wording, Chromium wording is different
-    const define = vi
-      .spyOn(customElements, "define")
-      .mockImplementation(() => {
-        throw new DOMException(
-          "CustomElementRegistry.define: 'definetest-twice' has already been defined as a custom element",
-          "NotSupportedError",
-        );
-      });
+    const define = vi.spyOn(customElements, "define").mockImplementation(() => {
+      throw new DOMException(
+        "CustomElementRegistry.define: 'definetest-twice' has already been defined as a custom element",
+        "NotSupportedError",
+      );
+    });
     try {
       expect(() => define_element(Second)).toThrow(/already/);
     } finally {
