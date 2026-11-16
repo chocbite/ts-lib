@@ -7,7 +7,7 @@ import {
   type FetchFunction,
   type FetchWrite,
 } from "@chocbite/ts-lib/parse";
-import { err, ok } from "@chocbite/ts-lib/result";
+import { err, ok, type Result } from "@chocbite/ts-lib/result";
 import state, { type StateREA } from "@chocbite/ts-lib/state";
 import { box, controls, row, section } from "../../helpers";
 
@@ -268,18 +268,24 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
 
   //The fake server is given to the parsers as their fetch, the global fetch is left alone.
   //It rejects like fetch when offline, that is an expected failure so it becomes an error
-  const api_fetch: FetchFunction = (_url, init) =>
-    server(init).then(
-      (response) => ok(response),
-      (cause: unknown) =>
-        err(`Fetch failed: ${cause instanceof Error ? cause.message : String(cause)}`),
-    );
+  const call_server = async (init?: RequestInit): Promise<Result<Response, string>> => {
+    try {
+      return ok(await server(init));
+    } catch (cause) {
+      return err(`Fetch failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+    }
+  };
 
+  const api_fetch: FetchFunction = async (_url, init) => {
+    const response = await call_server(init);
+    if (response.err) return response;
+    if (!response.value.ok) return err(`Fetch failed: HTTP ${response.value.status}`);
+    return ok(await response.value.text());
+  };
+
+  //The server explains a rejected write in the body, it is shown as the write error
   const patch_device: FetchWrite = async (payload) => {
-    const response = await api_fetch("/api/device", {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    });
+    const response = await call_server({ method: "PATCH", body: JSON.stringify(payload) });
     if (response.err) return response;
     if (!response.value.ok) return err(await response.value.text());
     return ok(undefined);

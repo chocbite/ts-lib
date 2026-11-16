@@ -108,7 +108,7 @@ The error of a function spec is wrapped in the member path: `Failed to parse due
 ```typescript
 import form from "@chocbite/ts-lib-ui/form";
 import { fetch_result, make_fetch_parser } from "@chocbite/ts-lib/parse";
-import { err, ok } from "@chocbite/ts-lib/result";
+import { ok } from "@chocbite/ts-lib/result";
 
 const device = make_fetch_parser(
   () => "/api/device",
@@ -116,9 +116,8 @@ const device = make_fetch_parser(
   { name: "sw", speed: "nw", temperature: "n", settings: { eco: "bw" } },
   {
     write: async (payload) => {
-      const response = await fetch_result("/api/device", { method: "PATCH", body: JSON.stringify(payload) });
-      if (response.err) return response;
-      return response.value.ok ? ok(undefined) : err(`Write failed: HTTP ${response.value.status}`);
+      const sent = await fetch_result("/api/device", { method: "PATCH", body: JSON.stringify(payload) });
+      return sent.err ? sent : ok(undefined);
     },
   },
 );
@@ -132,7 +131,11 @@ form.switch().bind({ value: device.settings.eco }); // writable, nested
 ### Fetching
 
 - **`request`** returns the URL, or `[url, init]` for `fetch` options. It's called for every fetch, so it can change.
-- **`fetch`** is the function that sends the request, `(url, init) => PromiseLike<Result<Response, string>>`. The default is `fetch_result`, the global `fetch` with a rejection turned into the error `Fetch failed: <message>`. A custom one can add authentication, retry, a timeout, or answer from a fake server in tests. `init.signal` aborts when polling stops. A fetch that ignores it runs to the end and its result is thrown away. `write` doesn't go through `fetch`, it sends however it wants.
+- **`fetch`** sends the request and gives the body text, `(url, init) => PromiseLike<Result<string, string>>`. The default is `fetch_result`, which uses the global `fetch` and gives these errors:
+  - `Fetch failed: HTTP 404` for a status that isn't ok.
+  - `Fetch failed: <message>` when the request or the body fails to load.
+
+  A custom one can add authentication, retry, a timeout, or answer from a fake server in tests, usually by calling `fetch_result` with changed arguments. `init.signal` aborts when polling stops. A fetch that ignores it runs to the end and its result is thrown away. `write` doesn't go through `fetch`, it sends however it wants, and can use `fetch_result` too.
 
   ```typescript
   const device = make_fetch_parser(() => "/api/device", 1000, { temperature: "n" }, {
@@ -141,13 +144,19 @@ form.switch().bind({ value: device.settings.eco }); // writable, nested
   ```
 - **Polling only runs while something is subscribed** to any of the states. The first subscription fetches at once, then the next fetch starts `update_rate` ms after the previous one finished. When the last subscriber is gone, polling stops and a fetch still running is ignored.
 - **Awaiting a state without subscribing fetches once.**
-- **The response is checked and parsed by the parser.** A status that isn't ok gives `Fetch failed: HTTP 404`. A body that fails to load gives `Fetch failed: <message>`. The body is parsed with `make_parser` and the schema, without the `w` markers. Any of these errors becomes the error of every state.
+- **The body text is parsed** with `make_parser` and the schema, without the `w` markers. An error from `fetch` or from parsing becomes the error of every state.
 
 ### Errors and bugs
 
 JavaScript throws the same `TypeError` for a network failure as for a bug, so `fetch` and `write` return expected failures as a `Result` error instead of throwing. That error becomes the state's error unchanged.
 
 **A throw from `request`, `fetch` or `write` is treated as a bug.** It's logged with `console.error` and its stack, and the state gets the error `Unexpected error in request`, `Unexpected error in fetch` or `Unexpected error in write`, so a pending read or write still finishes. A custom `fetch` should therefore catch the failures of the request it sends and return them as errors, as `fetch_result` does, and let nothing else throw.
+
+**What `fetch` and `write` return is also checked at runtime,** because `any` and plain JavaScript get past the types. These are bugs too, logged with a message saying what went wrong:
+- Not returning a `Result`.
+- A `Response` in the `Result` instead of the body text.
+- A promise in the `Result`, from a missing `await` before wrapping it in `ok`.
+- Anything else that isn't a string as the body.
 
 ### The parsed tree
 
@@ -206,9 +215,8 @@ const plant = make_fetch_parser(
   { pumps: [0, { id: "n", name: "sw" }, { write: "all", key: "id" }] },
   {
     write: async (payload) => {
-      const response = await fetch_result("/api/plant", { method: "PATCH", body: JSON.stringify(payload) });
-      if (response.err) return response;
-      return response.value.ok ? ok(undefined) : err(`Write failed: HTTP ${response.value.status}`);
+      const sent = await fetch_result("/api/plant", { method: "PATCH", body: JSON.stringify(payload) });
+      return sent.err ? sent : ok(undefined);
     },
   },
 );

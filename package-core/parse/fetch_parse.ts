@@ -2,6 +2,7 @@ import type { Prettify } from "#common";
 import {
   err,
   ok,
+  result as result_util,
   type Option,
   type Result,
   type ResultErr,
@@ -229,13 +230,13 @@ export type FetchRequest = string | readonly [string, RequestInit];
  * a throw is a bug and is logged with console.error*/
 export type FetchWrite = (payload: unknown) => PromiseLike<Result<void, string>>;
 
-/**Fetches a request. An expected failure, like a network error or a timeout, is returned as an error,
- * a throw is a bug and is logged with console.error. The status of the response is checked by the parser.
+/**Fetches a request and gives the body text. An expected failure, like a network error, a timeout or a failed status,
+ * is returned as an error, a throw is a bug and is logged with console.error.
  * init holds the signal that aborts the fetch when polling stops*/
 export type FetchFunction = (
   url: string,
   init: RequestInit,
-) => PromiseLike<Result<Response, string>>;
+) => PromiseLike<Result<string, string>>;
 
 export type FetchParserOptions = {
   /**Sends a write, required when the schema contains writable values*/
@@ -247,17 +248,54 @@ export type FetchParserOptions = {
 const message_of = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
-/**The global fetch as a FetchFunction, a rejection becomes an error.
+/**The global fetch as a FetchFunction, gives the body text.
+ * A rejection, a failed status or a body that fails to load becomes an error.
  * The default fetch of make_fetch_parser, and a base for custom fetch functions*/
 export async function fetch_result(
   url: string,
   init: RequestInit,
-): Promise<Result<Response, string>> {
+): Promise<Result<string, string>> {
   try {
-    return ok(await fetch(url, init));
+    const response = await fetch(url, init);
+    if (!response.ok) return err(`Fetch failed: HTTP ${response.status}`);
+    return ok(await response.text());
   } catch (cause) {
     return err(`Fetch failed: ${message_of(cause)}`);
   }
+}
+
+/**Logs a bug in code given to make_fetch_parser and gives the error result for it*/
+function bug(where: string, message: string, value: unknown): ResultErr<string> {
+  console.error(`make_fetch_parser: ${message}`, value);
+  return err(`Unexpected error in ${where}`);
+}
+
+/**Checks what a fetch function gave, the type is not enough as any and plain javascript get past it*/
+function checked_body(
+  value: unknown,
+): Result<string, string> {
+  if (!result_util.is_result(value))
+    return bug("fetch", "fetch must return a Result, it returned", value);
+  if (value.err) return value as ResultErr<string>;
+  const body: unknown = value.value;
+  if (typeof body === "string") return ok(body);
+  if (typeof Response !== "undefined" && body instanceof Response)
+    return bug(
+      "fetch",
+      "fetch returned a Response in its Result, return the body text instead, for example with fetch_result",
+      body,
+    );
+  if (
+    body !== null &&
+    (typeof body === "object" || typeof body === "function") &&
+    typeof (body as { then?: unknown }).then === "function"
+  )
+    return bug(
+      "fetch",
+      "fetch returned a promise in its Result, await it before wrapping it in ok",
+      body,
+    );
+  return bug("fetch", "fetch must give the body as a string, it gave", body);
 }
 
 /**Logs a throw from code given to make_fetch_parser, it is a bug, and gives the error result for it*/
@@ -529,23 +567,15 @@ export function make_fetch_parser<const S extends FetchSchema>(
     } catch (cause) {
       return unexpected("request", cause);
     }
-    let response: Result<Response, string>;
+    let fetched: unknown;
     try {
-      response = await fetch_with(url, { ...init, signal });
+      fetched = await fetch_with(url, { ...init, signal });
     } catch (cause) {
       return unexpected("fetch", cause);
     }
-    if (response.err) return response;
-    if (!response.value.ok)
-      return err(`Fetch failed: HTTP ${response.value.status}`);
-    let body: string;
-    try {
-      body = await response.value.text();
-    } catch (cause) {
-      //The connection failed while the body was loading
-      return err(`Fetch failed: ${message_of(cause)}`);
-    }
-    return parse(body);
+    const body = checked_body(fetched);
+    if (body.err) return body;
+    return parse(body.value);
   };
 
   // One-shot reads always answer so pending reads resolve, subscription fetches only notify while that subscription lasts
@@ -582,11 +612,16 @@ export function make_fetch_parser<const S extends FetchSchema>(
     async (payload) => {
       if (payload instanceof UnsentWrite) return err(payload.reason);
       if (!options?.write) return err("No write function given");
+      let written: unknown;
       try {
-        return await options.write(payload);
+        written = await options.write(payload);
       } catch (cause) {
         return unexpected("write", cause);
       }
+      //The type is not enough as any and plain javascript get past it
+      if (!result_util.is_result(written))
+        return bug("write", "write must return a Result, it returned", written);
+      return written;
     },
   ) as StateREAW<ResolveSchema<S>, any, unknown>;
 

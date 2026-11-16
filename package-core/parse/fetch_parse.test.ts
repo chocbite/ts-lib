@@ -1,5 +1,5 @@
 import { sleep } from "#common";
-import { err, ok } from "#result";
+import { err, ok, type Result } from "#result";
 import state, {
   type StateArrayReadTypes,
   type StateREA,
@@ -123,9 +123,7 @@ describe("make_fetch_parser", () => {
   it("fetches through a custom fetch function instead of the global fetch", async () => {
     const global_fetch = vi.fn();
     vi.stubGlobal("fetch", global_fetch);
-    const custom_fetch = vi.fn<FetchFunction>(async () =>
-      ok(new Response('{"name":"Ada"}')),
-    );
+    const custom_fetch = vi.fn<FetchFunction>(async () => ok('{"name":"Ada"}'));
     const user = make_fetch_parser(
       () => ["/user", { headers: { auth: "x" } }],
       60_000,
@@ -163,16 +161,6 @@ describe("make_fetch_parser", () => {
     expect(signal?.aborted).toBe(true);
   });
 
-  it("reports a failed http status from a custom fetch", async () => {
-    const user = make_fetch_parser(() => "/user", 1_000, { name: "s" }, {
-      fetch: async () => ok(new Response("", { status: 404 })),
-    });
-
-    const result = await user.name;
-
-    expect(!result.ok && result.error).toBe("Fetch failed: HTTP 404");
-  });
-
   it("gives the error of a custom fetch as the read error without logging", async () => {
     const console_error = vi.spyOn(console, "error").mockImplementation(() => {});
     const user = make_fetch_parser(() => "/user", 1_000, { name: "s" }, {
@@ -200,18 +188,49 @@ describe("make_fetch_parser", () => {
     console_error.mockRestore();
   });
 
-  it("gives a body that fails to load as a fetch error without logging", async () => {
+  it.each([
+    ["a Response", () => new Response("{}"), "returned a Response"],
+    ["an unawaited promise", () => Promise.resolve("{}"), "returned a promise"],
+    ["a number", () => 5, "must give the body as a string"],
+  ])(
+    "logs a custom fetch that gives %s instead of the body text",
+    async (_name, value, message) => {
+      const console_error = vi.spyOn(console, "error").mockImplementation(() => {});
+      const user = make_fetch_parser(() => "/user", 1_000, { name: "s" }, {
+        fetch: async () => ok(value() as unknown as string),
+      });
+
+      const result = await user.name;
+
+      expect(!result.ok && result.error).toBe("Unexpected error in fetch");
+      expect(console_error.mock.calls[0]?.[0]).toContain(message);
+      console_error.mockRestore();
+    },
+  );
+
+  it("logs a custom fetch that does not return a result", async () => {
     const console_error = vi.spyOn(console, "error").mockImplementation(() => {});
-    const response = new Response("{}");
-    vi.spyOn(response, "text").mockRejectedValue(new TypeError("connection reset"));
     const user = make_fetch_parser(() => "/user", 1_000, { name: "s" }, {
-      fetch: async () => ok(response),
+      fetch: async () => '{"name":"Ada"}' as unknown as Result<string, string>,
     });
 
     const result = await user.name;
 
-    expect(!result.ok && result.error).toBe("Fetch failed: connection reset");
-    expect(console_error).not.toHaveBeenCalled();
+    expect(!result.ok && result.error).toBe("Unexpected error in fetch");
+    expect(console_error.mock.calls[0]?.[0]).toContain("must return a Result");
+    console_error.mockRestore();
+  });
+
+  it("logs a write that does not return a result", async () => {
+    const console_error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const user = make_fetch_parser(() => "/user", 1_000, { name: "sw" }, {
+      write: async () => undefined as unknown as Result<void, string>,
+    });
+
+    const result = await user.name.write("Ada");
+
+    expect(!result.ok && result.error).toBe("Unexpected error in write");
+    expect(console_error.mock.calls[0]?.[0]).toContain("must return a Result");
     console_error.mockRestore();
   });
 
@@ -248,6 +267,35 @@ describe("make_fetch_parser", () => {
     const result = await fetch_result("/user", {});
 
     expect(!result.ok && result.error).toBe("Fetch failed: Failed to fetch");
+    vi.unstubAllGlobals();
+  });
+
+  it("gives the body text from fetch_result", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response('{"name":"Ada"}')));
+
+    const result = await fetch_result("/user", {});
+
+    expect(result.ok && result.value).toBe('{"name":"Ada"}');
+    vi.unstubAllGlobals();
+  });
+
+  it("gives a failed http status from fetch_result as an error", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 404 })));
+
+    const result = await fetch_result("/user", {});
+
+    expect(!result.ok && result.error).toBe("Fetch failed: HTTP 404");
+    vi.unstubAllGlobals();
+  });
+
+  it("gives a body that fails to load in fetch_result as an error", async () => {
+    const response = new Response("{}");
+    vi.spyOn(response, "text").mockRejectedValue(new TypeError("connection reset"));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+
+    const result = await fetch_result("/user", {});
+
+    expect(!result.ok && result.error).toBe("Fetch failed: connection reset");
     vi.unstubAllGlobals();
   });
 
