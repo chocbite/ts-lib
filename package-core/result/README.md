@@ -301,6 +301,42 @@ some(42).to_result("err"); // Ok(42)
 none().to_result("err"); // Err("err")
 ```
 
+## NiceError
+
+An error for results that are shown to a user. It has a short nice text for the user, like "Connection lost", and the details for whoever has to fix it, the message and the original `Error` with its stack.
+
+```typescript
+import { err_nice, ok, type ResultNice } from "@chocbite/ts-lib/result";
+
+export const SETTINGS_INVALID = Symbol("Settings are invalid");
+
+function read_settings(text: string): ResultNice<Settings> {
+  if (text === "") return err_nice(SETTINGS_INVALID, "The file is empty");
+  try {
+    return ok(JSON.parse(text) as Settings);
+  } catch (cause) {
+    return err_nice(SETTINGS_INVALID, cause instanceof Error ? cause : String(cause));
+  }
+}
+```
+
+- **`kind`** is a symbol that identifies the error. Its description is the nice text. Code can check it with `error.kind === CONNECTION_LOST` instead of matching text. Each module exports its own kinds.
+- **Use `Symbol("…")`, never `Symbol.for("…")`.** `Symbol.for` gives the same symbol for the same text everywhere, so two modules with a "Connection lost" kind would share it.
+- **The detail is a message or an `Error`.** `err_nice(kind, "text")` uses the text as the message. `err_nice(kind, error)` uses the error's message and keeps the error as `cause`, with the stack of where it failed. A caught value that isn't an `Error` is turned into one of the two first, `cause instanceof Error ? cause : String(cause)`.
+
+| Member            | Gives                                                              |
+| ----------------- | ------------------------------------------------------------------ |
+| `kind`            | The symbol given.                                                  |
+| `nice`            | The description of `kind`, or `"Unknown error"` when it has none.  |
+| `message`         | The message given, or the message of the `Error` given.            |
+| `cause`           | The `Error` given, or `undefined` when made from a message.        |
+| `equals(other)`   | True for the same `kind` and `message`.                            |
+| `toString()`      | `"Connection lost: No network"`.                                   |
+
+**`compare` treats two NiceErrors as equal when `equals` says so,** even when they are different objects. A source makes a new `NiceError` for every failure, and states compare results to skip updates that change nothing. Other errors are still compared by identity.
+
+**It wraps an `Error` instead of extending it, for speed.** Creating an `Error` captures a stack trace, which takes about a microsecond. A `NiceError` costs about as much as a string, and the stack worth having is the one of the wrapped `Error`, where the failure happened. It is not an `Error`, so it is not meant to be thrown, it lives in results.
+
 ## Type Helpers
 
 ```typescript

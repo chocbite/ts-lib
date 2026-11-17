@@ -1,5 +1,5 @@
 import { sleep } from "#common";
-import { err, ok, type Result } from "#result";
+import { err, ok, type Option, type Result } from "#result";
 import state, {
   type StateArrayReadTypes,
   type StateREA,
@@ -14,6 +14,7 @@ import {
   type FetchFunction,
   type FetchParsed,
   type FetchSchema,
+  type FetchWrite,
 } from "./fetch_parse";
 
 /**Value type of a readable state*/
@@ -995,5 +996,210 @@ describe("make_fetch_parser retry_rate", () => {
     const fetch = fetch_giving(ok("not json"));
 
     expect(await fetches_after(fetch, { retry_rate: 1000 }, [100, 900])).toEqual([1, 1, 2]);
+  });
+});
+
+describe("make_fetch_parser array_start", () => {
+  /**A parser with array_start 1 whose fetch gives body, and its write mock*/
+  const parser_from = <const S extends FetchSchema>(schema: S, body: unknown = {}) => {
+    const send = vi.fn<FetchWrite>(async () => ok(undefined));
+    const parsed = make_fetch_parser(() => "/x", 60_000, schema, {
+      write: send,
+      fetch: async () => ok(JSON.stringify(body)),
+      array_start: 1,
+    });
+    return { parsed, send };
+  };
+
+  it("adds array_start to the index of a dynamic array item in the payload", async () => {
+    const { parsed, send } = parser_from({ pumps: [0, { name: "sw" }] });
+
+    await parsed.pumps[0]!.name.write("A");
+
+    expect(send).toHaveBeenCalledWith({ pumps: { 1: { name: "A" } } });
+  });
+
+  it("adds array_start to the index a keyed item has in the last received value", async () => {
+    const { parsed, send } = parser_from(
+      { pumps: [0, { id: "n", name: "sw" }, { key: "id" }] },
+      { pumps: [{ id: 7, name: "a" }, { id: 9, name: "b" }] },
+    );
+    await parsed.pumps;
+
+    await parsed.pumps[1]!.name.write("B");
+
+    expect(send).toHaveBeenCalledWith({ pumps: { 2: { name: "B" } } });
+  });
+
+  it("adds array_start to the index of a fixed array item in the payload", async () => {
+    const { parsed, send } = parser_from({ outputs: [4, "bw"], zones: [2, { setpoint: "nw" }] });
+
+    await parsed.outputs[2][FETCH_PARSE].write(true);
+    await parsed.zones[0].setpoint.write(21);
+
+    expect(send).toHaveBeenNthCalledWith(1, { outputs: { 3: true } });
+    expect(send).toHaveBeenNthCalledWith(2, { zones: { 1: { setpoint: 21 } } });
+  });
+
+  it("gives an encoder the index with array_start added", async () => {
+    const { parsed, send } = parser_from({
+      tags: [0, "sw", { encode: (tag: string, index: number) => ({ index, tag }) }],
+    });
+
+    await parsed.tags[0]!.write("x");
+
+    expect(send).toHaveBeenCalledWith({ tags: { index: 1, tag: "x" } });
+  });
+
+  it("adds array_start to the indexes outside a write all array, not to the array sent", async () => {
+    const { parsed, send } = parser_from(
+      { groups: [2, { items: [0, "sw", { write: "all" }] }] },
+      { groups: [{ items: ["a"] }, { items: ["b", "c"] }] },
+    );
+    await parsed[FETCH_PARSE];
+
+    await parsed.groups[1].items[0]!.write("B");
+
+    expect(send).toHaveBeenCalledWith({ groups: { 2: { items: ["B", "c"] } } });
+  });
+});
+
+describe("make_fetch_parser tuples", () => {
+  const parser_from = <const S extends FetchSchema>(schema: S, body: unknown) => {
+    const send = vi.fn<FetchWrite>(async () => ok(undefined));
+    const parsed = make_fetch_parser(() => "/x", 60_000, schema, {
+      write: send,
+      fetch: async () => ok(JSON.stringify(body)),
+    });
+    return { parsed, send };
+  };
+
+  it("gives a state per position and the whole tuple under FETCH_PARSE", async () => {
+    const { parsed } = parser_from({ point: ["n", "s"] }, { point: [1, "a"] });
+
+    expect((await parsed.point[0]).unwrap()).toBe(1);
+    expect((await parsed.point[1]).unwrap()).toBe("a");
+    expect((await parsed.point[FETCH_PARSE]).unwrap()).toEqual([1, "a"]);
+  });
+
+  it("types the positions as states of their values", () => {
+    const { parsed } = parser_from({ point: ["nw", "s"] }, { point: [1, "a"] });
+
+    expectTypeOf(parsed.point[0]).toEqualTypeOf<StateREAW<number, Option<{}>, number>>();
+    expectTypeOf(parsed.point[1]).toEqualTypeOf<StateREA<string, Option<{}>, string>>();
+  });
+
+  it("writes a writable position addressed by index", async () => {
+    const { parsed, send } = parser_from({ point: ["nw", "s"] }, { point: [1, "a"] });
+
+    await parsed.point[0].write(5);
+
+    expect(send).toHaveBeenCalledWith({ point: { 0: 5 } });
+  });
+});
+
+describe("make_fetch_parser write_debounce", () => {
+  /**A parser with write_debounce 50 whose fetch gives body, and its write mock*/
+  const parser_from = <const S extends FetchSchema>(
+    schema: S,
+    body: unknown = {},
+    result: Result<void, string> = ok(undefined),
+  ) => {
+    const send = vi.fn<FetchWrite>(async () => result);
+    const parsed = make_fetch_parser(() => "/x", 60_000, schema, {
+      write: send,
+      fetch: async () => ok(JSON.stringify(body)),
+      write_debounce: 50,
+    });
+    return { parsed, send };
+  };
+
+  /**Runs fn with fake timers, then lets the batch go out*/
+  const with_timers = async (fn: () => Promise<void>) => {
+    vi.useFakeTimers();
+    try {
+      await fn();
+    } finally {
+      vi.useRealTimers();
+    }
+  };
+
+  it("sends the writes of different members within write_debounce as one merged payload", () =>
+    with_timers(async () => {
+      const { parsed, send } = parser_from({ name: "sw", settings: { eco: "bw" } });
+
+      const first = parsed.name.write("A");
+      const second = parsed.settings.eco.write(true);
+      await vi.advanceTimersByTimeAsync(49);
+      expect(send).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith({ name: "A", settings: { eco: true } });
+      expect((await first).ok).toBe(true);
+      expect((await second).ok).toBe(true);
+    }));
+
+  it("sends only the last value of a member written twice", () =>
+    with_timers(async () => {
+      const { parsed, send } = parser_from({ name: "sw" });
+
+      void parsed.name.write("A");
+      void parsed.name.write("B");
+      await vi.advanceTimersByTimeAsync(50);
+
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith({ name: "B" });
+    }));
+
+  it("gives every write of the batch the result of the write call", () =>
+    with_timers(async () => {
+      const { parsed } = parser_from({ name: "sw", speed: "nw" }, {}, err("Rejected"));
+
+      const first = parsed.name.write("A");
+      const second = parsed.speed.write(5);
+      await vi.advanceTimersByTimeAsync(50);
+
+      const [first_result, second_result] = [await first, await second];
+      expect(!first_result.ok && first_result.error).toBe("Rejected");
+      expect(!second_result.ok && second_result.error).toBe("Rejected");
+    }));
+
+  it("sends the batch first when an encoded write of another item would overwrite it", () =>
+    with_timers(async () => {
+      const { parsed, send } = parser_from({
+        tags: [0, "sw", { encode: (tag: string, index: number) => ({ index, tag }) }],
+      });
+
+      void parsed.tags[1]!.write("a");
+      void parsed.tags[3]!.write("b");
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenNthCalledWith(1, { tags: { index: 1, tag: "a" } });
+      await vi.advanceTimersByTimeAsync(50);
+
+      expect(send).toHaveBeenCalledTimes(2);
+      expect(send).toHaveBeenNthCalledWith(2, { tags: { index: 3, tag: "b" } });
+    }));
+
+  it("builds a write all array on the writes before it in the batch", async () => {
+    const { parsed, send } = parser_from(
+      { list: [0, "sw", { write: "all" }] },
+      { list: ["a", "b", "c"] },
+    );
+    //Received with real timers, the batch is what this is about
+    await parsed[FETCH_PARSE];
+    await with_timers(async () => {
+
+      const writes = [
+        parsed.list[0]!.write("A"),
+        parsed.list[2]!.write("C"),
+        parsed.list.write(state.a.write.push("d")),
+      ];
+      await vi.advanceTimersByTimeAsync(50);
+      expect((await Promise.all(writes)).map((r) => (r.ok ? "ok" : r.error))).toEqual(["ok", "ok", "ok"]);
+
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith({ list: ["A", "b", "C", "d"] });
+    });
   });
 });

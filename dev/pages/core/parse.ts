@@ -145,6 +145,8 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
   const UPDATE_MS = 1000;
   /**How long the fetch parser waits after a failed fetch*/
   const RETRY_MS = 3000;
+  /**How long the first fetch parser collects writes before sending them as one*/
+  const WRITE_DEBOUNCE_MS = 300;
   /**The server rejects speeds above this, to see a failed write*/
   const MAX_SPEED = 90;
 
@@ -152,6 +154,7 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
     "make_fetch_parser bound to form elements",
     `A fake device server answers fetches to /api/device after ${LATENCY_MS}ms, the parser polls it every ${UPDATE_MS}ms while any element is shown. ` +
       "Every element is bound directly to a member of the parsed result. Members marked w in the schema are writable, a change is sent as a partial object (see the request log), the next poll shows what the server kept. " +
+      `Writes are collected for ${WRITE_DEBOUNCE_MS}ms (write_debounce): change two elements quickly, or drag a slider, to see one PATCH with both changes, or only the last slider value. ` +
       `The server rejects speeds above ${MAX_SPEED}, drag the slider to the end to see the failed write. ` +
       `Go offline to see how each element shows the failed fetch, and back online to see them recover. While offline the request log shows a fetch every ${RETRY_MS}ms instead of every ${UPDATE_MS}ms (retry_rate), so going back online takes up to ${RETRY_MS}ms to show. ` +
       "Change values on the server to see the elements follow on the next poll.",
@@ -312,7 +315,7 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
       zones: [2, { name: "s", setpoint: "nw" }],
       tags: [0, "sw", { encode: (tag: string, index: number) => ({ index, tag }) }],
     },
-    { write: patch_device, fetch: api_fetch, retry_rate: RETRY_MS },
+    { write: patch_device, fetch: api_fetch, retry_rate: RETRY_MS, write_debounce: WRITE_DEBOUNCE_MS },
   );
 
   controls(sec, {

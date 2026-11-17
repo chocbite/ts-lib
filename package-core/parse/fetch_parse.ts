@@ -257,6 +257,14 @@ export type FetchParserOptions = {
   /**Time in ms to wait after a read that gave an error, in place of update_rate, so a server that is down is not asked every update.
    * Any error counts, also a response that fails to parse. Defaults to update_rate*/
   readonly retry_rate?: number;
+  /**Number of the first array item on the server, added to every array index a write sends and to the index given to an encoder.
+   * For servers that count from 1. Reading is not affected, received arrays are JSON arrays. Defaults to 0*/
+  readonly array_start?: number;
+  /**Time in ms to collect writes, they are then sent as one payload, the writes of different members merged.
+   * Counted from the first write, every write gets the result of the one write call.
+   * A write that would overwrite the write of another member, like an encoded array item, sends the collected writes first.
+   * Defaults to 0, every write is sent at once*/
+  readonly write_debounce?: number;
 };
 
 const default_fetch: FetchFunction = async (url, init) =>
@@ -526,6 +534,51 @@ class UnsentWrite {
   constructor(readonly reason: string) {}
 }
 
+/**Payload of a write with the member it writes, as the server addresses it, so a batch can tell members apart*/
+class Outgoing {
+  constructor(
+    readonly payload: unknown,
+    readonly member: string,
+  ) {}
+}
+
+const is_plain_object = (value: unknown): value is Record<string, unknown> =>
+  value !== null &&
+  typeof value === "object" &&
+  !Array.isArray(value) &&
+  Object.getPrototypeOf(value) === Object.prototype;
+
+/**Paths to the values of a payload that are not plain objects, arrays are values as they are sent whole*/
+function leaf_paths(payload: unknown, path: string[] = []): string[][] {
+  if (!is_plain_object(payload)) return [path];
+  return Object.entries(payload).flatMap(([key, value]) =>
+    leaf_paths(value, [...path, key]),
+  );
+}
+
+/**True when one path is the other or inside it*/
+const paths_overlap = (a: readonly string[], b: readonly string[]): boolean =>
+  a.slice(0, b.length).every((part, i) => part === b[i]) ||
+  b.slice(0, a.length).every((part, i) => part === a[i]);
+
+/**Copy of base with payload merged in, plain objects are merged, anything else replaces*/
+function merge_payload(base: unknown, payload: unknown): unknown {
+  if (!is_plain_object(base) || !is_plain_object(payload)) return payload;
+  const merged: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(payload))
+    merged[key] = key in merged ? merge_payload(merged[key], value) : value;
+  return merged;
+}
+
+/**Writes waiting for write_debounce, merged into one payload*/
+type WriteBatch = {
+  payload: unknown;
+  /**The leaf paths of the payload and the member that wrote them*/
+  leaves: { path: string[]; member: string }[];
+  done: ((result: StateResult<void>) => void)[];
+  timer: ReturnType<typeof setTimeout>;
+};
+
 function request_parts(
   request: FetchRequest,
 ): [string, RequestInit | undefined] {
@@ -598,6 +651,75 @@ export function make_fetch_parser<const S extends FetchSchema>(
     );
   };
 
+  const array_start = options?.array_start ?? 0;
+  /**A path as the server numbers it, numbers in a path are always array positions, object and record keys are strings*/
+  const to_server = (path: readonly IndexPart[]): IndexPart[] =>
+    path.map((part) => (typeof part === "number" ? part + array_start : part));
+
+  /**Calls write once, expected failures are its error, a throw or a wrong return value is a bug*/
+  const send = async (payload: unknown): Promise<StateResult<void>> => {
+    if (!options?.write) return err("No write function given");
+    let written: unknown;
+    try {
+      written = await options.write(payload);
+    } catch (cause) {
+      return unexpected("write", cause);
+    }
+    //The type is not enough as any and plain javascript get past it
+    if (!result_util.is_result(written))
+      return bug("write", "write must return a Result, it returned", written);
+    return written as StateResult<void>;
+  };
+
+  const write_debounce = options?.write_debounce ?? 0;
+  let batch: WriteBatch | undefined;
+
+  /**Sends the waiting writes as one, every write of the batch gets the result*/
+  const send_batch = async () => {
+    const sending = batch;
+    if (!sending) return;
+    batch = undefined;
+    clearTimeout(sending.timer);
+    const result = await send(sending.payload);
+    for (const done of sending.done) done(result);
+  };
+
+  /**Merges a write into the batch, a write that would overwrite the write of another member sends the batch first,
+   * like encoded items, which all go to the same key of their array*/
+  const add_to_batch = (outgoing: Outgoing): Promise<StateResult<void>> => {
+    const leaves = leaf_paths(outgoing.payload);
+    if (
+      batch?.leaves.some(
+        (leaf) =>
+          leaf.member !== outgoing.member &&
+          leaves.some((path) => paths_overlap(path, leaf.path)),
+      )
+    )
+      void send_batch();
+    batch ??= {
+      payload: undefined,
+      leaves: [],
+      done: [],
+      timer: setTimeout(() => void send_batch(), write_debounce),
+    };
+    const current = batch;
+    //A member written again replaces its earlier write
+    current.leaves = current.leaves.filter((leaf) => leaf.member !== outgoing.member);
+    current.leaves.push(...leaves.map((path) => ({ path, member: outgoing.member })));
+    current.payload = merge_payload(current.payload, outgoing.payload);
+    return new Promise((resolve) => current.done.push(resolve));
+  };
+
+  /**The array waiting in the batch at a path, write "all" arrays build on it so writes in one batch keep each other*/
+  const pending_array_at = (path: readonly IndexPart[]): unknown[] | undefined => {
+    let current = batch?.payload;
+    for (const part of to_server(path)) {
+      if (!is_plain_object(current)) return undefined;
+      current = current[String(part)];
+    }
+    return Array.isArray(current) ? current : undefined;
+  };
+
   const root = state.r.reaw.from<unknown, any, unknown>(
     (owner) => void load(owner),
     (owner) => {
@@ -611,19 +733,12 @@ export function make_fetch_parser<const S extends FetchSchema>(
       if (timer) clearTimeout(timer);
       timer = undefined;
     },
-    async (payload) => {
-      if (payload instanceof UnsentWrite) return err(payload.reason);
-      if (!options?.write) return err("No write function given");
-      let written: unknown;
-      try {
-        written = await options.write(payload);
-      } catch (cause) {
-        return unexpected("write", cause);
-      }
-      //The type is not enough as any and plain javascript get past it
-      if (!result_util.is_result(written))
-        return bug("write", "write must return a Result, it returned", written);
-      return written;
+    (payload) => {
+      if (payload instanceof UnsentWrite) return Promise.resolve(err(payload.reason));
+      //A write to the root itself is a member of its own
+      const outgoing = payload instanceof Outgoing ? payload : new Outgoing(payload, "");
+      if (write_debounce <= 0) return send(outgoing.payload);
+      return add_to_batch(outgoing);
     },
   ) as StateREAW<ResolveSchema<S>, any, unknown>;
 
@@ -646,20 +761,37 @@ export function make_fetch_parser<const S extends FetchSchema>(
         return new UnsentWrite("Failed to write, the item no longer exists");
       concrete = [...items, ...(path.slice(last_key + 1) as IndexPart[])];
     }
-    if (!all_path)
-      return payload_at_path(
-        concrete.slice(0, encoder ? -1 : undefined),
-        encoder ? encoder(value, concrete.at(-1) as number) : value,
+    if (!all_path) {
+      const sent = to_server(concrete);
+      return new Outgoing(
+        payload_at_path(
+          sent.slice(0, encoder ? -1 : undefined),
+          encoder ? encoder(value, sent.at(-1) as number) : value,
+        ),
+        JSON.stringify(sent),
       );
+    }
     const all_concrete = concrete.slice(0, all_path.length);
-    const base = result_at_path(latest, all_concrete);
+    const base = array_base_at(all_concrete);
     if (base.err) return new UnsentWrite(base.error);
-    if (!Array.isArray(base.value))
-      return new UnsentWrite("Failed to write array, the received value is not an array");
+    //Positions inside the array sent stay as they are, it is sent whole
     const array = with_value_at(base.value, concrete.slice(all_path.length), value);
     if (array === undefined)
       return new UnsentWrite("Failed to write, the item no longer exists");
-    return payload_at_path(all_concrete, array);
+    //The whole array is one member, a later write in it is built on this one and replaces it
+    const sent_path = to_server(all_concrete);
+    return new Outgoing(payload_at_path(sent_path, array), JSON.stringify(sent_path));
+  };
+
+  /**The array a write "all" array builds on, the one waiting in the batch, else the last received one*/
+  const array_base_at = (path: readonly IndexPart[]): Result<unknown[], string> => {
+    const pending = pending_array_at(path);
+    if (pending) return ok(pending);
+    const base = result_at_path(latest, path);
+    if (base.err) return err(base.error);
+    if (!Array.isArray(base.value))
+      return err("Failed to write array, the received value is not an array");
+    return ok(base.value as unknown[]);
   };
 
   /**Writable projection of the root, limit and check on the root give the payload back,
@@ -829,7 +961,12 @@ export function make_fetch_parser<const S extends FetchSchema>(
         ? writable(transform, (values) => {
             if (!state.a.is_write(values))
               return payload_for(path, values, undefined, item_all_path);
-            const base = result_at_path(latest, path);
+            //Keyed items in the path are found in the last received value
+            const concrete = latest.ok ? resolve_path(latest.value, path) : undefined;
+            const base =
+              concrete && !(concrete instanceof MissingPart)
+                ? array_base_at(concrete)
+                : result_at_path(latest, path);
             if (base.err) return new UnsentWrite(base.error);
             if (!Array.isArray(base.value))
               return new UnsentWrite("Failed to write array, the received value is not an array");
@@ -886,6 +1023,23 @@ export function make_fetch_parser<const S extends FetchSchema>(
       return Array.from({ length: count }, (_value, index) =>
         array_item(item, [...path, index]),
       );
+    }
+
+    //A list of only type strings is a tuple, a state per position, other lists are unions with one state
+    if (
+      Array.isArray(part_schema) &&
+      part_schema.every((entry) => typeof entry === "string")
+    ) {
+      const tuple = part_schema.map((entry, index) =>
+        node(entry, [...path, index], undefined, all_path, optional_at),
+      );
+      set_fetch_state(
+        tuple,
+        state.proxy.rea(root as any, (result) =>
+          result_at_path(result, path, optional_at),
+        ),
+      );
+      return tuple;
     }
 
     if (

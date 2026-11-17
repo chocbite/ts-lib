@@ -1,3 +1,7 @@
+import { err_nice, NiceError } from "./nice";
+
+export * from "./nice";
+
 /**Symbol used to identify Result objects, can be used to create result compliant objects */
 export const RESULT_KEY = Symbol("result_key");
 /**Symbol used to identify Option objects, can be used to create option compliant objects */
@@ -363,8 +367,12 @@ export class ResultErr<E> implements ResultBase<never, E> {
     return new ResultErr(mapper(this.error));
   }
 
+  /**NiceErrors are equal by kind and message, as a source makes a new one for every failure, other errors by identity*/
   compare(other: Result<any, E>): boolean {
-    return other.err && this.error === other.error;
+    if (!other.err) return false;
+    if (this.error instanceof NiceError && other.error instanceof NiceError)
+      return this.error.equals(other.error);
+    return this.error === other.error;
   }
 
   to_option(): OptionNone {
@@ -415,6 +423,7 @@ export function none() {
 export const result = {
   ok,
   err,
+  err_nice,
   some,
   none,
   RESULT_KEY,
