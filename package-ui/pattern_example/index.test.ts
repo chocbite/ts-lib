@@ -1,5 +1,11 @@
 import { NiceError } from "@chocbite/ts-lib/result";
-import { define_element, input_key, type InputOf } from "#base";
+import {
+  AccessTypes,
+  define_element,
+  input_key,
+  type BaseOptions,
+  type InputOf,
+} from "#base";
 import type { ResultOk } from "@chocbite/ts-lib/result";
 import state, {
   type StateOrVal,
@@ -176,11 +182,14 @@ class TypeProbe extends ExampleBase {
   static element_name() {
     return "typeprobe";
   }
-  set(options: {
-    ok_only?: StateOrValROS<number>;
-    writable?: StateOrValROSW<number>;
-    errorable?: StateOrVal<number>;
-  }): this {
+  set(
+    options: BaseOptions & {
+      ok_only?: StateOrValROS<number>;
+      writable?: StateOrValROSW<number>;
+      errorable?: StateOrVal<number>;
+    },
+  ): this {
+    super.set(options);
     this.set_input(PLAIN, 5, (value) => {
       expectTypeOf(value).toEqualTypeOf<ResultOk<number>>();
     });
@@ -227,12 +236,14 @@ define_element(TypeProbe);
 
 describe("options from keys", () => {
   it("derives the options from the keys, every option optional", () => {
-    expectTypeOf<ExampleSliderOptions>().toEqualTypeOf<{
-      value?: StateOrValROSW<number>;
-      min?: StateOrVal<number>;
-      max?: StateOrVal<number>;
-      step?: number;
-    }>();
+    expectTypeOf<ExampleSliderOptions>().toEqualTypeOf<
+      BaseOptions & {
+        value?: StateOrValROSW<number>;
+        min?: StateOrVal<number>;
+        max?: StateOrVal<number>;
+        step?: number;
+      }
+    >();
     expectTypeOf<ExampleLabelBoxOptions>().toMatchTypeOf<{
       width?: StateOrVal<number>;
       badge?: StateOrVal<string>;
@@ -244,6 +255,7 @@ describe("options from keys", () => {
     expectTypeOf<InputOf<typeof key>>().toEqualTypeOf<StateOrValROSW<number>>();
     expectTypeOf<InputOf<string>>().toBeNever();
     expectTypeOf<ExampleEditorOptions>().toEqualTypeOf<{
+      access?: StateOrVal<AccessTypes>;
       min?: StateOrVal<number>;
       max?: StateOrVal<number>;
     }>();
@@ -387,9 +399,11 @@ describe("nested subscriptions", () => {
   });
 
   it("derives the options of set without the creation inputs", () => {
-    expectTypeOf<ExampleGroupOptions>().toEqualTypeOf<{
-      gap?: StateOrVal<number>;
-    }>();
+    expectTypeOf<ExampleGroupOptions>().toEqualTypeOf<
+      BaseOptions & {
+        gap?: StateOrVal<number>;
+      }
+    >();
     expectTypeOf<ExampleGroupCreateOptions>().toMatchTypeOf<{
       gap?: StateOrVal<number>;
       items?: StateOrVal<ExampleBox[]>;

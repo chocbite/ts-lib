@@ -1,4 +1,10 @@
-import { Base, define_element, input_key, type InputOptions } from "#base";
+import {
+  Base,
+  define_element,
+  input_key,
+  type InputOptions,
+  type BaseOptions,
+} from "#base";
 import type { SVGFunc } from "#svg";
 import type { StateOrVal } from "@chocbite/ts-lib/state";
 import "./shared";
@@ -29,7 +35,7 @@ const TOPBAR = {
   /**Items at the right side, the side is empty on errors*/
   right: input_key<StateOrVal<readonly Element[]>>(),
 };
-export type TopbarOptions = InputOptions<typeof TOPBAR>;
+export type TopbarOptions = BaseOptions & InputOptions<typeof TOPBAR>;
 
 /**Bar along the top of a page, with items at the left, in the middle and at the right*/
 class Topbar extends TopbarBase {
@@ -42,6 +48,7 @@ class Topbar extends TopbarBase {
   #right = this.appendChild(document.createElement("div"));
 
   set(options: TopbarOptions): this {
+    super.set(options);
     this.set_input(TOPBAR.left, options.left, (items) => {
       this.#left.replaceChildren(...(items.ok ? items.value : []));
     });
@@ -71,7 +78,7 @@ const BUTTON = {
   /**Called when the button is clicked, a plain value as it is not shown*/
   on_click: input_key<() => void>(),
 };
-export type TopbarButtonOptions = InputOptions<typeof BUTTON>;
+export type TopbarButtonOptions = BaseOptions & InputOptions<typeof BUTTON>;
 
 /**Button for the top bar, with an icon, a text or both*/
 class TopbarButton extends TopbarBase {
@@ -89,6 +96,7 @@ class TopbarButton extends TopbarBase {
   }
 
   set(options: TopbarButtonOptions): this {
+    super.set(options);
     this.set_input(BUTTON.on_click, options.on_click, (on_click) => {
       this.#on_click = on_click.value;
     });
@@ -116,7 +124,7 @@ const LABEL = {
   /**Text of the label, shows the error on errors*/
   text: input_key<StateOrVal<string>>(),
 };
-export type TopbarLabelOptions = InputOptions<typeof LABEL>;
+export type TopbarLabelOptions = BaseOptions & InputOptions<typeof LABEL>;
 
 /**Text for the top bar*/
 class TopbarLabel extends TopbarBase {
@@ -125,6 +133,7 @@ class TopbarLabel extends TopbarBase {
   }
 
   set(options: TopbarLabelOptions): this {
+    super.set(options);
     this.set_input(LABEL.text, options.text, (text) => {
       this.textContent = text.ok ? text.value : "⚠ " + text.error.nice;
     });

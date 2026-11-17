@@ -5,6 +5,7 @@ import {
   input_key,
   type InputOf,
   type InputOptions,
+  type BaseOptions,
 } from "#base";
 import { ok } from "@chocbite/ts-lib/result";
 import {
@@ -41,7 +42,7 @@ const BOX = {
   /**Background color, grey on errors*/
   color: input_key<StateOrVal<string>>(),
 };
-export type ExampleBoxOptions = InputOptions<typeof BOX>;
+export type ExampleBoxOptions = BaseOptions & InputOptions<typeof BOX>;
 
 const BOX_STYLE =
   "display:inline-flex;align-items:center;justify-content:center;gap:4px;box-sizing:border-box;overflow:hidden;width:100px;height:32px;background:#2980b9;color:white;font:12px sans-serif";
@@ -62,6 +63,7 @@ class ExampleBox extends ExampleBase {
   }
 
   set(options: ExampleBoxOptions): this {
+    super.set(options);
     this.set_input(BOX.width, options.width, (width) => {
       if (width.ok) this.style.width = width.value + "px";
     });
@@ -154,7 +156,7 @@ const GROUP = {
   /**Space between the boxes in px, keeps the last good value on errors*/
   gap: input_key<StateOrVal<number>>(),
 };
-export type ExampleGroupOptions = InputOptions<typeof GROUP>;
+export type ExampleGroupOptions = BaseOptions & InputOptions<typeof GROUP>;
 /**Inputs of the group given at creation, they are handed out to other elements so they can not be replaced*/
 const GROUP_CREATE = {
   /**Boxes shown in the group, handed out as items*/
@@ -194,6 +196,7 @@ class ExampleGroup extends ExampleBase {
   }
 
   set(options: ExampleGroupOptions): this {
+    super.set(options);
     this.set_input(GROUP.gap, options.gap, (gap) => {
       if (gap.ok) this.style.gap = gap.value + "px";
     });
@@ -207,7 +210,7 @@ const WATCHER = {
   /**null watches nothing, undefined leaves the group unchanged*/
   group: input_key<StateOrVal<ExampleGroup | null>>(),
 };
-export type ExampleWatcherOptions = InputOptions<typeof WATCHER>;
+export type ExampleWatcherOptions = BaseOptions & InputOptions<typeof WATCHER>;
 /**The items of the watched group, an inner input and not an option, typed from the key of the group*/
 const WATCHER_ITEMS = input_key<InputOf<typeof GROUP_CREATE.items>>();
 
@@ -225,6 +228,7 @@ class ExampleWatcher extends ExampleBase {
   }
 
   set(options: ExampleWatcherOptions): this {
+    super.set(options);
     this.set_input(WATCHER.group, options.group, (group) => {
       if (!group.ok) {
         this.detach_state_from_symbol(WATCHER_ITEMS);
@@ -263,7 +267,7 @@ const SLIDER = {
   /**Step between values, a plain value*/
   step: input_key<number>(),
 };
-export type ExampleSliderOptions = InputOptions<typeof SLIDER>;
+export type ExampleSliderOptions = BaseOptions & InputOptions<typeof SLIDER>;
 
 /**Slider writing to a state, the state can be shared with any other element*/
 class ExampleSlider extends ExampleBase {
@@ -283,6 +287,7 @@ class ExampleSlider extends ExampleBase {
   }
 
   set(options: ExampleSliderOptions): this {
+    super.set(options);
     this.set_input(SLIDER.step, options.step, (step) => {
       this.#input.step = String(step.value);
     });
@@ -315,7 +320,7 @@ const VIEW = {
   /**Scale of the square*/
   scale: input_key<StateOrVal<number>>(),
 };
-export type ExampleViewOptions = InputOptions<typeof VIEW>;
+export type ExampleViewOptions = BaseOptions & InputOptions<typeof VIEW>;
 
 /**Stand in for a viewport, draws a square at the given scale*/
 class ExampleView extends ExampleBase {
@@ -334,6 +339,7 @@ class ExampleView extends ExampleBase {
   }
 
   set(options: ExampleViewOptions): this {
+    super.set(options);
     this.set_input(VIEW.scale, options.scale, (scale) => {
       if (scale.ok) this.#square.style.transform = `scale(${scale.value})`;
     });
@@ -343,7 +349,7 @@ class ExampleView extends ExampleBase {
 define_element(ExampleView);
 
 /**Built by hand, the editor has no inputs of its own, it passes the limits on to the slider*/
-export interface ExampleEditorOptions {
+export interface ExampleEditorOptions extends BaseOptions {
   /**Lowest scale*/
   min?: InputOf<typeof SLIDER.min>;
   /**Highest scale*/
@@ -399,6 +405,7 @@ class ExampleEditor extends ExampleBase {
   }
 
   set(options: ExampleEditorOptions): this {
+    super.set(options);
     this.#slider.set({ min: options.min, max: options.max });
     return this;
   }

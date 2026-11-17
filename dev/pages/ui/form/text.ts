@@ -144,7 +144,7 @@ const SAMPLES = ["", "Short", "Æble på dansk, ½ € and 漢字", LONG];
     form.text_input({ placeholder: "Empty" }).bind({ value: shared }),
   );
   box(r, "shared, access from state", WIDTH).appendChild(
-    form.text_input().opts({ access }).bind({ value: shared }),
+    form.text_input().set({ access }).bind({ value: shared }),
   );
   const h = box(r, "string helper max_length", WIDTH);
   h.appendChild(form.text_input().bind({ value: helped }));
@@ -228,6 +228,6 @@ const SAMPLES = ["", "Short", "Æble på dansk, ½ € and 漢字", LONG];
     form.text_input().bind({ value: shared }),
   );
   box(s, "multi line, read access", WIDTH).appendChild(
-    form.text_multiline().opts({ access: "r" }).bind({ value: shared }),
+    form.text_multiline().set({ access: "r" }).bind({ value: shared }),
   );
 }

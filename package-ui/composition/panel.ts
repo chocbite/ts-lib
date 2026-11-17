@@ -5,6 +5,7 @@ import {
   input_key,
   type InputOf,
   type InputOptions,
+  type BaseOptions,
 } from "#base";
 import ctm from "#context-menu";
 import type { SVGFunc } from "#svg";
@@ -48,7 +49,7 @@ const PANEL = {
   /**Whether the title bar is shown, true by default*/
   titlebar: input_key<StateOrVal<boolean>>(),
 };
-export type PanelOptions = InputOptions<typeof PANEL>;
+export type PanelOptions = BaseOptions & InputOptions<typeof PANEL>;
 
 /**Inputs of the content the panel follows, inner inputs that are not options*/
 const PANEL_CONTENT = {
@@ -193,6 +194,7 @@ class Panel extends Base {
   }
 
   set(options: PanelOptions): this {
+    super.set(options);
     this.set_input(PANEL.layer, options.layer, (layer) => {
       this.#layer = layer.ok ? layer.value : 0;
       this.#host?.[HOST_LAYER](this, this.#layer);

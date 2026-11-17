@@ -303,7 +303,7 @@ const content = (name: string) => [
     ],
   });
   const access = state.ok_w<AccessTypes>("w");
-  group.opts({ access });
+  group.set({ access });
   const r = spaced_row(sec);
   const b = box(r, "group with ids", { width: "24rem" });
   const out = output(sec);

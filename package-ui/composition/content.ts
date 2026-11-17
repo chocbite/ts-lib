@@ -5,6 +5,7 @@ import {
   input_key,
   type InputOf,
   type InputOptions,
+  type BaseOptions,
 } from "#base";
 import ctm, { type ContextMenuGroup } from "#context-menu";
 import type { SVGFunc } from "#svg";
@@ -18,7 +19,7 @@ const CONTENT = {
    * Lines, a menu, or a function giving them, which is called every time the menu opens*/
   context_menu: input_key<ContextMenuGroup>(),
 };
-export type ContentOptions = InputOptions<typeof CONTENT>;
+export type ContentOptions = BaseOptions & InputOptions<typeof CONTENT>;
 
 /**Inputs of content given at creation, the container showing the content follows them
  * Exported for the containers of this module, not from the module*/
@@ -112,6 +113,7 @@ export abstract class ContentBase extends Base {
   }
 
   set(options: ContentOptions): this {
+    super.set(options);
     this.set_input(CONTENT.context_menu, options.context_menu, (menu) => {
       this.#context_menu = menu.value;
     });

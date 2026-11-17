@@ -230,13 +230,13 @@ const WIDTH = { width: "14rem" };
     box(r, label, WIDTH).appendChild(
       form
         .button({ text: "Delete", icon: material_delete_rounded, toggle: true, value: true, color: FormColors.Red })
-        .opts({ access: a }),
+        .set({ access: a }),
     );
   const s = box(r, "from state", WIDTH);
   s.appendChild(
     form
       .button({ text: "Delete", icon: material_delete_rounded })
-      .opts({ access }),
+      .set({ access }),
   );
   readout(s, "access", access);
   box(r, "description", WIDTH).appendChild(

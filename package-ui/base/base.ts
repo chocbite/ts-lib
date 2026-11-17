@@ -3,6 +3,7 @@ import {
   state,
   type State,
   type StateInferSub,
+  type StateOrVal,
   type StateREA,
   type StateROA,
   type StateSub,
@@ -11,7 +12,9 @@ import { AccessTypes } from "./access";
 import { fault_icon } from "./fault";
 import {
   CREATE,
+  input_key,
   type InputKey,
+  type InputOptions,
   type InputResult,
   type InputState,
   type InputValue,
@@ -29,6 +32,16 @@ type DataProps<T> = {
 type WithStateROA<T> = {
   [K in keyof T]?: T[K] | StateROA<T[K]>;
 };
+
+/**Inputs every element has*/
+const BASE = {
+  /**Access of the element, write by default
+   * read makes it inert, so it is shown but can not be used, none hides it
+   * A state in error gives read access, the fault icon explains why*/
+  access: input_key<StateOrVal<AccessTypes>>(),
+};
+/**Options every element takes, the options type of an element includes them*/
+export type BaseOptions = InputOptions<typeof BASE>;
 
 const base_resize_observer = new ResizeObserver((e) => {
   for (let i = 0; i < e.length; i++) {
@@ -60,11 +73,10 @@ const base_resize_observer = new ResizeObserver((e) => {
  * static element_name_space() { return 'chocolatelibui-core' }
  * This resets the nametree to the library name and prevents too long element names
  *
- * Elements have an access propery, which builds on the html inert property
- * Access has the following three states
+ * Every element has the access input, set({ access }), which builds on the html inert property
  * write = normal interaction and look
- * read = inert attribute is added making the element uninteractable, and add opacity 0.5 to make the element look inaccessible
- * none = adds display:none to element to make it */
+ * read = the inert attribute makes the element uninteractable
+ * none = hides the element with display:none */
 export abstract class Base extends HTMLElement {
   /**Returns the name used to define the element, Abstract classes should return @abstract@ */
   static element_name() {
@@ -121,10 +133,13 @@ export abstract class Base extends HTMLElement {
 
   /**Applies the given options, options that are not given are left unchanged
    * Can be called any number of times, like when a list reuses an element for other data
-   * Elements override it with their own options type and call super.set with the options,
-   * each option is applied with set_input, so setting an option again replaces the state set before
+   * Elements override it with their own options type, which includes BaseOptions, and always call super.set with the options,
+   * as Base applies the inputs every element has, like access, each option is applied with set_input, so setting an option again replaces the state set before
    * It runs after every constructor has finished, so overrides called from it can use all fields of the subclass*/
-  set(_options: object): this {
+  set(options: BaseOptions): this {
+    this.set_input(BASE.access, options.access, (access) =>
+      this.#apply_access(access.ok ? access.value : AccessTypes.Read),
+    );
     return this;
   }
 
@@ -327,9 +342,8 @@ export abstract class Base extends HTMLElement {
   //       / /\ \| |   | |    |  __|  \___ \\___ \
   //      / ____ \ |___| |____| |____ ____) |___) |
   //     /_/    \_\_____\_____|______|_____/_____/
-  /**Sets the access of the element, passing undefined is the same as passing write access*/
-  set access(access: AccessTypes) {
-    if (this.#access === access) return;
+  #apply_access(access: AccessTypes) {
+    if ((this.#access ?? AccessTypes.Write) === access) return;
     this.#access = access;
     switch (access) {
       case AccessTypes.Write:
@@ -347,11 +361,6 @@ export abstract class Base extends HTMLElement {
 
   /**Overrideable function called when access is changed */
   protected on_access(_access: AccessTypes) {}
-
-  /**Returns the current access of the element */
-  get access(): AccessTypes {
-    return this.#access ?? AccessTypes.Write;
-  }
   //       _____ _______    _______ ______
   //      / ____|__   __|/\|__   __|  ____|
   //     | (___    | |  /  \  | |  | |__

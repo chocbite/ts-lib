@@ -19,7 +19,7 @@ The pattern is the interface an element gives to users of the library: the input
 1. **Inputs that change are states.** An input is a `StateOrVal<T>`, either a fixed value or a state (see `StateOrVal` in the state README). A fixed value is a constant and never changes. Elements have no setters or getters for their inputs, so an element never deals with properties and states for the same thing.
 2. **A factory creates the element.** It takes optional options and creates the element with `create`, which applies them. It may take required arguments for things outside the pattern, like the container an element lives in. The class is exported only as a type, unless it is meant to be subclassed, so nobody outside the module calls `new`.
 3. **The constructor takes no arguments.** It builds the children and sets visible defaults, so an element that never gets inputs still shows something sensible. Inputs are never applied in it.
-4. **Inputs are declared as keys.** Each element has a module-level object of keys made with `input_key`, and its options type is `InputOptions` of that object.
+4. **Inputs are declared as keys.** Each element has a module-level object of keys made with `input_key`, and its options type is `BaseOptions & InputOptions` of that object, `BaseOptions` being the inputs every element has, like `access`.
 5. **`set(options)` can be called again.** Each input is applied with `set_input`. Options left out stay as they are.
 6. **Handed out inputs are given once.** An input that other elements follow is a creation input, applied by `[CREATE]` and left out of the options of `set`, so it can not be replaced while others follow it.
 7. **States are handed down from parent to child.** A parent passes its inputs on to its children unchanged. It does not wrap them or copy their values.
@@ -34,7 +34,13 @@ box.set({ label: other_state }); // width stays 100
 ## Writing an element
 
 ```ts
-import { Base, define_element, input_key, type InputOptions } from "#base";
+import {
+  Base,
+  define_element,
+  input_key,
+  type BaseOptions,
+  type InputOptions,
+} from "#base";
 import type { StateOrVal } from "@chocbite/ts-lib/state";
 
 /**Inputs of the box*/
@@ -44,7 +50,7 @@ const BOX = {
   /**Text in the box, shows the error on errors*/
   label: input_key<StateOrVal<string>>(),
 };
-export type MyBoxOptions = InputOptions<typeof BOX>;
+export type MyBoxOptions = BaseOptions & InputOptions<typeof BOX>;
 
 class MyBox extends Base {
   static element_name() {
@@ -58,6 +64,8 @@ class MyBox extends Base {
   #text = this.appendChild(document.createElement("span"));
 
   set(options: MyBoxOptions): this {
+    //Applies the inputs every element has, like access
+    super.set(options);
     this.set_input(BOX.width, options.width, (width) => {
       if (width.ok) this.style.width = width.value + "px";
     });
@@ -73,6 +81,17 @@ export type { MyBox };
 export function my_box(options: MyBoxOptions = {}): MyBox {
   return MyBox.create(options);
 }
+```
+
+## Inputs every element has
+
+`Base` has inputs of its own, its options are `BaseOptions`, and every element takes them because its options type includes `BaseOptions` and its `set` calls `super.set(options)`. Leaving out the call silently drops them.
+
+- **`access`**: `StateOrVal<AccessTypes>`, write by default. Read makes the element inert, so it is shown but can not be used, none hides it. A state in error gives read access, and the fault icon explains why. Elements react to it in the protected `on_access` hook, like a form group making itself focusable while read only.
+
+```ts
+my_box({ label: "Name", access: AccessTypes.Read });
+my_box().set({ access: user_access_state });
 ```
 
 ## `create(options)`
@@ -173,7 +192,7 @@ const GROUP = {
   /**Space between the boxes in px*/
   gap: input_key<StateOrVal<number>>(),
 };
-export type GroupOptions = InputOptions<typeof GROUP>;
+export type GroupOptions = BaseOptions & InputOptions<typeof GROUP>;
 /**Inputs of the group given at creation, handed out to other elements*/
 const GROUP_CREATE = {
   /**Boxes shown in the group, handed out as items*/
@@ -199,6 +218,7 @@ class Group extends Base {
   }
 
   set(options: GroupOptions): this {
+    super.set(options);
     this.set_input(GROUP.gap, options.gap, (gap) => {
       if (gap.ok) this.style.gap = gap.value + "px";
     });
@@ -270,7 +290,7 @@ Elements created in large numbers, like list rows, list fields and canvas widget
 
 ## Status
 
-- **Done and tested** in `package-ui/base/base.test.ts`: `Base.create` with `[CREATE]`, `Base.set`, `Base.set_input`, `Base.input_state`, and the key helpers `input_key`, `InputOptions` and `InputOf`.
+- **Done and tested** in `package-ui/base/base.test.ts`: `Base.create` with `[CREATE]`, `Base.set` with the `access` input, `Base.set_input`, `Base.input_state`, and the key helpers `input_key`, `InputOptions` and `InputOf`.
 - **Being converted:** `composition` is the first production module written to the pattern. Other elements are converted one at a time, canvas `Page` and `Viewport` after the depot work.
 - **Example:** `package-ui/pattern_example` is kept as the reference and must stay in line with this file. It is never built or exported, its source reaches consumers through the `SOURCE.md` of the package.
 
@@ -279,7 +299,8 @@ Elements created in large numbers, like list rows, list fields and canvas widget
 - [ ] The class is exported only as a type, unless meant to be subclassed, and a factory taking optional options creates it with `create`.
 - [ ] The constructor takes no arguments, builds the children and sets visible defaults.
 - [ ] A module-level keys object made with `input_key` declares every input, with a doc comment on each key.
-- [ ] The options type is `InputOptions<typeof KEYS>`, or `InputOf` for options built by hand.
+- [ ] The options type is `BaseOptions & InputOptions<typeof KEYS>`, or extends `BaseOptions` with `InputOf` for options built by hand.
+- [ ] `set` calls `super.set(options)`, so the inputs every element has, like `access`, work on it.
 - [ ] Every input is applied with `set_input`, in `set`, or in `[CREATE]` for creation inputs.
 - [ ] Inputs handed out to other elements are creation inputs, applied by overriding `[CREATE]`, and left out of the options of `set`.
 - [ ] Each input handles its errors in a way that makes sense to the user, the fault icon explains them, and `fault_anchor` puts it where the problem shows if that isn't the element itself.

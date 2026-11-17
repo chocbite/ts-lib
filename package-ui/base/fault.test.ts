@@ -1,7 +1,7 @@
 import { NiceError } from "@chocbite/ts-lib/result";
 import state, { type StateOrVal } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Base, define_element, input_key, type InputOptions } from ".";
+import { Base, define_element, input_key, type BaseOptions, type InputOptions } from ".";
 
 const BOX = {
   label: input_key<StateOrVal<string>>(),
@@ -16,7 +16,8 @@ class FaultBox extends Base {
     return "test";
   }
   inner = this.appendChild(document.createElement("div"));
-  set(options: InputOptions<typeof BOX>): this {
+  set(options: BaseOptions & InputOptions<typeof BOX>): this {
+    super.set(options);
     this.set_input(BOX.label, options.label, () => {});
     this.set_input(BOX.width, options.width, () => {});
     return this;
@@ -46,7 +47,8 @@ class TextBox extends Base {
   static element_name_space() {
     return "test";
   }
-  set(options: InputOptions<typeof BOX>): this {
+  set(options: BaseOptions & InputOptions<typeof BOX>): this {
+    super.set(options);
     this.set_input(BOX.label, options.label, (label) => {
       this.textContent = label.ok ? label.value : "-";
     });

@@ -276,15 +276,15 @@ const VARIANTS = [
   );
   const e = spaced_row(sec);
   const ei = box(e, "input, errorable, access", WIDTH);
-  ei.appendChild(form.number_input({ unit: "A" }).opts({ access }).bind({ value }));
+  ei.appendChild(form.number_input({ unit: "A" }).set({ access }).bind({ value }));
   readout(ei, "state", value);
   box(e, "stepper, errorable, access", WIDTH).appendChild(
-    form.stepper({ unit: "A" }).opts({ access }).bind({ value }),
+    form.stepper({ unit: "A" }).set({ access }).bind({ value }),
   );
   box(e, "slider, errorable, access", WIDTH).appendChild(
-    form.slider({ min: 0, max: 10, unit: "A" }).opts({ access }).bind({ value }),
+    form.slider({ min: 0, max: 10, unit: "A" }).set({ access }).bind({ value }),
   );
   box(e, "progress, errorable, access", WIDTH).appendChild(
-    form.progress({ max: 10, unit: "A" }).opts({ access }).bind({ value }),
+    form.progress({ max: 10, unit: "A" }).set({ access }).bind({ value }),
   );
 }

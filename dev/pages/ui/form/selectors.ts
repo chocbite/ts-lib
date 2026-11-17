@@ -174,14 +174,14 @@ const MIXED: FormSelections<number> = [
   t.appendChild(
     form
       .toggle_button({ selections: numbered(5, true) })
-      .opts({ access })
+      .set({ access })
       .bind({ value: shared }),
   );
   readout(t, "state", shared);
   box(r, "dropdown, access from state", WIDTH).appendChild(
     form
       .dropdown({ selections: numbered(5, true) })
-      .opts({ access })
+      .set({ access })
       .bind({ value: shared }),
   );
   const j = spaced_row(sec);

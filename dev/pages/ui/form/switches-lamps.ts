@@ -121,7 +121,7 @@ const WIDTH = { width: "14rem" };
   s.appendChild(
     form
       .switch({ icon: material_wifi_rounded })
-      .opts({ access })
+      .set({ access })
       .bind({ value: shared }),
   );
   readout(s, "access", access);
@@ -136,10 +136,10 @@ const WIDTH = { width: "14rem" };
   );
   const fixed = spaced_row(sec);
   box(fixed, "read, on", WIDTH).appendChild(
-    form.switch({ value: true }).opts({ access: "r" }),
+    form.switch({ value: true }).set({ access: "r" }),
   );
   box(fixed, "read, off", WIDTH).appendChild(
-    form.switch({ value: false }).opts({ access: "r" }),
+    form.switch({ value: false }).set({ access: "r" }),
   );
   box(fixed, "description (hover)", WIDTH).appendChild(
     form.switch({ description: "Turns the radio on and off" }),
@@ -265,7 +265,7 @@ const WIDTH = { width: "14rem" };
   box(r, "read access", WIDTH).appendChild(
     form
       .lamp({ text: "Read access", colors: [FormColors.None, FormColors.Blue] })
-      .opts({ access: "r" })
+      .set({ access: "r" })
       .bind({ value: on }),
   );
 }

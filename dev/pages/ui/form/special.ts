@@ -102,7 +102,7 @@ const WIDTH = { width: "18rem" };
   a.appendChild(form.ip({ type: IPVersion.V4 }).bind({ value: shared }));
   readout(a, "state", shared, (v) => v.to_string());
   box(r, "shared, access from state", WIDTH).appendChild(
-    form.ip({ type: IPVersion.V4 }).opts({ access }).bind({ value: shared }),
+    form.ip({ type: IPVersion.V4 }).set({ access }).bind({ value: shared }),
   );
   const j = box(r, "only 10.x.x.x", WIDTH);
   j.appendChild(form.ip({ type: IPVersion.V4 }).bind({ value: rejecting }));
@@ -132,7 +132,7 @@ const WIDTH = { width: "18rem" };
   box(r, "empty", WIDTH).appendChild(form.password());
   box(r, "digits only", WIDTH).appendChild(form.password({ filter: /^\d*$/ }));
   const b = box(r, "bound, access from state", WIDTH);
-  b.appendChild(form.password().opts({ access }).bind({ value }));
+  b.appendChild(form.password().set({ access }).bind({ value }));
   readout(b, "state", value);
   for (const width of ["5rem", "32rem"])
     box(r, width, { width }).appendChild(
@@ -165,7 +165,7 @@ const WIDTH = { width: "18rem" };
   box(r, "live", WIDTH).appendChild(form.color({ live: true }).bind({ value }));
   box(r, "no value", WIDTH).appendChild(form.color());
   box(r, "read access", WIDTH).appendChild(
-    form.color({ value: "#ff8800" }).opts({ access: "r" }),
+    form.color({ value: "#ff8800" }).set({ access: "r" }),
   );
   box(r, "5rem", { width: "5rem" }).appendChild(
     form.color({ value: "#ff8800" }),
@@ -250,7 +250,7 @@ const WIDTH = { width: "18rem" };
   d.appendChild(
     form
       .date_time({ mode: FormDateTimeMode.DATE })
-      .opts({ access })
+      .set({ access })
       .bind({ value: date }),
   );
   readout(d, "state", date, (v) => v.toISOString());
@@ -258,7 +258,7 @@ const WIDTH = { width: "18rem" };
   s.appendChild(
     form
       .date_time({ mode: FormDateTimeMode.STRING })
-      .opts({ access })
+      .set({ access })
       .bind({ value: text }),
   );
   readout(s, "state", text);
@@ -266,7 +266,7 @@ const WIDTH = { width: "18rem" };
   n.appendChild(
     form
       .date_time({ mode: FormDateTimeMode.NUMBER })
-      .opts({ access })
+      .set({ access })
       .bind({ value: number }),
   );
   readout(n, "state", number, (v) => v + " = " + new Date(v).toISOString());

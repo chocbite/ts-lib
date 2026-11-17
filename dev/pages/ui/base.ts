@@ -6,6 +6,7 @@ import {
   define_element,
   input_key,
   type BaseIntersectObserverOptions,
+  type BaseOptions,
   type InputOptions,
 } from "@chocbite/ts-lib-ui/base";
 import { array_from_length } from "@chocbite/ts-lib/common";
@@ -315,15 +316,14 @@ const toggle_ticking = () => {
   );
   const items = row(sec);
   for (const access of Object.values(AccessTypes))
-    box(items, "access " + access).appendChild(new DevAccess()).access = access;
-  const changing = new DevAccess();
+    box(items, "access " + access).appendChild(new DevAccess()).set({ access });
+  //The changing one follows a state
+  const access = state.ok_w<AccessTypes>(AccessTypes.Write);
   const holder = box(items, "changing, access w");
-  holder.appendChild(changing);
+  holder.appendChild(new DevAccess()).set({ access });
   const label = holder.parentElement!.querySelector("span")!;
-  const set = (access: AccessTypes) => {
-    changing.access = access;
-    label.textContent = "changing, access " + changing.access;
-  };
+  access.sub((a) => (label.textContent = "changing, access " + a.value));
+  const set = (value: AccessTypes) => access.set_ok(value);
   controls(sec, {
     "Changing: write": () => set(AccessTypes.Write),
     "Changing: read": () => set(AccessTypes.Read),
@@ -482,7 +482,8 @@ class DemoDot extends Base {
     super();
     this.style.cssText = "display:inline-block;width:1.5rem;height:1.5rem;margin:0.3rem;border-radius:50%;background:#7f8c8d";
   }
-  set(options: InputOptions<typeof DOT>): this {
+  set(options: BaseOptions & InputOptions<typeof DOT>): this {
+    super.set(options);
     this.set_input(DOT.on, options.on, (on) => {
       this.style.background = on.ok && on.value ? "#27ae60" : "#7f8c8d";
     });
@@ -508,7 +509,8 @@ class DemoLabel extends Base {
     this.style.cssText = "display:inline-block;padding:0.3rem 1.5rem 0.3rem 0.5rem;border:1px solid #95a5a6;border-radius:0.2rem";
     this.textContent = "—";
   }
-  set(options: InputOptions<typeof LABEL>): this {
+  set(options: BaseOptions & InputOptions<typeof LABEL>): this {
+    super.set(options);
     this.set_input(LABEL.text, options.text, (text) => {
       this.textContent = text.ok ? text.value : "—";
     });
@@ -533,7 +535,8 @@ class DemoField extends Base {
     this.#value.style.cssText = "display:inline-block;min-width:4rem;padding:0.3rem 1.2rem 0.3rem 0.5rem;border:1px solid #95a5a6;border-radius:0.2rem";
     this.appendChild(this.#value).textContent = "—";
   }
-  set(options: InputOptions<typeof LABEL>): this {
+  set(options: BaseOptions & InputOptions<typeof LABEL>): this {
+    super.set(options);
     this.set_input(LABEL.text, options.text, (text) => {
       this.#value.textContent = text.ok ? text.value : "—";
     });
@@ -572,7 +575,8 @@ class DemoGauge extends Base {
     this.#unit.style.marginLeft = "0.25rem";
     this.append(this.#label, this.#value, this.#unit);
   }
-  set(options: InputOptions<typeof GAUGE>): this {
+  set(options: BaseOptions & InputOptions<typeof GAUGE>): this {
+    super.set(options);
     this.set_input(GAUGE.label, options.label, (label) => {
       this.#label.textContent = label.ok ? label.value : "";
     });

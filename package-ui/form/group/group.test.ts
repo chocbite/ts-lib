@@ -246,10 +246,10 @@ describe("Group layout", () => {
 
   it("is focusable only with read access", () => {
     const group = form_group();
-    group.access = AccessTypes.Read;
+    group.set({ access: AccessTypes.Read });
     expect(group.tabIndex).toBe(0);
     expect(group.inert).toBe(true);
-    group.access = AccessTypes.Write;
+    group.set({ access: AccessTypes.Write });
     expect(group.hasAttribute("tabindex")).toBe(false);
     expect(group.onfocus).toBeNull();
   });

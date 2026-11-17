@@ -8,7 +8,7 @@ import st, {
 } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { ACCESSTYPESINFO, AccessTypes } from "./access";
-import { Base } from "./base";
+import { Base, type BaseOptions } from "./base";
 import { define_element } from "./define_element";
 import { CREATE, input_key, type InputOf, type InputOptions } from "./input";
 import "./index.scss";
@@ -721,54 +721,87 @@ describe("Base access", () => {
     document.body.replaceChildren();
   });
 
+  const shown = (element: Element) =>
+    getComputedStyle(element).display !== "none";
+
   it("defaults to write access", () => {
-    const element = new ProbeElement();
-    expect(element.access).toBe(AccessTypes.Write);
+    const element = document.body.appendChild(new ProbeElement());
     expect(element.inert).toBe(false);
+    expect(element.hasAttribute("inert")).toBe(false);
   });
 
   it("read makes the element inert, none hides it", () => {
     const element = document.body.appendChild(new ProbeElement());
-    element.access = AccessTypes.Read;
-    expect(element.access).toBe(AccessTypes.Read);
+    element.set({ access: AccessTypes.Read });
     expect(element.inert).toBe(true);
-    expect(getComputedStyle(element).display).not.toBe("none");
-    element.access = AccessTypes.None;
-    expect(element.access).toBe(AccessTypes.None);
+    expect(shown(element)).toBe(true);
+    element.set({ access: AccessTypes.None });
     expect(element.getAttribute("inert")).toBe("none");
-    expect(getComputedStyle(element).display).toBe("none");
+    expect(shown(element)).toBe(false);
   });
 
   it("none then read shows the element again but keeps it inert", () => {
     const element = document.body.appendChild(new ProbeElement());
-    element.access = AccessTypes.None;
-    element.access = AccessTypes.Read;
+    element.set({ access: AccessTypes.None });
+    element.set({ access: AccessTypes.Read });
     expect(element.inert).toBe(true);
-    expect(getComputedStyle(element).display).not.toBe("none");
+    expect(shown(element)).toBe(true);
   });
 
   it("write after none removes the inert attribute", () => {
     const element = document.body.appendChild(new ProbeElement());
-    element.access = AccessTypes.None;
-    element.access = AccessTypes.Write;
+    element.set({ access: AccessTypes.None });
+    element.set({ access: AccessTypes.Write });
     expect(element.hasAttribute("inert")).toBe(false);
   });
 
   it("on_access runs once per change", () => {
     const element = new ProbeElement();
-    element.access = AccessTypes.Read;
-    element.access = AccessTypes.Read;
-    element.access = AccessTypes.Write;
+    element.set({ access: AccessTypes.Read });
+    element.set({ access: AccessTypes.Read });
+    element.set({ access: AccessTypes.Write });
     expect(element.access_calls).toEqual([AccessTypes.Read, AccessTypes.Write]);
   });
 
-  it("access can be driven by a state through opts", () => {
+  it("follows a state, and a fixed value set again releases it", () => {
     const state = st.ok_w<AccessTypes>(AccessTypes.Read);
     const element = document.body.appendChild(new ProbeElement());
-    element.opts({ access: state });
+    element.set({ access: state });
     expect(element.inert).toBe(true);
     state.set_ok(AccessTypes.Write);
     expect(element.inert).toBe(false);
+    element.set({ access: AccessTypes.Read });
+    expect(state.amount()).toBe(0);
+    state.set_ok(AccessTypes.Write);
+    expect(element.inert).toBe(true);
+  });
+
+  it("a state in error gives read access, and the error is a fault of the element", () => {
+    const state = st.from_w<AccessTypes>(AccessTypes.Write);
+    const element = document.body.appendChild(new ProbeElement());
+    element.set({ access: state });
+    state.set_err(nice_err("no access info"));
+    expect(element.inert).toBe(true);
+    expect(shown(element)).toBe(true);
+    expect(element.faults.map((f) => f.nice)).toEqual(["no access info"]);
+  });
+
+  it("is an input of elements with options of their own", () => {
+    const element = document.body.appendChild(new SetProbe());
+    element.set({ access: AccessTypes.Read, width: 2 });
+    expect(element.inert).toBe(true);
+    expect(element.style.width).toBe("2px");
+  });
+
+  it("is only an input, the old setter and getter are gone", () => {
+    const compile_only = (element: ProbeElement) => {
+      // @ts-expect-error access is given with set
+      element.access = AccessTypes.Read;
+      // @ts-expect-error access is not read back from the element
+      void element.access;
+    };
+    expect(compile_only).toBeTypeOf("function");
+    expectTypeOf<SetProbeOptions>().toHaveProperty("access");
   });
 
   it("the access type list has an entry for every access type", () => {
@@ -852,7 +885,7 @@ const SET_PROBE = {
   width: input_key<StateOrVal<number>>(),
   label: input_key<StateOrValROS<string>>(),
 };
-type SetProbeOptions = InputOptions<typeof SET_PROBE>;
+type SetProbeOptions = BaseOptions & InputOptions<typeof SET_PROBE>;
 
 /**Element using set, width keeps its last value on errors*/
 class SetProbe extends Base {
@@ -868,6 +901,7 @@ class SetProbe extends Base {
     this.textContent = "default";
   }
   set(options: SetProbeOptions): this {
+    super.set(options);
     this.set_input(SET_PROBE.width, options.width, (width) => {
       if (width.ok) this.style.width = width.value + "px";
     });
@@ -1131,7 +1165,8 @@ describe("Base set", () => {
       static element_name_space() {
         return "basetest";
       }
-      set(options: InputOptions<typeof KEYS>): this {
+      set(options: BaseOptions & InputOptions<typeof KEYS>): this {
+        super.set(options);
         this.set_input(KEYS.plain, options.plain, (value) => {
           expectTypeOf(value).toEqualTypeOf<ResultOk<number>>();
         });
