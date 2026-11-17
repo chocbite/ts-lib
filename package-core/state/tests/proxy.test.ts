@@ -1,5 +1,5 @@
 import { sleep } from "#common";
-import { err, ok, ResultOk } from "#result";
+import { ok, ResultOk, err_nice } from "#result";
 import { describe, expect, it } from "vitest";
 import { state as st, StateResult } from "..";
 import {
@@ -411,7 +411,7 @@ describe("Proxy features", function () {
       const proxy = maker();
       expect(await proxy.check(3)).toEqual(ok(3));
       expect(await proxy.check(11)).toEqual(
-        err("22 is bigger than the limit of 10"),
+        err_nice(st.errors.ABOVE_MAX, "22 is bigger than the limit of 10"),
       );
     });
   });

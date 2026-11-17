@@ -7,7 +7,7 @@ import list from "@chocbite/ts-lib-ui/list";
 import { array_from_length } from "@chocbite/ts-lib/common";
 import { err, ok, type Option } from "@chocbite/ts-lib/result";
 import state, { type State, type StateROSW } from "@chocbite/ts-lib/state";
-import { box, controls, row, section } from "../../helpers";
+import { box, controls, row, section, demo_error } from "../../helpers";
 
 const WORDS = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf"];
 const word = (i: number) => WORDS[i % WORDS.length];
@@ -337,7 +337,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
             text: "Add row",
             on_add: () => {
               count++;
-              if (count > 2) rows.set_err("The rows failed to load");
+              if (count > 2) rows.set_err(demo_error("The rows failed to load"));
               else void rows.write(state.a.write.push("New " + count));
             },
           },
@@ -463,7 +463,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
     "Text: short": () => state_text.set_ok("Short"),
     "Text: long": () =>
       state_text.set_ok("A much longer state text for the key field"),
-    "Text: error": () => state_text.set_err("Text failed"),
+    "Text: error": () => state_text.set_err(demo_error("Text failed")),
   });
 }
 
@@ -487,13 +487,13 @@ const word = (i: number) => WORDS[i % WORDS.length];
     show_invalid && item % 3 === 1 ? `Row ${item} could not be read` : undefined;
 
   controls(sec, {
-    "List error": () => failing.set_err("Could not read the rows"),
+    "List error": () => failing.set_err(demo_error("Could not read the rows")),
     "List recover": () => failing.set_ok(initial()),
     "Toggle invalid rows": () => {
       show_invalid = !show_invalid;
       invalid.set_ok([...invalid.ok()]);
     },
-    "Sub rows error": () => sub_rows.set_err("Could not read the sub rows"),
+    "Sub rows error": () => sub_rows.set_err(demo_error("Could not read the sub rows")),
     "Sub rows recover": () => sub_rows.set_ok([10, 12]),
   });
 
@@ -666,7 +666,7 @@ function sel_list(
     state.rosw<number[]>(ok([]), (value, owner, old) => {
       const [keys, changes] = state.a.write_apply(value, old?.ok ? [...old.value] : []);
       const problem = check(keys);
-      if (problem) return Promise.resolve(err(problem));
+      if (problem) return Promise.resolve(err(demo_error("Rejected", problem)));
       state.a.read_set([keys, changes], owner.set_ok.bind(owner));
       return Promise.resolve(ok(undefined));
     });
@@ -934,7 +934,7 @@ function drag_list(
   );
   const rows = state.rosw<DragNode[]>(
     ok([drag_file("one.txt"), drag_file("two.txt"), drag_file("three.txt")]),
-    () => Promise.resolve(err("This list is locked")),
+    () => Promise.resolve(err(demo_error("Rejected", "This list is locked"))),
   );
   box(sec, "locked", { width: "16rem" }).appendChild(drag_list(rows));
 }

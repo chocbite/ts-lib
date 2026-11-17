@@ -1,7 +1,7 @@
 import {
   ResultInferOk,
   type Option,
-  type Result,
+  type ResultNice,
   type ResultOk,
 } from "#result";
 import type {
@@ -13,7 +13,7 @@ import type { StateObjectRead, StateObjectWrite } from "./helpers/object";
 
 export const STATE_VIEWER_OVERRIDE_KEY = Symbol("STATE_VIEWER_OVERRIDE_KEY");
 
-export type StateResult<T> = Result<T, string>;
+export type StateResult<T> = ResultNice<T>;
 
 /**Automatically maps array types to StateArrayRead and object record types to StateObjectRead when reading state values.
  * For primitive types and non-record objects, returns the type unchanged.*/

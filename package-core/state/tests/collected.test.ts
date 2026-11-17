@@ -1,5 +1,5 @@
 import { sleep } from "#common";
-import { err, ok, ResultOk } from "#result";
+import { ok, ResultOk, err_nice } from "#result";
 import { describe, expect, it } from "vitest";
 import { state as st, StateResult } from "..";
 import {
@@ -12,6 +12,7 @@ import {
   type TestStateOkSync,
   type TestStateSync,
 } from "./tests_shared";
+import { TEST_ERROR } from "./tests_shared";
 
 describe("Collected states", function () {
   //##################################################################################################################################################
@@ -424,11 +425,11 @@ describe("Collected states", function () {
       await sleep(0);
       transform_call_count = 0;
       // Set one to error and another to ok in the same cycle
-      stat1.set(err("fail"));
+      stat1.set(err_nice(TEST_ERROR, "fail"));
       stat2.set(ok(5));
       await sleep(1);
       expect(transform_call_count).equal(1);
-      expect(state.get()).toEqual(err("fail"));
+      expect(state.get()).toEqual(err_nice(TEST_ERROR, "fail"));
       state.unsub(sub);
     });
 

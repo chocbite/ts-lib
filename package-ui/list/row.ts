@@ -1,6 +1,7 @@
 import { Base, define_element } from "#base";
 import ctm, { ContextMenu, type ContextMenuLines } from "#context-menu";
-import { none, some, type Option } from "@chocbite/ts-lib/result";
+import { NiceError, none, some, type Option } from "@chocbite/ts-lib/result";
+import { list_errors } from "./errors";
 import { state, type State, type StateInferSub } from "@chocbite/ts-lib/state";
 import state_ui from "#state_ui";
 import { ListAddRow, type ListAddRowOptions } from "./add_row";
@@ -19,7 +20,9 @@ import type {
 } from "./types";
 
 /**Shown when the user tries to select a row that can not be selected */
-const NOT_SELECTABLE = "This row cannot be selected";
+/**The error of selecting a row that can not be selected*/
+const not_selectable = () =>
+  new NiceError(list_errors.NOT_SELECTABLE, "This row cannot be selected");
 
 export type ListSubRows<R> = () => R[] | State<R[]>;
 
@@ -223,7 +226,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     }
     if (!selection) return false;
     if (e.key === " " && this.selection_key === undefined) {
-      selection.on_error?.(this, NOT_SELECTABLE);
+      selection.on_error?.(this, not_selectable());
       return true;
     }
     return selection.key_down(this.selection_key, e);
@@ -409,7 +412,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     this.state = rows as ListParentRows<A>;
     if (state.is.state(rows))
       this.#state_sub = this.attach_state(rows, (r) =>
-        this.#update_rows(r.ok ? r.value : [], r.ok ? undefined : r.error),
+        this.#update_rows(r.ok ? r.value : [], r.ok ? undefined : r.error.nice),
       );
     else this.#update_rows(rows);
   }
@@ -449,7 +452,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
         this.#focus_after_click();
         if (this.selection_key !== undefined)
           selection.check_click(this.selection_key);
-        else selection.on_error?.(this, NOT_SELECTABLE);
+        else selection.on_error?.(this, not_selectable());
       };
     }
     for (const cell of [this.#check, this.#key_field])
@@ -462,7 +465,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
       this.#focus_after_click();
       if (this.selection_key !== undefined)
         selection.click(this.selection_key, e);
-      else selection.on_error?.(this, NOT_SELECTABLE);
+      else selection.on_error?.(this, not_selectable());
     };
     //Shift click would select text between the rows
     this.#field_box.onmousedown = (e) => {

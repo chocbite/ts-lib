@@ -1,5 +1,5 @@
 import { sleep } from "#common";
-import { err, ok, ResultOk } from "#result";
+import { err, NiceError, ok, ResultOk } from "#result";
 import { expect, it } from "vitest";
 import type {
   StateResult as SR,
@@ -14,8 +14,11 @@ import type {
   StateSub,
 } from "../types";
 
+/**Kind of the errors tests make themselves*/
+export const TEST_ERROR = Symbol("Test error");
+
 function err_gen() {
-  return "Test Error";
+  return new NiceError(TEST_ERROR, "Test Error");
 }
 
 type StateType<O, SY, W, ST, R> = {

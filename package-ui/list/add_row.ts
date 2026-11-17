@@ -58,7 +58,7 @@ export class ListAddRow<
     this.#button.onclick = options.on_add;
 
     if (state.is.state(options.text))
-      this.attach_state_to_prop("text", options.text, (e) => some(e));
+      this.attach_state_to_prop("text", options.text, (e) => some(e.nice));
     else this.detach_state_from_prop("text").text = options.text;
     if (state.is.state(options.disabled))
       this.attach_state_to_prop("disabled", options.disabled, () =>

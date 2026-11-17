@@ -4,11 +4,13 @@ import {
   BaseSVG,
   base_loop,
   define_element,
+  input_key,
   type BaseIntersectObserverOptions,
+  type InputOptions,
 } from "@chocbite/ts-lib-ui/base";
 import { array_from_length } from "@chocbite/ts-lib/common";
-import { some } from "@chocbite/ts-lib/result";
-import state from "@chocbite/ts-lib/state";
+import { NiceError, some } from "@chocbite/ts-lib/result";
+import state, { type StateOrVal } from "@chocbite/ts-lib/state";
 import { box, controls, row, section } from "../../helpers";
 
 /**Adds a line of text to the parent, for showing counts that change*/
@@ -459,4 +461,229 @@ const toggle_ticking = () => {
   });
   holder.appendChild(gauge.canvas);
   update();
+}
+
+
+//Small elements following the element pattern, to see the fault icon on elements of different sizes
+
+const DOT = {
+  /**On or off, grey on errors*/
+  on: input_key<StateOrVal<boolean>>(),
+};
+/**A round lamp, too small for any text, the fault icon is the only sign of a problem*/
+class DemoDot extends Base {
+  static element_name() {
+    return "dot";
+  }
+  static element_name_space() {
+    return "devbase";
+  }
+  constructor() {
+    super();
+    this.style.cssText = "display:inline-block;width:1.5rem;height:1.5rem;margin:0.3rem;border-radius:50%;background:#7f8c8d";
+  }
+  set(options: InputOptions<typeof DOT>): this {
+    this.set_input(DOT.on, options.on, (on) => {
+      this.style.background = on.ok && on.value ? "#27ae60" : "#7f8c8d";
+    });
+    return this;
+  }
+}
+define_element(DemoDot);
+
+const LABEL = {
+  /**Text, a dash on errors*/
+  text: input_key<StateOrVal<string>>(),
+};
+/**A text, showing a dash on errors and leaving the explanation to the fault icon*/
+class DemoLabel extends Base {
+  static element_name() {
+    return "label";
+  }
+  static element_name_space() {
+    return "devbase";
+  }
+  constructor() {
+    super();
+    this.style.cssText = "display:inline-block;padding:0.3rem 1.5rem 0.3rem 0.5rem;border:1px solid #95a5a6;border-radius:0.2rem";
+    this.textContent = "—";
+  }
+  set(options: InputOptions<typeof LABEL>): this {
+    this.set_input(LABEL.text, options.text, (text) => {
+      this.textContent = text.ok ? text.value : "—";
+    });
+    return this;
+  }
+}
+define_element(DemoLabel);
+
+/**A name and a value box, the fault icon goes on the value box, where the problem is*/
+class DemoField extends Base {
+  static element_name() {
+    return "field";
+  }
+  static element_name_space() {
+    return "devbase";
+  }
+  #value = document.createElement("span");
+  constructor() {
+    super();
+    this.style.cssText = "display:inline-flex;gap:0.5rem;align-items:center";
+    this.appendChild(document.createElement("span")).textContent = "Speed";
+    this.#value.style.cssText = "display:inline-block;min-width:4rem;padding:0.3rem 1.2rem 0.3rem 0.5rem;border:1px solid #95a5a6;border-radius:0.2rem";
+    this.appendChild(this.#value).textContent = "—";
+  }
+  set(options: InputOptions<typeof LABEL>): this {
+    this.set_input(LABEL.text, options.text, (text) => {
+      this.#value.textContent = text.ok ? text.value : "—";
+    });
+    return this;
+  }
+  protected fault_anchor(): Element {
+    return this.#value;
+  }
+}
+define_element(DemoField);
+
+const GAUGE = {
+  /**Name of the value, empty on errors*/
+  label: input_key<StateOrVal<string>>(),
+  /**The value, a dash on errors*/
+  value: input_key<StateOrVal<number>>(),
+  /**Unit after the value, left out on errors*/
+  unit: input_key<StateOrVal<string>>(),
+};
+/**A value with a name and a unit, three inputs that can each fail, the prompt lists every problem*/
+class DemoGauge extends Base {
+  static element_name() {
+    return "gauge";
+  }
+  static element_name_space() {
+    return "devbase";
+  }
+  #label = document.createElement("div");
+  #value = document.createElement("span");
+  #unit = document.createElement("span");
+  constructor() {
+    super();
+    this.style.cssText = "display:inline-block;min-width:7rem;padding:0.4rem 1.5rem 0.4rem 0.6rem;border:1px solid #95a5a6;border-radius:0.2rem";
+    this.#label.style.fontSize = "0.75rem";
+    this.#value.style.fontSize = "1.4rem";
+    this.#unit.style.marginLeft = "0.25rem";
+    this.append(this.#label, this.#value, this.#unit);
+  }
+  set(options: InputOptions<typeof GAUGE>): this {
+    this.set_input(GAUGE.label, options.label, (label) => {
+      this.#label.textContent = label.ok ? label.value : "";
+    });
+    this.set_input(GAUGE.value, options.value, (value) => {
+      this.#value.textContent = value.ok ? value.value.toFixed(1) : "—";
+    });
+    this.set_input(GAUGE.unit, options.unit, (unit) => {
+      this.#unit.textContent = unit.ok ? unit.value : "";
+    });
+    return this;
+  }
+}
+define_element(DemoGauge);
+
+/**Errors like the ones the libraries give, from a lost connection, a bug and normal use*/
+const errors = {
+  connection: () => new NiceError(Symbol("Connection failed"), new TypeError("Failed to fetch")),
+  bug: () =>
+    new NiceError(
+      Symbol("Invalid data from server"),
+      new Error("Failed to parse due to member speed being wrong type (expected number)", {
+        cause: new Error("make_fetch_parser was called here"),
+      }),
+    ),
+  waiting: () => new NiceError(Symbol("Waiting for data"), "No value received yet"),
+};
+
+//      ______      _    _ _   _______
+//     |  ____/\   | |  | | | |__   __|
+//     | |__ /  \  | |  | | |    | |
+//     |  __/ /\ \ | |  | | |    | |
+//     | | / ____ \| |__| | |____| |
+//     |_|/_/    \_\\____/|______|_|
+{
+  const sec = section(
+    "Fault icon",
+    "Every element following the element pattern shows the broken link icon in its top right corner while an input is in error, without code of its own. " +
+      "Look at how it sits on the tiny dot, the label and the field, where the field puts it on its value box. Click it for the prompt: the nice text, the message, and for errors with an Error the details with the stack and its causes. " +
+      "The click must not reach the element. The positioned box checks that an element that is positioned keeps its position.",
+  );
+  const on = state.from_w(true);
+  const text = state.from_w("Running");
+  const boxes = row(sec);
+  box(boxes, "dot").append(DemoDot.create({ on }), DemoDot.create({ on: true }));
+  box(boxes, "label").appendChild(DemoLabel.create({ text }));
+  box(boxes, "field, icon on its value").appendChild(DemoField.create({ text }));
+  const placed = box(boxes, "positioned element", { position: "relative", width: "8rem", height: "3rem" });
+  const absolute = placed.appendChild(DemoLabel.create({ text }));
+  absolute.style.position = "absolute";
+  absolute.style.right = "0";
+  absolute.style.bottom = "0";
+  controls(sec, {
+    "Connection failed": () => {
+      const error = errors.connection();
+      on.set_err(error);
+      text.set_err(error);
+    },
+    "Bug, with cause chain": () => text.set_err(errors.bug()),
+    "Waiting, message only": () => on.set_err(errors.waiting()),
+    "All ok": () => {
+      on.set_ok(true);
+      text.set_ok("Running");
+    },
+  });
+}
+
+{
+  const sec = section(
+    "Several problems on one element",
+    "A gauge with three inputs that fail in different ways. It shows one icon however many inputs fail, and its prompt lists every problem, an identical error only once. " +
+      "Fail them one by one, then fix them one by one, the icon must stay until the last one is fixed.",
+  );
+  const label = state.from_w("Temperature");
+  const value = state.from_w(21.5);
+  const unit = state.from_w("°C");
+  const boxes = row(sec);
+  box(boxes, "gauge").appendChild(DemoGauge.create({ label, value, unit }));
+  box(boxes, "same states, fixed unit").appendChild(DemoGauge.create({ label, value, unit: "°C" }));
+  controls(sec, {
+    "Fail label, waiting": () => label.set_err(errors.waiting()),
+    "Fail value, connection": () => value.set_err(errors.connection()),
+    "Fail unit, bug": () => unit.set_err(errors.bug()),
+    "Fix label": () => label.set_ok("Temperature"),
+    "Fix value": () => value.set_ok(21.5),
+    "Fix unit": () => unit.set_ok("°C"),
+  });
+}
+
+//       ____  _    _ _______       _____ ______
+//      / __ \| |  | |__   __|/\   / ____|  ____|
+//     | |  | | |  | |  | |  /  \ | |  __| |__
+//     | |  | | |  | |  | | / /\ \| | |_ |  __|
+//     | |__| | |__| |  | |/ ____ \ |__| | |____
+//      \____/ \____/   |_/_/    \_\_____|______|
+{
+  const sec = section(
+    "Outage on many elements",
+    "One error reaching many elements, like a fetch that fails for every state of a parser. Shows 5000 dots bound to one state, then fails and recovers it, with the time each took. " +
+      "The prompt of any dot lists the error once.",
+  );
+  const on = state.from_w(true);
+  const timing = sec.appendChild(document.createElement("p"));
+  const area = sec.appendChild(document.createElement("div"));
+  const timed = (what: string, action: () => void) => {
+    const start = performance.now();
+    action();
+    timing.textContent = `${what}: ${(performance.now() - start).toFixed(1)} ms`;
+  };
+  controls(sec, {
+    "Show 5000": () => timed("Show 5000", () => area.replaceChildren(...Array.from({ length: 5000 }, () => DemoDot.create({ on })))),
+    "Fail": () => timed("Fail", () => on.set_err(errors.connection())),
+    "Recover": () => timed("Recover", () => on.set_ok(true)),
+  });
 }

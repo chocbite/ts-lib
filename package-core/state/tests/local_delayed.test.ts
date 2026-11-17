@@ -1,5 +1,5 @@
 import { sleep } from "#common";
-import { err, ok, ResultOk } from "#result";
+import { ok, ResultOk, err_nice } from "#result";
 import { assertType, describe, expect, it } from "vitest";
 import {
   state as st,
@@ -20,6 +20,7 @@ import {
   type TestStateAll,
   type TestStateWrite,
 } from "./tests_shared";
+import { TEST_ERROR } from "./tests_shared";
 
 describe("Initialize delayed states", function () {
   //##################################################################################################################################################
@@ -101,7 +102,7 @@ describe("Initialize delayed states", function () {
       assertType<StateLocalREA<number>>(init);
     });
     it("err", async function () {
-      const init = st.rea<number>(() => sleep(1, err("1")));
+      const init = st.rea<number>(() => sleep(1, err_nice(TEST_ERROR, "1")));
       assertType<StateREA<number>>(init);
       assertType<StateLocalREA<number>>(init);
     });
@@ -244,7 +245,7 @@ describe("Initialize delayed states", function () {
       assertType<StateLocalREAW<number>>(init);
     });
     it("err", async function () {
-      const init = st.reaw<number>(() => sleep(1, err("1")));
+      const init = st.reaw<number>(() => sleep(1, err_nice(TEST_ERROR, "1")));
       assertType<StateREAW<number>>(init);
       assertType<StateLocalREAW<number>>(init);
     });
@@ -366,10 +367,10 @@ describe("Initialize delayed states", function () {
       const check = () => {
         st.roa<number>(async () => ok(1));
         // @ts-expect-error an ok state can not be initialized with an error
-        st.roa<number>(async () => err("Failed"));
+        st.roa<number>(async () => err_nice(TEST_ERROR, "Failed"));
         st.roaw<number>(async () => ok(1));
         // @ts-expect-error an ok state can not be initialized with an error
-        st.roaw<number>(async () => err("Failed"));
+        st.roaw<number>(async () => err_nice(TEST_ERROR, "Failed"));
       };
       expect(check).toBeTypeOf("function");
     });

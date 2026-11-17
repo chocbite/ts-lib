@@ -1,15 +1,9 @@
 import { NiceError, type Result } from "#result";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  FETCH_ABORTED,
-  FETCH_CONNECTION_FAILED,
-  FETCH_CONNECTION_LOST,
-  FETCH_REJECTED,
-  FETCH_TIMED_OUT,
-  fetch_status_safe,
-  fetch_text_safe,
-  FetchStatusError,
-} from "./fetch";
+import { fetch_status_safe, fetch_text_safe, FetchStatusError } from "./fetch";
+import safe from "./index";
+
+const errors = safe.fetch.errors;
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -49,7 +43,7 @@ describe("fetch_text_safe", () => {
 
     const result = await fetch_text_safe("/x");
 
-    expect_kind(result, FETCH_CONNECTION_LOST);
+    expect_kind(result, errors.CONNECTION_LOST);
     expect(!result.ok && result.error.cause).toBe(failure);
   });
 
@@ -58,7 +52,7 @@ describe("fetch_text_safe", () => {
       signal: AbortSignal.abort(),
     });
 
-    expect_kind(result, FETCH_ABORTED);
+    expect_kind(result, errors.ABORTED);
   });
 });
 
@@ -113,7 +107,7 @@ describe.each([
     const result = await fetch_safe("/x");
 
     expect(!result.ok && result.error).toBeInstanceOf(NiceError);
-    expect_kind(result, FETCH_CONNECTION_FAILED);
+    expect_kind(result, errors.CONNECTION_FAILED);
     expect(!result.ok && result.error.nice).toBe("Connection failed");
     expect(!result.ok && result.error.message).toBe("Failed to fetch");
     expect(!result.ok && result.error.cause).toBe(failure);
@@ -124,7 +118,7 @@ describe.each([
 
     const result = await fetch_safe("/x");
 
-    expect_kind(result, FETCH_TIMED_OUT);
+    expect_kind(result, errors.TIMED_OUT);
     expect(!result.ok && result.error.message).toBe("signal timed out");
   });
 
@@ -133,7 +127,7 @@ describe.each([
 
     const result = await fetch_safe("/x");
 
-    expect_kind(result, FETCH_ABORTED);
+    expect_kind(result, errors.ABORTED);
   });
 
   it("gives a rejection that is not an Error as connection failed with its text, without cause", async () => {
@@ -141,7 +135,7 @@ describe.each([
 
     const result = await fetch_safe("/x");
 
-    expect_kind(result, FETCH_CONNECTION_FAILED);
+    expect_kind(result, errors.CONNECTION_FAILED);
     expect(!result.ok && result.error.message).toBe("gone");
     expect(!result.ok && result.error.cause).toBeUndefined();
   });
@@ -151,7 +145,7 @@ describe.each([
 
     const result = await fetch_safe("/x");
 
-    expect_kind(result, FETCH_REJECTED);
+    expect_kind(result, errors.REJECTED);
     expect(!result.ok && result.error.message).toBe("HTTP 400");
     const cause = !result.ok ? result.error.cause : undefined;
     expect(cause).toBeInstanceOf(FetchStatusError);
@@ -166,7 +160,16 @@ describe.each([
 
     const result = await fetch_safe("/x");
 
-    expect_kind(result, FETCH_REJECTED);
+    expect_kind(result, errors.REJECTED);
     expect(!result.ok && (result.error.cause as FetchStatusError).body).toBe("");
+  });
+});
+
+describe("safe default export", () => {
+  it("gives the fetch functions and their errors under fetch", () => {
+    expect(safe.fetch.text).toBe(fetch_text_safe);
+    expect(safe.fetch.status).toBe(fetch_status_safe);
+    expect(Object.isFrozen(errors)).toBe(true);
+    expect(errors.TIMED_OUT.description).toBe("Request timed out");
   });
 });

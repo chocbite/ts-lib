@@ -1,3 +1,4 @@
+import { NiceError } from "@chocbite/ts-lib/result";
 import { define_element, input_key, type InputOf } from "#base";
 import type { ResultOk } from "@chocbite/ts-lib/result";
 import state, {
@@ -29,6 +30,9 @@ import {
   type ExampleEditor,
   type ExampleGroup,
 } from ".";
+
+/**A test error whose nice text is its message, so shown texts read as before*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 const attach = <T extends HTMLElement>(element: T): T =>
   document.body.appendChild(element);
@@ -296,7 +300,7 @@ describe("errors", () => {
     const probe = new TypeProbe().set({
       ok_only: 1,
       writable: state.ok_w(2),
-      errorable: state.err("e"),
+      errorable: state.err(nice_err("e")),
     });
     expect(probe).toBeInstanceOf(TypeProbe);
   });
@@ -304,7 +308,7 @@ describe("errors", () => {
   it("keeps the last good width when a state gives an error", () => {
     const width = state.from_w<number>(120);
     const box = attach(example_box({ width }));
-    width.set_err("gone");
+    width.set_err(nice_err("gone"));
     expect(box.style.width).toBe("120px");
   });
 
@@ -313,9 +317,9 @@ describe("errors", () => {
     const color = state.from_w("red");
     const box = attach(example_box({ label, color }));
     expect(box.textContent).toBe("a");
-    label.set_err("gone");
+    label.set_err(nice_err("gone"));
     expect(box.textContent).toBe("⚠ gone");
-    color.set_err("gone");
+    color.set_err(nice_err("gone"));
     expect(box.style.background).toBe("rgb(127, 140, 141)");
     label.set_ok("b");
     color.set_ok("red");

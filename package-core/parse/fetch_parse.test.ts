@@ -1,5 +1,6 @@
 import { sleep } from "#common";
-import { err, ok, type Option, type Result } from "#result";
+import { err, err_nice, NiceError, ok, type Option, type Result } from "#result";
+import safe, { fetch_status_safe } from "#safe";
 import state, {
   type StateArrayReadTypes,
   type StateREA,
@@ -16,6 +17,11 @@ import {
   type FetchSchema,
   type FetchWrite,
 } from "./fetch_parse";
+import parse from "./index";
+
+const errors = parse.fetch.errors;
+/**Kind of the errors tests make themselves*/
+const TEST_ERROR = Symbol("Test error");
 
 /**Value type of a readable state*/
 type StateRV<S> = S extends StateREA<infer V> ? V : never;
@@ -72,7 +78,9 @@ describe("make_fetch_parser", () => {
 
     const result = await parsed.name;
 
-    expect(!result.ok && result.error).toBe("Fetch failed: offline");
+    expect(!result.ok && result.error.kind).toBe(safe.fetch.errors.CONNECTION_FAILED);
+    expect(!result.ok && result.error.message).toBe("offline");
+    expect(!result.ok && result.error.cause).toBeInstanceOf(TypeError);
     expect(console_error).not.toHaveBeenCalled();
     console_error.mockRestore();
     vi.unstubAllGlobals();
@@ -87,7 +95,8 @@ describe("make_fetch_parser", () => {
 
     const result = await parsed.name;
 
-    expect(!result.ok && result.error).toBe("Fetch failed: HTTP 500");
+    expect(!result.ok && result.error.kind).toBe(safe.fetch.errors.REJECTED);
+    expect(!result.ok && result.error.message).toBe("HTTP 500");
     vi.unstubAllGlobals();
   });
 
@@ -104,7 +113,7 @@ describe("make_fetch_parser", () => {
 
     const result = await parsed.name;
 
-    expect(!result.ok && result.error).toBe("Unexpected error in request");
+    expect(!result.ok && result.error).toEqual(new NiceError(errors.UNEXPECTED, thrown));
     expect(console_error).toHaveBeenCalledWith(expect.anything(), thrown);
     console_error.mockRestore();
   });
@@ -171,12 +180,12 @@ describe("make_fetch_parser", () => {
   it("gives the error of a custom fetch as the read error without logging", async () => {
     const console_error = vi.spyOn(console, "error").mockImplementation(() => {});
     const user = make_fetch_parser(() => "/user", 1_000, { name: "s" }, {
-      fetch: async () => err("Timed out"),
+      fetch: async () => err_nice(TEST_ERROR, "Timed out"),
     });
 
     const result = await user.name;
 
-    expect(!result.ok && result.error).toBe("Timed out");
+    expect(!result.ok && result.error).toEqual(new NiceError(TEST_ERROR, "Timed out"));
     expect(console_error).not.toHaveBeenCalled();
     console_error.mockRestore();
   });
@@ -190,7 +199,7 @@ describe("make_fetch_parser", () => {
 
     const result = await user.name;
 
-    expect(!result.ok && result.error).toBe("Unexpected error in fetch");
+    expect(!result.ok && result.error).toEqual(new NiceError(errors.UNEXPECTED, thrown));
     expect(console_error).toHaveBeenCalledWith(expect.anything(), thrown);
     console_error.mockRestore();
   });
@@ -209,7 +218,7 @@ describe("make_fetch_parser", () => {
 
       const result = await user.name;
 
-      expect(!result.ok && result.error).toBe("Unexpected error in fetch");
+      expect(!result.ok && result.error.kind).toBe(errors.UNEXPECTED);
       expect(console_error.mock.calls[0]?.[0]).toContain(message);
       console_error.mockRestore();
     },
@@ -218,12 +227,12 @@ describe("make_fetch_parser", () => {
   it("logs a custom fetch that does not return a result", async () => {
     const console_error = vi.spyOn(console, "error").mockImplementation(() => {});
     const user = make_fetch_parser(() => "/user", 1_000, { name: "s" }, {
-      fetch: async () => '{"name":"Ada"}' as unknown as Result<string, string>,
+      fetch: async () => '{"name":"Ada"}' as unknown as Result<string, NiceError>,
     });
 
     const result = await user.name;
 
-    expect(!result.ok && result.error).toBe("Unexpected error in fetch");
+    expect(!result.ok && result.error.kind).toBe(errors.UNEXPECTED);
     expect(console_error.mock.calls[0]?.[0]).toContain("must return a Result");
     console_error.mockRestore();
   });
@@ -231,12 +240,12 @@ describe("make_fetch_parser", () => {
   it("logs a write that does not return a result", async () => {
     const console_error = vi.spyOn(console, "error").mockImplementation(() => {});
     const user = make_fetch_parser(() => "/user", 1_000, { name: "sw" }, {
-      write: async () => undefined as unknown as Result<void, string>,
+      write: async () => undefined as unknown as Result<void, NiceError>,
     });
 
     const result = await user.name.write("Ada");
 
-    expect(!result.ok && result.error).toBe("Unexpected error in write");
+    expect(!result.ok && result.error.kind).toBe(errors.UNEXPECTED);
     expect(console_error.mock.calls[0]?.[0]).toContain("must return a Result");
     console_error.mockRestore();
   });
@@ -244,12 +253,12 @@ describe("make_fetch_parser", () => {
   it("gives the error of write as the write result without logging", async () => {
     const console_error = vi.spyOn(console, "error").mockImplementation(() => {});
     const user = make_fetch_parser(() => "/user", 1_000, { name: "sw" }, {
-      write: async () => err("Rejected by server"),
+      write: async () => err_nice(TEST_ERROR, "Rejected by server"),
     });
 
     const result = await user.name.write("Ada");
 
-    expect(!result.ok && result.error).toBe("Rejected by server");
+    expect(!result.ok && result.error).toEqual(new NiceError(TEST_ERROR, "Rejected by server"));
     expect(console_error).not.toHaveBeenCalled();
     console_error.mockRestore();
   });
@@ -263,7 +272,7 @@ describe("make_fetch_parser", () => {
 
     const result = await user.name.write("Ada");
 
-    expect(!result.ok && result.error).toBe("Unexpected error in write");
+    expect(!result.ok && result.error).toEqual(new NiceError(errors.UNEXPECTED, thrown));
     expect(console_error).toHaveBeenCalledWith(expect.anything(), thrown);
     console_error.mockRestore();
   });
@@ -589,7 +598,8 @@ describe("make_fetch_parser array write options", () => {
     try {
       const { parsed, send } = await pumps_parser({ write: "all" });
       const result = await parsed.pumps[5]!.speed.write(5);
-      expect(!result.ok && result.error).toContain("no longer exists");
+      expect(!result.ok && result.error.kind).toBe(errors.ITEM_GONE);
+      if (!result.ok) expect_created_here(result.error);
       expect(send).not.toHaveBeenCalled();
     } finally {
       vi.unstubAllGlobals();
@@ -728,7 +738,7 @@ describe("make_fetch_parser keyed arrays", () => {
   };
   const name_of = async (item: { name: StateREA<string> }) => {
     const name = await item.name;
-    return name.ok ? name.value : "error: " + name.error;
+    return name.ok ? name.value : "error: " + name.error.message;
   };
 
   it("without a key, item states follow positions and an insert at the start is reported at the end", async () => {
@@ -835,7 +845,8 @@ describe("make_fetch_parser keyed arrays", () => {
       const [a] = t.items();
       await t.poll([B]);
       const result = await a!.name.write("Renamed");
-      expect(!result.ok && result.error).toContain("no longer exists");
+      expect(!result.ok && result.error.kind).toBe(errors.ITEM_GONE);
+      if (!result.ok) expect_created_here(result.error);
       expect(t.send).not.toHaveBeenCalled();
     } finally {
       t.done();
@@ -875,7 +886,7 @@ describe("make_fetch_parser optional members", () => {
   };
   const value_of = async (s: PromiseLike<StateResult<unknown>>) => {
     const r = await s;
-    return r.ok ? r.value : "error: " + r.error;
+    return r.ok ? r.value : "error: " + r.error.message;
   };
 
   it("reads a missing optional leaf as undefined", async () => {
@@ -950,7 +961,7 @@ describe("make_fetch_parser optional members", () => {
 
 describe("make_fetch_parser retry_rate", () => {
   /**A fetch that gives the results in order, the last one from then on*/
-  const fetch_giving = (...results: Result<string, string>[]) =>
+  const fetch_giving = (...results: Result<string, NiceError>[]) =>
     vi.fn<FetchFunction>(async () => results.length > 1 ? results.shift()! : results[0]!);
 
   /**Subscribes, runs the timers for each step in ms and gives the number of fetches after each step*/
@@ -978,7 +989,7 @@ describe("make_fetch_parser retry_rate", () => {
   };
 
   it("waits retry_rate after a failed fetch and update_rate again after a success", async () => {
-    const fetch = fetch_giving(err("offline"), err("offline"), ok('{"name":"Ada"}'));
+    const fetch = fetch_giving(err_nice(TEST_ERROR, "offline"), err_nice(TEST_ERROR, "offline"), ok('{"name":"Ada"}'));
 
     //Fails at 0 and 1000, succeeds at 2000, then polls every 100
     expect(await fetches_after(fetch, { retry_rate: 1000 }, [999, 1, 999, 1, 99, 1])).toEqual([
@@ -987,7 +998,7 @@ describe("make_fetch_parser retry_rate", () => {
   });
 
   it("waits update_rate after a failed fetch without retry_rate", async () => {
-    const fetch = fetch_giving(err("offline"));
+    const fetch = fetch_giving(err_nice(TEST_ERROR, "offline"));
 
     expect(await fetches_after(fetch, {}, [99, 1, 100])).toEqual([1, 1, 2, 3]);
   });
@@ -1103,7 +1114,7 @@ describe("make_fetch_parser write_debounce", () => {
   const parser_from = <const S extends FetchSchema>(
     schema: S,
     body: unknown = {},
-    result: Result<void, string> = ok(undefined),
+    result: Result<unknown, NiceError> = ok(undefined),
   ) => {
     const send = vi.fn<FetchWrite>(async () => result);
     const parsed = make_fetch_parser(() => "/x", 60_000, schema, {
@@ -1154,15 +1165,15 @@ describe("make_fetch_parser write_debounce", () => {
 
   it("gives every write of the batch the result of the write call", () =>
     with_timers(async () => {
-      const { parsed } = parser_from({ name: "sw", speed: "nw" }, {}, err("Rejected"));
+      const { parsed } = parser_from({ name: "sw", speed: "nw" }, {}, err_nice(TEST_ERROR, "Rejected"));
 
       const first = parsed.name.write("A");
       const second = parsed.speed.write(5);
       await vi.advanceTimersByTimeAsync(50);
 
       const [first_result, second_result] = [await first, await second];
-      expect(!first_result.ok && first_result.error).toBe("Rejected");
-      expect(!second_result.ok && second_result.error).toBe("Rejected");
+      expect(!first_result.ok && first_result.error.message).toBe("Rejected");
+      expect(!second_result.ok && second_result.error.message).toBe("Rejected");
     }));
 
   it("sends the batch first when an encoded write of another item would overwrite it", () =>
@@ -1201,5 +1212,92 @@ describe("make_fetch_parser write_debounce", () => {
       expect(send).toHaveBeenCalledTimes(1);
       expect(send).toHaveBeenCalledWith({ list: ["A", "b", "C", "d"] });
     });
+  });
+});
+
+/**The error is not supposed to happen, so it has an Error, whose cause is where make_fetch_parser was called, this test file*/
+const expect_created_here = (error: NiceError) => {
+  expect(error.cause).toBeInstanceOf(Error);
+  expect((error.cause?.cause as Error | undefined)?.stack).toContain("fetch_parse.test");
+};
+
+describe("make_fetch_parser NiceErrors", () => {
+  it("gives a write without write function as not writable, with where the parser was made", async () => {
+    const parsed = make_fetch_parser(() => "/x", 60_000, { name: "s" }, { fetch: async () => ok('{"name":"a"}') });
+
+    const result = await (parsed[FETCH_PARSE] as unknown as StateREAW<unknown>).write({ name: "b" });
+
+    expect(!result.ok && result.error.kind).toBe(state.errors.NOT_WRITABLE);
+    if (!result.ok) expect_created_here(result.error);
+  });
+
+  const parser_with = <const S extends FetchSchema>(schema: S, body: string) =>
+    make_fetch_parser(() => "/x", 60_000, schema, {
+      fetch: async () => ok(body),
+      write: async () => ok(undefined),
+    });
+
+  it("gives a body that fails to parse as invalid data, with the parser message", async () => {
+    const parsed = parser_with({ name: "s" }, "not json");
+
+    const result = await parsed.name;
+
+    expect(!result.ok && result.error.kind).toBe(errors.INVALID_DATA);
+    expect(!result.ok && result.error.message).toBe("Failed to parse valid json");
+    if (!result.ok) expect_created_here(result.error);
+  });
+
+  it("gives a missing record member as member missing", async () => {
+    const parsed = parser_with(["{}", "n"], '{"a":1}');
+
+    const result = await parsed["b"]!;
+
+    expect(!result.ok && result.error.kind).toBe(errors.MEMBER_MISSING);
+    if (!result.ok) expect_created_here(result.error);
+  });
+
+  it("refuses a write all array write before a value is received as no value", async () => {
+    const send = vi.fn<FetchWrite>(async () => ok(undefined));
+    const parsed = make_fetch_parser(() => "/x", 60_000, { list: [0, "sw", { write: "all" }] }, {
+      fetch: () => new Promise(() => {}),
+      write: send,
+    });
+
+    const result = await parsed.list.write(state.a.write.push("x"));
+
+    expect(!result.ok && result.error.kind).toBe(errors.NO_VALUE);
+    //Normal use, nothing is received yet after start up, so only a message
+    expect(!result.ok && result.error.cause).toBeUndefined();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("gives the result of write as ok without its value", async () => {
+    const parsed = make_fetch_parser(() => "/x", 60_000, { name: "sw" }, {
+      fetch: async () => ok('{"name":"a"}'),
+      write: async () => ok(204),
+    });
+
+    expect(await parsed.name.write("b")).toEqual(ok(undefined));
+  });
+
+  it("logs a fetch from plain javascript that gives a string error as a bug", async () => {
+    const console_error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const parsed = make_fetch_parser(() => "/x", 60_000, { name: "s" }, {
+      fetch: async () => err("offline") as unknown as Result<string, NiceError>,
+    });
+
+    const result = await parsed.name;
+
+    expect(!result.ok && result.error.kind).toBe(errors.UNEXPECTED);
+    if (!result.ok) expect_created_here(result.error);
+    console_error.mockRestore();
+  });
+
+  it("takes fetch_status_safe as write without mapping", () => {
+    const parsed = make_fetch_parser(() => "/x", 60_000, { name: "sw" }, {
+      write: (payload) => fetch_status_safe("/x", { method: "PATCH", body: JSON.stringify(payload) }),
+    });
+
+    expect(parsed.name).toBeDefined();
   });
 });

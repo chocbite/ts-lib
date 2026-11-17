@@ -30,8 +30,8 @@ const bar = comp.topbar({
 ```
 
 - **`comp.topbar({ left, mid, right })`**: each side is an array of elements, or a state of one. A side in error is empty. The middle stays centered, and when space runs out the middle gives way first, its labels end in "…".
-- **`comp.topbar_button({ text, icon, on_click })`**: a button with an icon, a text or both. A text in error shows the error, an icon in error is left out. `on_click` is a plain function, `set({ on_click })` replaces it.
-- **`comp.topbar_label({ text })`**: a text, showing the error when the state is in error.
+- **`comp.topbar_button({ text, icon, on_click })`**: a button with an icon, a text or both. A text in error shows the nice text of the error, an icon in error is left out. `on_click` is a plain function, `set({ on_click })` replaces it.
+- **`comp.topbar_label({ text })`**: a text, showing the nice text of the error when the state is in error.
 
 Colors come from the theme variables of the composition group: title bar background, hover and text.
 
@@ -53,7 +53,7 @@ report.append(report_table);
 
 | Option         | Given         | Description                                                                                                                         |
 | -------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `title`        | at creation   | Title the container shows. An error is shown as the title.                                                                          |
+| `title`        | at creation   | Title the container shows. An error shows its nice text as the title.                                                                          |
 | `icon`         | at creation   | Icon in front of the title, `undefined` for none. An error shows no icon.                                                           |
 | `closable`     | at creation   | Whether the container shows a close button.                                                                                         |
 | `min_width`    | at creation   | Smallest width in rem the container gives the content.                                                                              |
@@ -79,7 +79,7 @@ class Note extends ContentBase {
   set(options: NoteOptions): this {
     super.set(options);
     this.set_input(NOTE.text, options.text, (text) => {
-      this.#text.textContent = text.ok ? text.value : "⚠ " + text.error;
+      this.#text.textContent = text.ok ? text.value : "⚠ " + text.error.nice;
     });
     return this;
   }

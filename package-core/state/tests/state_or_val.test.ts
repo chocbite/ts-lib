@@ -1,4 +1,4 @@
-import { err, ok, type OptionNone } from "#result";
+import { ok, type OptionNone, err_nice, NiceError } from "#result";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   state as st,
@@ -14,6 +14,7 @@ import {
   type StateROS,
   type StateROSW,
 } from "..";
+import { TEST_ERROR } from "./tests_shared";
 
 describe("as_state", () => {
   it("wraps a fixed value in a read only ok state", () => {
@@ -26,7 +27,7 @@ describe("as_state", () => {
   it("returns a state unchanged", () => {
     const source = st.ok_w(5);
     expect(st.as_state(source)).toBe(source);
-    const errored = st.err<number>("gone");
+    const errored = st.err<number>(new NiceError(TEST_ERROR, "gone"));
     expect(st.as_state(errored)).toBe(errored);
   });
 
@@ -45,8 +46,8 @@ describe("as_state", () => {
   it("follows the given state", async () => {
     const source = st.from_w<number>(5);
     const result = st.as_state(source as StateOrValRES<number>);
-    source.set_err("gone");
-    expect(result.get()).toEqual(err("gone"));
+    source.set_err(new NiceError(TEST_ERROR, "gone"));
+    expect(result.get()).toEqual(err_nice(TEST_ERROR, "gone"));
     source.set_ok(6);
     expect(await result).toEqual(ok(6));
   });
@@ -72,7 +73,7 @@ describe("as_state", () => {
       st.as_state({} as StateOrVal<number>),
     ).toEqualTypeOf<StateREA<number>>();
     //Keeps the related type of the state, a local state without helper has none
-    expectTypeOf(st.as_state(st.err<number>("e"))).toEqualTypeOf<
+    expectTypeOf(st.as_state(st.err<number>(new NiceError(TEST_ERROR, "e")))).toEqualTypeOf<
       StateRES<number, OptionNone>
     >();
   });

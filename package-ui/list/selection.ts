@@ -1,5 +1,5 @@
 import { Base, define_element } from "#base";
-import type { Result } from "@chocbite/ts-lib/result";
+import type { NiceError, Result } from "@chocbite/ts-lib/result";
 import { state, type StateREAW } from "@chocbite/ts-lib/state";
 import "./selection.scss";
 
@@ -33,7 +33,7 @@ export class ListSelection<K> {
   /**Called after a change of the shown selection or of the selectable rows */
   on_change?: () => void;
   /**Called when the state rejects a write, with the row the user acted on */
-  on_error?: (row: ListSelectionRow | undefined, message: string) => void;
+  on_error?: (row: ListSelectionRow | undefined, error: NiceError) => void;
   /**State user actions are written to */
   target?: StateREAW<K[], any, K[]>;
 
@@ -82,7 +82,7 @@ export class ListSelection<K> {
   //    |_____/   |_/_/    \_\_|  |______|
 
   /**Applies a value of the state, only the changed keys are touched when the value carries its changes */
-  apply(value: Result<readonly K[], string>) {
+  apply(value: Result<readonly K[], NiceError>) {
     this.batch(() => {
       if (!value.ok) {
         this.#fresh([]);

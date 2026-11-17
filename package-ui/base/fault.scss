@@ -1,0 +1,33 @@
+@use "../icons/mixins" as icons;
+
+//Without specificity, so any rule setting the position of the element wins,
+//an element that is not positioned becomes the box the icon is placed in
+:where(.base-fault-host) {
+  position: relative;
+}
+
+base-fault {
+  @include icons.material-symbols-rounded;
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.2rem;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  box-sizing: border-box;
+  border: 1px solid var(--base-fault-iconOutline);
+  color: var(--base-fault-icon);
+  background-color: var(--base-fault-iconBackground);
+
+  //A glyph of the icon font, the broken link, most problems are values that could not be read
+  &::before {
+    content: "link_off";
+  }
+}

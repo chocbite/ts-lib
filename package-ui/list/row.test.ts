@@ -1,6 +1,6 @@
 import type { ContextMenu } from "#context-menu";
 import type { SVGFunc } from "#svg";
-import { none, ok, type Option } from "@chocbite/ts-lib/result";
+import { none, ok, type Option, NiceError } from "@chocbite/ts-lib/result";
 import { state, type State } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import list from ".";
@@ -8,6 +8,9 @@ import { ListAddRow, type ListAddRowOptions } from "./add_row";
 import { ListField } from "./field";
 import { ListKeyField } from "./key_field";
 import { ListRow } from "./row";
+
+/**A test error whose nice text is its message, so shown texts read as before*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 type Row = ListRow<number, { col: string }, number[], true>;
 type AnyRow = ListRow<any, any, any, any>;
@@ -348,7 +351,7 @@ describe("ListRow opening", () => {
     expect(row.open).toBe(false);
     openable.set_ok(true);
     row.open = true;
-    openable.set_err("fail");
+    openable.set_err(nice_err("fail"));
     expect(row.open).toBe(false);
     expect(row.openable).toBe(false);
   });

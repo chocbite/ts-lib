@@ -1,13 +1,14 @@
 import { sync_resolve } from "#common";
 import {
-  err,
   none,
   ok,
   Option,
   OptionNone,
   ResultInferOk,
   ResultOk,
+  err_nice,
 } from "#result";
+import { not_writable, state_errors } from "./errors";
 import { IS } from "./helpers/is";
 import {
   StateResult as SR,
@@ -95,7 +96,9 @@ export abstract class StateBase<
     const gate = this.#write_enabled;
     if (!gate) return func();
     return gate.then((res) =>
-      res.ok && res.value ? func() : err("not writable"),
+      res.ok && res.value
+        ? func()
+        : err_nice(state_errors.WRITE_DISABLED, "writing is disabled"),
     );
   }
 
@@ -216,10 +219,10 @@ export class StateReadOnly<
     return STATE_WRITE_DISABLED;
   }
   limit(_value: WT): PromiseLike<SR<WT>> {
-    return sync_resolve(err("not writable"));
+    return sync_resolve(not_writable());
   }
   check(_value: WT): PromiseLike<SR<WT>> {
-    return sync_resolve(err("not writable"));
+    return sync_resolve(not_writable());
   }
 }
 
@@ -252,10 +255,10 @@ class StateFalse extends StateBase<ResultOk<boolean>, never, OptionNone> {
     return false;
   }
   limit(_value: never): PromiseLike<SR<never>> {
-    return sync_resolve(err("not writable"));
+    return sync_resolve(not_writable());
   }
   check(_value: never): PromiseLike<SR<never>> {
-    return sync_resolve(err("not writable"));
+    return sync_resolve(not_writable());
   }
 }
 
@@ -278,7 +281,7 @@ function json_invalid(path: string, reason: string): string {
 
 /**Converts a state result to JSON, states in error are written as null*/
 async function result_to_json(result: SR<unknown>, path: string) {
-  if (result.err) return json_invalid(path, `is in error "${result.error}"`);
+  if (result.err) return json_invalid(path, `is in error "${result.error.toString()}"`);
   return value_to_json(result.value, path);
 }
 

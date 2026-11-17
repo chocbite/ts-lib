@@ -7,16 +7,13 @@ import { ResultErr, type Result } from "./index";
  * The kind identifies the error and its description is the nice text, use Symbol("…"), not Symbol.for,
  * so each module's kinds are its own.*/
 export class NiceError {
-  readonly #detail: string | Error;
-
   constructor(
     /**What went wrong, its description is the nice text, like Symbol("Connection lost")*/
     readonly kind: symbol,
-    /**A message, or the Error that caused this, the message is then its message*/
-    detail: string | Error,
-  ) {
-    this.#detail = detail;
-  }
+    /**A message, or the Error that caused this, the message is then its message.
+     * A plain field, so test equality like toEqual compares it*/
+    readonly detail: string | Error,
+  ) {}
 
   /**The text for the user, the description of the kind*/
   get nice(): string {
@@ -25,12 +22,12 @@ export class NiceError {
 
   /**The details, the message given or the message of the Error*/
   get message(): string {
-    return typeof this.#detail === "string" ? this.#detail : this.#detail.message;
+    return typeof this.detail === "string" ? this.detail : this.detail.message;
   }
 
   /**The Error this wraps, with its stack, undefined when made from a message*/
   get cause(): Error | undefined {
-    return typeof this.#detail === "string" ? undefined : this.#detail;
+    return typeof this.detail === "string" ? undefined : this.detail;
   }
 
   /**Same kind and message, two failures that look the same to the user and in the details*/

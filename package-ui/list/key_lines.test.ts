@@ -1,9 +1,12 @@
 import { theme_init } from "#theme";
-import { ok } from "@chocbite/ts-lib/result";
+import { ok, NiceError } from "@chocbite/ts-lib/result";
 import { state } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it } from "vitest";
 import list from ".";
 import { ListKeyField, type ListKeyFieldOptions } from "./key_field";
+
+/**A test error whose nice text is its message, so shown texts read as before*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 //The lines are sized by theme variables
 theme_init();
@@ -197,7 +200,7 @@ describe("List key field lines of an error instead of rows", () => {
       },
     );
     document.body.append(container);
-    (sub ? sub_rows : rows).set_err("broken");
+    (sub ? sub_rows : rows).set_err(nice_err("broken"));
     return container;
   }
 

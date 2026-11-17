@@ -1,8 +1,11 @@
-import { err, ok } from "@chocbite/ts-lib/result";
+import { err, ok, NiceError } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { form_stepper } from "./number/stepper/stepper";
 import { form_text_input } from "./text/input/text_input";
+
+/**A test error whose nice text is its message, so shown texts read as before*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 /**String helper whose check is a spy, "bad" is rejected*/
 const make_helper = () => {
@@ -12,7 +15,7 @@ const make_helper = () => {
     .spyOn(helper, "check")
     .mockImplementation((value: string) =>
       value === "bad"
-        ? Promise.resolve(err("bad is not allowed"))
+        ? Promise.resolve(err(nice_err("bad is not allowed")))
         : Promise.resolve(check(value)),
     );
   return { helper, check_spy };
@@ -178,14 +181,34 @@ describe("Form value buffer", () => {
   });
 
   it("restores the shown value and warns when the state rejects a write", async () => {
-    const state = st.rosw(ok(1), async () => err("Not now"));
+    const state = st.rosw(ok(1), async () => err(new NiceError(Symbol("Rejected"), "Not now")));
     const { element, change, step_up, value_box, warn_input } = make_stepper();
     element.bind({ value: state });
     await step_up();
     expect(state.ok()).toBe(1);
     expect(value_box.textContent).toBe("1");
-    expect(warn_input.validationMessage).toBe("Not now");
+    //The warning has room for the nice text and the message
+    expect(warn_input.validationMessage).toBe("Rejected: Not now");
     expect(change).not.toHaveBeenCalled();
+  });
+
+  it("warns that a change to an element bound to a read only state is refused, as read only", async () => {
+    const { element, step_up, warn_input } = make_stepper();
+    element.bind({ value: st.ok_w(1).read_only });
+    await step_up();
+    expect(warn_input.validationMessage).toBe("Read only: The value can not be changed here");
+  });
+
+  it("keeps the error of its state, with its details, for whoever has to fix it", () => {
+    const failed = new NiceError(Symbol("Sensor offline"), "No answer from sensor 3");
+    const state = st.from_w(1);
+    const { element } = make_stepper();
+    element.bind({ value: state });
+    expect(element.error).toBeUndefined();
+    state.set_err(failed);
+    expect(element.error).toBe(failed);
+    state.set_ok(2);
+    expect(element.error).toBeUndefined();
   });
 
   it("removes the tooltip when the description is emptied", () => {

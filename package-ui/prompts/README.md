@@ -32,3 +32,13 @@ if (result.some) create(result.value.name);
 Resolves with the values the user changed, by `id` of the form elements, typed from the elements. The first element the user can change gets the focus, and Enter submits with the last button.
 
 A submit button's `click(group, close)` runs on submit. Returning `true` keeps the prompt open, for example to check the values first, and `close(result)` closes it later. Options set the columns and rows of the form and of the submit buttons.
+
+## Faults
+
+```ts
+await prompts.faults(element.faults);
+```
+
+Lists problems, the `NiceError`s from `@chocbite/ts-lib/result`. It is what the fault icon of an element opens, see the fault icon in [PATTERN.md](../PATTERN.md#the-fault-icon), so an app rarely calls it itself. Problems are grouped by kind: the nice text once, with each distinct message of that kind under it. An outage that fails every input shows up once, and several missing members of a fetch parser show one heading with every member named. A message with an `Error` also gets a Details toggle with the stack and the stacks of its causes, formatted only when opened. The text can be selected, to copy it into a bug report.
+
+The prompt is 60% of the width of the page, at least 20rem and never wider than the page. Only the list scrolls, so the Close button stays in view however many problems there are. Resolves when it is closed.

@@ -1,3 +1,4 @@
+import { NiceError } from "@chocbite/ts-lib/result";
 import { material_save_rounded } from "#icons";
 import { SCALE, theme_init } from "#theme";
 import state from "@chocbite/ts-lib/state";
@@ -6,6 +7,9 @@ import { panel_container } from "./container";
 import { content, type ContentCreateOptions } from "./content";
 import type { Panel, PanelOptions } from "./panel";
 import { CompAnchor } from "./shared";
+
+/**A test error whose nice text is its message, so shown texts read as before*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 const panels: Panel[] = [];
 const panel_with = (
@@ -66,7 +70,7 @@ describe("Panel content", () => {
     expect(title_of(panel).textContent).toBe("a");
     title.set_ok("b");
     expect(title_of(panel).textContent).toBe("b");
-    title.set_err("gone");
+    title.set_err(nice_err("gone"));
     expect(title_of(panel).textContent).toBe("⚠ gone");
   });
 

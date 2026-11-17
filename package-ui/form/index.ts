@@ -1,3 +1,4 @@
+import { form_errors } from "./errors";
 import {
   FormColors,
   FormOptions,
@@ -83,6 +84,8 @@ import { form_text, FormText, type FormTextOptions } from "./text/text/text";
 /**Form elements with label */
 export const form = {
   FormColors,
+  /**The kinds of the NiceErrors the form elements make, like form.errors.READ_ONLY*/
+  errors: form_errors,
 
   //Boolean
   button: form_button,

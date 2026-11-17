@@ -1,8 +1,20 @@
 import { Base } from "#base";
 import { sync_resolve } from "@chocbite/ts-lib/common";
-import { err, ok, type Option, type Result } from "@chocbite/ts-lib/result";
+import {
+  err,
+  err_nice,
+  NiceError,
+  ok,
+  type Option,
+  type Result,
+  type ResultNice,
+} from "@chocbite/ts-lib/result";
 import type { State, StateREA, StateSub } from "@chocbite/ts-lib/state";
 import "./shared";
+import { form_errors } from "./errors";
+
+/**A change to an element bound to a read only state, normal use, the element only shows the value*/
+const read_only = () => err_nice(form_errors.READ_ONLY, "The value can not be changed here");
 
 export interface FormOptions {}
 
@@ -91,7 +103,7 @@ export abstract class FormValue<
   }
 
   protected _state?: State<RT, Option<{}>, RT>;
-  #func?: StateSub<Result<RT, string>>;
+  #func?: StateSub<ResultNice<RT>>;
 
   /**Binds the element to a state, a read only state is shown and changes to the element are refused with a warning*/
   bind(opts: { value: StateREA<RT, Option<{}>, RT> }): this {
@@ -131,15 +143,20 @@ export abstract class FormValue<
         : ok(this._buffer);
   }
 
-  #error = false;
-  set error(err: string | undefined) {
-    if (err) {
-      this.new_error(err);
-      this.#error = true;
+  #error?: NiceError;
+  /**Shows the error on the element, as its nice text, or clears it with undefined*/
+  set error(error: NiceError | undefined) {
+    if (error) {
+      this.new_error(error.nice);
+      this.#error = error;
     } else if (this.#error) {
       this.clear_error();
-      this.#error = false;
+      this.#error = undefined;
     }
+  }
+  /**The error shown on the element, with its details for whoever has to fix it*/
+  get error(): NiceError | undefined {
+    return this.#error;
   }
 
   /**Clears the value and error of the component if not state based*/
@@ -148,7 +165,7 @@ export abstract class FormValue<
     this._buffer = undefined;
     this.clear_value();
     this.clear_error();
-    this.#error = false;
+    this.#error = undefined;
   }
 
   /**Called when value is set by value setter or state*/
@@ -157,7 +174,7 @@ export abstract class FormValue<
   /**Clears form element graphically*/
   protected abstract clear_value(): void;
 
-  /**Called when error is set by error or state*/
+  /**Called when error is set by error or state, with the nice text of the error*/
   protected abstract new_error(val: string): void;
 
   /**Called when error is cleared by error or state*/
@@ -232,8 +249,9 @@ export abstract class FormValueWrite<
     else this._buffer = val;
   }
 
-  warn(message: string): void {
-    this.warn_input.setCustomValidity(message);
+  /**Shows a warning for a moment, a NiceError as its nice text and its message, there is room for both*/
+  warn(message: string | NiceError): void {
+    this.warn_input.setCustomValidity(typeof message === "string" ? message : message.toString());
     this.warn_input.reportValidity();
     if (this.#warn_timeout) clearTimeout(this.#warn_timeout);
     this.#warn_timeout = setTimeout(() => {
@@ -243,22 +261,21 @@ export abstract class FormValueWrite<
   }
 
   /**Function to limit value entered */
-  protected limit_value(val: RT): PromiseLike<Result<RT, string>> {
+  protected limit_value(val: RT): PromiseLike<ResultNice<RT>> {
     if (this._state) {
       if (this._state.writable) return this._state.limit(val);
-      else return sync_resolve(err("Not writable"));
+      else return sync_resolve(read_only());
     } else return sync_resolve(ok(val));
   }
 
   /**Function to check value, a state checks the value itself when it is written, so it is not checked here*/
-  protected check_value(val: RT): PromiseLike<Result<RT, string>> {
-    if (this._state && !this._state.writable)
-      return sync_resolve(err("Not writable"));
+  protected check_value(val: RT): PromiseLike<ResultNice<RT>> {
+    if (this._state && !this._state.writable) return sync_resolve(read_only());
     return sync_resolve(ok(val));
   }
 
   /**Function to update value*/
-  protected async set_value_limit(val: RT): Promise<Result<RT, string>> {
+  protected async set_value_limit(val: RT): Promise<ResultNice<RT>> {
     const limited = await this.limit_value(val);
     if (limited.err) {
       this.warn(limited.error);
@@ -268,7 +285,7 @@ export abstract class FormValueWrite<
   }
 
   /**Function to update value*/
-  protected async set_value_check(val: RT): Promise<Result<RT, string>> {
+  protected async set_value_check(val: RT): Promise<ResultNice<RT>> {
     const checked = await this.check_value(val);
     if (checked.err) {
       this.warn(checked.error);
@@ -279,7 +296,7 @@ export abstract class FormValueWrite<
 
   /**Shows the value and writes it to the state, a value the state rejects is reverted and warned about.
    * The change listener is only called with accepted values*/
-  async #set_value(val: RT): Promise<Result<RT, string>> {
+  async #set_value(val: RT): Promise<ResultNice<RT>> {
     //Shown even when unchanged, the shown text can differ, like a typed value rounding to the current value
     this.new_value(val);
     if (this._buffer === val) return ok(val);

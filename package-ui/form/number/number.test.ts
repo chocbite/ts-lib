@@ -247,7 +247,7 @@ describe("Number input", () => {
     await wait();
     expect(element.buffer).toBe(5);
     expect(change).not.toHaveBeenCalled();
-    expect(warn_input.validationMessage).toBe("Maximum value 5");
+    expect(warn_input.validationMessage).toBe("Value too high: Maximum value 5");
   });
 
   it("rejects stepping below min with a warning", async () => {
@@ -255,7 +255,7 @@ describe("Number input", () => {
     key(element, "ArrowDown");
     await wait();
     expect(element.buffer).toBe(0);
-    expect(warn_input.validationMessage).toBe("Minimum value 0");
+    expect(warn_input.validationMessage).toBe("Value too low: Minimum value 0");
   });
 
   it("sets a typed value on Enter", async () => {
@@ -287,7 +287,7 @@ describe("Number input", () => {
     expect(element.buffer).toBe(3);
     expect(value_box.textContent).toBe("3");
     expect(change).not.toHaveBeenCalled();
-    expect(warn_input.validationMessage).toBe("Maximum value 10");
+    expect(warn_input.validationMessage).toBe("Value too high: Maximum value 10");
   });
 
   it("Escape restores the shown value", async () => {
@@ -539,7 +539,7 @@ describe("Stepper", () => {
     await wait();
     expect(element.buffer).toBe(3);
     expect(change).not.toHaveBeenCalled();
-    expect(warn_input.validationMessage).toBe("Maximum value 3V");
+    expect(warn_input.validationMessage).toBe("Value too high: Maximum value 3V");
   });
 
   it("steps once when an icon is clicked", async () => {

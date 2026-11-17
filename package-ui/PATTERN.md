@@ -62,7 +62,7 @@ class MyBox extends Base {
       if (width.ok) this.style.width = width.value + "px";
     });
     this.set_input(BOX.label, options.label, (label) => {
-      this.#text.textContent = label.ok ? label.value : "⚠ " + label.error;
+      this.#text.textContent = label.ok ? label.value : "⚠ " + label.error.nice;
     });
     return this;
   }
@@ -111,7 +111,19 @@ The key's type decides whether the element must handle errors:
 - **Can't be an error:** `StateOrValROS`, `StateOrValROSW`, `StateOrValROA` and plain values give `apply` a `ResultOk`, so it reads `.value`.
 - **Can be an error:** `StateOrVal`, `StateOrValRES` and `StateOrValREA` give a `StateResult`, and TypeScript makes `apply` handle the error.
 
-Every element decides what an error looks like for each input. `ExampleBox` keeps its last width, shows the error text in its label, and greys out its color. Pick what makes sense for the user, and never throw.
+Every element decides what an error looks like for each input. `ExampleBox` keeps its last width, shows the nice text of the error in its label, and greys out its color. The error is a `NiceError`, see the result module: show `error.nice` where space is short, add `error.message` where there is room. Pick what makes sense for the user, and never throw.
+
+#### The fault icon
+
+On top of that, `set_input` reports every error of an input as a fault of the element, and clears it when the input is ok again or gets a fixed value. While an element has a fault it shows a small broken link icon in its top right corner, and a click on it opens `prompts.faults` listing the faults: the nice text, the message, and the stack with its causes for errors with an `Error`. This needs no code in the element and can't be turned off, so every element shows problems the same way, even one too small for any text.
+
+- **An element only shows what fits.** Like the dot that just turns grey, or a label showing a dash, the icon explains the rest.
+- **`fault_anchor()`** is the element the icon is put in, the element itself by default. Override it to put the icon on the part with the problem, like the value box of a field.
+- **Writing `textContent` of the anchor removes the icon,** like it removes every child. Base puts it back after every input is applied, so text written in `apply` is fine. Text written elsewhere, like in an event handler, loses the icon until the next input changes, so keep such text in a child element instead.
+- **`this.fault(key, error | undefined)`** sets or clears a fault that isn't an input, under a key of its own, like `Symbol("connection")`.
+- **`element.faults`** gives the faults the element has now.
+- **It costs nothing without faults.** The icon is made on the first fault and removed with the last, and one listener on the document handles every icon. An element not in the document has no subscribed inputs, so no faults.
+- **The icon sits at the top right corner**, absolutely positioned. An element without a position of its own gets `position: relative` from a rule without specificity, so any position the element sets wins.
 
 ### Writable inputs and `input_state(key)`
 
@@ -270,7 +282,7 @@ Elements created in large numbers, like list rows, list fields and canvas widget
 - [ ] The options type is `InputOptions<typeof KEYS>`, or `InputOf` for options built by hand.
 - [ ] Every input is applied with `set_input`, in `set`, or in `[CREATE]` for creation inputs.
 - [ ] Inputs handed out to other elements are creation inputs, applied by overriding `[CREATE]`, and left out of the options of `set`.
-- [ ] Each input handles its errors in a way that makes sense to the user.
+- [ ] Each input handles its errors in a way that makes sense to the user, the fault icon explains them, and `fault_anchor` puts it where the problem shows if that isn't the element itself.
 - [ ] Writable inputs use `input_state` to write, and fixed values are shown as read only.
 - [ ] Subclasses have their own keys objects and call `super.set(options)` and `super[CREATE](options)` once.
 - [ ] Configuration that never changes, references up the tree and internal logic are kept out of the inputs.

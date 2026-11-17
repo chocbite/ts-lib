@@ -175,14 +175,14 @@ describe("Text multiline user input", () => {
     expect(change).not.toHaveBeenCalled();
     expect(element.buffer).toBe("ab");
     expect(area.value).toBe("ab");
-    expect(warn.validationMessage).toBe("A maximum of 3 characters is allowed");
+    expect(warn.validationMessage).toBe("Text too long: A maximum of 3 characters is allowed");
   });
 
   it("rejects a committed value with more bytes than max bytes", async () => {
     const { change, warn, enter } = make({ max_bytes: 4 });
     await enter("æææ");
     expect(change).not.toHaveBeenCalled();
-    expect(warn.validationMessage).toBe("A maximum of 4 bytes is allowed");
+    expect(warn.validationMessage).toBe("Text too long: A maximum of 4 bytes is allowed");
   });
 
   it("blocks characters not matching the filter", () => {

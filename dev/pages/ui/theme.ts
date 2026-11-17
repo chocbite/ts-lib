@@ -1,3 +1,4 @@
+import type { NiceError } from "@chocbite/ts-lib/result";
 import {
   ANIMATION_LEVEL,
   ANIMATION_SPEED,
@@ -26,14 +27,14 @@ function status(parent: HTMLElement): HTMLElement {
 
 /**Writes a value to a setting and shows the result, so a refused value is visible*/
 function writer<T>(
-  setting: { write(value: T): PromiseLike<{ ok: boolean; error?: string }> },
+  setting: { write(value: T): PromiseLike<{ ok: boolean; error?: NiceError }> },
   line: HTMLElement,
 ) {
   return (value: T) => async () => {
     const result = await setting.write(value);
     if (result.ok) return;
     line.style.color = "#d33";
-    line.textContent = `write ${JSON.stringify(value)} refused: ${result.error}`;
+    line.textContent = `write ${JSON.stringify(value)} refused: ${result.error?.toString()}`;
   };
 }
 
@@ -42,7 +43,7 @@ function enum_setting<T extends string>(
   title: string,
   note: string,
   setting: {
-    write(value: T): PromiseLike<{ ok: boolean; error?: string }>;
+    write(value: T): PromiseLike<{ ok: boolean; error?: NiceError }>;
     sub(func: (value: { ok: boolean; value?: T }) => void, update?: boolean): unknown;
   },
   values: { [key: string]: T },
@@ -69,7 +70,7 @@ function number_setting(
   title: string,
   note: string,
   setting: {
-    write(value: number): PromiseLike<{ ok: boolean; error?: string }>;
+    write(value: number): PromiseLike<{ ok: boolean; error?: NiceError }>;
     sub(func: (value: { ok: boolean; value?: number }) => void, update?: boolean): unknown;
     ok(): number;
   },

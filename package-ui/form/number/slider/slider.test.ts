@@ -157,7 +157,7 @@ describe("Slider", () => {
     await wait();
     expect(element.buffer).toBe(10);
     expect(change).not.toHaveBeenCalled();
-    expect(warn_input.validationMessage).toBe("Maximum value 10");
+    expect(warn_input.validationMessage).toBe("Value too high: Maximum value 10");
   });
 
   it("steps once when an icon is clicked", async () => {

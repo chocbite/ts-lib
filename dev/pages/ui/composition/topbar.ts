@@ -7,7 +7,7 @@ import {
 } from "@chocbite/ts-lib-ui/icons";
 import type { SVGFunc } from "@chocbite/ts-lib-ui/svg";
 import state from "@chocbite/ts-lib/state";
-import { box, controls, row, section } from "../../../helpers";
+import { box, controls, row, section, demo_error } from "../../../helpers";
 
 const FULL = { width: "48rem" };
 
@@ -116,9 +116,9 @@ const FULL = { width: "48rem" };
     "Next icon": () => icon.set_ok(icons[++icon_index % icons.length]),
     "No icon": () => icon.set_ok(undefined),
     Errors: () => {
-      items.set_err("no items");
-      title.set_err("no title");
-      icon.set_err("no icon");
+      items.set_err(demo_error("no items"));
+      title.set_err(demo_error("no title"));
+      icon.set_err(demo_error("no icon"));
     },
   });
 }

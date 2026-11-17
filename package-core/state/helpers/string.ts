@@ -1,4 +1,5 @@
-import { err, ok, OptionSome, some } from "#result";
+import { ok, OptionSome, some, err_nice } from "#result";
+import { state_errors } from "../errors";
 import { StateResult as SR, State } from "../types";
 import {
   StateInit as Init,
@@ -70,7 +71,8 @@ export class StateStringHelperBase
       this.max_length_bytes,
     ]);
     if (max_length?.ok && value.length > max_length.value)
-      return err(
+      return err_nice(
+        state_errors.TEXT_TOO_LONG,
         "the text is longer than the limit of " +
           max_length.value +
           " characters",
@@ -79,7 +81,8 @@ export class StateStringHelperBase
       max_length_bytes?.ok &&
       new TextEncoder().encode(value).length > max_length_bytes.value
     )
-      return err(
+      return err_nice(
+        state_errors.TEXT_TOO_LONG,
         "the text is longer than the limit of " +
           max_length_bytes.value +
           " bytes",

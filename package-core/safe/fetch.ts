@@ -1,15 +1,19 @@
 import { err_nice, ok, type ResultNice } from "#result";
 
-/**fetch rejected, like a network that is down, the server not answering or a request the browser blocks*/
-export const FETCH_CONNECTION_FAILED = Symbol("Connection failed");
-/**fetch rejected with a TimeoutError, from a signal like AbortSignal.timeout*/
-export const FETCH_TIMED_OUT = Symbol("Request timed out");
-/**fetch rejected with an AbortError, the request was aborted through its signal*/
-export const FETCH_ABORTED = Symbol("Request aborted");
-/**The status of the response is not ok, the cause is a FetchStatusError with the status and body*/
-export const FETCH_REJECTED = Symbol("Request rejected by server");
-/**The body of the response failed to load, like a connection that drops while it loads*/
-export const FETCH_CONNECTION_LOST = Symbol("Connection lost");
+//Exported for index.ts only, the module gives it as safe.fetch.errors so kinds stay namespaced
+/**The kinds of the NiceErrors of the fetch functions, their descriptions are the nice texts*/
+export const fetch_errors = Object.freeze({
+  /**fetch rejected, like a network that is down, the server not answering or a request the browser blocks*/
+  CONNECTION_FAILED: Symbol("Connection failed"),
+  /**fetch rejected with a TimeoutError, from a signal like AbortSignal.timeout*/
+  TIMED_OUT: Symbol("Request timed out"),
+  /**fetch rejected with an AbortError, the request was aborted through its signal*/
+  ABORTED: Symbol("Request aborted"),
+  /**The status of the response is not ok, the cause is a FetchStatusError with the status and body*/
+  REJECTED: Symbol("Request rejected by server"),
+  /**The body of the response failed to load, like a connection that drops while it loads*/
+  CONNECTION_LOST: Symbol("Connection lost"),
+});
 
 /**A response whose status is not ok, with the body text, which often explains why*/
 export class FetchStatusError extends Error {
@@ -27,8 +31,8 @@ export class FetchStatusError extends Error {
  * A rejection is any value, one that is not an Error becomes the message, no Error is made for it*/
 function rejected(cause: unknown, kind: symbol) {
   if (!(cause instanceof Error)) return err_nice(kind, String(cause));
-  if (cause.name === "TimeoutError") return err_nice(FETCH_TIMED_OUT, cause);
-  if (cause.name === "AbortError") return err_nice(FETCH_ABORTED, cause);
+  if (cause.name === "TimeoutError") return err_nice(fetch_errors.TIMED_OUT, cause);
+  if (cause.name === "AbortError") return err_nice(fetch_errors.ABORTED, cause);
   return err_nice(kind, cause);
 }
 
@@ -42,7 +46,7 @@ async function fetch_ok(
   try {
     response = await fetch(url, init);
   } catch (cause) {
-    return rejected(cause, FETCH_CONNECTION_FAILED);
+    return rejected(cause, fetch_errors.CONNECTION_FAILED);
   }
   if (response.ok) return ok(response);
   let body = "";
@@ -51,12 +55,12 @@ async function fetch_ok(
   } catch {
     //The status is the failure, a body that fails to load only loses the explanation
   }
-  return err_nice(FETCH_REJECTED, new FetchStatusError(response.status, body));
+  return err_nice(fetch_errors.REJECTED, new FetchStatusError(response.status, body));
 }
 
 /**The global fetch, gives the body text of the response.
  * Only the fetch and the body read are caught, so the failures of the request are errors and nothing else is.
- * The error is a NiceError of one of the FETCH_ kinds, with the original error as cause*/
+ * The error is a NiceError of kind from safe.fetch.errors, with the original error as cause*/
 export async function fetch_text_safe(
   url: string,
   init?: RequestInit,
@@ -66,14 +70,14 @@ export async function fetch_text_safe(
   try {
     return ok(await response.value.text());
   } catch (cause) {
-    return rejected(cause, FETCH_CONNECTION_LOST);
+    return rejected(cause, fetch_errors.CONNECTION_LOST);
   }
 }
 
 /**The global fetch, gives the status of the response, for requests whose answer is not needed, like a post or patch.
  * The body is not read, it is cancelled so it does not hold the connection.
  * Only the fetch is caught, so the failures of the request are errors and nothing else is.
- * The error is a NiceError of one of the FETCH_ kinds, with the original error as cause*/
+ * The error is a NiceError of kind from safe.fetch.errors, with the original error as cause*/
 export async function fetch_status_safe(
   url: string,
   init?: RequestInit,

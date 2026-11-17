@@ -108,3 +108,11 @@ describe("compare with NiceError", () => {
     expect(err(object).compare(err(object))).toBe(true);
   });
 });
+
+describe("NiceError equality in tests", () => {
+  it("is toEqual only for the same kind and detail, so tests can compare whole results", () => {
+    expect(new NiceError(CONNECTION_LOST, "a")).toEqual(new NiceError(CONNECTION_LOST, "a"));
+    expect(new NiceError(CONNECTION_LOST, "a")).not.toEqual(new NiceError(CONNECTION_LOST, "b"));
+    expect(err_nice(CONNECTION_LOST, "a")).not.toEqual(err_nice(SERVER_ERROR, "a"));
+  });
+});

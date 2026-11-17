@@ -1,5 +1,5 @@
 import { theme_init } from "#theme";
-import { err, ok, type Option } from "@chocbite/ts-lib/result";
+import { err, ok, type Option, NiceError } from "@chocbite/ts-lib/result";
 import {
   state,
   STATE_ARRAY_WRITE_KEY,
@@ -9,6 +9,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import list from ".";
 import type { ListDropTarget } from "./drag";
 import type { ListRow } from "./row";
+
+/**A test error whose nice text is its message, so shown texts read as before*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 //Row sizes come from theme variables
 theme_init();
@@ -160,7 +163,7 @@ describe("List reorder handles", () => {
   it("keep the error and add rows after them, from the key column to the end", () => {
     const rows = state.from_w<Node[]>([node(1)]);
     const container = tree(rows as unknown as Rows, { multi: true });
-    rows.set_err("broken");
+    rows.set_err(nice_err("broken"));
     const key = container
       .querySelector("list-rowserror > list-keyfield")!
       .getBoundingClientRect();
@@ -362,7 +365,7 @@ describe("List reorder in one parent", () => {
 
   it("a rejected move leaves the row and shows why", async () => {
     const rows = state.rosw<Node[]>(ok([node(1), node(2)]), () =>
-      Promise.resolve(err("Locked")),
+      Promise.resolve(err(nice_err("Locked"))),
     );
     const container = tree(rows);
     await drag(row_named(container, "n1"), at(row_named(container, "n2"), 0.9));
@@ -452,7 +455,7 @@ describe("List reorder between parents", () => {
   it("a failed remove leaves the row in both places, never loses it", async () => {
     const children = state.ok_w([node(20)]);
     const rows = state.rosw<Node[]>(ok([node(1), { id: 2, children }]), () =>
-      Promise.resolve(err("Can not remove")),
+      Promise.resolve(err(nice_err("Can not remove"))),
     );
     const container = tree(rows);
     await drag(row_named(container, "n1"), at(row_named(container, "n2"), 0.5));

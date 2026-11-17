@@ -13,7 +13,7 @@ import {
 import type { SVGFunc } from "@chocbite/ts-lib-ui/svg";
 import { px_to_rem } from "@chocbite/ts-lib-ui/theme";
 import state from "@chocbite/ts-lib/state";
-import { controls, section } from "../../../helpers";
+import { controls, section, demo_error } from "../../../helpers";
 
 const open: Panel[] = [];
 let offset = 0;
@@ -90,8 +90,8 @@ const close_all = () => {
     "Next icon": () => icon.set_ok(icons[++icon_index % icons.length]),
     "Toggle closable": () => closable.set_ok(!closable.ok()),
     Errors: () => {
-      title.set_err("no title");
-      icon.set_err("no icon");
+      title.set_err(demo_error("no title"));
+      icon.set_err(demo_error("no icon"));
     },
     "Close all": close_all,
   });

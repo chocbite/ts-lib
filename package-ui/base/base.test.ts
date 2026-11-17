@@ -1,4 +1,4 @@
-import { none, some, type ResultOk } from "@chocbite/ts-lib/result";
+import { none, some, type ResultOk, NiceError } from "@chocbite/ts-lib/result";
 import st, {
   type StateOrVal,
   type StateOrValROS,
@@ -13,6 +13,9 @@ import { define_element } from "./define_element";
 import { CREATE, input_key, type InputOf, type InputOptions } from "./input";
 import "./index.scss";
 import { BaseIntersectObserver } from "./intersect_observer";
+
+/**A test error whose nice text is its message, so shown texts read as before*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 class TestElement extends Base {
   static element_name() {
@@ -554,15 +557,15 @@ describe("Base state to property", () => {
   it("attach_state_to_prop sets ok values and uses map_err for errors", () => {
     const state = st.from_w(1);
     const element = document.body.appendChild(new ProbeElement());
-    const map_err = vi.fn((e: string) => (e === "skip" ? none() : some(-1)));
+    const map_err = vi.fn((e: NiceError) => (e.message === "skip" ? none() : some(-1)));
     element.attach_state_to_prop("value", state, map_err);
     expect(element.value).toBe(1);
-    state.set_err("bad");
-    expect(map_err).toHaveBeenCalledWith("bad");
+    state.set_err(nice_err("bad"));
+    expect(map_err.mock.calls[0]?.[0].message).toBe("bad");
     expect(element.value).toBe(-1);
     state.set_ok(4);
     expect(element.value).toBe(4);
-    state.set_err("skip");
+    state.set_err(nice_err("skip"));
     expect(element.value).toBe(4);
   });
 
@@ -572,13 +575,13 @@ describe("Base state to property", () => {
     element.attach_state_to_prop_map(
       "label",
       state,
-      (e) => some("err " + e),
+      (e) => some("err " + e.message),
       (v: number) => (v === 0 ? none() : some("ok " + v)),
     );
     expect(element.label).toBe("ok 2");
     state.set_ok(0);
     expect(element.label).toBe("ok 2");
-    state.set_err("x");
+    state.set_err(nice_err("x"));
     expect(element.label).toBe("err x");
   });
 
@@ -645,12 +648,12 @@ describe("Base state to attribute", () => {
     const state = st.from_w("a");
     const element = document.body.appendChild(new ProbeElement());
     element.attach_state_to_attribute("data-x", state, (e) =>
-      e === "skip" ? none() : some("error " + e),
+      e.message === "skip" ? none() : some("error " + e.message),
     );
     expect(element.getAttribute("data-x")).toBe("a");
-    state.set_err("bad");
+    state.set_err(nice_err("bad"));
     expect(element.getAttribute("data-x")).toBe("error bad");
-    state.set_err("skip");
+    state.set_err(nice_err("skip"));
     expect(element.getAttribute("data-x")).toBe("error bad");
   });
 
@@ -664,7 +667,7 @@ describe("Base state to attribute", () => {
       (v) => some("v" + v),
     );
     expect(element.getAttribute("data-x")).toBe("v1");
-    state.set_err("x");
+    state.set_err(nice_err("x"));
     expect(element.getAttribute("data-x")).toBe("err");
   });
 
@@ -1100,7 +1103,7 @@ describe("Base set", () => {
   it("the error is up to the element", () => {
     const width = st.from_w(5);
     const element = attach(new SetProbe().set({ width }));
-    width.set_err("gone");
+    width.set_err(nice_err("gone"));
     expect(element.style.width).toBe("5px");
   });
 

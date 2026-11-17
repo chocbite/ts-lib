@@ -1,5 +1,6 @@
 import { number_step_start_decimal } from "#math";
-import { err, ok, OptionSome, ResultOk, some } from "#result";
+import { ok, OptionSome, ResultOk, some, err_nice } from "#result";
+import { state_errors } from "../errors";
 import {
   COLLECTED,
   StateCollectedREA,
@@ -331,9 +332,9 @@ export class StateNumberHelperBase
       this.decimals,
     ]);
     if (max?.ok && value > max.value)
-      return err(value + " is bigger than the limit of " + max.value);
+      return err_nice(state_errors.ABOVE_MAX, value + " is bigger than the limit of " + max.value);
     if (min?.ok && value < min.value)
-      return err(value + " is smaller than the limit of " + min.value);
+      return err_nice(state_errors.BELOW_MIN, value + " is smaller than the limit of " + min.value);
     //limit clamps to min and max after snapping to step, so those are valid even when not on a step
     if (value === max?.unwrap_or(undefined) || value === min?.unwrap_or(undefined))
       return ok(value);
@@ -349,13 +350,14 @@ export class StateNumberHelperBase
     //Tiny differences are floating point noise, like 0.1 + 0.2, so they are accepted
     if (Math.abs(snapped - value) > 1e-9 * Math.max(1, Math.abs(value))) {
       if (step_val)
-        return err(
+        return err_nice(
+          state_errors.OFF_STEP,
           value +
             " is not on a step of " +
             step_val +
             (start_val ? " starting from " + start_val : ""),
         );
-      return err(value + " has more than " + decimals_val + " decimals");
+      return err_nice(state_errors.TOO_MANY_DECIMALS, value + " has more than " + decimals_val + " decimals");
     }
     return ok(snapped);
   }

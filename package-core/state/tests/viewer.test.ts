@@ -1,7 +1,8 @@
 import { sleep } from "#common";
-import { ok } from "#result";
+import { ok, NiceError } from "#result";
 import { describe, expect, it } from "vitest";
 import { state as st } from "..";
+import { TEST_ERROR } from "./tests_shared";
 
 describe("viewer", { timeout: 100 }, function () {
   describe("basic", function () {
@@ -37,7 +38,7 @@ describe("viewer", { timeout: 100 }, function () {
       const s = st.from_w(1);
       let count = 0;
       const v = st.v.viewer(s, () => count++);
-      s.set_err("bad");
+      s.set_err(new NiceError(TEST_ERROR, "bad"));
       expect(count).toBe(1);
       v.unsub();
     });
@@ -516,7 +517,7 @@ describe("viewer", { timeout: 100 }, function () {
       let count = 0;
       const v = st.v.viewer(root, () => count++);
 
-      root.set_err("oops");
+      root.set_err(new NiceError(TEST_ERROR, "oops"));
       expect(count).toBe(1);
 
       inner.set_ok(2);

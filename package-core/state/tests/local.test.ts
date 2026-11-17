@@ -1,4 +1,4 @@
-import { err, ok, ResultOk } from "#result";
+import { ok, ResultOk, err_nice, NiceError } from "#result";
 import { assertType, describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   state as st,
@@ -17,6 +17,7 @@ import {
   type TestStateOkSync,
   type TestStateSync,
 } from "./tests_shared";
+import { TEST_ERROR } from "./tests_shared";
 
 describe("Sync states", function () {
   describe("ROS", { timeout: 100 }, function () {
@@ -73,11 +74,11 @@ describe("Sync states", function () {
       st.res(ok(1));
     });
     it("err", async function () {
-      st.res(err("1"));
+      st.res(err_nice(TEST_ERROR, "1"));
     });
     it("rok is false", function () {
       expect(st.res(ok(1)).rok).toBe(false);
-      expect(st.res(err("1")).rok).toBe(false);
+      expect(st.res(err_nice(TEST_ERROR, "1")).rok).toBe(false);
     });
     it("rsync is true", function () {
       expect(st.res(ok(1)).rsync).toBe(true);
@@ -147,11 +148,11 @@ describe("Sync states", function () {
       st.resw(ok(1), true);
     });
     it("err", async function () {
-      st.resw(err("1"), true);
+      st.resw(err_nice(TEST_ERROR, "1"), true);
     });
     it("rok is false", function () {
       expect(st.resw(ok(1), true).rok).toBe(false);
-      expect(st.resw(err("1"), true).rok).toBe(false);
+      expect(st.resw(err_nice(TEST_ERROR, "1"), true).rok).toBe(false);
     });
     it("rsync is true", function () {
       expect(st.resw(ok(1), true).rsync).toBe(true);
@@ -206,14 +207,14 @@ describe("to_json", function () {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       const json = await st
-        .ok({ a: NaN, b: [Infinity], c: st.err<number>("Broken") })
+        .ok({ a: NaN, b: [Infinity], c: st.err<number>(new NiceError(TEST_ERROR, "Broken")) })
         .to_json();
       expect(JSON.parse(json)).toEqual({ a: null, b: [null], c: null });
       const logged = error.mock.calls.map((call) => String(call[0]));
       expect(logged).toEqual([
         "state.a is NaN, written as null in JSON",
         "state.b[0] is Infinity, written as null in JSON",
-        'state.c is in error "Broken", written as null in JSON',
+        'state.c is in error "Test error: Broken", written as null in JSON',
       ]);
     } finally {
       error.mockRestore();

@@ -1,6 +1,7 @@
-import { err, ok } from "#result";
+import { err, ok, type NiceError } from "#result";
 import { StateBase } from "./base";
 import { COLLECTED } from "./collected";
+import { state_errors } from "./errors";
 import {
   ARRAY,
   STATE_ARRAY_READ_KEY,
@@ -30,8 +31,8 @@ export const state = {
   ok<RT>(init: RT) {
     return ros(ok(init));
   },
-  /**Creates an error state with the given initial error message */
-  err<RT>(init: string) {
+  /**Creates an error state with the given initial error */
+  err<RT>(init: NiceError) {
     return res(err(init) as SR<RT>);
   },
   /**Creates an errorable state with the given initial value */
@@ -42,8 +43,8 @@ export const state = {
   ok_w<RT>(init: RT) {
     return rosw(ok(init));
   },
-  /**Creates a writable error state with the given initial error message */
-  err_w<RT>(init: string) {
+  /**Creates a writable error state with the given initial error */
+  err_w<RT>(init: NiceError) {
     return resw(err(init) as SR<RT>);
   },
   /**Creates a writable errorable state with the given initial value */
@@ -124,6 +125,8 @@ export const state = {
   STATE_KEY,
   /**Utility base class for state, with basic state functionality */
   class: StateBase,
+  /**The kinds of the NiceErrors the state system makes, like state.errors.NOT_WRITABLE*/
+  errors: state_errors,
 };
 export default state;
 
