@@ -118,7 +118,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
 {
   const sec = section(
     "Linked values",
-    "The main goal: both sliders and the box share one writable state, and the label is derived from it. Moving either slider should move everything",
+    "The main goal: both sliders and the box share one writable state, and the label is derived from it. Moving either slider should move everything. A slider with a fixed value keeps it itself and moves alone, one with a read only state of the width follows it but can not be moved",
   );
   const width = state.ok_w(150);
   const label = state.p.ros(width, (value) => ok(`${value.value}px`));
@@ -127,8 +127,11 @@ const output = (parent: HTMLElement): HTMLPreElement => {
     example_slider({ value: width, min: 40, max: 300 }),
     example_slider({ value: width, min: 40, max: 300 }),
   );
-  box(boxes, "Fixed value, disabled").appendChild(
+  box(boxes, "Fixed value, its own").appendChild(
     example_slider({ value: 150, min: 40, max: 300 }),
+  );
+  box(boxes, "Read only state, disabled").appendChild(
+    example_slider({ value: width.read_only, min: 40, max: 300 }),
   );
   box(boxes, "Box", { width: "20rem" }).appendChild(
     example_box({ width, height: 40, label }),
@@ -255,7 +258,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
 {
   const sec = section(
     "Writing to the input state",
-    "The slider keeps no reference to its value state, its input handler writes to whatever state the value key has now through input_state. Switch the slider between the A and B states and drag it: only the box of the state it has moves. A fixed value disables it, as nothing can be written",
+    "The slider keeps no reference to its value state, its input handler writes to whatever state the value key has now through input_state. Switch the slider between the A and B states and drag it: only the box of the state it has moves. With a fixed value the slider keeps the value itself and writes nothing",
   );
   const a = state.ok_w(60);
   const b = state.ok_w(140);
@@ -281,7 +284,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
     },
     "Slider fixed 100": () => {
       slider.set({ value: 100 });
-      label.textContent = "slider has a fixed value, disabled";
+      label.textContent = "slider keeps a fixed value itself, writes nothing";
     },
   });
 }
@@ -295,7 +298,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
 {
   const sec = section(
     "Editor",
-    "The editor passes its scale on to a view and a slider unchanged, and uses as_state to derive the label and to hand the scale out. The scale is given at creation as it is handed out, the slider limits are passed on through set and can change. A fixed scale disables the slider. The outside readout subscribes to the scale the editor hands out",
+    "The editor passes its scale on to a view and a slider unchanged, and uses as_state to derive the label and to hand the scale out. The scale is given at creation as it is handed out, the slider limits are passed on through set and can change. A fixed scale becomes a state the editor keeps, so its slider still moves its view. The outside readout subscribes to the scale the editor hands out",
   );
   const shared = state.ok_w(1);
   const boxes = row(sec);

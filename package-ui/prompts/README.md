@@ -48,14 +48,14 @@ A submit button's `click(group, close)` runs on submit, with the form group to c
 
 ### Live elements
 
-An element bound to a state with `bind` is live: it writes to its state as soon as the user changes it, while the prompt is open, and submitting or closing does not undo it. This makes a prompt a quick small window for settings that apply right away, and live elements can be mixed with ones that are submitted. Their value is in the state, so they are left out of `value_partial` and `value_changed`, and like an element without a value they make `get_value` an error.
+An element whose `value` is a writable state is live: it writes to its state as soon as the user changes it, while the prompt is open, and submitting or closing does not undo it. This makes a prompt a quick small window for settings that apply right away, and live elements can be mixed with ones that are submitted. Their values are in the answer like any other, `value_changed` holds them when the user changed them. Elements that should only give their value on submit keep it themselves, started with a fixed `value`.
 
 ```ts
 await prompts.form(
   "Display",
   [
     form.text({ text: "Brightness" }),
-    form.slider().bind({ value: brightness }),
+    form.slider({ value: brightness }),
   ],
   { text: "Close" },
 );

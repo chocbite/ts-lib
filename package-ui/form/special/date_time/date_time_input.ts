@@ -1,23 +1,16 @@
-import { define_element } from "#base";
+import { CREATE, define_element, input_key, type InputOptions } from "#base";
 import {
   material_calendar_month_rounded,
   material_schedule_rounded,
 } from "#icons";
 import type { Option } from "@chocbite/ts-lib/result";
-import { FormValueWrite, FormValueWriteOptions } from "../../base";
+import type { StateOrVal } from "@chocbite/ts-lib/state";
+import {
+  FormValueWrite,
+  type FormValueCreateOptions,
+  type FormValueWriteOptions,
+} from "../../base";
 import "./date_time_input.scss";
-
-export interface FormDateTimeOptions<
-  MODE extends FormDateTimeMode,
-  ID extends string | undefined,
-> extends FormValueWriteOptions<FormDateTimeResult<MODE>, ID> {
-  /**Type of date time*/
-  type?: FormDateTimeType;
-  /**Value representation used by the input*/
-  mode: MODE;
-  /**Force show milliseconds even when value is not precise to milliseconds */
-  milliseconds?: boolean;
-}
 
 export const FormDateTimeType = {
   DATE: "date",
@@ -26,6 +19,22 @@ export const FormDateTimeType = {
 } as const;
 export type FormDateTimeType =
   (typeof FormDateTimeType)[keyof typeof FormDateTimeType];
+
+/**Smallest part of the time a date time input shows and enters*/
+export const FormDateTimePrecision = {
+  MINUTES: "minutes",
+  SECONDS: "seconds",
+  MILLISECONDS: "milliseconds",
+} as const;
+export type FormDateTimePrecision =
+  (typeof FormDateTimePrecision)[keyof typeof FormDateTimePrecision];
+
+/**Milliseconds of the smallest part of each precision, also the step of the input in seconds times 1000*/
+const PRECISION_MS: { [K in FormDateTimePrecision]: number } = {
+  minutes: 60000,
+  seconds: 1000,
+  milliseconds: 1,
+};
 
 export const FormDateTimeMode = {
   DATE: "date",
@@ -61,9 +70,30 @@ type FormDateTimeResult<MODE extends FormDateTimeMode> =
       ? string
       : number;
 
-export class FormDateTime<
+/**Inputs of the date time input*/
+const DATE_TIME = {
+  /**What is entered, a date, a time or both, both by default, an error keeps the type*/
+  type: input_key<StateOrVal<FormDateTimeType>>(),
+  /**Smallest part of the time shown and entered, seconds by default, the date type has none
+   * The shown value is cut to it, the value itself keeps its precision until the user changes it*/
+  precision: input_key<StateOrVal<FormDateTimePrecision>>(),
+};
+export type FormDateTimeOptions<MODE extends FormDateTimeMode> =
+  FormValueWriteOptions<FormDateTimeResult<MODE>> &
+    InputOptions<typeof DATE_TIME>;
+export type FormDateTimeCreateOptions<
   MODE extends FormDateTimeMode,
   ID extends string | undefined,
+> = FormDateTimeOptions<MODE> &
+  FormValueCreateOptions<ID> & {
+    /**How the value is given and taken, a Date, a string or a number, given at creation as it decides the value*/
+    mode: MODE;
+  };
+
+/**Date and time input, the mode decides whether the value is a Date, a string or a number*/
+class FormDateTime<
+  MODE extends FormDateTimeMode = FormDateTimeMode,
+  ID extends string | undefined = string | undefined,
 > extends FormValueWrite<FormDateTimeResult<MODE>, ID> {
   static element_name() {
     return "datetimeinput";
@@ -73,12 +103,11 @@ export class FormDateTime<
   }
 
   #type: FormDateTimeType = FormDateTimeType.DATETIME;
-  #mode: MODE;
-  #milliseconds: boolean = false;
+  #mode: MODE = FormDateTimeMode.NUMBER as MODE;
+  #precision: FormDateTimePrecision = FormDateTimePrecision.SECONDS;
 
-  constructor(mode: MODE, id?: ID) {
-    super(id);
-    this.#mode = mode;
+  constructor() {
+    super();
     this.warn_input.onfocus = () => {
       this.selected = true;
     };
@@ -126,77 +155,69 @@ export class FormDateTime<
     };
   }
 
-  /**Returns the date time type*/
-  get type() {
-    return this.#type;
+  [CREATE](options: { mode?: MODE } & FormValueCreateOptions<ID>): void {
+    super[CREATE](options);
+    if (options.mode !== undefined) this.#mode = options.mode;
   }
 
-  /**Sets the date time type*/
-  set type(type: FormDateTimeType) {
-    if (type === FormDateTimeType.DATE) this.warn_input.type = "date";
-    if (type === FormDateTimeType.TIME) this.warn_input.type = "time";
-    if (type === FormDateTimeType.DATETIME)
-      this.warn_input.type = "datetime-local";
-    this.#type = type;
+  set(options: FormDateTimeOptions<MODE>): this {
+    super.set(options);
+    this.set_input(DATE_TIME.type, options.type, (type) => {
+      if (!type.ok) return;
+      this.#type = type.value;
+      this.warn_input.type =
+        type.value === FormDateTimeType.DATETIME
+          ? "datetime-local"
+          : type.value;
+      this.#redraw();
+    });
+    this.set_input(DATE_TIME.precision, options.precision, (precision) => {
+      if (!precision.ok) return;
+      this.#precision = precision.value;
+      this.warn_input.step = String(PRECISION_MS[precision.value] / 1000);
+      this.#redraw();
+    });
+    return this;
   }
 
-  /**Returns true if the input is set to show milliseconds*/
-  get milliseconds() {
-    return this.#milliseconds;
-  }
-
-  /**Sets the input to show milliseconds*/
-  set milliseconds(value: boolean) {
-    this.#milliseconds = value;
-    if (value) this.warn_input.step = "0.001";
-    else this.warn_input.step = "1";
-  }
-
-  /**Returns the date time type*/
-  get step() {
-    return Number(this.warn_input.step);
-  }
-  /**Sets the date time type*/
-  set step(step: number) {
-    this.warn_input.step = String(step);
+  /**Shows the value again, after a change to how it is shown, changing the input type empties it*/
+  #redraw() {
+    if (this._buffer !== undefined) this.new_value(this._buffer);
   }
 
   protected new_value(value: FormDateTimeResult<MODE>): void {
     let time: number;
     if (typeof value === "number") time = value;
     else if (typeof value === "string") {
-      if (INPUT_FORMAT[this.#type].test(value)) {
+      //Shown as it is, unless it has seconds the precision cuts off
+      const cut =
+        this.#precision === FormDateTimePrecision.MINUTES &&
+        /\d{2}:\d{2}:\d{2}/.test(value);
+      if (!cut && INPUT_FORMAT[this.#type].test(value)) {
         this.warn_input.value = value;
         return;
       }
       time = string_wall_time(value);
     } else time = value.getTime() - value.getTimezoneOffset() * 60000;
-    this.warn_input.valueAsNumber = this.#milliseconds
-      ? time
-      : time - (time % 1000);
+    const unit = PRECISION_MS[this.#precision];
+    this.warn_input.valueAsNumber = time - (time % unit);
   }
   protected clear_value(): void {
     this.warn_input.value = "";
   }
 
-  protected new_error(_val: string): void {}
-
-  protected clear_error(): void {}
-
   protected state_related(_related: Option<{}>): void {}
 }
 define_element(FormDateTime);
 
-/**Creates a date time input form element
- * Number type is always UTC, Date and String is always local*/
+export type { FormDateTime };
+
+/**Creates a date time input
+ * The mode decides the value, a number is always UTC, a Date and a string are local*/
 export function form_date_time<
   MODE extends FormDateTimeMode,
-  ID extends string | undefined,
->(options: FormDateTimeOptions<MODE, ID>): FormDateTime<MODE, ID> {
-  const input = new FormDateTime<MODE, ID>(options.mode, options.id);
-  if (options.type) input.type = options.type;
-  if (options.milliseconds !== undefined)
-    input.milliseconds = options.milliseconds;
-  FormValueWrite.apply_options(input, options);
-  return input;
+  ID extends string | undefined = undefined,
+>(options: FormDateTimeCreateOptions<MODE, ID>): FormDateTime<MODE, ID> {
+  //create can not carry the mode type of a generic class, the options are checked by this function
+  return FormDateTime.create(options as never) as FormDateTime<MODE, ID>;
 }

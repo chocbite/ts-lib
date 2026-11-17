@@ -1,4 +1,4 @@
-import { ok } from "@chocbite/ts-lib/result";
+import { NiceError, ok } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FormColors } from "../../base";
@@ -32,6 +32,9 @@ const make = (options: Parameters<typeof form_button>[0] = {}) => {
   };
   return { element, change, pointer, key };
 };
+
+/**A test error whose nice text is its message*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 describe("Momentary button", () => {
   afterEach(() => {
@@ -87,7 +90,7 @@ describe("Momentary button", () => {
   it("writes presses to the bound state", async () => {
     const state = st.ok_w(false);
     const { element, pointer } = make();
-    element.bind({ value: state });
+    element.set({ value: state });
     await pointer("pointerdown");
     expect(state.ok()).toBe(true);
     await pointer("pointerup");
@@ -97,7 +100,7 @@ describe("Momentary button", () => {
   it("shows the bound state", () => {
     const state = st.ok_w(true);
     const { element } = make();
-    element.bind({ value: state });
+    element.set({ value: state });
     expect(element.classList.contains("active")).toBe(true);
     state.set_ok(false);
     expect(element.classList.contains("active")).toBe(false);
@@ -180,7 +183,6 @@ describe("Toggle button", () => {
 
   it("toggles when the pointer is released", async () => {
     const { element, change, pointer } = make({ toggle: true });
-    expect(element.toggle).toBe(true);
     await pointer("pointerdown");
     expect(element.buffer).toBe(undefined);
     await pointer("pointerup");
@@ -209,7 +211,7 @@ describe("Toggle button", () => {
   it("toggles the bound state", async () => {
     const state = st.rosw(st.b.help(ok(true)), true);
     const { element, pointer } = make({ toggle: true });
-    element.bind({ value: state });
+    element.set({ value: state });
     await pointer("pointerdown");
     await pointer("pointerup");
     expect(state.ok()).toBe(false);
@@ -226,9 +228,11 @@ describe("Button options", () => {
     const { element } = make({ on_click });
     element.click();
     expect(on_click).toHaveBeenCalledTimes(1);
-    element.on_click = undefined;
+    const second = vi.fn();
+    element.set({ on_click: second });
     element.click();
     expect(on_click).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(1);
   });
 
   it("sets text, color and center", () => {
@@ -237,13 +241,29 @@ describe("Button options", () => {
       color: FormColors.Green,
       center: true,
     });
-    expect(element.text).toBe("Go");
+    expect(element.textContent).toBe("Go");
     expect(element.getAttribute("color")).toBe("green");
-    expect(element.center).toBe(true);
-    element.color = FormColors.None;
+    expect(element.classList.contains("center")).toBe(true);
+    element.set({ color: FormColors.None, center: false });
     expect(element.hasAttribute("color")).toBe(false);
-    element.center = false;
-    expect(element.center).toBe(false);
+    expect(element.classList.contains("center")).toBe(false);
+  });
+
+  it("follows states for text, color and toggle", async () => {
+    const text = st.from_w("Go");
+    const color = st.ok_w<FormColors>(FormColors.Green);
+    const toggle = st.ok_w(false);
+    const { element, pointer } = make({ text, color, toggle });
+    text.set_ok("Stop");
+    color.set_ok(FormColors.Red);
+    expect(element.textContent).toBe("Stop");
+    expect(element.getAttribute("color")).toBe("red");
+    text.set_err(nice_err("No label"));
+    expect(element.textContent).toBe("No label");
+    toggle.set_ok(true);
+    await pointer("pointerdown");
+    await pointer("pointerup");
+    expect(element.buffer).toBe(true);
   });
 
   it("is focusable", () => {

@@ -33,11 +33,11 @@ function attach_customization_panel(button: HTMLElement) {
   c.content.set({
     main: [
       form.text({ text: "App setting" }),
-      form.switch().bind({ value: state.ok_w(true) }),
+      form.switch().set({ value: state.ok_w(true) }),
     ],
     advanced: [
       form.text({ text: "Advanced app setting" }),
-      form.stepper().bind({ value: state.ok_w(5) }),
+      form.stepper().set({ value: state.ok_w(5) }),
     ],
   });
 }

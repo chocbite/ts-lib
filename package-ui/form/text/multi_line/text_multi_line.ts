@@ -1,36 +1,45 @@
-import { define_element } from "#base";
+import { define_element, input_key, type InputOptions } from "#base";
 import { sync_resolve } from "@chocbite/ts-lib/common";
 import { set_cursor_end } from "#selection";
 import { material_drag_handle_rounded } from "#icons";
-import {
-  none,
-  err_nice,
-  type ResultNice,
-} from "@chocbite/ts-lib/result";
+import { err_nice, type ResultNice } from "@chocbite/ts-lib/result";
 import {
   state,
+  type StateOrVal,
   type StateStringRelated,
 } from "@chocbite/ts-lib/state";
 import { string_byte_length, string_byte_limit } from "@chocbite/ts-lib/string";
-import { FormValueWrite, FormValueWriteOptions } from "../../base";
+import {
+  FormSetting,
+  FormValueWrite,
+  type FormValueCreateOptions,
+  type FormValueWriteOptions,
+} from "../../base";
 import "./text_multi_line.scss";
 
-export interface FormTextMultilineOptions<
-  ID extends string | undefined,
-  RT = string,
-> extends FormValueWriteOptions<RT, ID> {
-  /**Placeholder text when input is empty */
-  placeholder?: string;
-  /**Maximum length of the input */
-  max_length?: number;
-  /**Maximum bytes of the input */
-  max_bytes?: number;
-  /**Allowed characters for the text input */
-  filter?: RegExp;
-}
+/**Inputs of the multi line text input*/
+const TEXT_MULTILINE = {
+  /**Text shown while the input is empty, an error shows its nice text*/
+  placeholder: input_key<StateOrVal<string>>(),
+  /**Most characters the text can have, 0 for no limit, not given the limit of the value state is used*/
+  max_length: input_key<StateOrVal<number>>(),
+  /**Most bytes the text can have, 0 for no limit, not given the limit of the value state is used*/
+  max_bytes: input_key<StateOrVal<number>>(),
+  /**Characters the user can type, others are refused with a warning*/
+  filter: input_key<RegExp>(),
+};
+/**Related limits of the value state, followed while the inputs are not given*/
+const TEXT_MULTILINE_RELATED = {
+  max_length: input_key<StateOrVal<number | null>>(),
+  max_bytes: input_key<StateOrVal<number | null>>(),
+};
+export type FormTextMultilineOptions = FormValueWriteOptions<string> &
+  InputOptions<typeof TEXT_MULTILINE>;
+export type FormTextMultilineCreateOptions<ID extends string | undefined> =
+  FormTextMultilineOptions & FormValueCreateOptions<ID>;
 
-export class FormTextMultiline<
-  ID extends string | undefined,
+class FormTextMultiline<
+  ID extends string | undefined = string | undefined,
 > extends FormValueWrite<string, ID> {
   static element_name() {
     return "textmultiline";
@@ -42,16 +51,21 @@ export class FormTextMultiline<
   #filter?: RegExp;
   #max_length?: number;
   #max_bytes?: number;
-  //True while the limit comes from the bound state
-  #related_length = false;
-  #related_bytes = false;
+  #length = new FormSetting<number>((max) => {
+    this.#max_length = max || undefined;
+    if (max) this.#value_box.maxLength = max;
+    else this.#value_box.removeAttribute("maxlength");
+  });
+  #bytes = new FormSetting<number>((max) => {
+    this.#max_bytes = max || undefined;
+  });
   #value_box: HTMLTextAreaElement = this.appendChild(
     document.createElement("textarea"),
   );
   #resizer: HTMLDivElement = this.appendChild(document.createElement("div"));
 
-  constructor(id?: ID) {
-    super(id);
+  constructor() {
+    super();
     this.#value_box.onfocus = () => {
       this.selected = true;
     };
@@ -144,34 +158,21 @@ export class FormTextMultiline<
     });
   }
 
-  set filter(val: RegExp | undefined) {
-    this.#filter = val;
-  }
-  get filter(): RegExp | undefined {
-    return this.#filter;
-  }
-
-  set placeholder(val: string) {
-    this.#value_box.placeholder = val;
-  }
-  get placeholder(): string {
-    return this.#value_box.placeholder;
-  }
-
-  set max_length(val: number | undefined) {
-    this.#max_length = val;
-    if (val === undefined) this.#value_box.removeAttribute("maxlength");
-    else this.#value_box.maxLength = val;
-  }
-  get max_length(): number | undefined {
-    return this.#max_length;
-  }
-
-  set max_bytes(val: number | undefined) {
-    this.#max_bytes = val;
-  }
-  get max_bytes(): number | undefined {
-    return this.#max_bytes;
+  set(options: FormTextMultilineOptions): this {
+    super.set(options);
+    this.set_input(TEXT_MULTILINE.placeholder, options.placeholder, (text) => {
+      this.#value_box.placeholder = text.ok ? text.value : text.error.nice;
+    });
+    this.set_input(TEXT_MULTILINE.max_length, options.max_length, (max) =>
+      this.#length.input(max.ok ? max.value : undefined),
+    );
+    this.set_input(TEXT_MULTILINE.max_bytes, options.max_bytes, (max) =>
+      this.#bytes.input(max.ok ? max.value : undefined),
+    );
+    this.set_input(TEXT_MULTILINE.filter, options.filter, (filter) => {
+      this.#filter = filter.value;
+    });
+    return this;
   }
 
   protected new_value(val: string): void {
@@ -181,10 +182,6 @@ export class FormTextMultiline<
   protected clear_value(): void {
     this.#value_box.value = "";
   }
-
-  protected new_error(_val: string): void {}
-
-  protected clear_error(): void {}
 
   protected limit_value(val: string): PromiseLike<ResultNice<string>> {
     if (this.#max_length && val.length > this.#max_length)
@@ -196,43 +193,42 @@ export class FormTextMultiline<
   protected check_value(val: string): PromiseLike<ResultNice<string>> {
     if (this.#max_length && val.length > this.#max_length)
       return sync_resolve(
-        err_nice(state.errors.TEXT_TOO_LONG, `A maximum of ${this.#max_length} characters is allowed`),
+        err_nice(
+          state.errors.TEXT_TOO_LONG,
+          `A maximum of ${this.#max_length} characters is allowed`,
+        ),
       );
     if (this.#max_bytes && string_byte_length(val) > this.#max_bytes)
       return sync_resolve(
-        err_nice(state.errors.TEXT_TOO_LONG, `A maximum of ${this.#max_bytes} bytes is allowed`),
+        err_nice(
+          state.errors.TEXT_TOO_LONG,
+          `A maximum of ${this.#max_bytes} bytes is allowed`,
+        ),
       );
     return super.check_value(val);
   }
 
   protected state_related(related: Partial<StateStringRelated>): void {
-    if (related.max_length)
-      this.attach_state_to_prop("max_length", related.max_length, () => none());
-    else if (this.#related_length)
-      this.detach_state_from_prop("max_length").max_length = undefined;
-    this.#related_length = !!related.max_length;
-    if (related.max_length_bytes)
-      this.attach_state_to_prop("max_bytes", related.max_length_bytes, () =>
-        none(),
-      );
-    else if (this.#related_bytes)
-      this.detach_state_from_prop("max_bytes").max_bytes = undefined;
-    this.#related_bytes = !!related.max_length_bytes;
+    this.follow_related(
+      TEXT_MULTILINE_RELATED.max_length,
+      related.max_length,
+      (max) => this.#length.related(max),
+    );
+    this.follow_related(
+      TEXT_MULTILINE_RELATED.max_bytes,
+      related.max_length_bytes,
+      (max) => this.#bytes.related(max),
+    );
   }
 }
 define_element(FormTextMultiline);
 
-/**Creates a multi line text input form element */
-export function form_text_multiline<ID extends string | undefined>(
-  options?: FormTextMultilineOptions<ID>,
+export type { FormTextMultiline };
+
+/**Creates a multi line text input
+ * A fixed value is where it starts, a writable state is written when the user changes the text, a read only state is only shown*/
+export function form_text_multiline<ID extends string | undefined = undefined>(
+  options: FormTextMultilineCreateOptions<ID> = {},
 ): FormTextMultiline<ID> {
-  const input = new FormTextMultiline<ID>(options?.id);
-  if (options) {
-    if (options.filter) input.filter = options.filter;
-    if (options.placeholder) input.placeholder = options.placeholder;
-    if (options.max_length) input.max_length = options.max_length;
-    if (options.max_bytes) input.max_bytes = options.max_bytes;
-    FormValueWrite.apply_options(input, options);
-  }
-  return input;
+  return FormTextMultiline.create(options) as FormTextMultiline<ID>;
 }

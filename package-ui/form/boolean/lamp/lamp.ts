@@ -1,28 +1,50 @@
-import { define_element } from "#base";
+import { define_element, input_key, type InputOptions } from "#base";
 import type { Option } from "@chocbite/ts-lib/result";
+import type { StateOrVal } from "@chocbite/ts-lib/state";
 import type { SVGFunc } from "#svg";
-import { FormValue, type FormColors, type FormValueOptions } from "../../base";
+import {
+  FormValue,
+  type FormColors,
+  type FormValueCreateOptions,
+  type FormValueOptions,
+} from "../../base";
 import "./lamp.scss";
 
-export interface FormLampOptions<
-  T extends boolean | number,
-  C extends FormColors[],
-  ID extends string | undefined,
-> extends FormValueOptions<T, ID> {
-  /**Sets the lamp colors */
-  colors: C;
-  /**Lamp text */
-  text?: string;
-  /**Icon for lamp */
-  icon?: SVGFunc;
-  /**Centers text and icon */
-  center?: boolean;
-}
+/**Inputs of the lamp, the colors are typed by the lamp, so the key is loose*/
+const LAMP = {
+  colors: input_key<StateOrVal<FormColors[]>>(),
+  /**Text of the lamp, an error shows its nice text*/
+  text: input_key<StateOrVal<string>>(),
+  /**Icon in front of the text, undefined for none, an error shows none*/
+  icon: input_key<StateOrVal<SVGFunc | undefined>>(),
+  /**Centers the text and icon*/
+  center: input_key<StateOrVal<boolean>>(),
+};
 
-export class FormLamp<
+/**Options of a lamp with value T, colors C decide the value, two colors a boolean, more a number*/
+export type FormLampOptions<
+  T extends boolean | number,
+  C extends FormColors[],
+> = FormValueOptions<T> &
+  Omit<InputOptions<typeof LAMP>, "colors"> & {
+    /**Color for each value, the first for false or 0, an error shows no color*/
+    colors?: StateOrVal<C>;
+  };
+/**Options of a lamp given at creation, the colors are needed, as they decide the value*/
+export type FormLampCreateOptions<
   T extends boolean | number,
   C extends FormColors[],
   ID extends string | undefined,
+> = FormLampOptions<T, C> &
+  FormValueCreateOptions<ID> & {
+    colors: StateOrVal<C>;
+  };
+
+/**Shows a value as a color, only shows, the user can not change it*/
+class FormLamp<
+  T extends boolean | number = boolean | number,
+  C extends FormColors[] = FormColors[],
+  ID extends string | undefined = string | undefined,
 > extends FormValue<T, ID> {
   static element_name() {
     return "lamp";
@@ -35,34 +57,27 @@ export class FormLamp<
   #icon: SVGSVGElement | undefined;
   #colors: FormColors[] = [];
 
-  /**Sets the current text of the lamp*/
-  set text(label: string) {
-    this.#text.textContent = label;
-  }
-  get text() {
-    return this.#text.textContent;
-  }
-
-  /**Changes the icon of the lamp*/
-  set icon(icon: SVGFunc | undefined) {
-    if (this.#icon) this.removeChild(this.#icon);
-    this.#icon = icon ? this.insertBefore(icon(), this.#text) : undefined;
-  }
-
-  /** Sets the background color of the lamp*/
-  set colors(colors: C) {
-    this.#colors = colors;
-    this.new_value(this.buffer!);
-  }
-
-  /**Centers text and icon */
-  set center(center: boolean) {
-    if (center) this.classList.add("center");
-    else this.classList.remove("center");
-  }
-
-  get center() {
-    return this.classList.contains("center");
+  set(options: FormLampOptions<T, C>): this {
+    super.set(options);
+    this.set_input(LAMP.colors, options.colors, (colors) => {
+      this.#colors = colors.ok ? colors.value : [];
+      if (this.buffer === undefined) this.clear_value();
+      else this.new_value(this.buffer);
+    });
+    this.set_input(LAMP.text, options.text, (text) => {
+      this.#text.textContent = text.ok ? text.value : text.error.nice;
+    });
+    this.set_input(LAMP.icon, options.icon, (icon) => {
+      this.#icon?.remove();
+      this.#icon =
+        icon.ok && icon.value
+          ? this.insertBefore(icon.value(), this.#text)
+          : undefined;
+    });
+    this.set_input(LAMP.center, options.center, (center) => {
+      this.classList.toggle("center", center.ok && center.value);
+    });
+    return this;
   }
 
   /**Called when value is changed */
@@ -76,42 +91,26 @@ export class FormLamp<
     this.removeAttribute("color");
   }
 
-  protected new_error(err: string): void {
-    console.error(err);
-  }
-
-  protected clear_error(): void {}
-
   protected state_related(_related: Option<{}>): void {}
 }
 define_element(FormLamp);
 
-/**Creates a button form element */
-function from<ID extends string | undefined>(
-  options?: FormLampOptions<
+export type { FormLamp };
+
+/**Creates a lamp showing a value as a color, two colors give a boolean value, more a number*/
+function form_lamp<ID extends string | undefined = undefined>(
+  options: FormLampCreateOptions<
     number,
     [FormColors, FormColors, FormColors, ...FormColors[]],
     ID
   >,
 ): FormLamp<number, [FormColors, FormColors, FormColors, ...FormColors[]], ID>;
-function from<ID extends string | undefined>(
-  options?: FormLampOptions<boolean, [FormColors, FormColors], ID>,
+function form_lamp<ID extends string | undefined = undefined>(
+  options: FormLampCreateOptions<boolean, [FormColors, FormColors], ID>,
 ): FormLamp<boolean, [FormColors, FormColors], ID>;
-function from<
-  T extends boolean | number,
-  C extends FormColors[],
-  ID extends string | undefined,
->(options?: FormLampOptions<T, C, ID>): FormLamp<T, C, ID> {
-  const lamp = new FormLamp<T, C, ID>(options?.id);
-  if (options) {
-    lamp.colors = options.colors;
-    if (options.text) lamp.text = options.text;
-    if (options.icon) lamp.icon = options.icon;
-    if (options.center) lamp.center = options.center;
-    FormValue.apply_options(lamp, options);
-  }
-  return lamp;
+function form_lamp(
+  options: FormLampCreateOptions<boolean | number, FormColors[], undefined>,
+): FormLamp {
+  return FormLamp.create(options);
 }
-
-/**Creates a button form element */
-export const form_lamp = from;
+export { form_lamp };

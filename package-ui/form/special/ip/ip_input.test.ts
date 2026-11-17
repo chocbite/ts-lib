@@ -98,7 +98,7 @@ describe("IP input display", () => {
 
   it("switches type when given an address of the other version", () => {
     const { element, parts } = make();
-    element.value = new IPAddress("::1");
+    element.set({ value: new IPAddress("::1") });
     expect(element.classList.contains("ipv6")).toBe(true);
     expect(element.classList.contains("ipv4")).toBe(false);
     expect(parts().length).toBe(8);
@@ -108,7 +108,7 @@ describe("IP input display", () => {
   it("keeps its warning input after the type changes", () => {
     const { element } = make();
     expect(element.querySelector("input")).not.toBeNull();
-    element.value = new IPAddress("::1");
+    element.set({ value: new IPAddress("::1") });
     expect(element.querySelector("input")).not.toBeNull();
   });
 
@@ -191,7 +191,7 @@ describe("IP input committing", () => {
     const state = st.ok_w(new IPAddress("10.0.0.1"));
     const write = vi.spyOn(state, "write");
     const { element, parts } = make();
-    element.bind({ value: state });
+    element.set({ value: state });
     parts()[0].focus();
     parts()[0].blur();
     await wait();
@@ -242,7 +242,7 @@ describe("IP input committing", () => {
   it("follows and writes a bound state", async () => {
     const state = st.ok_w(new IPAddress("10.0.0.1"));
     const { element, parts, key } = make();
-    element.bind({ value: state });
+    element.set({ value: state });
     expect(element.value_as_ip.to_string()).toBe("10.0.0.1");
     parts()[3].textContent = "2";
     key(parts()[3], "Enter");

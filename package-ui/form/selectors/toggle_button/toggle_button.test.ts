@@ -1,4 +1,5 @@
 import { material_close_rounded } from "#icons";
+import { NiceError } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { form_toggle_button } from "./toggle_button";
@@ -142,13 +143,13 @@ describe("Toggle button", () => {
 
   it("a value not in the selections selects nothing", () => {
     const { element, selected } = make({ value: 1 });
-    element.value = 99;
+    element.set({ value: 99 });
     expect(selected()).toBe(-1);
   });
 
   it("arrow right after an unknown value starts from the first option", async () => {
     const { element, tops, selected, key } = make({ value: 2 });
-    element.value = 99;
+    element.set({ value: 99 });
     key(tops()[0], "ArrowRight");
     await wait();
     expect(selected()).toBe(0);
@@ -156,17 +157,34 @@ describe("Toggle button", () => {
 
   it("replacing the selections keeps the current value selected", () => {
     const { element, tops, selected } = make({ value: 3 });
-    element.selections = [
-      { value: 3, text: "C" },
-      { value: 4, text: "D" },
-    ];
+    element.set({
+      selections: [
+        { value: 3, text: "C" },
+        { value: 4, text: "D" },
+      ],
+    });
     expect(tops().map((top) => top.textContent)).toEqual(["C", "D"]);
     expect(selected()).toBe(0);
   });
 
+  it("follows a state of selections, an error shows none", () => {
+    const selections = st.from_w([{ value: 1, text: "A" }]);
+    const { element, tops } = make({ selections });
+    expect(tops().map((top) => top.textContent)).toEqual(["A"]);
+    selections.set_ok([
+      { value: 1, text: "A" },
+      { value: 2, text: "B" },
+    ]);
+    expect(tops().map((top) => top.textContent)).toEqual(["A", "B"]);
+    selections.set_err(new NiceError(Symbol("No choices"), "Server down"));
+    //Only the fault icon is left
+    expect(tops()).toEqual([]);
+    expect(element.faults.length).toBe(1);
+  });
+
   it("removing the selections empties the element", () => {
     const { element } = make({ value: 3 });
-    element.selections = undefined;
+    element.set({ selections: [] });
     expect(element.children.length).toBe(0);
   });
 
@@ -188,7 +206,7 @@ describe("Toggle button", () => {
   it("follows and writes a bound state", async () => {
     const state = st.ok_w(1);
     const { element, tops, selected } = make();
-    element.bind({ value: state });
+    element.set({ value: state });
     expect(selected()).toBe(0);
     tops()[1].click();
     await wait();

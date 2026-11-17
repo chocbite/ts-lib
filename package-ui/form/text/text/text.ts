@@ -1,16 +1,24 @@
-import { define_element } from "#base";
+import {
+  define_element,
+  input_key,
+  type BaseOptions,
+  type InputOptions,
+} from "#base";
+import type { StateOrVal } from "@chocbite/ts-lib/state";
 import { FormElement } from "../../base";
 import "./text.scss";
 
-export interface FormTextOptions {
-  /**Buttons text */
-  text?: string;
-  /**Text size */
-  size?: number;
-}
+/**Inputs of the text*/
+const TEXT = {
+  /**Text shown, an error shows its nice text*/
+  text: input_key<StateOrVal<string>>(),
+  /**Font size in rem, not given the size of form text, an error gives that size*/
+  size: input_key<StateOrVal<number>>(),
+};
+export type FormTextOptions = BaseOptions & InputOptions<typeof TEXT>;
 
-/**Component for simple text */
-export class FormText extends FormElement {
+/**Simple text, like a label in front of a form element*/
+class FormText extends FormElement {
   static element_name() {
     return "text";
   }
@@ -18,29 +26,24 @@ export class FormText extends FormElement {
     return "form";
   }
 
-  constructor(options: FormTextOptions) {
-    super();
-    if (options.text) this.text = options.text;
-    if (options.size) this.size = options.size;
-  }
-
-  /**Sets the current text of the element*/
-  set text(text: string) {
-    this.textContent = text;
-  }
-  get text() {
-    return this.textContent;
-  }
-
-  /**Sets the current text of the element*/
-  set size(size: number) {
-    this.style.fontSize = size + "rem";
-    this.style.lineHeight = size + "rem";
+  set(options: FormTextOptions): this {
+    super.set(options);
+    this.set_input(TEXT.text, options.text, (text) => {
+      this.textContent = text.ok ? text.value : text.error.nice;
+    });
+    this.set_input(TEXT.size, options.size, (size) => {
+      const rem = size.ok ? size.value + "rem" : "";
+      this.style.fontSize = rem;
+      this.style.lineHeight = rem;
+    });
+    return this;
   }
 }
 define_element(FormText);
 
-/**Creates a button form element */
-export function form_text(options: FormTextOptions): FormText {
-  return new FormText(options);
+export type { FormText };
+
+/**Creates a text, like a label in front of a form element*/
+export function form_text(options: FormTextOptions = {}): FormText {
+  return FormText.create(options);
 }

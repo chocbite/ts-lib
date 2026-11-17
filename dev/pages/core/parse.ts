@@ -339,52 +339,52 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
   const writable = row(sec);
   writable.style.marginTop = "0.75rem";
   const name = box(writable, "name: sw, text input", WIDTH);
-  name.appendChild(form.text_input().bind({ value: parsed.name }));
+  name.appendChild(form.text_input().set({ value: parsed.name }));
   const running = box(writable, "running: bw, switch and lamp", WIDTH);
-  running.appendChild(form.switch().bind({ value: parsed.running }));
+  running.appendChild(form.switch().set({ value: parsed.running }));
   running.appendChild(
-    form.lamp({ text: "Running", colors: [FormColors.Red, FormColors.Green] }).bind({
+    form.lamp({ text: "Running", colors: [FormColors.Red, FormColors.Green] }).set({
       value: parsed.running,
     }),
   );
   const speed = box(writable, "speed: nw, slider and progress", WIDTH);
-  speed.appendChild(form.slider({ min: 0, max: 100, unit: "%" }).bind({ value: parsed.speed }));
-  speed.appendChild(form.progress({ unit: "%" }).bind({ value: parsed.speed }));
+  speed.appendChild(form.slider({ min: 0, max: 100, unit: "%" }).set({ value: parsed.speed }));
+  speed.appendChild(form.progress({ unit: "%" }).set({ value: parsed.speed }));
   const setpoint = box(writable, "setpoint: nw, number input and stepper", WIDTH);
   setpoint.appendChild(
-    form.number_input({ min: 10, max: 30, decimals: 1, unit: "°C" }).bind({
+    form.number_input({ min: 10, max: 30, decimals: 1, unit: "°C" }).set({
       value: parsed.setpoint,
     }),
   );
   setpoint.appendChild(
-    form.stepper({ min: 10, max: 30, step: 0.5, decimals: 1, unit: "°C" }).bind({
+    form.stepper({ min: 10, max: 30, step: 0.5, decimals: 1, unit: "°C" }).set({
       value: parsed.setpoint,
     }),
   );
   const mode = box(writable, "mode: nw, toggle and dropdown", WIDTH);
-  mode.appendChild(form.toggle_button({ selections: MODES }).bind({ value: parsed.mode }));
-  mode.appendChild(form.dropdown({ selections: MODES }).bind({ value: parsed.mode }));
+  mode.appendChild(form.toggle_button({ selections: MODES }).set({ value: parsed.mode }));
+  mode.appendChild(form.dropdown({ selections: MODES }).set({ value: parsed.mode }));
 
   const read_only = row(sec);
   read_only.style.marginTop = "0.75rem";
   const temperature = box(read_only, "temperature: n, read only", WIDTH);
   temperature.appendChild(
-    form.progress({ min: 0, max: 40, decimals: 1, unit: "°C" }).bind({
+    form.progress({ min: 0, max: 40, decimals: 1, unit: "°C" }).set({
       value: parsed.temperature,
     }),
   );
   temperature.appendChild(
-    form.number_input({ decimals: 1, unit: "°C" }).bind({ value: parsed.temperature }),
+    form.number_input({ decimals: 1, unit: "°C" }).set({ value: parsed.temperature }),
   );
   const alarm = box(read_only, "alarm: b, read only, on above 25 °C", WIDTH);
   alarm.appendChild(
-    form.lamp({ text: "Alarm", colors: [FormColors.None, FormColors.Red] }).bind({
+    form.lamp({ text: "Alarm", colors: [FormColors.None, FormColors.Red] }).set({
       value: parsed.alarm,
     }),
   );
   const outputs = box(writable, "outputs: [4, bw], fixed array", WIDTH);
   for (const output of parsed.outputs)
-    outputs.appendChild(form.switch().bind({ value: output[FETCH_PARSE] }));
+    outputs.appendChild(form.switch().set({ value: output[FETCH_PARSE] }));
 
   const rest = box(read_only, "note: ?s and log: [0, s]", { width: "24rem" });
   readout(rest, "note", parsed.note);
@@ -461,25 +461,25 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
             title: "Server id",
             init_width: 6,
             field_gen: () => form.list_field(form.number_input()),
-            field_apply: (field, v: Pump["id"]) => field.element.bind({ value: v }),
+            field_apply: (field, v: Pump["id"]) => field.element.set({ value: v }),
           }),
           name: list.column({
             title: "Name",
             init_width: 12,
             field_gen: () => form.list_field(form.text_input()),
-            field_apply: (field, v: Pump["name"]) => field.element.bind({ value: v }),
+            field_apply: (field, v: Pump["name"]) => field.element.set({ value: v }),
           }),
           running: list.column({
             title: "Running",
             fixed_width: "min",
             field_gen: () => form.list_field(form.switch()),
-            field_apply: (field, v: Pump["running"]) => field.element.bind({ value: v }),
+            field_apply: (field, v: Pump["running"]) => field.element.set({ value: v }),
           }),
           speed: list.column({
             title: "Speed",
             init_width: 12,
             field_gen: () => form.list_field(form.stepper({ min: 0, max: 100, unit: "%" })),
-            field_apply: (field, v: Pump["speed"]) => field.element.bind({ value: v }),
+            field_apply: (field, v: Pump["speed"]) => field.element.set({ value: v }),
           }),
         },
         (pump) =>
@@ -543,7 +543,7 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
   for (const zone of parsed.zones) {
     readout(zones, "name", zone.name);
     zones.appendChild(
-      form.number_input({ min: 10, max: 30, decimals: 1, unit: "°C" }).bind({
+      form.number_input({ min: 10, max: 30, decimals: 1, unit: "°C" }).set({
         value: zone.setpoint,
       }),
     );
@@ -556,7 +556,7 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
     if (!r.ok || r.value.length === shown_tags) return;
     shown_tags = r.value.length;
     tags.replaceChildren(
-      ...r.value.map((tag) => form.text_input().bind({ value: tag })),
+      ...r.value.map((tag) => form.text_input().set({ value: tag })),
     );
   }, true);
 }

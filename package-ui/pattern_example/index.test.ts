@@ -238,7 +238,7 @@ describe("options from keys", () => {
   it("derives the options from the keys, every option optional", () => {
     expectTypeOf<ExampleSliderOptions>().toEqualTypeOf<
       BaseOptions & {
-        value?: StateOrValROSW<number>;
+        value?: StateOrValROS<number>;
         min?: StateOrVal<number>;
         max?: StateOrVal<number>;
         step?: number;
@@ -260,7 +260,7 @@ describe("options from keys", () => {
       max?: StateOrVal<number>;
     }>();
     expectTypeOf<ExampleEditorCreateOptions["scale"]>().toEqualTypeOf<
-      StateOrValROSW<number> | undefined
+      StateOrValROS<number> | undefined
     >();
   });
 
@@ -302,8 +302,13 @@ describe("input_state", () => {
     await Promise.resolve();
     expect(second.ok()).toBe(70);
     expect(first.ok()).toBe(10);
+    //A fixed value after a state is kept by the slider, nothing is written
     slider.set({ value: 5 });
-    expect(input.disabled).toBe(true);
+    input.value = "80";
+    input.dispatchEvent(new Event("input"));
+    await Promise.resolve();
+    expect(input.disabled).toBe(false);
+    expect(second.ok()).toBe(70);
   });
 });
 
@@ -340,17 +345,25 @@ describe("errors", () => {
   });
 });
 
-describe("fixed values that can not change", () => {
-  it("a fixed slider value disables the slider, a state enables it", () => {
-    const slider = attach(example_slider({ value: 30 }));
+describe("values the user changes", () => {
+  it("a fixed slider value is kept by the slider, the user changes it", () => {
+    const slider = attach(example_slider({ value: 30, max: 100 }));
+    const input = slider.querySelector("input")!;
+    expect(input.disabled).toBe(false);
+    expect(input.value).toBe("30");
+    input.value = "60";
+    input.dispatchEvent(new Event("input"));
+    expect(input.value).toBe("60");
+  });
+
+  it("only a read only state disables the slider", () => {
+    const slider = attach(example_slider({ value: state.ok(30) }));
     const input = slider.querySelector("input")!;
     expect(input.disabled).toBe(true);
-    expect(input.value).toBe("30");
     slider.set({ value: state.ok_w(40) });
     expect(input.disabled).toBe(false);
-    expect(input.value).toBe("40");
     slider.set({ value: 50 });
-    expect(input.disabled).toBe(true);
+    expect(input.disabled).toBe(false);
   });
 
   it("a watcher shows a fixed list of a group", () => {
@@ -478,20 +491,31 @@ describe("editor", () => {
     label: editor.querySelector("example-box") as HTMLElement,
   });
 
-  it("builds its children in the constructor", () => {
-    const { square, input, label } = parts(example_editor());
+  it("builds its children in the constructor, the slider changes the view from the start", async () => {
+    const editor = attach(example_editor());
+    const { square, input, label } = parts(editor);
     expect(square.style.transform).toBe("scale(1)");
-    expect(input.disabled).toBe(true);
+    expect(input.disabled).toBe(false);
     expect(label.textContent).toBe("scale 1.00");
+    input.value = "2";
+    input.dispatchEvent(new Event("input"));
+    await Promise.resolve();
+    expect(editor.scale.ok()).toBe(2);
+    expect(square.style.transform).toBe("scale(2)");
   });
 
-  it("hands out a fixed scale as a state and disables the slider", () => {
+  it("hands out a fixed scale as a state the slider changes", async () => {
     const editor = attach(example_editor({ scale: 2 }));
     expect(editor.scale.ok()).toBe(2);
     const { square, input, label } = parts(editor);
     expect(square.style.transform).toBe("scale(2)");
-    expect(input.disabled).toBe(true);
+    expect(input.disabled).toBe(false);
     expect(label.textContent).toBe("scale 2.00");
+    input.value = "1.5";
+    input.dispatchEvent(new Event("input"));
+    await Promise.resolve();
+    expect(editor.scale.ok()).toBe(1.5);
+    expect(label.textContent).toBe("scale 1.50");
   });
 
   it("hands out a given state and passes it on unchanged", async () => {

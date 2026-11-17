@@ -52,7 +52,7 @@ describe("Group values", () => {
 
   it("setting the value sets the components, ignoring unknown ids", () => {
     const { group, a, b } = make();
-    group.value = { a: 3, b: true, c: 9 } as { a: number; b: boolean };
+    group.set({ value: { a: 3, b: true, c: 9 } as { a: number; b: boolean } });
     expect(a.buffer).toBe(3);
     expect(b.buffer).toBe(true);
     expect(group.querySelector("form-stepper span")!.textContent).toBe("3");
@@ -82,21 +82,21 @@ describe("Group values", () => {
       elements: [inner, form_switch({ id: "y", value: true })],
     });
     expect(outer.get_value.unwrap()).toEqual({ inner: { x: 1 }, y: true });
-    outer.value = { inner: { x: 5 } };
+    outer.set({ value: { inner: { x: 5 } } });
     expect(inner.get_value.unwrap()).toEqual({ x: 5 });
   });
 
-  it("fails reading values while bound to a state", () => {
+  it("reads the values of its elements also while its value is a state", () => {
     const { group } = make({ a: 1, b: true });
-    group.bind({ value: st.ok_w({ a: 2 }) });
-    expect(group.get_value.err).toBe(true);
-    expect(group.value_partial.err).toBe(true);
-    expect(group.value_changed.err).toBe(true);
+    group.set({ value: st.ok_w({ a: 2 }) });
+    expect(group.get_value.unwrap()).toEqual({ a: 2, b: true });
+    expect(group.value_partial.unwrap()).toEqual({ a: 2, b: true });
+    expect(group.value_changed.unwrap()).toEqual({});
   });
 
   it("sets the components from the bound state", () => {
     const { group, a, b } = make();
-    group.bind({ value: st.ok_w({ a: 7, b: true }) });
+    group.set({ value: st.ok_w({ a: 7, b: true }) });
     expect(a.buffer).toBe(7);
     expect(b.buffer).toBe(true);
   });
@@ -160,23 +160,23 @@ describe("Group elements", () => {
     error.mockRestore();
   });
 
-  it("adds more elements when elements is set again", () => {
-    const group = form_group({ elements: [form_stepper({ id: "a" })] });
-    group.elements = [form_switch({ id: "b" })];
-    expect(Object.keys(group.value_elements)).toEqual(["a", "b"]);
-    expect(group.children.length).toBe(2);
-  });
-
-  it("elements gives all added elements, also those without an id", () => {
+  it("elements gives all elements, also those without an id, only those with an id are values", () => {
     const a = form_stepper({ id: "a" });
     const plain = form_stepper();
     const lamp = form_lamp({
       id: "l",
       colors: [FormColors.Red, FormColors.Green],
     });
-    const group = form_group({ elements: [a, plain] });
-    group.elements = [lamp];
+    const group = form_group({ elements: [a, plain, lamp] });
     expect(group.elements).toEqual([a, plain, lamp]);
+    expect(Object.keys(group.value_elements)).toEqual(["a"]);
+  });
+
+  it("gets its elements at creation, as they decide its value", () => {
+    const group = form_group({ elements: [form_stepper({ id: "a" })] });
+    // @ts-expect-error the elements are given at creation
+    group.set({ elements: [form_switch({ id: "b" })] });
+    expect(Object.keys(group.value_elements)).toEqual(["a"]);
   });
 });
 
@@ -188,19 +188,19 @@ describe("Group layout", () => {
   it("switches between border styles", () => {
     const group = form_group({ border: FormGroupBorderStyle.Inset });
     expect(group.classList.contains("inset")).toBe(true);
-    group.border = FormGroupBorderStyle.Outset;
+    group.set({ border: FormGroupBorderStyle.Outset });
     expect(group.classList.contains("inset")).toBe(false);
     expect(group.classList.contains("outset")).toBe(true);
-    group.border = FormGroupBorderStyle.None;
+    group.set({ border: FormGroupBorderStyle.None });
     expect(group.classList.contains("outset")).toBe(false);
   });
 
   it("removes the line border when the border changes", () => {
     const group = form_group({ border: FormGroupBorderStyle.Line });
     expect(group.classList.contains("line")).toBe(true);
-    group.border = FormGroupBorderStyle.None;
+    group.set({ border: FormGroupBorderStyle.None });
     expect(group.classList.contains("line")).toBe(false);
-    group.border = FormGroupBorderStyle.Inset;
+    group.set({ border: FormGroupBorderStyle.Inset });
     expect(group.classList.contains("line")).toBe(false);
   });
 
@@ -208,14 +208,14 @@ describe("Group layout", () => {
     const group = form_group({ max_height: 10 });
     expect(group.classList.contains("max_height")).toBe(true);
     expect(group.style.getPropertyValue("--max_height")).toBe("10rem");
-    group.max_height = undefined;
+    group.set({ max_height: 0 });
     expect(group.classList.contains("max_height")).toBe(false);
   });
 
   it("embeds", () => {
     const group = form_group({ embed: true });
     expect(group.classList.contains("embed")).toBe(true);
-    group.embed = false;
+    group.set({ embed: false });
     expect(group.classList.contains("embed")).toBe(false);
   });
 
@@ -230,14 +230,14 @@ describe("Group layout", () => {
     expect(group.style.gridTemplateColumns).toBe(
       "repeat(auto-fit, minmax(5rem, 1fr))",
     );
-    group.column = ["2rem", "3rem"];
+    group.set({ column: ["2rem", "3rem"] });
     expect(group.style.gridTemplateColumns).toBe(
       "minmax(2rem, 1fr) minmax(3rem, 1fr)",
     );
-    group.row = true;
+    group.set({ row: true });
     expect(group.classList.contains("flex-row")).toBe(true);
     expect(group.classList.contains("grid-col")).toBe(false);
-    group.row = "4rem";
+    group.set({ row: "4rem" });
     expect(group.classList.contains("grid-row")).toBe(true);
     expect(group.style.gridTemplateRows).toBe(
       "repeat(auto-fit, minmax(4rem, 1fr))",

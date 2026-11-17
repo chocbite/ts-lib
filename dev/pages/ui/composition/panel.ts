@@ -36,7 +36,7 @@ const close_all = () => {
 {
   const sec = section(
     "Position",
-    "Drag the title bar, or focus it and use the arrow keys (shift for 5rem, ctrl for 0.1rem). Without a position the panel starts centered and moves freely. Fixed x only moves up and down. The bound panel writes its states, the info line follows, and Reset puts it back. Make the window narrow, panels stay reachable and come back when it grows",
+    "Drag the title bar, or focus it and use the arrow keys (shift for 5rem, ctrl for 0.1rem). Without a position the panel starts centered and moves freely. A fixed position is where it starts, it moves freely from there. Locked x is a read only state, it only moves up and down. The bound panel writes its states, the info line follows, and Reset puts it back. Make the window narrow, panels stay reachable and come back when it grows",
   );
   const x = state.ok_w(30);
   const y = state.ok_w(12);
@@ -48,10 +48,16 @@ const close_all = () => {
   controls(sec, {
     Centered: () =>
       show("Centered", "No position given, moves freely", { width: 18 }),
-    "Fixed x": () =>
-      show("Fixed x", "x is fixed, only moves up and down", {
+    "Fixed start": () =>
+      show("Fixed start", "Starts at x 4, y 14, moves freely", {
         x: 4,
-        y: state.ok_w(14),
+        y: 14,
+        width: 18,
+      }),
+    "Locked x": () =>
+      show("Locked x", "x is a read only state, only moves up and down", {
+        x: state.ok(4),
+        y: 20,
         width: 18,
       }),
     Bound: () =>
@@ -114,7 +120,7 @@ const close_all = () => {
 {
   const sec = section(
     "Sizing",
-    "Drag the edges and corners, the opposite edge stays put. Switch the input mode to touch in the shell to see the sizers. Fixed width can only change height, not sizeable has no sizers. The bound one writes its width and height, the minimum is 4rem",
+    "Drag the edges and corners, the opposite edge stays put. Switch the input mode to touch in the shell to see the sizers. A fixed width is where it starts, a read only width can only change height, not sizeable has no sizers. The bound one writes its width and height, the minimum is 4rem",
   );
   const width = state.ok_w(20);
   const height = state.ok_w(10);
@@ -127,7 +133,9 @@ const close_all = () => {
     "Fits content": () =>
       show("Fits content", "Starts at the size of its content", {}),
     "Fixed width": () =>
-      show("Fixed width", "Only the height changes", { width: 16 }),
+      show("Fixed width", "Starts 16rem wide, sizes freely", { width: 16 }),
+    "Locked width": () =>
+      show("Locked width", "Only the height changes", { width: state.ok(16) }),
     "Not sizeable": () =>
       show("Not sizeable", "No sizers", { width: 16, sizeable: false }),
     Bound: () => show("Bound", "Writes width and height", { width, height }),

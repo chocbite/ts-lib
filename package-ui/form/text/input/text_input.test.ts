@@ -1,7 +1,10 @@
-import { ok } from "@chocbite/ts-lib/result";
+import { NiceError, ok } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { form_text_input } from "./text_input";
+
+/**A test error whose nice text is its message*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 const wait = (ms: number = 10) =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -37,10 +40,9 @@ const make = (options: Parameters<typeof form_text_input>[0] = {}) => {
 };
 
 describe("Text input max length", () => {
-  it("can be removed again", () => {
+  it("can be removed again with 0", () => {
     const element = form_text_input({ max_length: 5 });
-    expect(() => (element.max_length = undefined)).not.toThrow();
-    expect(element.max_length).toBeUndefined();
+    element.set({ max_length: 0 });
     expect(element.querySelector("input")!.hasAttribute("maxlength")).toBe(
       false,
     );
@@ -59,20 +61,30 @@ describe("Text input options", () => {
   });
 
   it("applies placeholder, max length, max bytes and filter", () => {
-    const filter = /^[a-z]+$/;
-    const element = form_text_input({
+    const { input, before_input } = make({
       placeholder: "Name",
       max_length: 4,
-      max_bytes: 8,
-      filter,
+      max_bytes: 3,
+      filter: /^[a-zé]+$/,
     });
-    const input = element.querySelector("input")!;
-    expect(element.placeholder).toBe("Name");
     expect(input.placeholder).toBe("Name");
-    expect(element.max_length).toBe(4);
     expect(input.maxLength).toBe(4);
-    expect(element.max_bytes).toBe(8);
-    expect(element.filter).toBe(filter);
+    expect(before_input("1")).toBe(true);
+    expect(before_input("ab")).toBe(false);
+    //é is two bytes
+    expect(before_input("éé")).toBe(true);
+  });
+
+  it("follows states for placeholder and max length", () => {
+    const placeholder = st.from_w("Name");
+    const max_length = st.ok_w(4);
+    const { input } = make({ placeholder, max_length });
+    placeholder.set_ok("Title");
+    max_length.set_ok(6);
+    expect(input.placeholder).toBe("Title");
+    expect(input.maxLength).toBe(6);
+    placeholder.set_err(nice_err("No hint"));
+    expect(input.placeholder).toBe("No hint");
   });
 
   it("shows the initial value and returns it", () => {
@@ -263,7 +275,7 @@ describe("Text input state", () => {
   it("shows the state value and follows changes", async () => {
     const state = st.ok_w("first");
     const { input, element } = make();
-    element.bind({ value: state });
+    element.set({ value: state });
     expect(input.value).toBe("first");
     state.set_ok("second");
     await wait();
@@ -273,18 +285,19 @@ describe("Text input state", () => {
   it("writes an entered value to the state", async () => {
     const state = st.ok_w("first");
     const { element, change, enter } = make();
-    element.bind({ value: state });
+    element.set({ value: state });
     await enter("typed");
     expect(state.ok()).toBe("typed");
     expect(change).toHaveBeenCalledWith("typed");
-    expect(element.get_value.err).toBe(true);
-    expect(element.changed).toBe(false);
+    //A live value is the value of the element too, and the user changed it
+    expect(element.get_value.unwrap()).toBe("typed");
+    expect(element.changed).toBe(true);
   });
 
   it("clear does nothing when bound to a state", () => {
     const state = st.ok_w("first");
     const { element, input } = make();
-    element.bind({ value: state });
+    element.set({ value: state });
     element.clear();
     expect(input.value).toBe("first");
     expect(element.buffer).toBe("first");
@@ -297,29 +310,35 @@ describe("Text input state", () => {
       st.s.help(ok("a"), { max_length, max_length_bytes }),
       true,
     );
-    const { element, input } = make();
-    element.bind({ value: state });
-    expect(element.max_length).toBe(5);
+    const { element, input, before_input } = make();
+    element.set({ value: state });
     expect(input.maxLength).toBe(5);
-    expect(element.max_bytes).toBe(10);
+    input.value = "";
+    expect(before_input("a".repeat(11))).toBe(true);
     max_length.set_ok(7);
     await wait();
-    expect(element.max_length).toBe(7);
+    expect(input.maxLength).toBe(7);
+  });
+
+  it("a max length given as input wins over the one of the state", () => {
+    const state = st.rosw(st.s.help(ok("a"), { max_length: st.ok(5) }), true);
+    const { input } = make({ value: state, max_length: 3 });
+    expect(input.maxLength).toBe(3);
   });
 
   it("does not keep the max length of a previously bound state", () => {
     const state = st.rosw(st.s.help(ok("a"), { max_length: st.ok(2) }), true);
-    const { element } = make();
-    element.bind({ value: state });
-    expect(element.max_length).toBe(2);
-    element.bind({ value: st.ok_w("b") });
-    expect(element.max_length).toBeUndefined();
+    const { element, input } = make();
+    element.set({ value: state });
+    expect(input.maxLength).toBe(2);
+    element.set({ value: st.ok_w("b") });
+    expect(input.hasAttribute("maxlength")).toBe(false);
   });
 
   it("shows a state change made while focused once the focus leaves", async () => {
     const state = st.ok_w("first");
     const { element, input } = make();
-    element.bind({ value: state });
+    element.set({ value: state });
     input.focus();
     state.set_ok("second");
     await wait();

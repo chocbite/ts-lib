@@ -1,7 +1,16 @@
-import { some } from "@chocbite/ts-lib/result";
-import state, { type StateEnumRelated } from "@chocbite/ts-lib/state";
+import { input_key } from "#base";
+import state, {
+  type State,
+  type StateEnumRelated,
+  type StateOrVal,
+} from "@chocbite/ts-lib/state";
 import type { SVGFunc } from "#svg";
-import { FormValueWrite, FormValueWriteOptions } from "../base";
+import {
+  FormSetting,
+  FormValueWrite,
+  type FormValueCreateOptions,
+  type FormValueWriteOptions,
+} from "../base";
 
 export interface FormSelectorOption<RT> {
   /**Value to set when option is selected */
@@ -15,53 +24,61 @@ export interface FormSelectorOption<RT> {
 /**Selection options for a form selector */
 export type FormSelections<T> = FormSelectorOption<T>[];
 
-export interface FormSelectorBaseOptions<
-  T,
-  ID extends string | undefined,
-> extends FormValueWriteOptions<T, ID> {
-  /**Options for selector*/
-  selections?: FormSelections<T>;
-}
+/**Inputs of selectors, loosely typed as selectors are generic in their value*/
+const SELECTOR = {
+  selections: input_key<StateOrVal<FormSelections<any>>>(),
+};
+/**The list of an enum value state, followed while no selections are given*/
+/**Value of the list state of an enum value state*/
+type EnumList =
+  StateEnumRelated["list"] extends State<infer L, any, any> ? L : never;
+const SELECTOR_RELATED = {
+  list: input_key<StateOrVal<EnumList | null>>(),
+};
 
-/**Base for number elements elements*/
-export abstract class FormSelectorBase<
+/**Options of a selector with value RT*/
+export interface FormSelectorOptions<RT> extends FormValueWriteOptions<RT> {
+  /**Choices of the selector, not given the choices of an enum value state are used, an error shows none*/
+  selections?: StateOrVal<FormSelections<RT>>;
+}
+export type FormSelectorCreateOptions<
   RT,
   ID extends string | undefined,
-> extends FormValueWrite<RT, ID> {
-  /**Sets the selection options for the selector */
-  abstract set selections(selections: FormSelections<RT> | undefined);
+> = FormSelectorOptions<RT> & FormValueCreateOptions<ID>;
 
-  static apply_options<RT, ID extends string | undefined>(
-    element: FormSelectorBase<RT, ID>,
-    options: FormSelectorBaseOptions<RT, ID>,
-  ) {
-    if (options.selections) element.selections = options.selections;
-    super.apply_options(element, options);
+/**Base for selectors, choosing a value from a list of selections*/
+export abstract class FormSelectorBase<
+  RT,
+  ID extends string | undefined = string | undefined,
+> extends FormValueWrite<RT, ID> {
+  #selections = new FormSetting<FormSelections<RT>>((selections) =>
+    this.apply_selections(selections),
+  );
+
+  set(options: FormSelectorOptions<RT>): this {
+    super.set(options);
+    this.set_input(SELECTOR.selections, options.selections, (selections) =>
+      this.#selections.input(selections.ok ? selections.value : undefined),
+    );
+    return this;
   }
 
-  //True while the selections come from the list of the bound state
-  #related_list = false;
+  /**Shows the selections that count now, undefined for none*/
+  protected abstract apply_selections(
+    selections: FormSelections<RT> | undefined,
+  ): void;
 
   protected state_related(related: Partial<StateEnumRelated>): void {
-    if (related.list) {
-      this.attach_state_to_prop_map(
-        "selections",
-        related.list,
-        () => some([]),
-        (val) => {
-          return some(
-            state.e.map(val, (key, val) => {
-              return {
-                text: val.name,
-                value: key as RT,
-                icon: val.icon,
-              };
-            }),
-          );
-        },
-      );
-    } else if (this.#related_list)
-      this.detach_state_from_prop("selections").selections = undefined;
-    this.#related_list = !!related.list;
+    this.follow_related(SELECTOR_RELATED.list, related.list, (list) =>
+      this.#selections.related(
+        list
+          ? state.e.map(list, (key, val) => ({
+              text: val.name,
+              value: key as RT,
+              icon: val.icon,
+            }))
+          : undefined,
+      ),
+    );
   }
 }

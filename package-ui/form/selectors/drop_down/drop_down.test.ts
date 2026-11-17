@@ -93,14 +93,13 @@ describe("Dropdown display", () => {
   it("shows the default text until something is selected", () => {
     const { text, element } = make();
     expect(text()).toBe("Select something");
-    expect(element.default).toBe("Select something");
     expect(element.tabIndex).toBe(0);
   });
 
   it("uses the default text option", () => {
     const { text, element } = make({ default: "Pick one" });
     expect(text()).toBe("Pick one");
-    element.default = "Other";
+    element.set({ default: "Other" });
     expect(text()).toBe("Other");
   });
 
@@ -117,7 +116,7 @@ describe("Dropdown display", () => {
     expect(element.firstElementChild!.getAttribute("icon")).toBe(
       "material_close_rounded",
     );
-    element.value = 1;
+    element.set({ value: 1 });
     expect(text()).toBe("One");
     expect(element.firstElementChild!.matches("svg[icon]")).toBe(false);
   });
@@ -127,7 +126,7 @@ describe("Dropdown display", () => {
       value: 2,
       default_icon: material_home_rounded,
     });
-    element.value = 99;
+    element.set({ value: 99 });
     expect(text()).toBe("Select something");
     expect(element.firstElementChild!.getAttribute("icon")).toBe(
       "material_home_rounded",
@@ -136,16 +135,16 @@ describe("Dropdown display", () => {
 
   it("shows the default when the value is not in the selections", () => {
     const { element, text } = make({ value: 1 });
-    element.value = 99;
+    element.set({ value: 99 });
     expect(text()).toBe("Select something");
     expect(element.firstElementChild!.matches("svg[icon]")).toBe(false);
   });
 
   it("updates the text when the selections are replaced", () => {
     const { element, text } = make({ value: 1 });
-    element.selections = [{ value: 1, text: "Uno" }];
+    element.set({ selections: [{ value: 1, text: "Uno" }] });
     expect(text()).toBe("Uno");
-    element.selections = [{ value: 2, text: "Dos" }];
+    element.set({ selections: [{ value: 2, text: "Dos" }] });
     expect(text()).toBe("Select something");
   });
 
@@ -258,7 +257,7 @@ describe("Dropdown popup", () => {
   it("replacing the selections closes the popup", () => {
     const { element } = make();
     element.open = true;
-    element.selections = [{ value: 5, text: "Five" }];
+    element.set({ selections: [{ value: 5, text: "Five" }] });
     expect(box().classList.contains("open")).toBe(false);
   });
 
@@ -321,7 +320,7 @@ describe("Dropdown state", () => {
   it("follows and writes a bound state", async () => {
     const state = st.ok_w(1);
     const { element, text } = make();
-    element.bind({ value: state });
+    element.set({ value: state });
     expect(text()).toBe("One");
     element.open = true;
     lines()[2].click();

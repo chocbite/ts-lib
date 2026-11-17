@@ -104,8 +104,8 @@ describe("Number element icons", () => {
 
   it("stepper icon can be changed twice", () => {
     const element = form_stepper();
-    element.icon_decrease = custom_icon("first");
-    element.icon_decrease = custom_icon("second");
+    element.set({ icon_decrease: custom_icon("first") });
+    element.set({ icon_decrease: custom_icon("second") });
     expect(element.querySelector('[data-icon="first"]')).toBeNull();
     expect(element.querySelector('[data-icon="second"]')).not.toBeNull();
   });
@@ -345,14 +345,14 @@ describe("Number input", () => {
     expect(before_input(element, "5")).toBe(false);
     expect(before_input(element, ".")).toBe(true);
     expect(before_input(element, ",")).toBe(true);
-    element.decimals = 1;
+    element.set({ decimals: 1 });
     expect(before_input(element, ".")).toBe(false);
   });
 
   it("blocks a minus only when min is not negative", () => {
     const { element } = make_input();
     expect(before_input(element, "-")).toBe(false);
-    element.min = 0;
+    element.set({ min: 0 });
     expect(before_input(element, "-")).toBe(true);
   });
 
@@ -370,7 +370,7 @@ describe("Number input", () => {
   it("takes min, max, decimals and unit from the bound state", () => {
     const state = number_state(2, { min: 0, max: 10, decimals: 1, unit: "A" });
     const { element, unit_box, min_legend, max_legend } = make_input();
-    element.bind({ value: state });
+    element.set({ value: state });
     expect(unit_box.textContent).toBe("A");
     expect(min_legend.textContent).toBe("Min:0.0");
     expect(max_legend.textContent).toBe("Max:10.0");
@@ -380,7 +380,7 @@ describe("Number input", () => {
     const min = st.ok_w(0);
     const state = st.rosw(st.n.help(ok(5), { min }), true);
     const { element, min_legend } = make_input();
-    element.bind({ value: state });
+    element.set({ value: state });
     min.set_ok(2);
     expect(min_legend.textContent).toBe("Min:2");
   });
@@ -388,20 +388,21 @@ describe("Number input", () => {
   it("writes stepped values to the bound state", async () => {
     const state = number_state(4, { step: 2 });
     const { element, change, value_box } = make_input();
-    element.bind({ value: state });
+    element.set({ value: state });
     expect(value_box.textContent).toBe("4");
     key(element, "ArrowUp");
     await wait();
     expect(state.ok()).toBe(6);
     expect(value_box.textContent).toBe("6");
     expect(change).toHaveBeenCalledWith(6);
-    expect(element.get_value.err).toBe(true);
+    //A live value is the value of the element too
+    expect(element.get_value.unwrap()).toBe(6);
   });
 
   it("does not write past the limit of the bound state", async () => {
     const state = number_state(10, { max: 10 });
     const { element, change } = make_input();
-    element.bind({ value: state });
+    element.set({ value: state });
     key(element, "ArrowUp");
     await wait();
     expect(state.ok()).toBe(10);
@@ -411,7 +412,7 @@ describe("Number input", () => {
   it("shows the bound value with the decimals of the bound state", () => {
     const state = number_state(2.5, { decimals: 2 });
     const { element, value_box } = make_input();
-    element.bind({ value: state });
+    element.set({ value: state });
     expect(value_box.textContent).toBe("2.50");
   });
 
@@ -419,8 +420,8 @@ describe("Number input", () => {
     const limited = number_state(5, { min: 0, max: 5 });
     const plain = st.ok_w(5);
     const { element, min_legend, max_legend } = make_input();
-    element.bind({ value: limited });
-    element.bind({ value: plain });
+    element.set({ value: limited });
+    element.set({ value: plain });
     expect(min_legend.textContent).toBe("");
     expect(max_legend.textContent).toBe("");
     key(element, "ArrowUp");
@@ -431,7 +432,7 @@ describe("Number input", () => {
   it("focusing and leaving without editing keeps a newer state value", async () => {
     const state = st.ok_w(5);
     const { element, value_box } = make_input();
-    element.bind({ value: state });
+    element.set({ value: state });
     value_box.focus();
     state.set_ok(7);
     value_box.blur();
@@ -702,7 +703,7 @@ describe("Stepper", () => {
   it("focusing and leaving without editing shows a newer state value", async () => {
     const state = st.ok_w(5);
     const { element, value_box } = make_stepper();
-    element.bind({ value: state });
+    element.set({ value: state });
     value_box.focus();
     state.set_ok(7);
     expect(value_box.textContent).toBe("5");
@@ -715,7 +716,7 @@ describe("Stepper", () => {
   it("retyping the shown value while a newer state value arrived writes it", async () => {
     const state = st.ok_w(5);
     const { element, value_box } = make_stepper();
-    element.bind({ value: state });
+    element.set({ value: state });
     value_box.focus();
     state.set_ok(7);
     value_box.textContent = "5";
@@ -778,15 +779,14 @@ describe("Stepper", () => {
   it("blocks a second minus sign and a minus with a positive min", () => {
     const { element, value_box } = make_stepper({ value: -5 });
     expect(before_input(value_box, "-")).toBe(true);
-    element.value = 5;
-    element.min = 0;
+    element.set({ value: 5, min: 0 });
     expect(before_input(value_box, "-")).toBe(true);
   });
 
   it("writes to the bound state and takes its limits", async () => {
     const state = number_state(9, { max: 10, unit: "%" });
     const { element, unit_box, max_legend } = make_stepper();
-    element.bind({ value: state });
+    element.set({ value: state });
     expect(unit_box.textContent).toBe("%");
     expect(max_legend.textContent).toBe("Max:10");
     key(element, "ArrowRight");
@@ -800,14 +800,14 @@ describe("Stepper", () => {
   it("shows the bound value with the decimals of the bound state", () => {
     const state = number_state(2.5, { decimals: 2 });
     const { element, value_box } = make_stepper();
-    element.bind({ value: state });
+    element.set({ value: state });
     expect(value_box.textContent).toBe("2.50");
   });
 
   it("shows state values set while not editing", () => {
     const state = st.ok_w(1);
     const { element, value_box } = make_stepper();
-    element.bind({ value: state });
+    element.set({ value: state });
     state.set_ok(4);
     expect(value_box.textContent).toBe("4");
   });
@@ -829,14 +829,21 @@ describe("Progress", () => {
     expect(parts(element).bar.style.width).toBe("50%");
   });
 
+  it("a limit given as input wins over the related limit of the value state, the others still apply", () => {
+    const value = number_state(25, { max: 100, unit: "%" });
+    const element = document.body.appendChild(form_progress({ value, max: 50 }));
+    expect(parts(element).bar.style.width).toBe("50%");
+    expect(element.children[2].textContent).toBe("%");
+  });
+
   it("redraws the shown value when decimals, min or max change", () => {
     const element = form_progress({ value: 25 });
     const { bar, text } = parts(element);
-    element.decimals = 2;
+    element.set({ decimals: 2 });
     expect(text.textContent).toBe("25.00");
-    element.max = 50;
+    element.set({ max: 50 });
     expect(bar.style.width).toBe("50%");
-    element.min = 20;
+    element.set({ min: 20 });
     expect(parseFloat(bar.style.width)).toBeCloseTo(100 / 6, 3);
   });
 
@@ -846,7 +853,7 @@ describe("Progress", () => {
     const state = st.rosw(st.n.help(ok(25), { decimals, max }), true);
     const element = form_progress();
     document.body.appendChild(element);
-    element.bind({ value: state });
+    element.set({ value: state });
     const { bar, text } = parts(element);
     expect(text.textContent).toBe("25");
     decimals.set_ok(1);

@@ -48,20 +48,20 @@ class Customization extends ContentBase {
     this.appendChild(
       form.group({
         elements: [
-          form.toggle_button().bind({ value: THEME }),
+          form.toggle_button().set({ value: THEME }),
           this.#main,
           form.group_collapser(
             form.group({
               embed: true,
               elements: [
                 form.text({ text: "UI Scale" }),
-                form.stepper().bind({ value: SCALE }),
+                form.stepper().set({ value: SCALE }),
                 form.text({ text: "Input Mode" }),
-                form.toggle_button().bind({ value: INPUT_MODE }),
+                form.toggle_button().set({ value: INPUT_MODE }),
                 form.text({ text: "Animation Level" }),
-                form.toggle_button().bind({ value: ANIMATION_LEVEL }),
+                form.toggle_button().set({ value: ANIMATION_LEVEL }),
                 form.text({ text: "Animation Speed" }),
-                form.slider({ live: true }).bind({ value: ANIMATION_SPEED }),
+                form.slider({ live: true }).set({ value: ANIMATION_SPEED }),
                 this.#advanced,
               ],
             }),

@@ -10,19 +10,19 @@ import {
   err_nice,
   type ResultNice,
 } from "@chocbite/ts-lib/result";
-import type { SVGFunc } from "#svg";
 import {
   FormNumberWrite,
   number_decimals,
-  type FormStepperBaseOptions,
+  STEPPER,
+  type FormStepperOptions,
+  type FormStepperCreateOptions,
 } from "../number_base";
 import "./slider.scss";
 
-/**Slide Selector, displays all options in a slider*/
-export class FormSlider<ID extends string | undefined> extends FormNumberWrite<
-  ID,
-  number
-> {
+/**Slider, a number moved along a bar, with buttons to step it*/
+class FormSlider<
+  ID extends string | undefined = string | undefined,
+> extends FormNumberWrite<ID> {
   static element_name() {
     return "slider";
   }
@@ -55,8 +55,8 @@ export class FormSlider<ID extends string | undefined> extends FormNumberWrite<
   #value_box = this.#slider.appendChild(document.createElement("span"));
   #unit_box = this.#slider.appendChild(document.createElement("span"));
 
-  constructor(id?: ID) {
-    super(id);
+  constructor() {
+    super();
     this.#slider.setAttribute("tabindex", "0");
     this.appendChild(this.warn_input);
 
@@ -180,12 +180,12 @@ export class FormSlider<ID extends string | undefined> extends FormNumberWrite<
     this.#slider.focus(options);
   }
 
-  set unit(unit: string | undefined) {
+  protected apply_unit(unit: string | undefined): void {
     this.#unit = unit || "";
     this.#unit_box.textContent = this.#unit;
   }
 
-  set min(min: number | undefined) {
+  protected apply_min(min: number | undefined): void {
     this.#min = min ?? -Infinity;
     this.#update_min_max();
     this.#update_min_legend();
@@ -195,7 +195,7 @@ export class FormSlider<ID extends string | undefined> extends FormNumberWrite<
       this.#min === -Infinity ? "" : "Min:" + this.#min.toFixed(this.#decimals);
   }
 
-  set max(max: number | undefined) {
+  protected apply_max(max: number | undefined): void {
     this.#max = max ?? Infinity;
     this.#update_min_max();
     this.#update_max_legend();
@@ -212,17 +212,17 @@ export class FormSlider<ID extends string | undefined> extends FormNumberWrite<
     else if (this.buffer !== undefined) this.new_value(this.buffer);
   }
 
-  set decimals(dec: number | undefined) {
+  protected apply_decimals(dec: number | undefined): void {
     this.#decimals_set = dec;
     this.#update_decimals();
   }
 
-  set step(step: number | undefined) {
+  protected apply_step(step: number | undefined): void {
     this.#step = step || 0;
     this.#update_decimals();
   }
 
-  set start(step: number | undefined) {
+  protected apply_start(step: number | undefined): void {
     this.#start = step || 0;
     this.#update_decimals();
   }
@@ -238,27 +238,28 @@ export class FormSlider<ID extends string | undefined> extends FormNumberWrite<
       this.new_value(this.buffer);
   }
 
-  /**Set wether the slider is in live mode*/
-  set live(live: boolean | undefined) {
-    this.#live = live || false;
-  }
-
-  set icon_decrease(icon: SVGFunc | undefined) {
-    const old = this.#icon_dec;
-    this.#icon_dec = this.#stepper_func(
-      icon ? icon() : material_remove_rounded(),
-      false,
-    );
-    this.replaceChild(this.#icon_dec, old);
-  }
-
-  set icon_increase(icon: SVGFunc | undefined) {
-    const old = this.#icon_inc;
-    this.#icon_inc = this.#stepper_func(
-      icon ? icon() : material_add_rounded(),
-      true,
-    );
-    this.replaceChild(this.#icon_inc, old);
+  set(options: FormStepperOptions): this {
+    super.set(options);
+    this.set_input(STEPPER.live, options.live, (live) => {
+      this.#live = live.ok && live.value;
+    });
+    this.set_input(STEPPER.icon_decrease, options.icon_decrease, (icon) => {
+      const old = this.#icon_dec;
+      this.#icon_dec = this.#stepper_func(
+        icon.ok && icon.value ? icon.value() : material_remove_rounded(),
+        false,
+      );
+      this.replaceChild(this.#icon_dec, old);
+    });
+    this.set_input(STEPPER.icon_increase, options.icon_increase, (icon) => {
+      const old = this.#icon_inc;
+      this.#icon_inc = this.#stepper_func(
+        icon.ok && icon.value ? icon.value() : material_add_rounded(),
+        true,
+      );
+      this.replaceChild(this.#icon_inc, old);
+    });
+    return this;
   }
 
   protected new_value(value: number): void {
@@ -275,12 +276,6 @@ export class FormSlider<ID extends string | undefined> extends FormNumberWrite<
     this.#value_box.textContent = "";
     this.#move_slide(50);
   }
-
-  protected new_error(err: string): void {
-    console.error(err);
-  }
-
-  protected clear_error(): void {}
 
   protected limit_value(val: number): PromiseLike<ResultNice<number>> {
     let lim = number_step_start_decimal(
@@ -396,16 +391,11 @@ export class FormSlider<ID extends string | undefined> extends FormNumberWrite<
 }
 define_element(FormSlider);
 
-/**Creates a dropdown form element */
-export function form_slider<ID extends string | undefined>(
-  options?: FormStepperBaseOptions<ID>,
+export type { FormSlider };
+
+/**Creates a slider, a number moved along a bar, with buttons to step it*/
+export function form_slider<ID extends string | undefined = undefined>(
+  options: FormStepperCreateOptions<ID> = {},
 ): FormSlider<ID> {
-  const slide = new FormSlider<ID>(options?.id);
-  if (options) {
-    if (options.live) slide.live = options.live;
-    if (options.icon_decrease) slide.icon_decrease = options.icon_decrease;
-    if (options.icon_increase) slide.icon_increase = options.icon_increase;
-    FormNumberWrite.apply_options(slide, options);
-  }
-  return slide;
+  return FormSlider.create(options) as FormSlider<ID>;
 }

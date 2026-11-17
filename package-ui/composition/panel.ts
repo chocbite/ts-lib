@@ -10,7 +10,7 @@ import {
 import ctm from "#context-menu";
 import type { SVGFunc } from "#svg";
 import { px_to_rem } from "#theme";
-import type { StateOrVal, StateOrValROSW } from "@chocbite/ts-lib/state";
+import type { StateOrVal, StateOrValROS } from "@chocbite/ts-lib/state";
 import {
   CONTENT_CLOSED,
   CONTENT_CREATE,
@@ -25,21 +25,23 @@ const PANEL = {
   /**Layer of the panel, panels in a higher layer are always above panels in a lower one*/
   layer: input_key<StateOrVal<number>>(),
   /**Horizontal position in rem from the left of the page, of the anchor point of the panel
-   * Not given the panel starts centered, a fixed value can not be moved by the user, a writable state is written when the user moves the panel*/
-  x: input_key<StateOrValROSW<number>>(),
+   * Not given the panel starts centered, a fixed value is where it starts, the user moves it from there,
+   * a writable state is written when the user moves the panel, a read only state can not be moved*/
+  x: input_key<StateOrValROS<number>>(),
   /**Vertical position in rem from the top of the page, of the anchor point of the panel, works like x*/
-  y: input_key<StateOrValROSW<number>>(),
+  y: input_key<StateOrValROS<number>>(),
   /**Point of the panel that x and y place, top_left by default*/
   anchor: input_key<StateOrVal<CompAnchor>>(),
   /**Width in rem, not given the panel fits its content
-   * A fixed value can not be sized by the user, a writable state is written when the user sizes the panel*/
-  width: input_key<StateOrValROSW<number>>(),
+   * A fixed value is the width it starts with, the user sizes it from there,
+   * a writable state is written when the user sizes the panel, a read only state can not be sized*/
+  width: input_key<StateOrValROS<number>>(),
   /**Height in rem, works like width*/
-  height: input_key<StateOrValROSW<number>>(),
+  height: input_key<StateOrValROS<number>>(),
   /**Whether the user can size the panel, at the sides where width and height can be written, true by default*/
   sizeable: input_key<StateOrVal<boolean>>(),
-  /**Whether the panel is hidden, auto_hide writes it, so give a writable state to show the panel again*/
-  hidden: input_key<StateOrValROSW<boolean>>(),
+  /**Whether the panel is hidden, auto_hide changes it, so give a writable state to show the panel again*/
+  hidden: input_key<StateOrValROS<boolean>>(),
   /**Hides the panel when the user presses outside it*/
   auto_hide: input_key<StateOrVal<boolean>>(),
   /**Closes the panel when the user presses outside it*/
@@ -128,7 +130,6 @@ class Panel extends Base {
   #min_height = 0;
   /**Values of the changeable inputs, the panel owns them until they are given*/
   #values: ChangeableValues = { hidden: false };
-  #given = new Set<Changeable>();
   /**Position shown last, in rem, the start of moving and sizing*/
   #left = 0;
   #top = 0;
@@ -204,13 +205,11 @@ class Panel extends Base {
       this.#layout();
     });
     for (const name of ["x", "y", "width", "height"] as const) {
-      if (options[name] !== undefined) this.#given.add(name);
       this.set_input(PANEL[name], options[name], (value) => {
         this.#values[name] = value.value;
         this.#layout();
       });
     }
-    if (options.hidden !== undefined) this.#given.add("hidden");
     this.set_input(PANEL.hidden, options.hidden, (hidden) => {
       this.#values.hidden = hidden.value;
       this.classList.toggle("hidden", hidden.value);
@@ -285,24 +284,26 @@ class Panel extends Base {
   //     | |    |  __  | / /\ \ | . ` | | |_ |  __|
   //     | |____| |  | |/ ____ \| |\  | |__| | |____
   //      \_____|_|  |_/_/    \_\_| \_|\_____|______|
-  /**Whether the user can change the input, when the panel owns it or it is a writable state*/
+  /**Whether the user can change the input, every input but a read only state*/
   #can_change(name: Changeable): boolean {
-    return !this.#given.has(name) || this.#state_of(name) !== undefined;
+    const state = this.#state_of(name);
+    return state === undefined || state.writable;
   }
 
-  /**The writable state the input has, undefined for a fixed value or one never given*/
+  /**The state the input has, undefined for a fixed value or one never given*/
   #state_of(name: Changeable) {
-    return this.input_state<StateOrValROSW<number | boolean>>(PANEL[name]);
+    return this.input_state<StateOrValROS<number | boolean>>(PANEL[name]);
   }
 
-  /**Writes a change by the user, to the state of the input, or to the panel when it owns the input*/
+  /**Writes a change by the user, to a writable state, or to the panel for a fixed value or one never given*/
   #change<N extends Changeable>(
     name: N,
     value: NonNullable<ChangeableValues[N]>,
   ): void {
     const state = this.#state_of(name);
-    if (state) void state.write(value);
-    else if (!this.#given.has(name)) {
+    if (state) {
+      if (state.writable) void state.write?.(value);
+    } else {
       this.#values[name] = value;
       if (name === "hidden") this.classList.toggle("hidden", value === true);
       this.#layout();

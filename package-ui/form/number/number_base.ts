@@ -1,111 +1,122 @@
-import { none } from "@chocbite/ts-lib/result";
-import type { StateNumberRelated } from "@chocbite/ts-lib/state";
+import { input_key, type InputOptions } from "#base";
+import type { StateNumberRelated, StateOrVal } from "@chocbite/ts-lib/state";
 import type { SVGFunc } from "#svg";
 import {
+  FormSetting,
   FormValueWrite,
-  FormValueWriteOptions,
-  type FormValueOptions,
+  type FormValueCreateOptions,
+  type FormValueWriteOptions,
 } from "../base";
 import "./number_base.scss";
 
-export interface FormNumberOptions<
-  ID extends string | undefined,
-  RT = number,
-> extends FormValueOptions<RT, ID> {
-  /**Lower limit for slider value*/
-  min?: number;
-  /**Upper limit for slider value*/
-  max?: number;
-  /**Amount of decimals to show*/
-  decimals?: number;
-  /**Unit to use for slider*/
-  unit?: string;
-}
+/**Inputs of number elements, not given the related value of the value state is used*/
+const NUMBER = {
+  /**Lowest value*/
+  min: input_key<StateOrVal<number>>(),
+  /**Highest value*/
+  max: input_key<StateOrVal<number>>(),
+  /**Size of a step, 0 for an automatic step*/
+  step: input_key<StateOrVal<number>>(),
+  /**Value the steps start from, 0 for automatic*/
+  start: input_key<StateOrVal<number>>(),
+  /**Decimals shown, not given enough for the step and start*/
+  decimals: input_key<StateOrVal<number>>(),
+  /**Unit shown after the value*/
+  unit: input_key<StateOrVal<string>>(),
+};
+/**Related values of the value state, followed while the inputs are not given*/
+const NUMBER_RELATED = {
+  min: input_key<StateOrVal<number | null>>(),
+  max: input_key<StateOrVal<number | null>>(),
+  step: input_key<StateOrVal<number | null>>(),
+  start: input_key<StateOrVal<number | null>>(),
+  decimals: input_key<StateOrVal<number | null>>(),
+  unit: input_key<StateOrVal<string | null>>(),
+};
+export type FormNumberOptions = FormValueWriteOptions<number> &
+  InputOptions<typeof NUMBER>;
+export type FormNumberCreateOptions<ID extends string | undefined> =
+  FormNumberOptions & FormValueCreateOptions<ID>;
 
-export interface FormNumberWriteOptions<
-  ID extends string | undefined,
-  RT = number,
->
-  extends FormNumberOptions<ID, RT>, FormValueWriteOptions<RT, ID> {
-  /**Step size, use 0 for automatic step size*/
-  step?: number;
-  /**Start for step, use 0 for automatic */
-  start?: number;
-}
+/**Inputs of the stepper and slider*/
+export const STEPPER = {
+  /**True writes the value while the user moves it, false only when the user lets go*/
+  live: input_key<StateOrVal<boolean>>(),
+  /**Icon of the decrease button, not given the default minus*/
+  icon_decrease: input_key<StateOrVal<SVGFunc | undefined>>(),
+  /**Icon of the increase button, not given the default plus*/
+  icon_increase: input_key<StateOrVal<SVGFunc | undefined>>(),
+};
+export type FormStepperOptions = FormNumberOptions &
+  InputOptions<typeof STEPPER>;
+export type FormStepperCreateOptions<ID extends string | undefined> =
+  FormStepperOptions & FormValueCreateOptions<ID>;
 
-export interface FormStepperBaseOptions<
-  ID extends string | undefined,
-  RT = number,
-> extends FormNumberWriteOptions<ID, RT> {
-  /**wether the events are live as the slider is moved or only when moving stops */
-  live?: boolean;
-  /**Icon to use for decreasing value*/
-  icon_decrease?: SVGFunc;
-  /**Icon to use for increasing value*/
-  icon_increase?: SVGFunc;
-}
-
+/**Base of number elements the user changes, the settings come from the inputs, or else from the related values of the value state*/
 export abstract class FormNumberWrite<
-  ID extends string | undefined,
-  RT = number,
-> extends FormValueWrite<RT, ID> {
-  static apply_options<RT, ID extends string | undefined>(
-    element: FormNumberWrite<ID, RT>,
-    options: FormNumberWriteOptions<ID, RT>,
-  ) {
-    if (options.unit) element.unit = options.unit;
-    if (options.decimals) element.decimals = options.decimals;
-    if (options.min !== undefined) element.min = options.min;
-    if (options.max !== undefined) element.max = options.max;
-    if (options.step) element.step = options.step;
-    if (options.start) element.start = options.start;
-    super.apply_options(element, options);
+  ID extends string | undefined = string | undefined,
+> extends FormValueWrite<number, ID> {
+  #min = new FormSetting<number>((v) => this.apply_min(v));
+  #max = new FormSetting<number>((v) => this.apply_max(v));
+  #step = new FormSetting<number>((v) => this.apply_step(v));
+  #start = new FormSetting<number>((v) => this.apply_start(v));
+  #decimals = new FormSetting<number>((v) => this.apply_decimals(v));
+  #unit = new FormSetting<string>((v) => this.apply_unit(v));
+
+  set(options: FormNumberOptions): this {
+    super.set(options);
+    const ok_or = <T>(r: { ok: boolean; value?: T }) =>
+      r.ok ? r.value : undefined;
+    this.set_input(NUMBER.min, options.min, (r) => this.#min.input(ok_or(r)));
+    this.set_input(NUMBER.max, options.max, (r) => this.#max.input(ok_or(r)));
+    this.set_input(NUMBER.step, options.step, (r) =>
+      this.#step.input(ok_or(r)),
+    );
+    this.set_input(NUMBER.start, options.start, (r) =>
+      this.#start.input(ok_or(r)),
+    );
+    this.set_input(NUMBER.decimals, options.decimals, (r) =>
+      this.#decimals.input(ok_or(r)),
+    );
+    this.set_input(NUMBER.unit, options.unit, (r) =>
+      this.#unit.input(ok_or(r)),
+    );
+    return this;
   }
-
-  /**Set the minimum value*/
-  abstract set min(min: number | undefined);
-
-  /**Set the minimum value*/
-  abstract set max(max: number | undefined);
-
-  /**Sets the size of number change steps*/
-  abstract set step(step: number | undefined);
-
-  /**Sets the start offset for number steps*/
-  abstract set start(step: number | undefined);
-
-  /**Sets the amount of decimals the element can have*/
-  abstract set decimals(dec: number | undefined);
-
-  /**Sets the unit of the element*/
-  abstract set unit(unit: string | undefined);
-
-  /**Related states of the last bound state, a prop is only reset when it followed one of them*/
-  #related: Partial<StateNumberRelated> = {};
 
   protected state_related(related: Partial<StateNumberRelated>): void {
-    const old = this.#related;
-    this.#related = related;
-    if (related.min)
-      this.attach_state_to_prop("min", related.min, () => none());
-    else if (old.min) this.detach_state_from_prop("min").min = undefined;
-    if (related.max)
-      this.attach_state_to_prop("max", related.max, () => none());
-    else if (old.max) this.detach_state_from_prop("max").max = undefined;
-    if (related.step)
-      this.attach_state_to_prop("step", related.step, () => none());
-    else if (old.step) this.detach_state_from_prop("step").step = undefined;
-    if (related.start)
-      this.attach_state_to_prop("start", related.start, () => none());
-    else if (old.start) this.detach_state_from_prop("start").start = undefined;
-    if (related.decimals)
-      this.attach_state_to_prop("decimals", related.decimals, () => none());
-    else if (old.decimals)
-      this.detach_state_from_prop("decimals").decimals = undefined;
-    if (related.unit)
-      this.attach_state_to_prop("unit", related.unit, () => none());
-    else if (old.unit) this.detach_state_from_prop("unit").unit = undefined;
+    this.follow_related(NUMBER_RELATED.min, related.min, (v) =>
+      this.#min.related(v),
+    );
+    this.follow_related(NUMBER_RELATED.max, related.max, (v) =>
+      this.#max.related(v),
+    );
+    this.follow_related(NUMBER_RELATED.step, related.step, (v) =>
+      this.#step.related(v),
+    );
+    this.follow_related(NUMBER_RELATED.start, related.start, (v) =>
+      this.#start.related(v),
+    );
+    this.follow_related(NUMBER_RELATED.decimals, related.decimals, (v) =>
+      this.#decimals.related(v),
+    );
+    this.follow_related(NUMBER_RELATED.unit, related.unit, (v) =>
+      this.#unit.related(v),
+    );
   }
+
+  /**Applies the lowest value that counts now, undefined for none*/
+  protected abstract apply_min(min: number | undefined): void;
+  /**Applies the highest value that counts now, undefined for none*/
+  protected abstract apply_max(max: number | undefined): void;
+  /**Applies the step that counts now, undefined for automatic*/
+  protected abstract apply_step(step: number | undefined): void;
+  /**Applies the start that counts now, undefined for automatic*/
+  protected abstract apply_start(start: number | undefined): void;
+  /**Applies the decimals that count now, undefined for automatic*/
+  protected abstract apply_decimals(decimals: number | undefined): void;
+  /**Applies the unit that counts now, undefined for none*/
+  protected abstract apply_unit(unit: string | undefined): void;
 }
 
 /**Decimals to show and round to, the given decimals, or without them enough for the step and start*/

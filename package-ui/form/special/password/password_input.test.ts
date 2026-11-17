@@ -107,7 +107,7 @@ describe("Password input", () => {
   it("writes an entered password to a bound state", async () => {
     const state = st.ok_w("old");
     const { element, change, enter } = make();
-    element.bind({ value: state });
+    element.set({ value: state });
     await enter("new");
     expect(state.ok()).toBe("new");
     expect(change).toHaveBeenCalledWith("new");
@@ -116,7 +116,7 @@ describe("Password input", () => {
   it("does not overwrite the typed password with a state change while focused", async () => {
     const state = st.ok_w("old");
     const { element, input } = make();
-    element.bind({ value: state });
+    element.set({ value: state });
     input.focus();
     input.value = "typing";
     state.set_ok("other");

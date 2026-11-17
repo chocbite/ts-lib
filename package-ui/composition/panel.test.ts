@@ -176,13 +176,19 @@ describe("Panel position", () => {
     expect(left_of(panel)).toBe(6);
   });
 
-  it("does not move along an axis with a fixed position", () => {
+  it("does not move along an axis with a read only state", () => {
     const y = state.ok_w(5);
-    const panel = panel_with({}, { x: 5, y, width: 10, height: 6 });
+    const panel = panel_with({}, { x: state.ok(5), y, width: 10, height: 6 });
     press(panel, "ArrowRight");
     press(panel, "ArrowDown");
     expect(left_of(panel)).toBe(5);
     expect(y.ok()).toBe(6);
+  });
+
+  it("starts at a fixed position and moves from there by itself", () => {
+    const panel = panel_with({}, { x: 5, y: 5, width: 10, height: 6 });
+    press(panel, "ArrowRight");
+    expect(left_of(panel)).toBe(6);
   });
 
   it("moves by itself when no position is given", () => {
@@ -210,7 +216,9 @@ describe("Panel sizing", () => {
   it("has sizers where the size can be changed", () => {
     expect(sizer_of(panel_with()).className).toBe("x y");
     const width = state.ok_w(10);
-    expect(sizer_of(panel_with({}, { width, height: 6 })).className).toBe("x");
+    expect(sizer_of(panel_with({}, { width, height: state.ok(6) })).className).toBe("x");
+    //A fixed size is where the panel starts, the user sizes it from there
+    expect(sizer_of(panel_with({}, { width: 10, height: 6 })).className).toBe("x y");
   });
 
   it("has no sizers when not sizeable", () => {
@@ -238,8 +246,14 @@ describe("Panel hiding", () => {
     expect(panel.classList.contains("hidden")).toBe(false);
   });
 
-  it("auto_hide can not hide a panel with a fixed hidden", () => {
+  it("auto_hide hides a panel with a fixed hidden by itself", () => {
     const panel = panel_with({}, { hidden: false, auto_hide: true });
+    press_outside();
+    expect(panel.classList.contains("hidden")).toBe(true);
+  });
+
+  it("auto_hide can not hide a panel with a read only hidden", () => {
+    const panel = panel_with({}, { hidden: state.ok(false), auto_hide: true });
     press_outside();
     expect(panel.classList.contains("hidden")).toBe(false);
   });

@@ -11,7 +11,7 @@ import { ok } from "@chocbite/ts-lib/result";
 import {
   state,
   type StateOrVal,
-  type StateOrValROSW,
+  type StateOrValROS,
   type StateROS,
 } from "@chocbite/ts-lib/state";
 
@@ -258,8 +258,9 @@ define_element(ExampleWatcher);
 //     |_____/|______|_____|_____/|______|_|  \_\
 /**Inputs of the slider*/
 const SLIDER = {
-  /**Value the slider shows and writes, a fixed value shows a disabled slider, as it can never change*/
-  value: input_key<StateOrValROSW<number>>(),
+  /**Value the slider shows and the user changes
+   * A fixed value is kept by the slider, a writable state is written, a read only state disables the slider*/
+  value: input_key<StateOrValROS<number>>(),
   /**Lowest value*/
   min: input_key<StateOrVal<number>>(),
   /**Highest value*/
@@ -280,10 +281,12 @@ class ExampleSlider extends ExampleBase {
   constructor() {
     super();
     this.#input.type = "range";
-    this.#input.disabled = true;
     //Writes to whatever state the value input has now, the key keeps the reference
-    this.#input.oninput = () =>
-      void this.input_state(SLIDER.value)?.write(Number(this.#input.value));
+    //Without a state the slider keeps the value itself, the input already shows it
+    this.#input.oninput = () => {
+      const value = this.input_state(SLIDER.value);
+      if (value?.writable) void value.write?.(Number(this.#input.value));
+    };
   }
 
   set(options: ExampleSliderOptions): this {
@@ -302,8 +305,9 @@ class ExampleSlider extends ExampleBase {
     this.set_input(SLIDER.value, options.value, (result) => {
       this.#input.value = String(result.value);
     });
-    //A fixed value can not be written
-    this.#input.disabled = !this.input_state(SLIDER.value);
+    //Only a read only state can not be changed
+    const value = this.input_state(SLIDER.value);
+    this.#input.disabled = value !== undefined && !value.writable;
     return this;
   }
 }
@@ -356,11 +360,15 @@ export interface ExampleEditorOptions extends BaseOptions {
   max?: InputOf<typeof SLIDER.max>;
 }
 /**The scale is handed out, so it is given at creation
- * The slider writes the scale, so the scale takes the type of the slider value*/
+ * The slider changes the scale, so the scale takes the type of the slider value*/
 export interface ExampleEditorCreateOptions extends ExampleEditorOptions {
-  /**A fixed scale can not be changed, so the slider is disabled*/
+  /**Scale of the view, a fixed scale is kept by the editor and changed with the slider, a read only state disables the slider*/
   scale?: InputOf<typeof SLIDER.value>;
 }
+
+/**The scale as text, derived with a proxy state*/
+const scale_label = (scale: StateROS<number>) =>
+  state.p.ros(scale, (v) => ok(`scale ${v.value.toFixed(2)}`));
 
 /**Wraps a view with controls, the stand in for an editor wrapping a viewport
  * The children are built in the constructor, the scale and limits are passed on to them unchanged,
@@ -370,13 +378,14 @@ class ExampleEditor extends ExampleBase {
     return "editor";
   }
 
-  #scale: StateROS<number> = state.ok(1);
-  #view = this.appendChild(example_view());
+  //A scale of its own until one is given, so the slider changes the view from the start
+  #scale: StateROS<number> = state.ok_w(1);
+  #view = this.appendChild(example_view({ scale: this.#scale }));
   #slider = this.appendChild(
-    example_slider({ min: 0.25, max: 3, step: 0.25, value: 1 }),
+    example_slider({ min: 0.25, max: 3, step: 0.25, value: this.#scale }),
   );
   #label = this.appendChild(
-    example_box({ width: 160, height: 24, label: "scale 1.00" }),
+    example_box({ width: 160, height: 24, label: scale_label(this.#scale) }),
   );
 
   constructor() {
@@ -386,6 +395,7 @@ class ExampleEditor extends ExampleBase {
   }
 
   /**The scale as a state, also when a fixed scale was given, so anything can subscribe to it
+   * A fixed scale becomes a writable state the editor keeps, so the slider can change it and the view follows
    * Given at creation and never replaced*/
   get scale(): StateROS<number> {
     return this.#scale;
@@ -396,12 +406,11 @@ class ExampleEditor extends ExampleBase {
     super[CREATE](options);
     const scale = options.scale;
     if (scale === undefined) return;
-    this.#scale = state.as_state(scale);
-    this.#view.set({ scale });
-    this.#slider.set({ value: scale });
-    this.#label.set({
-      label: state.p.ros(this.#scale, (v) => ok(`scale ${v.value.toFixed(2)}`)),
-    });
+    //The view and label follow the scale, so a fixed scale the slider changes needs a state of its own
+    this.#scale = typeof scale === "number" ? state.ok_w(scale) : scale;
+    this.#view.set({ scale: this.#scale });
+    this.#slider.set({ value: this.#scale });
+    this.#label.set({ label: scale_label(this.#scale) });
   }
 
   set(options: ExampleEditorOptions): this {

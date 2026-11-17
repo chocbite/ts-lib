@@ -93,10 +93,10 @@ const VARIANTS = [
   const live = state.ok_w(0);
   const s = spaced_row(sec);
   const l = box(s, "live, min -10, max 10", WIDTH);
-  l.appendChild(form.stepper({ min: -10, max: 10, live: true }).bind({ value: live }));
+  l.appendChild(form.stepper({ min: -10, max: 10, live: true }).set({ value: live }));
   readout(l, "state", live);
   const n = box(s, "not live, same state", WIDTH);
-  n.appendChild(form.stepper({ min: -10, max: 10 }).bind({ value: live }));
+  n.appendChild(form.stepper({ min: -10, max: 10 }).set({ value: live }));
   box(s, "custom icons", WIDTH).appendChild(
     form.stepper({
       icon_decrease: material_volume_down_rounded,
@@ -132,14 +132,14 @@ const VARIANTS = [
   const s = spaced_row(sec);
   const l = box(s, "live, 0 to 100", WIDTH);
   l.appendChild(
-    form.slider({ min: 0, max: 100, unit: "%", live: true }).bind({ value: live }),
+    form.slider({ min: 0, max: 100, unit: "%", live: true }).set({ value: live }),
   );
   readout(l, "state", live);
   box(s, "not live, same state", WIDTH).appendChild(
-    form.slider({ min: 0, max: 100, unit: "%" }).bind({ value: live }),
+    form.slider({ min: 0, max: 100, unit: "%" }).set({ value: live }),
   );
   box(s, "step 10, same state", WIDTH).appendChild(
-    form.slider({ min: 0, max: 100, step: 10, unit: "%" }).bind({ value: live }),
+    form.slider({ min: 0, max: 100, step: 10, unit: "%" }).set({ value: live }),
   );
   box(s, "custom icons", WIDTH).appendChild(
     form.slider({
@@ -181,21 +181,21 @@ const VARIANTS = [
   );
   const r = spaced_row(sec);
   box(r, "default 0 - 100", WIDTH).appendChild(
-    form.progress().bind({ value }),
+    form.progress().set({ value }),
   );
   box(r, "unit %, 1 decimal", WIDTH).appendChild(
-    form.progress({ unit: "%", decimals: 1 }).bind({ value }),
+    form.progress({ unit: "%", decimals: 1 }).set({ value }),
   );
   box(r, "min -50, max 50", WIDTH).appendChild(
-    form.progress({ min: -50, max: 50, unit: "°C" }).bind({ value }),
+    form.progress({ min: -50, max: 50, unit: "°C" }).set({ value }),
   );
   box(r, "max 1000, long unit", WIDTH).appendChild(
-    form.progress({ max: 1000, unit: "items processed" }).bind({ value }),
+    form.progress({ max: 1000, unit: "items processed" }).set({ value }),
   );
   const w = spaced_row(sec);
   for (const width of ["5rem", "10rem", "32rem"])
     box(w, width, { width }).appendChild(
-      form.progress({ unit: "%", decimals: 2 }).bind({ value }),
+      form.progress({ unit: "%", decimals: 2 }).set({ value }),
     );
   box(w, "no value yet", WIDTH).appendChild(form.progress({ unit: "%" }));
 }
@@ -234,11 +234,11 @@ const VARIANTS = [
   });
   const r = spaced_row(sec);
   const i = box(r, "number input", WIDTH);
-  i.appendChild(form.number_input().bind({ value }));
+  i.appendChild(form.number_input().set({ value }));
   readout(i, "state", value);
-  box(r, "stepper", WIDTH).appendChild(form.stepper().bind({ value }));
-  box(r, "slider", WIDTH).appendChild(form.slider().bind({ value }));
-  box(r, "progress", WIDTH).appendChild(form.progress().bind({ value }));
+  box(r, "stepper", WIDTH).appendChild(form.stepper().set({ value }));
+  box(r, "slider", WIDTH).appendChild(form.slider().set({ value }));
+  box(r, "progress", WIDTH).appendChild(form.progress().set({ value }));
 }
 
 //      ______ _____  _____   ____  _____   _____
@@ -266,25 +266,25 @@ const VARIANTS = [
   });
   const g = spaced_row(sec);
   const gi = box(g, "input, rejects 3 - 6", WIDTH);
-  gi.appendChild(form.number_input({ step: 1 }).bind({ value: guarded }));
+  gi.appendChild(form.number_input({ step: 1 }).set({ value: guarded }));
   readout(gi, "state", guarded);
   box(g, "stepper, rejects 3 - 6", WIDTH).appendChild(
-    form.stepper({ step: 1 }).bind({ value: guarded }),
+    form.stepper({ step: 1 }).set({ value: guarded }),
   );
   box(g, "slider 0 - 10, rejects 3 - 6", WIDTH).appendChild(
-    form.slider({ min: 0, max: 10, live: true }).bind({ value: guarded }),
+    form.slider({ min: 0, max: 10, live: true }).set({ value: guarded }),
   );
   const e = spaced_row(sec);
   const ei = box(e, "input, errorable, access", WIDTH);
-  ei.appendChild(form.number_input({ unit: "A" }).set({ access }).bind({ value }));
+  ei.appendChild(form.number_input({ unit: "A" }).set({ access }).set({ value }));
   readout(ei, "state", value);
   box(e, "stepper, errorable, access", WIDTH).appendChild(
-    form.stepper({ unit: "A" }).set({ access }).bind({ value }),
+    form.stepper({ unit: "A" }).set({ access }).set({ value }),
   );
   box(e, "slider, errorable, access", WIDTH).appendChild(
-    form.slider({ min: 0, max: 10, unit: "A" }).set({ access }).bind({ value }),
+    form.slider({ min: 0, max: 10, unit: "A" }).set({ access }).set({ value }),
   );
   box(e, "progress, errorable, access", WIDTH).appendChild(
-    form.progress({ max: 10, unit: "A" }).set({ access }).bind({ value }),
+    form.progress({ max: 10, unit: "A" }).set({ access }).set({ value }),
   );
 }

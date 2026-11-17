@@ -10,7 +10,7 @@ import {
 } from "@chocbite/ts-lib-ui/icons";
 import { err, ok } from "@chocbite/ts-lib/result";
 import state, { type State } from "@chocbite/ts-lib/state";
-import { box, controls, row, section, demo_error } from "../../../helpers";
+import { box, controls, demo_error, row, section } from "../../../helpers";
 
 /**Shows the current value of a state as text and follows it*/
 function readout<T>(parent: HTMLElement, label: string, value: State<T>) {
@@ -88,7 +88,11 @@ const WIDTH = { width: "14rem" };
       form.button({ text: long, icon: material_play_arrow_rounded }),
     );
     box(r, width + ", long centered", { width }).appendChild(
-      form.button({ text: long, icon: material_play_arrow_rounded, center: true }),
+      form.button({
+        text: long,
+        icon: material_play_arrow_rounded,
+        center: true,
+      }),
     );
   }
   const free = spaced_row(sec);
@@ -163,7 +167,7 @@ const WIDTH = { width: "14rem" };
         icon: material_play_arrow_rounded,
         on_click: () => clicks.set_ok(clicks.ok() + 1),
       })
-      .bind({ value: momentary }),
+      .set({ value: momentary }),
   );
   m.appendChild(
     form
@@ -171,7 +175,7 @@ const WIDTH = { width: "14rem" };
         text: "Held",
         colors: [FormColors.None, FormColors.Green],
       })
-      .bind({ value: momentary }),
+      .set({ value: momentary }),
   );
   readout(m, "value", momentary);
   readout(m, "on_click calls", clicks);
@@ -179,7 +183,7 @@ const WIDTH = { width: "14rem" };
   t.appendChild(
     form
       .button({ text: "Toggle me", icon: material_stop_rounded, toggle: true })
-      .bind({ value: toggled }),
+      .set({ value: toggled }),
   );
   t.appendChild(
     form
@@ -189,7 +193,7 @@ const WIDTH = { width: "14rem" };
         toggle: true,
         color: FormColors.Yellow,
       })
-      .bind({ value: toggled }),
+      .set({ value: toggled }),
   );
   readout(t, "value", toggled);
   const plain = box(r, "not bound, change listener", WIDTH);
@@ -229,7 +233,13 @@ const WIDTH = { width: "14rem" };
   ] as const)
     box(r, label, WIDTH).appendChild(
       form
-        .button({ text: "Delete", icon: material_delete_rounded, toggle: true, value: true, color: FormColors.Red })
+        .button({
+          text: "Delete",
+          icon: material_delete_rounded,
+          toggle: true,
+          value: true,
+          color: FormColors.Red,
+        })
         .set({ access: a }),
     );
   const s = box(r, "from state", WIDTH);
@@ -267,7 +277,7 @@ const WIDTH = { width: "14rem" };
   const r = spaced_row(sec);
   const e = box(r, "errorable state", WIDTH);
   e.appendChild(
-    form.button({ text: "Errorable", toggle: true }).bind({ value }),
+    form.button({ text: "Errorable", toggle: true }).set({ value }),
   );
   readout(e, "state", value);
   const rejecting = state.rosw(ok(false), async () =>
@@ -275,7 +285,7 @@ const WIDTH = { width: "14rem" };
   );
   const j = box(r, "state rejects writes", WIDTH);
   j.appendChild(
-    form.button({ text: "Rejected", toggle: true }).bind({ value: rejecting }),
+    form.button({ text: "Rejected", toggle: true }).set({ value: rejecting }),
   );
   readout(j, "state", rejecting);
 }

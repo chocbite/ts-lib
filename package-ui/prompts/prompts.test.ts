@@ -12,7 +12,7 @@ const current = () => {
 /**The form button with the text in the open prompt*/
 const button = (text: string) =>
   [...current().querySelectorAll<HTMLElement>("*")].find(
-    (e) => "on_click" in e && e.textContent === text,
+    (e) => e.tagName === "FORM-BUTTON" && e.textContent === text,
   )!;
 const key = (target: Element, key: string) =>
   target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
@@ -95,9 +95,9 @@ describe("Prompt form", () => {
     expect(values.value_changed).toEqual(ok({}));
   });
 
-  it("leaves live elements bound to a state out of the values, their value is in the state", async () => {
+  it("includes live elements bound to a state, their value is written to the state right away", async () => {
     const on = state.ok_w(false);
-    const swit = form.switch({ id: "on" }).bind({ value: on });
+    const swit = form.switch({ id: "on" }).set({ value: on });
     const result = prompts.form("Settings", [swit], { text: "OK" });
     swit.click();
     await new Promise((r) => setTimeout(r, 0));
@@ -105,10 +105,9 @@ describe("Prompt form", () => {
     expect(on.ok()).toBe(true);
     button("OK").click();
     const values = await submitted(result);
-    expect(values.value_changed).toEqual(ok({}));
-    expect(values.value_partial).toEqual(ok({}));
-    //Like an element without a value
-    expect(values.get_value.err).toBe(true);
+    expect(values.value_changed).toEqual(ok({ on: true }));
+    expect(values.value_partial).toEqual(ok({ on: true }));
+    expect(values.get_value).toEqual(ok({ on: true }));
   });
 
   it("types the values by the ids of the elements", () => {

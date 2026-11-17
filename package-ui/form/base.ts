@@ -1,4 +1,10 @@
-import { Base } from "#base";
+import {
+  Base,
+  CREATE,
+  input_key,
+  type BaseOptions,
+  type InputKey,
+} from "#base";
 import { sync_resolve } from "@chocbite/ts-lib/common";
 import {
   err,
@@ -9,14 +15,17 @@ import {
   type Result,
   type ResultNice,
 } from "@chocbite/ts-lib/result";
-import type { State, StateREA, StateSub } from "@chocbite/ts-lib/state";
+import {
+  state,
+  type State,
+  type StateOrVal,
+  type StateOrValREA,
+} from "@chocbite/ts-lib/state";
 import "./shared";
 import { form_errors } from "./errors";
 
 /**A change to an element bound to a read only state, normal use, the element only shows the value*/
 const read_only = () => err_nice(form_errors.READ_ONLY, "The value can not be changed here");
-
-export interface FormOptions {}
 
 /**Colors for form elements that have selectable colors*/
 export const FormColors = {
@@ -37,8 +46,6 @@ export abstract class FormElement extends Base {
   static element_name_space(): string {
     return "form";
   }
-
-  static apply_options(_element: FormElement, _options: FormOptions) {}
 }
 
 //##################################################################################################
@@ -49,16 +56,29 @@ export abstract class FormElement extends Base {
 //        \  / ____ \| |___| |__| | |____  | | \ \| |____ / ____ \| |__| |
 //         \/_/    \_\______\____/|______| |_|  \_\______/_/    \_\_____/
 
-export interface FormValueOptions<
-  RT,
-  ID extends string | undefined,
-> extends FormOptions {
-  /**ID form form element */
+/**Inputs of form value elements, loosely typed as the elements are generic in their value*/
+const FORM_VALUE = {
+  value: input_key<StateOrValREA<any, Option<{}>, any>>(),
+  description: input_key<StateOrVal<string>>(),
+};
+
+/**Options of form value elements on the element pattern*/
+export interface FormValueOptions<RT> extends BaseOptions {
+  /**Value the element shows and the user changes
+   * A fixed value is the value the element starts with, the element keeps the user's changes itself,
+   * a writable state is written when the user changes the value,
+   * a read only state is only shown, a change by the user is refused with a warning
+   * Not given, the element starts without a value and keeps it itself
+   * An error of the state shows as a fault of the element, and makes get_value an error while it lasts*/
+  value?: StateOrValREA<RT, Option<{}>, unknown>;
+  /**Longer description of what the element does, shown as a tooltip*/
+  description?: StateOrVal<string>;
+}
+
+/**Options of form value elements given at creation*/
+export interface FormValueCreateOptions<ID extends string | undefined> {
+  /**Id the group of the element knows its value by, the group reads it to type its values*/
   id?: ID;
-  /**Value for form element */
-  value?: RT;
-  /**Longer description what form element does */
-  description?: string;
 }
 
 /**Shared class for all components with values*/
@@ -70,31 +90,41 @@ export abstract class FormValue<
     return "@abstract@";
   }
 
-  static apply_options<RT, ID extends string | undefined>(
-    element: FormValue<RT, ID>,
-    options: FormValueOptions<RT, ID>,
-  ) {
-    if (options.description) element.description = options.description;
-    if (options.value !== undefined) element.value = options.value;
-    super.apply_options(element, options);
+  #form_id?: ID;
+  /**Id the group of the element knows its value by, given at creation*/
+  get form_id(): ID {
+    return this.#form_id as ID;
   }
 
-  readonly form_id: ID;
-
-  constructor(id?: ID) {
-    super();
-    this.form_id = id as ID;
+  [CREATE](options: FormValueCreateOptions<ID>): void {
+    super[CREATE](options);
+    if (options.id !== undefined) this.#form_id = options.id;
   }
 
-  protected _description?: string;
-  /**Sets the description of the element, shown as a tooltip*/
-  set description(text: string) {
-    this._description = text;
+  set(options: FormValueOptions<RT>): this {
+    super.set(options);
+    this.set_input(FORM_VALUE.description, options.description, (text) =>
+      this.#describe(text.ok ? text.value : ""),
+    );
+    const value = options.value;
+    if (value === undefined) return this;
+    const from_state = state.is.state_of(value);
+    //Related first, so the first value is shown with them, like decimals
+    const related = from_state ? value.related() : undefined;
+    this.state_related(related?.some ? related.value : {});
+    this.set_input(FORM_VALUE.value, value, (result) => {
+      //The key is loosely typed, the value can be an error
+      //The error itself is shown by the fault icon of Base
+      const val = result as ResultNice<RT>;
+      this.#value_error = val.err ? val.error : undefined;
+      if (val.ok) this.show_value(val.value);
+    });
+    return this;
+  }
+
+  #describe(text: string) {
     if (text) this.title = text;
     else this.removeAttribute("title");
-  }
-  get description(): string {
-    return this._description || "";
   }
 
   protected _buffer?: RT;
@@ -102,70 +132,36 @@ export abstract class FormValue<
     return this._buffer;
   }
 
-  protected _state?: State<RT, Option<{}>, RT>;
-  #func?: StateSub<ResultNice<RT>>;
-
-  /**Binds the element to a state, a read only state is shown and changes to the element are refused with a warning*/
-  bind(opts: { value: StateREA<RT, Option<{}>, RT> }): this {
-    if (this.#func) {
-      this.detach_state(this.#func);
-      this.#func = undefined;
-    }
-    if (opts.value) {
-      //Related first, so the first value is shown with them, like decimals
-      const related = opts.value.related();
-      this.state_related(related.some ? related.value : {});
-      this.#func = this.attach_state(opts.value, (val) => {
-        if (val.ok) {
-          this.value = val.value;
-          if (this.#error) this.error = undefined;
-        } else this.error = val.error;
-      });
-    } else this.state_related({});
-    this._state = opts.value;
-
-    return this;
+  /**The state the value comes from, undefined for a fixed value or a value the element keeps itself*/
+  protected get _state(): State<RT, Option<{}>, RT> | undefined {
+    return this.input_state(FORM_VALUE.value) as
+      State<RT, Option<{}>, RT> | undefined;
   }
 
-  /**This sets the value of the component*/
-  set value(val: RT) {
+
+  /**Shows the value and keeps it, without writing it anywhere, the value input uses it*/
+  protected show_value(val: RT): void {
     if (typeof this._buffer !== "undefined" && this._buffer === val) return;
     this._buffer = val;
     this.new_value(val);
   }
 
-  /**Returns value of the component*/
+  /**Returns the value of the element, from wherever it comes, an error while the value is in error or there is none yet*/
   get get_value(): Result<RT, string> {
-    return this._state
-      ? err("State based component")
-      : typeof this._buffer === "undefined"
-        ? err("No value yet")
-        : ok(this._buffer);
+    if (this.#value_error) return err(this.#value_error.nice);
+    return typeof this._buffer === "undefined"
+      ? err("No value yet")
+      : ok(this._buffer);
   }
 
-  #error?: NiceError;
-  /**Shows the error on the element, as its nice text, or clears it with undefined*/
-  set error(error: NiceError | undefined) {
-    if (error) {
-      this.new_error(error.nice);
-      this.#error = error;
-    } else if (this.#error) {
-      this.clear_error();
-      this.#error = undefined;
-    }
-  }
-  /**The error shown on the element, with its details for whoever has to fix it*/
-  get error(): NiceError | undefined {
-    return this.#error;
-  }
+  /**The error of the state of the value while it lasts*/
+  #value_error?: NiceError;
 
-  /**Clears the value and error of the component if not state based*/
+  /**Clears the value, only a value the element keeps itself, not one from a state*/
   clear(): void {
     if (this._state) return;
     this._buffer = undefined;
     this.clear_value();
-    this.clear_error();
-    this.#error = undefined;
   }
 
   /**Called when value is set by value setter or state*/
@@ -174,14 +170,46 @@ export abstract class FormValue<
   /**Clears form element graphically*/
   protected abstract clear_value(): void;
 
-  /**Called when error is set by error or state, with the nice text of the error*/
-  protected abstract new_error(val: string): void;
-
-  /**Called when error is cleared by error or state*/
-  protected abstract clear_error(): void;
-
-  /**Called when state has related information */
+  /**Called when the value input changes, with the related states of the value state, like limits, {} for a fixed value
+   * Elements follow the ones they use with follow_related*/
   protected abstract state_related(related: {}): void;
+
+  /**Follows a related state of the value state, like its maximum length, under a key of the element
+   * apply gets undefined when the value state has none, or it is in error*/
+  protected follow_related<T>(
+    key: InputKey<StateOrVal<T | null>>,
+    related: State<T> | undefined,
+    apply: (value: T | undefined) => void,
+  ): void {
+    this.set_input(key, related ?? null, (value) =>
+      apply(value.ok && value.value !== null ? value.value : undefined),
+    );
+  }
+}
+
+/**A setting of an element given as an input, or else taken from a related state of the value, like a maximum length
+ * The input wins while it is given and ok, apply gets the setting that counts every time either changes*/
+export class FormSetting<T> {
+  #input?: T;
+  #related?: T;
+  #apply: (value: T | undefined) => void;
+  constructor(apply: (value: T | undefined) => void) {
+    this.#apply = apply;
+  }
+  /**The setting that counts now*/
+  get value(): T | undefined {
+    return this.#input ?? this.#related;
+  }
+  /**Sets the value of the input, undefined when it is in error*/
+  input(value: T | undefined): void {
+    this.#input = value;
+    this.#apply(this.value);
+  }
+  /**Sets the related value, undefined when the value state has none*/
+  related(value: T | undefined): void {
+    this.#related = value;
+    this.#apply(this.value);
+  }
 }
 
 //##################################################################################################
@@ -192,11 +220,13 @@ export abstract class FormValue<
 //        \  / ____ \| |___| |__| | |____     \  /\  /  | | \ \ _| |_   | |  | |____
 //         \/_/    \_\______\____/|______|     \/  \/   |_|  \_\_____|  |_|  |______|
 
-export interface FormValueWriteOptions<
-  RT,
-  ID extends string | undefined,
-> extends FormValueOptions<RT, ID> {
-  /**Change listener function*/
+const FORM_VALUE_WRITE = {
+  change: input_key<(val: any) => void>(),
+};
+
+/**Options of form elements the user changes, on the element pattern*/
+export interface FormValueWriteOptions<RT> extends FormValueOptions<RT> {
+  /**Called with every value the user changes the element to, after it is accepted*/
   change?: (val: RT) => void;
 }
 
@@ -215,28 +245,21 @@ export abstract class FormValueWrite<
   #changed: boolean = false;
   #change?: (val: RT) => void;
 
-  static apply_options<RT, ID extends string | undefined>(
-    element: FormValueWrite<RT, ID>,
-    options: FormValueWriteOptions<RT, ID>,
-  ) {
-    if (options.change) element.change = options.change;
-    super.apply_options(element, options);
+  constructor() {
+    super();
+    this.warn_input.name = "val";
   }
 
-  constructor(id?: ID) {
-    super(id);
-    this.warn_input.name = "val";
+  set(options: FormValueWriteOptions<RT>): this {
+    super.set(options);
+    this.set_input(FORM_VALUE_WRITE.change, options.change, (change) => {
+      this.#change = change.value;
+    });
+    return this;
   }
 
   focus(options?: FocusOptions): void {
     this.warn_input.focus(options);
-  }
-
-  set change(func: (val: RT) => void) {
-    this.#change = func;
-  }
-  get change(): ((val: RT) => void) | undefined {
-    return this.#change;
   }
 
   /**Returns true if the value of the component has changed*/
@@ -244,8 +267,9 @@ export abstract class FormValueWrite<
     return this.#changed;
   }
 
-  set value(val: RT) {
-    if (!this.selected) super.value = val;
+  /**While the user edits the element, a new value is only kept, so the edit is not overwritten*/
+  protected show_value(val: RT): void {
+    if (!this.selected) super.show_value(val);
     else this._buffer = val;
   }
 
@@ -308,6 +332,7 @@ export abstract class FormValueWrite<
         this.warn(written.error);
         return err(written.error);
       }
+      this.#changed = true;
     } else {
       this._buffer = val;
       this.#changed = true;

@@ -24,7 +24,6 @@ The pattern is the interface an element gives to users of the library: the input
 6. **Handed out inputs are given once.** An input that other elements follow is a creation input, applied by `[CREATE]` and left out of the options of `set`, so it can not be replaced while others follow it.
 7. **States are handed down from parent to child.** A parent passes its inputs on to its children unchanged. It does not wrap them or copy their values.
 8. **Every input is its own state.** Use one state per value, like `x`, `y` and `width`, never one state holding an object of them, so each value can be connected to other elements on its own.
-9. **Writable inputs make a fixed value read only.** An element that writes an input, like a slider or a moveable panel, can not change a fixed value, so it shows it as read only. Give a writable state to make it changeable.
 
 ```ts
 const box = my_box({ width: 100, label: label_state });
@@ -144,29 +143,38 @@ On top of that, `set_input` reports every error of an input as a fault of the el
 - **It costs nothing without faults.** The icon is made on the first fault and removed with the last, and one listener on the document handles every icon. An element not in the document has no subscribed inputs, so no faults.
 - **The icon sits at the top right corner**, absolutely positioned. An element without a position of its own gets `position: relative` from a rule without specificity, so any position the element sets wins.
 
-### Writable inputs and `input_state(key)`
+### Inputs the user changes and `input_state(key)`
 
-An element that writes, like a slider, uses a writable key such as `input_key<StateOrValROSW<number>>()`.
+An input the user changes, like the value of a slider or the position of a moveable panel, works the same way in every element:
 
-`input_state(key)` returns the state the input has right now, typed by the key, so a writable key gives a state with `write`. It returns `undefined` for a fixed value or an input that was never set. The element keeps no reference of its own, because `Base` already stores the state under the key:
+- **A fixed value** is the element's own value, starting at what was given. The user changes it, and the element keeps the change itself.
+- **A writable state** is written when the user changes the value, and every element following the state sees it.
+- **A read only state** is only shown, the user can not change it. This is how an element is locked, like a panel that can not be moved.
+- **Not given**, the element keeps a value of its own, like a fixed value.
+
+The key takes any state, such as `input_key<StateOrValROS<number>>()`, and the element checks `writable` at runtime. `input_state(key)` returns the state the input has right now, typed by the key, or `undefined` for a fixed value or an input that was never set. The element keeps no reference of its own, because `Base` already stores the state under the key:
 
 ```ts
 constructor() {
   super();
-  //Writes to whatever state the value input has now
-  this.#input.oninput = () =>
-    void this.input_state(SLIDER.value)?.write(Number(this.#input.value));
+  //Writes to whatever state the value input has now, without a state the input keeps the value itself
+  this.#input.oninput = () => {
+    const value = this.input_state(SLIDER.value);
+    if (value?.writable) void value.write?.(Number(this.#input.value));
+  };
 }
 
 set(options: SliderOptions): this {
+  super.set(options);
   this.set_input(SLIDER.value, options.value, (v) => (this.#input.value = String(v.value)));
-  //A fixed value can not be written
-  this.#input.disabled = !this.input_state(SLIDER.value);
+  //Only a read only state can not be changed
+  const value = this.input_state(SLIDER.value);
+  this.#input.disabled = value !== undefined && !value.writable;
   return this;
 }
 ```
 
-A fixed value is shown read only (rule 9), so there is no separate option to turn writing off. An element that is only sometimes changeable, like a panel that can be moved, is changeable exactly when its inputs are writable states.
+A parent that hands out a value its child changes, like an editor handing out the scale its slider changes, makes a writable state from a fixed value, so everything following the value sees the change. See `ExampleEditor`.
 
 ### Plain values
 
@@ -286,12 +294,12 @@ Elements created in large numbers, like list rows, list fields and canvas widget
 
 ## `set` and `bind`
 
-`set` gives inputs. A few elements also have a `bind` method that two-way binds a writable state the element owns the meaning of: form elements bind their `value`, and list containers their `selection`. These are older than this pattern, and they are their own methods, not part of `Base`.
+`set` gives inputs. Form elements take their value as the `value` input like any other, see the form README. List containers still have a `bind` that two-way binds their `selection`, which is older than this pattern.
 
 ## Status
 
 - **Done and tested** in `package-ui/base/base.test.ts`: `Base.create` with `[CREATE]`, `Base.set` with the `access` input, `Base.set_input`, `Base.input_state`, and the key helpers `input_key`, `InputOptions` and `InputOf`.
-- **Being converted:** `composition` is the first production module written to the pattern. Other elements are converted one at a time, canvas `Page` and `Viewport` after the depot work.
+- **Being converted:** `composition` is the first production module written to the pattern. `form` is converted too, every form element takes its inputs with `set`, with the value model of the form README. Other elements are converted one at a time, canvas `Page` and `Viewport` after the depot work.
 - **Example:** `package-ui/pattern_example` is kept as the reference and must stay in line with this file. It is never built or exported, its source reaches consumers through the `SOURCE.md` of the package.
 
 ## Checklist for a new or converted element
@@ -304,7 +312,7 @@ Elements created in large numbers, like list rows, list fields and canvas widget
 - [ ] Every input is applied with `set_input`, in `set`, or in `[CREATE]` for creation inputs.
 - [ ] Inputs handed out to other elements are creation inputs, applied by overriding `[CREATE]`, and left out of the options of `set`.
 - [ ] Each input handles its errors in a way that makes sense to the user, the fault icon explains them, and `fault_anchor` puts it where the problem shows if that isn't the element itself.
-- [ ] Writable inputs use `input_state` to write, and fixed values are shown as read only.
+- [ ] Inputs the user changes write a writable state with `input_state`, keep a fixed value themselves, and lock for a read only state.
 - [ ] Subclasses have their own keys objects and call `super.set(options)` and `super[CREATE](options)` once.
 - [ ] Configuration that never changes, references up the tree and internal logic are kept out of the inputs.
 - [ ] Tests cover fixed values, states, setting again with both, and errors.

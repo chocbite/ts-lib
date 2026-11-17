@@ -51,18 +51,6 @@ form-switch {
       }
     }
 
-    &.error {
-      background-color: base.$color_background;
-      @include base.form-colors(error-color, background-color);
-
-      &::after {
-        left: base.$size_height / 2;
-
-        .touch & {
-          left: base.$size_touchHeight / 2;
-        }
-      }
-    }
 
     &.active {
       cursor: grabbing;

@@ -1,31 +1,39 @@
-import { define_element } from "#base";
+import { define_element, input_key, type InputOptions } from "#base";
 import type { Option } from "@chocbite/ts-lib/result";
+import type { StateOrVal } from "@chocbite/ts-lib/state";
 import type { SVGFunc } from "#svg";
-import { FormColors, FormValueWrite, FormValueWriteOptions } from "../../base";
+import {
+  FormColors,
+  FormValueWrite,
+  type FormValueCreateOptions,
+  type FormValueWriteOptions,
+} from "../../base";
 import "../../shared";
 import "./button.scss";
 
-export interface FormButtonOptions<
-  ID extends string | undefined,
-> extends FormValueWriteOptions<boolean, ID> {
-  /**Buttons text */
-  text?: string;
-  /**Icon for button */
-  icon?: SVGFunc;
-  /**Function to call on button click */
-  on_click?: () => void;
-  /**Set true to make button toggle on click instead of normal */
-  toggle?: boolean;
-  /**Changes the buttons color */
-  color?: FormColors;
-  /**Centers text and icon */
-  center?: boolean;
-}
+/**Inputs of the button*/
+const BUTTON = {
+  /**Text of the button, an error shows its nice text*/
+  text: input_key<StateOrVal<string>>(),
+  /**Icon in front of the text, undefined for none, an error shows none*/
+  icon: input_key<StateOrVal<SVGFunc | undefined>>(),
+  /**Called when the button is clicked*/
+  on_click: input_key<() => void>(),
+  /**True makes the button toggle its value on every click, false makes it momentary, true while pressed*/
+  toggle: input_key<StateOrVal<boolean>>(),
+  /**Color of the button, None for the default, an error gives the default*/
+  color: input_key<StateOrVal<FormColors>>(),
+  /**Centers the text and icon*/
+  center: input_key<StateOrVal<boolean>>(),
+};
+export type FormButtonOptions = FormValueWriteOptions<boolean> &
+  InputOptions<typeof BUTTON>;
+export type FormButtonCreateOptions<ID extends string | undefined> =
+  FormButtonOptions & FormValueCreateOptions<ID>;
 
-export class FormButton<ID extends string | undefined> extends FormValueWrite<
-  boolean,
-  ID
-> {
+class FormButton<
+  ID extends string | undefined = string | undefined,
+> extends FormValueWrite<boolean, ID> {
   static element_name() {
     return "button";
   }
@@ -38,8 +46,8 @@ export class FormButton<ID extends string | undefined> extends FormValueWrite<
   #toggle?: boolean;
   #icon?: SVGSVGElement;
 
-  constructor(id?: ID) {
-    super(id);
+  constructor() {
+    super();
 
     this.appendChild(this.warn_input);
     this.setAttribute("tabindex", "0");
@@ -117,42 +125,33 @@ export class FormButton<ID extends string | undefined> extends FormValueWrite<
     HTMLElement.prototype.focus.call(this, options);
   }
 
-  /**Sets the current text of the button*/
-  set text(label: string) {
-    this.#text.textContent = label;
-  }
-  get text() {
-    return this.#text.textContent;
-  }
-
-  /**Changes the icon of the button*/
-  set icon(icon: SVGFunc | undefined) {
-    if (this.#icon) this.removeChild(this.#icon);
-    this.#icon = icon ? this.insertBefore(icon(), this.#text) : undefined;
-  }
-
-  /**Function to call on button click*/
-  set on_click(func: (() => void) | undefined) {
-    this.#on_click = func;
-  }
-  get on_click() {
-    return this.#on_click;
-  }
-
-  /**Changes the color of the button*/
-  set color(color: FormColors) {
-    if (color === FormColors.None) this.removeAttribute("color");
-    else this.setAttribute("color", color);
-  }
-
-  /**Centers text and icon */
-  set center(center: boolean) {
-    if (center) this.classList.add("center");
-    else this.classList.remove("center");
-  }
-
-  get center() {
-    return this.classList.contains("center");
+  set(options: FormButtonOptions): this {
+    super.set(options);
+    this.set_input(BUTTON.text, options.text, (text) => {
+      this.#text.textContent = text.ok ? text.value : text.error.nice;
+    });
+    this.set_input(BUTTON.icon, options.icon, (icon) => {
+      this.#icon?.remove();
+      this.#icon =
+        icon.ok && icon.value
+          ? this.insertBefore(icon.value(), this.#text)
+          : undefined;
+    });
+    this.set_input(BUTTON.on_click, options.on_click, (on_click) => {
+      this.#on_click = on_click.value;
+    });
+    this.set_input(BUTTON.toggle, options.toggle, (toggle) => {
+      this.#toggle = toggle.ok && toggle.value;
+    });
+    this.set_input(BUTTON.color, options.color, (color) => {
+      if (color.ok && color.value !== FormColors.None)
+        this.setAttribute("color", color.value);
+      else this.removeAttribute("color");
+    });
+    this.set_input(BUTTON.center, options.center, (center) => {
+      this.classList.toggle("center", center.ok && center.value);
+    });
+    return this;
   }
 
   /**Called when value is changed */
@@ -165,37 +164,15 @@ export class FormButton<ID extends string | undefined> extends FormValueWrite<
     this.new_value(false);
   }
 
-  protected new_error(err: string): void {
-    console.error("TODO", err);
-  }
-
-  protected clear_error(): void {}
-
   protected state_related(_related: Option<{}>): void {}
-
-  /**Changes whether the button is maintained or momentary*/
-  set toggle(toggle: boolean | undefined) {
-    this.#toggle = Boolean(toggle);
-  }
-  get toggle() {
-    return this.#toggle;
-  }
 }
 define_element(FormButton);
 
-/**Creates a button form element */
-export function form_button<ID extends string | undefined>(
-  options?: FormButtonOptions<ID>,
+export type { FormButton };
+
+/**Creates a button, its value is true while pressed, or toggles on every click with toggle*/
+export function form_button<ID extends string | undefined = undefined>(
+  options: FormButtonCreateOptions<ID> = {},
 ): FormButton<ID> {
-  const butt = new FormButton<ID>(options?.id);
-  if (options) {
-    if (options.text) butt.text = options.text;
-    if (options.icon) butt.icon = options.icon;
-    if (options.on_click) butt.on_click = options.on_click;
-    if (options.toggle) butt.toggle = options.toggle;
-    if (options.color) butt.color = options.color;
-    if (options.center) butt.center = options.center;
-    FormValueWrite.apply_options(butt, options);
-  }
-  return butt;
+  return FormButton.create(options) as FormButton<ID>;
 }

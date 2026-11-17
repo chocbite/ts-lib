@@ -104,25 +104,24 @@ describe("Slider", () => {
   it("places the handle by the value within the limits", () => {
     const { element, slider } = make({ min: 0, max: 10, value: 5 });
     expect(slider.style.left).toBe("50%");
-    element.value = 0;
+    element.set({ value: 0 });
     expect(slider.style.left).toBe("0%");
-    element.value = 10;
+    element.set({ value: 10 });
     expect(slider.style.left).toBe("100%");
-    element.value = 20;
+    element.set({ value: 20 });
     expect(slider.style.left).toBe("100%");
   });
 
   it("moves the handle when the limits change after the value", () => {
     const { element, slider } = make({ value: 5 });
-    element.min = 0;
-    element.max = 20;
+    element.set({ min: 0, max: 20 });
     expect(slider.style.left).toBe("25%");
   });
 
   it("keeps the handle centered without a max", () => {
     const { element, slider } = make({ min: 0, value: 5 });
     expect(slider.style.left).toBe("50%");
-    element.value = 7;
+    element.set({ value: 7 });
     expect(slider.style.left).toBe("50%");
   });
 
@@ -282,7 +281,7 @@ describe("Slider", () => {
       true,
     );
     const { element, left_legend, down, up } = make();
-    element.bind({ value: state });
+    element.set({ value: state });
     expect(left_legend.textContent).toBe("Min:0");
     down(80);
     up(80);
@@ -296,7 +295,7 @@ describe("Slider", () => {
       true,
     );
     const { element, value_box } = make();
-    element.bind({ value: state });
+    element.set({ value: state });
     expect(value_box.textContent).toBe("2.50");
   });
 

@@ -9,7 +9,7 @@ const current = () => {
 };
 /**The form button with the text in the open prompt*/
 const button = (text: string) =>
-  [...current().querySelectorAll<HTMLElement>("*")].find((e) => "on_click" in e && e.textContent === text)!;
+  [...current().querySelectorAll<HTMLElement>("*")].find((e) => e.tagName === "FORM-BUTTON" && e.textContent === text)!;
 const wait = (ms = 10) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const OFFLINE = Symbol("Connection failed");

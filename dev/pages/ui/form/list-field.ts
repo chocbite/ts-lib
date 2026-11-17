@@ -54,7 +54,7 @@ const MODES = [
           fixed_width: "min",
           field_gen: () => form.list_field(form.switch()),
           field_apply: (field, v: Machine["on"]) =>
-            field.element.bind({ value: v }),
+            field.element.set({ value: v }),
         }),
         lamp: list.column({
           title: "State",
@@ -67,7 +67,7 @@ const MODES = [
               }),
             ),
           field_apply: (field, v: Machine["on"]) =>
-            field.element.bind({ value: v }),
+            field.element.set({ value: v }),
         }),
         speed: list.column({
           title: "Speed",
@@ -75,14 +75,14 @@ const MODES = [
           field_gen: () =>
             form.list_field(form.stepper({ min: 0, max: 100, unit: "%" })),
           field_apply: (field, v: Machine["speed"]) =>
-            field.element.bind({ value: v }),
+            field.element.set({ value: v }),
         }),
         progress: list.column({
           title: "Load",
           init_width: 10,
           field_gen: () => form.list_field(form.progress({ unit: "%" })),
           field_apply: (field, v: Machine["speed"]) =>
-            field.element.bind({ value: v }),
+            field.element.set({ value: v }),
         }),
         mode: list.column({
           title: "Mode",
@@ -90,14 +90,14 @@ const MODES = [
           field_gen: () =>
             form.list_field(form.toggle_button({ selections: MODES })),
           field_apply: (field, v: Machine["mode"]) =>
-            field.element.bind({ value: v }),
+            field.element.set({ value: v }),
         }),
         mode_dropdown: list.column({
           title: "Mode dropdown",
           init_width: 10,
           field_gen: () => form.list_field(form.dropdown({ selections: MODES })),
           field_apply: (field, v: Machine["mode"]) =>
-            field.element.bind({ value: v }),
+            field.element.set({ value: v }),
         }),
         start: list.column({
           title: "Start",
@@ -107,7 +107,7 @@ const MODES = [
               form.button({ icon: material_play_arrow_rounded, text: "Start" }),
             ),
           field_apply: (field, v: Machine["on"]) =>
-            (field.element.on_click = () => v.set_ok(true)),
+            field.element.set({ on_click: () => v.set_ok(true) }),
         }),
       },
       (m) => ok({

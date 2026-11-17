@@ -1,6 +1,7 @@
 import type { AccessTypes } from "@chocbite/ts-lib-ui/base";
 import form, {
   FormDateTimeMode,
+  FormDateTimePrecision,
   FormDateTimeType,
 } from "@chocbite/ts-lib-ui/form";
 import { IPAddress, IPVersion } from "@chocbite/ts-lib/common";
@@ -99,13 +100,13 @@ const WIDTH = { width: "18rem" };
   });
   const r = spaced_row(sec);
   const a = box(r, "shared", WIDTH);
-  a.appendChild(form.ip({ type: IPVersion.V4 }).bind({ value: shared }));
+  a.appendChild(form.ip({ type: IPVersion.V4 }).set({ value: shared }));
   readout(a, "state", shared, (v) => v.to_string());
   box(r, "shared, access from state", WIDTH).appendChild(
-    form.ip({ type: IPVersion.V4 }).set({ access }).bind({ value: shared }),
+    form.ip({ type: IPVersion.V4 }).set({ access }).set({ value: shared }),
   );
   const j = box(r, "only 10.x.x.x", WIDTH);
-  j.appendChild(form.ip({ type: IPVersion.V4 }).bind({ value: rejecting }));
+  j.appendChild(form.ip({ type: IPVersion.V4 }).set({ value: rejecting }));
   readout(j, "state", rejecting, (v) => v.to_string());
 }
 
@@ -132,7 +133,7 @@ const WIDTH = { width: "18rem" };
   box(r, "empty", WIDTH).appendChild(form.password());
   box(r, "digits only", WIDTH).appendChild(form.password({ filter: /^\d*$/ }));
   const b = box(r, "bound, access from state", WIDTH);
-  b.appendChild(form.password().set({ access }).bind({ value }));
+  b.appendChild(form.password().set({ access }).set({ value }));
   readout(b, "state", value);
   for (const width of ["5rem", "32rem"])
     box(r, width, { width }).appendChild(
@@ -160,9 +161,9 @@ const WIDTH = { width: "18rem" };
   });
   const r = spaced_row(sec);
   const a = box(r, "not live", WIDTH);
-  a.appendChild(form.color().bind({ value }));
+  a.appendChild(form.color().set({ value }));
   readout(a, "state", value);
-  box(r, "live", WIDTH).appendChild(form.color({ live: true }).bind({ value }));
+  box(r, "live", WIDTH).appendChild(form.color({ live: true }).set({ value }));
   box(r, "no value", WIDTH).appendChild(form.color());
   box(r, "read access", WIDTH).appendChild(
     form.color({ value: "#ff8800" }).set({ access: "r" }),
@@ -207,14 +208,14 @@ const WIDTH = { width: "18rem" };
       form.date_time({ type, mode: FormDateTimeMode.DATE }),
     );
   }
+  //The same instant with milliseconds at every precision, the value keeps them, only the shown value is cut
+  const precise = new Date(2026, 0, 15, 13, 45, 30, 123);
+  const p = spaced_row(sec);
+  for (const precision of Object.values(FormDateTimePrecision))
+    box(p, "precision " + precision, WIDTH).appendChild(
+      form.date_time({ mode: FormDateTimeMode.DATE, precision, value: precise }),
+    );
   const m = spaced_row(sec);
-  box(m, "milliseconds", WIDTH).appendChild(
-    form.date_time({
-      mode: FormDateTimeMode.DATE,
-      milliseconds: true,
-      value: new Date(2026, 0, 15, 13, 45, 30, 123),
-    }),
-  );
   for (const width of ["8rem", "32rem"])
     box(m, width, { width }).appendChild(
       form.date_time({ mode: FormDateTimeMode.DATE, value: local }),
@@ -251,7 +252,7 @@ const WIDTH = { width: "18rem" };
     form
       .date_time({ mode: FormDateTimeMode.DATE })
       .set({ access })
-      .bind({ value: date }),
+      .set({ value: date }),
   );
   readout(d, "state", date, (v) => v.toISOString());
   const s = box(r, "string mode", WIDTH);
@@ -259,7 +260,7 @@ const WIDTH = { width: "18rem" };
     form
       .date_time({ mode: FormDateTimeMode.STRING })
       .set({ access })
-      .bind({ value: text }),
+      .set({ value: text }),
   );
   readout(s, "state", text);
   const n = box(r, "number mode (UTC)", WIDTH);
@@ -267,7 +268,7 @@ const WIDTH = { width: "18rem" };
     form
       .date_time({ mode: FormDateTimeMode.NUMBER })
       .set({ access })
-      .bind({ value: number }),
+      .set({ value: number }),
   );
   readout(n, "state", number, (v) => v + " = " + new Date(v).toISOString());
 }

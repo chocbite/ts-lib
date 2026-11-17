@@ -1,16 +1,18 @@
 import type { NiceError } from "@chocbite/ts-lib/result";
-import { Base, define_element } from "#base";
+import { Base, define_element, input_key, type InputOptions } from "#base";
 import { DOCUMENT_HANDLER } from "#document";
 import {
   material_close_rounded,
   material_keyboard_arrow_down_rounded,
   material_unfold_less_rounded,
 } from "#icons";
+import type { StateOrVal } from "@chocbite/ts-lib/state";
 import type { SVGFunc } from "#svg";
+import type { FormValueCreateOptions } from "../../base";
 import {
   FormSelectorBase,
-  type FormSelectorBaseOptions,
   type FormSelectorOption,
+  type FormSelectorOptions,
 } from "../selector_base";
 import "./drop_down.scss";
 
@@ -19,20 +21,24 @@ export interface FormDropDownSelection {
   icon?: SVGFunc;
 }
 
-export interface FormDropDownOptions<
+/**Inputs of the dropdown*/
+const DROPDOWN = {
+  /**Text shown while nothing is selected, an error shows its nice text*/
+  default: input_key<StateOrVal<string>>(),
+  /**Icon shown while nothing is selected, undefined for none*/
+  default_icon: input_key<StateOrVal<SVGFunc | undefined>>(),
+};
+export type FormDropDownOptions<RT> = FormSelectorOptions<RT> &
+  InputOptions<typeof DROPDOWN>;
+export type FormDropDownCreateOptions<
   RT,
   ID extends string | undefined,
-> extends FormSelectorBaseOptions<RT, ID> {
-  /**Default text displayed*/
-  default?: string;
-  /**Default icon displayed*/
-  default_icon?: SVGFunc;
-}
+> = FormDropDownOptions<RT> & FormValueCreateOptions<ID>;
 
 /**Dropdown box for selecting between multiple choices in a small space*/
-export class FormDropdown<
+class FormDropdown<
   RT,
-  ID extends string | undefined,
+  ID extends string | undefined = string | undefined,
 > extends FormSelectorBase<RT, ID> {
   static element_name() {
     return "dropdown";
@@ -56,8 +62,8 @@ export class FormDropdown<
   #box?: DropDownBox;
   private is_open: boolean = false;
 
-  constructor(id?: ID) {
-    super(id);
+  constructor() {
+    super();
     this.#text.append(this.#default);
     this.appendChild(this.warn_input);
     this.tabIndex = 0;
@@ -89,23 +95,21 @@ export class FormDropdown<
     HTMLElement.prototype.focus.call(this, options);
   }
 
-  /**Gets the default text displayed when nothing has been selected yet */
-  get default() {
-    return this.#default.nodeValue || "";
+  set(options: FormDropDownOptions<RT>): this {
+    super.set(options);
+    this.set_input(DROPDOWN.default, options.default, (text) => {
+      this.#default.nodeValue = text.ok ? text.value : text.error.nice;
+    });
+    this.set_input(DROPDOWN.default_icon, options.default_icon, (icon) => {
+      this.#default_icon = icon.ok ? icon.value : undefined;
+      if (this.#selected === -1) this.#set_icon = this.#default_icon;
+    });
+    return this;
   }
 
-  /**Sets the default text displayed when nothing has been selected yet */
-  set default(def: string) {
-    this.#default.nodeValue = def;
-  }
-
-  /**Sets the default text displayed when nothing has been selected yet */
-  set default_icon(def: SVGFunc | undefined) {
-    this.#default_icon = def;
-    if (def && this.#selected === -1) this.#set_icon = def;
-  }
-
-  set selections(selections: FormSelectorOption<RT>[] | undefined) {
+  protected apply_selections(
+    selections: FormSelectorOption<RT>[] | undefined,
+  ): void {
     this.open = false;
     if (this.#map.size > 0) {
       this.#map.clear();
@@ -160,9 +164,7 @@ export class FormDropdown<
   }
 
   #clear() {
-    this.default_icon = this.#default_icon
-      ? (this.#set_icon = this.#default_icon)
-      : (this.#set_icon = undefined);
+    this.#set_icon = this.#default_icon;
     this.#text.replaceChildren(this.#default);
   }
 
@@ -184,10 +186,6 @@ export class FormDropdown<
     this.#clear();
   }
 
-  protected new_error(_val: string): void {}
-
-  protected clear_error(): void {}
-
   warn(message: string | NiceError): void {
     setTimeout(() => {
       super.warn(message);
@@ -196,17 +194,14 @@ export class FormDropdown<
 }
 define_element(FormDropdown);
 
-/**Creates a dropdown form element */
-export function form_dropdown<RT, ID extends string | undefined>(
-  options?: FormDropDownOptions<RT, ID>,
+export type { FormDropdown };
+
+/**Creates a dropdown, choosing one of the selections in little space*/
+export function form_dropdown<RT, ID extends string | undefined = undefined>(
+  options: FormDropDownCreateOptions<RT, ID> = {},
 ): FormDropdown<RT, ID> {
-  const drop = new FormDropdown<RT, ID>(options?.id);
-  if (options) {
-    if (options.default) drop.default = options.default;
-    if (options.default_icon) drop.default_icon = options.default_icon;
-    FormSelectorBase.apply_options(drop, options);
-  }
-  return drop;
+  //create can not carry the value type of a generic class, the options are checked by this function
+  return FormDropdown.create(options as never) as FormDropdown<RT, ID>;
 }
 
 ///##################################################################################################

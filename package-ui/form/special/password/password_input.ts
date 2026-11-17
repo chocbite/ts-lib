@@ -1,19 +1,26 @@
-import { define_element } from "#base";
+import { define_element, input_key, type InputOptions } from "#base";
 import type { Option } from "@chocbite/ts-lib/result";
-import { FormValueWrite, FormValueWriteOptions } from "../../base";
+import {
+  FormValueWrite,
+  type FormValueCreateOptions,
+  type FormValueWriteOptions,
+} from "../../base";
 import "./password_input.scss";
 
-export interface FormPasswordOptions<
-  ID extends string | undefined,
-> extends FormValueWriteOptions<string, ID> {
-  /**Allowed characters for the password input */
-  filter?: RegExp;
-}
+/**Inputs of the password input*/
+const PASSWORD = {
+  /**Characters the user can type, others are refused with a warning*/
+  filter: input_key<RegExp>(),
+};
+export type FormPasswordOptions = FormValueWriteOptions<string> &
+  InputOptions<typeof PASSWORD>;
+export type FormPasswordCreateOptions<ID extends string | undefined> =
+  FormPasswordOptions & FormValueCreateOptions<ID>;
 
-export class FormPassword<ID extends string | undefined> extends FormValueWrite<
-  string,
-  ID
-> {
+/**Password input, the text is hidden and cleared when the user starts typing*/
+class FormPassword<
+  ID extends string | undefined = string | undefined,
+> extends FormValueWrite<string, ID> {
   static element_name() {
     return "passwordinput";
   }
@@ -23,8 +30,8 @@ export class FormPassword<ID extends string | undefined> extends FormValueWrite<
 
   #filter?: RegExp;
 
-  constructor(id?: ID) {
-    super(id);
+  constructor() {
+    super();
     this.appendChild(this.warn_input);
     this.warn_input.type = "password";
     this.warn_input.onfocus = () => {
@@ -51,8 +58,12 @@ export class FormPassword<ID extends string | undefined> extends FormValueWrite<
     };
   }
 
-  set filter(val: RegExp | undefined) {
-    this.#filter = val;
+  set(options: FormPasswordOptions): this {
+    super.set(options);
+    this.set_input(PASSWORD.filter, options.filter, (filter) => {
+      this.#filter = filter.value;
+    });
+    return this;
   }
 
   protected new_value(val: string): void {
@@ -63,22 +74,15 @@ export class FormPassword<ID extends string | undefined> extends FormValueWrite<
     this.warn_input.value = "";
   }
 
-  protected new_error(_val: string): void {}
-
-  protected clear_error(): void {}
-
   protected state_related(_related: Option<{}>): void {}
 }
 define_element(FormPassword);
 
-/**Creates a password input form element */
-export function form_password<ID extends string | undefined>(
-  options?: FormPasswordOptions<ID>,
+export type { FormPassword };
+
+/**Creates a password input*/
+export function form_password<ID extends string | undefined = undefined>(
+  options: FormPasswordCreateOptions<ID> = {},
 ): FormPassword<ID> {
-  const input = new FormPassword<ID>(options?.id);
-  if (options) {
-    if (options.filter) input.filter = options.filter;
-    FormValueWrite.apply_options(input, options);
-  }
-  return input;
+  return FormPassword.create(options) as FormPassword<ID>;
 }

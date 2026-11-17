@@ -1,7 +1,7 @@
 import { define_element } from "#base";
 import {
   FormSelectorBase,
-  type FormSelectorBaseOptions,
+  type FormSelectorCreateOptions,
   type FormSelectorOption,
 } from "../selector_base";
 import "./toggle_button.scss";
@@ -12,9 +12,9 @@ export interface FormToggleButtonSelection {
 }
 
 /**Toggle buttons, displays all options in a multi toggler*/
-export class FormToggleButton<
+class FormToggleButton<
   RT,
-  ID extends string | undefined,
+  ID extends string | undefined = string | undefined,
 > extends FormSelectorBase<RT, ID> {
   /**Returns the name used to define the element*/
   static element_name() {
@@ -32,7 +32,9 @@ export class FormToggleButton<
     (this.firstElementChild as HTMLElement | null)?.focus(options);
   }
 
-  set selections(selections: FormSelectorOption<RT>[] | undefined) {
+  protected apply_selections(
+    selections: FormSelectorOption<RT>[] | undefined,
+  ): void {
     if (this.#map.size > 0) {
       this.#map.clear();
       this.#values = [];
@@ -110,17 +112,16 @@ export class FormToggleButton<
     this.#selected = -1;
   }
 
-  protected new_error(_val: string): void {}
-
-  protected clear_error(): void {}
 }
 define_element(FormToggleButton);
 
-/**Creates a toggle button form element */
-export function form_toggle_button<RT, ID extends string | undefined>(
-  options?: FormSelectorBaseOptions<RT, ID>,
-): FormToggleButton<RT, ID> {
-  const togg = new FormToggleButton<RT, ID>(options?.id);
-  if (options) FormSelectorBase.apply_options(togg, options);
-  return togg;
+export type { FormToggleButton };
+
+/**Creates toggle buttons, one button per selection, the selected one is the value*/
+export function form_toggle_button<
+  RT,
+  ID extends string | undefined = undefined,
+>(options: FormSelectorCreateOptions<RT, ID> = {}): FormToggleButton<RT, ID> {
+  //create can not carry the value type of a generic class, the options are checked by this function
+  return FormToggleButton.create(options as never) as FormToggleButton<RT, ID>;
 }

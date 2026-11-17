@@ -3,6 +3,7 @@ import {
   material_unfold_more_rounded,
 } from "#icons";
 import { ANIMATION_LEVEL, ANIMATION_SPEED, AnimationLevels } from "#theme";
+import st from "@chocbite/ts-lib/state";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { form_text_input } from "../text/input/text_input";
 import { form_group } from "./group";
@@ -15,6 +16,16 @@ const icon = (element: Element) =>
   element.querySelector("svg")!.getAttribute("icon");
 const icon_name = (func: () => SVGSVGElement) => func().getAttribute("icon");
 
+/**Collapser around a group, attached to the document*/
+const make = (options?: Parameters<typeof form_group_collapser>[1]) => {
+  const group = form_group({ elements: [form_text_input()] });
+  const collapser = form_group_collapser(group, options);
+  document.body.appendChild(collapser);
+  const button = collapser.querySelector(":scope > span") as HTMLSpanElement;
+  const collapsed = () => collapser.classList.contains("collapsed");
+  return { group, collapser, button, collapsed };
+};
+
 describe("Group collapser", () => {
   afterEach(() => {
     document.body.replaceChildren();
@@ -22,26 +33,14 @@ describe("Group collapser", () => {
 
   it("reopening during the collapse animation leaves it open", async () => {
     await ANIMATION_LEVEL.write(AnimationLevels.All);
-    const collapser = form_group_collapser(
-      form_group({ elements: [form_text_input()] }),
-    );
-    document.body.appendChild(collapser);
-    collapser.collapsed = true;
-    collapser.collapsed = false;
+    const { collapser, button, collapsed } = make();
+    collapser.set({ collapsed: true });
+    collapser.set({ collapsed: false });
     await wait(600);
-    expect(collapser.collapsed).toBe(false);
-    expect(collapser.classList.contains("collapsed")).toBe(false);
+    expect(collapsed()).toBe(false);
+    expect(button.textContent).toBe("Collapse");
   });
 });
-
-/**Collapser around a group, attached to the document*/
-const make = (options?: Parameters<typeof form_group_collapser>[1]) => {
-  const group = form_group({ elements: [form_text_input()] });
-  const collapser = form_group_collapser(group, options);
-  document.body.appendChild(collapser);
-  const button = collapser.querySelector(":scope > span") as HTMLSpanElement;
-  return { group, collapser, button };
-};
 
 describe("Group collapser without animation", () => {
   beforeEach(async () => {
@@ -51,65 +50,77 @@ describe("Group collapser without animation", () => {
     document.body.replaceChildren();
   });
 
-  it("starts open with the collapse text", () => {
-    const { collapser, button, group } = make();
-    expect(collapser.collapsed).toBe(false);
-    expect(collapser.classList.contains("collapsed")).toBe(false);
+  it("starts open with the collapse text, holding the group", () => {
+    const { collapser, button, group, collapsed } = make();
+    expect(collapsed()).toBe(false);
     expect(button.textContent).toBe("Collapse");
-    expect(collapser.group).toBe(group);
+    expect(collapser.firstElementChild).toBe(group);
   });
 
   it("starts collapsed with the expand text when asked", () => {
-    const { collapser, button } = make({ collapsed: true });
-    expect(collapser.collapsed).toBe(true);
-    expect(collapser.classList.contains("collapsed")).toBe(true);
+    const { button, collapsed } = make({ collapsed: true });
+    expect(collapsed()).toBe(true);
     expect(button.textContent).toBe("Expand");
   });
 
-  it("toggles when the button is clicked", () => {
-    const { collapser, button } = make();
+  it("toggles itself when the button is clicked, starting from a fixed value", () => {
+    const { button, collapsed } = make({ collapsed: false });
     button.click();
-    expect(collapser.collapsed).toBe(true);
-    expect(collapser.classList.contains("collapsed")).toBe(true);
+    expect(collapsed()).toBe(true);
     expect(button.textContent).toBe("Expand");
     button.click();
-    expect(collapser.collapsed).toBe(false);
-    expect(collapser.classList.contains("collapsed")).toBe(false);
+    expect(collapsed()).toBe(false);
     expect(button.textContent).toBe("Collapse");
   });
 
+  it("writes a writable state when the button is clicked, and follows it", () => {
+    const state = st.ok_w(false);
+    const { button, collapsed } = make({ collapsed: state });
+    button.click();
+    expect(state.ok()).toBe(true);
+    expect(collapsed()).toBe(true);
+    state.set_ok(false);
+    expect(collapsed()).toBe(false);
+  });
+
+  it("can not be toggled with a read only state", () => {
+    const { button, collapsed } = make({ collapsed: st.ok(true) });
+    button.click();
+    expect(collapsed()).toBe(true);
+  });
+
   it("toggles on Enter and Space, not on other keys", () => {
-    const { collapser, button } = make();
+    const { button, collapsed } = make();
     const press = (key: string) => {
       const event = new KeyboardEvent("keydown", { key, cancelable: true });
       button.dispatchEvent(event);
       return event.defaultPrevented;
     };
     expect(press("Enter")).toBe(true);
-    expect(collapser.collapsed).toBe(true);
+    expect(collapsed()).toBe(true);
     expect(press(" ")).toBe(true);
-    expect(collapser.collapsed).toBe(false);
+    expect(collapsed()).toBe(false);
     expect(press("a")).toBe(false);
-    expect(collapser.collapsed).toBe(false);
+    expect(collapsed()).toBe(false);
   });
 
-  it("uses custom texts", () => {
-    const { collapser, button } = make({
-      opened_text: "Less",
-      closed_text: "More",
-    });
+  it("uses custom texts, also from states", () => {
+    const closed_text = st.ok_w("More");
+    const { collapser, button } = make({ opened_text: "Less", closed_text });
     expect(button.textContent).toBe("Less");
-    collapser.collapsed = true;
+    collapser.set({ collapsed: true });
     expect(button.textContent).toBe("More");
+    closed_text.set_ok("Show");
+    expect(button.textContent).toBe("Show");
   });
 
   it("setting the same state again changes nothing", () => {
-    const { collapser, button } = make();
-    collapser.collapsed = false;
+    const { collapser, button, collapsed } = make();
+    collapser.set({ collapsed: false });
     expect(button.textContent).toBe("Collapse");
-    collapser.collapsed = true;
-    collapser.collapsed = true;
-    expect(collapser.classList.contains("collapsed")).toBe(true);
+    collapser.set({ collapsed: true });
+    collapser.set({ collapsed: true });
+    expect(collapsed()).toBe(true);
     expect(button.textContent).toBe("Expand");
   });
 
@@ -121,19 +132,10 @@ describe("Group collapser without animation", () => {
   it("shows the matching icon after toggling", () => {
     const { collapser, button } = make();
     expect(icon(button)).toBe(icon_name(material_unfold_less_rounded));
-    collapser.collapsed = true;
+    collapser.set({ collapsed: true });
     expect(icon(button)).toBe(icon_name(material_unfold_more_rounded));
-    collapser.collapsed = false;
+    collapser.set({ collapsed: false });
     expect(icon(button)).toBe(icon_name(material_unfold_less_rounded));
-  });
-
-  it("replaces the group", () => {
-    const { collapser, group } = make();
-    const other = form_group();
-    collapser.group = other;
-    expect(collapser.group).toBe(other);
-    expect(group.parentElement).toBeNull();
-    expect(collapser.firstElementChild).toBe(other);
   });
 });
 
@@ -145,13 +147,13 @@ describe("Group collapser with animation", () => {
   it("adds the collapsed class when the collapse animation ends", async () => {
     await ANIMATION_LEVEL.write(AnimationLevels.All);
     await ANIMATION_SPEED.write(100);
-    const { collapser } = make();
-    collapser.collapsed = true;
-    expect(collapser.collapsed).toBe(true);
-    expect(collapser.classList.contains("collapsed")).toBe(false);
+    const { collapser, button, collapsed } = make();
+    collapser.set({ collapsed: true });
+    expect(button.textContent).toBe("Expand");
+    expect(collapsed()).toBe(false);
     await wait(300);
-    expect(collapser.classList.contains("collapsed")).toBe(true);
-    collapser.collapsed = false;
-    expect(collapser.classList.contains("collapsed")).toBe(false);
+    expect(collapsed()).toBe(true);
+    collapser.set({ collapsed: false });
+    expect(collapsed()).toBe(false);
   });
 });

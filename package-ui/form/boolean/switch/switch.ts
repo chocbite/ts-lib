@@ -1,24 +1,32 @@
-import { define_element } from "#base";
+import { define_element, input_key, type InputOptions } from "#base";
 import type { Option } from "@chocbite/ts-lib/result";
+import type { StateOrVal } from "@chocbite/ts-lib/state";
 import type { SVGFunc } from "#svg";
-import { FormColors, FormValueWrite, FormValueWriteOptions } from "../../base";
+import {
+  FormColors,
+  FormValueWrite,
+  type FormValueCreateOptions,
+  type FormValueWriteOptions,
+} from "../../base";
 import "./switch.scss";
 
-export interface FormSwitchOptions<
-  ID extends string | undefined,
-> extends FormValueWriteOptions<boolean, ID> {
-  /**Icon to use for left side*/
-  icon?: SVGFunc;
-  /**Color when switch is on */
-  on_color?: FormColors;
-  /**Color when switch is off */
-  off_color?: FormColors;
-}
+/**Inputs of the switch*/
+const SWITCH = {
+  /**Icon at the left of the switch, undefined for none, an error shows none*/
+  icon: input_key<StateOrVal<SVGFunc | undefined>>(),
+  /**Color of the switch when on, None for the default, an error gives the default*/
+  on_color: input_key<StateOrVal<FormColors>>(),
+  /**Color of the switch when off, None for the default, an error gives the default*/
+  off_color: input_key<StateOrVal<FormColors>>(),
+};
+export type FormSwitchOptions = FormValueWriteOptions<boolean> &
+  InputOptions<typeof SWITCH>;
+export type FormSwitchCreateOptions<ID extends string | undefined> =
+  FormSwitchOptions & FormValueCreateOptions<ID>;
 
-export class FormSwitch<ID extends string | undefined> extends FormValueWrite<
-  boolean,
-  ID
-> {
+class FormSwitch<
+  ID extends string | undefined = string | undefined,
+> extends FormValueWrite<boolean, ID> {
   static element_name() {
     return "switch";
   }
@@ -30,8 +38,8 @@ export class FormSwitch<ID extends string | undefined> extends FormValueWrite<
   #icon: SVGSVGElement | undefined;
   #prevent_click: boolean = false;
 
-  constructor(id?: ID) {
-    super(id);
+  constructor() {
+    super();
 
     this.appendChild(this.warn_input);
     this.#switch.setAttribute("tabindex", "0");
@@ -104,23 +112,23 @@ export class FormSwitch<ID extends string | undefined> extends FormValueWrite<
     this.#switch.focus(options);
   }
 
-  /**Changes the icon of the switch*/
-  set icon(icon: SVGFunc | undefined) {
-    if (this.#icon) this.removeChild(this.#icon);
-    this.#icon = icon ? this.insertBefore(icon(), this.#switch) : undefined;
-  }
-
-  set on_color(color: FormColors) {
-    if (color === FormColors.None) this.#switch.removeAttribute("on-color");
-    else this.#switch.setAttribute("on-color", color);
-  }
-  set off_color(color: FormColors) {
-    if (color === FormColors.None) this.#switch.removeAttribute("off-color");
-    else this.#switch.setAttribute("off-color", color);
-  }
-  set error_color(color: FormColors) {
-    if (color === FormColors.None) this.#switch.removeAttribute("error-color");
-    else this.#switch.setAttribute("error-color", color);
+  set(options: FormSwitchOptions): this {
+    super.set(options);
+    this.set_input(SWITCH.icon, options.icon, (icon) => {
+      this.#icon?.remove();
+      this.#icon =
+        icon.ok && icon.value
+          ? this.insertBefore(icon.value(), this.#switch)
+          : undefined;
+    });
+    for (const name of ["on_color", "off_color"] as const)
+      this.set_input(SWITCH[name], options[name], (color) => {
+        const attribute = name.replace("_", "-");
+        if (color.ok && color.value !== FormColors.None)
+          this.#switch.setAttribute(attribute, color.value);
+        else this.#switch.removeAttribute(attribute);
+      });
+    return this;
   }
 
   /**Called when value is changed */
@@ -133,28 +141,16 @@ export class FormSwitch<ID extends string | undefined> extends FormValueWrite<
     this.new_value(false);
   }
 
-  protected new_error(_err: string): void {
-    this.#switch.classList.add("error");
-  }
-
-  protected clear_error(): void {
-    this.#switch.classList.remove("error");
-  }
-
   protected state_related(_related: Option<{}>): void {}
 }
 define_element(FormSwitch);
 
-/**Creates a switch form element */
-export function form_switch<ID extends string | undefined>(
-  options?: FormSwitchOptions<ID>,
+export type { FormSwitch };
+
+/**Creates a switch, the value is a boolean
+ * A fixed value is where it starts, a writable state is written when the user switches it, a read only state is only shown*/
+export function form_switch<ID extends string | undefined = undefined>(
+  options: FormSwitchCreateOptions<ID> = {},
 ): FormSwitch<ID> {
-  const swit = new FormSwitch<ID>(options?.id);
-  if (options) {
-    if (options.icon) swit.icon = options.icon;
-    if (options.on_color) swit.on_color = options.on_color;
-    if (options.off_color) swit.off_color = options.off_color;
-    FormValueWrite.apply_options(swit, options);
-  }
-  return swit;
+  return FormSwitch.create(options) as FormSwitch<ID>;
 }

@@ -1,6 +1,12 @@
-import { AccessTypes } from "#base";
+import { AccessTypes, input_key, type InputOptions } from "#base";
 import { err, ok, Option, Result } from "@chocbite/ts-lib/result";
-import { FormElement, FormValue, FormValueWrite } from "../base";
+import type { StateOrVal } from "@chocbite/ts-lib/state";
+import {
+  FormElement,
+  FormValue,
+  FormValueWrite,
+  type FormValueWriteOptions,
+} from "../base";
 import "./group_base.scss";
 
 /**Different border styles for the component group*/
@@ -17,7 +23,8 @@ export type GroupExtractVals<Arr extends any[]> = Arr extends [
   infer Head,
   ...infer Tail,
 ]
-  ? Head extends FormValue<infer T, infer ID>
+  ? //Only elements the user changes are collected by the group, like at runtime
+    Head extends FormValueWrite<infer T, infer ID>
     ? [FormValue<T, ID>, ...GroupExtractVals<Tail>]
     : [...GroupExtractVals<Tail>]
   : [];
@@ -37,6 +44,22 @@ export type GroupValueElements<Elements extends FormElement[]> = {
       : never
     : never]: Element;
 };
+
+/**Inputs of groups*/
+const GROUP_BASE = {
+  /**Border around the group, none by default*/
+  border: input_key<StateOrVal<FormGroupBorderStyle>>(),
+  /**Removes the padding, so groups in groups do not build up padding*/
+  embed: input_key<StateOrVal<boolean>>(),
+  /**Highest height in rem, it scrolls beyond, 0 for no limit*/
+  max_height: input_key<StateOrVal<number>>(),
+};
+/**Options of a group with values RT
+ * The value of a group is the values of its elements by id, a value given to the group is given to each element as its own*/
+export type FormGroupBaseOptions<RT extends object> = FormValueWriteOptions<
+  Partial<RT>
+> &
+  InputOptions<typeof GROUP_BASE>;
 
 export abstract class FormGroupBase<
   RT extends object,
@@ -59,35 +82,30 @@ export abstract class FormGroupBase<
     ) as unknown as GroupValueElements<Elements>;
   }
 
-  /**This places the group at an absolute position in one of the corners of the container*/
-  set border(border: FormGroupBorderStyle | undefined) {
-    this.classList.remove(
-      FormGroupBorderStyle.Inset,
-      FormGroupBorderStyle.Outset,
-      FormGroupBorderStyle.Line,
-    );
-    if (border && border !== FormGroupBorderStyle.None)
-      this.classList.add(border);
-  }
-
-  set max_height(height: number | undefined) {
-    this.style.setProperty("--max_height", height ? height + "rem" : "none");
-    if (height) this.classList.add("max_height");
-    else this.classList.remove("max_height");
-  }
-
-  set embed(embed: boolean) {
-    if (embed) this.classList.add("embed");
-    else this.classList.remove("embed");
-  }
-
-  set value(val: Partial<RT>) {
-    super.value = val;
+  set(options: FormGroupBaseOptions<RT>): this {
+    super.set(options);
+    this.set_input(GROUP_BASE.border, options.border, (border) => {
+      this.classList.remove(
+        FormGroupBorderStyle.Inset,
+        FormGroupBorderStyle.Outset,
+        FormGroupBorderStyle.Line,
+      );
+      if (border.ok && border.value !== FormGroupBorderStyle.None)
+        this.classList.add(border.value);
+    });
+    this.set_input(GROUP_BASE.max_height, options.max_height, (height) => {
+      const max = height.ok ? height.value : 0;
+      this.style.setProperty("--max_height", max ? max + "rem" : "none");
+      this.classList.toggle("max_height", max > 0);
+    });
+    this.set_input(GROUP_BASE.embed, options.embed, (embed) => {
+      this.classList.toggle("embed", embed.ok && embed.value);
+    });
+    return this;
   }
 
   /**Returns value of the group, returning err if any component has no value*/
   get get_value(): Result<RT, string> {
-    if (this._state) return err("State based component");
     const result: RT = {} as RT;
     for (const [key, comp] of this._value_elements) {
       const val = comp.get_value;
@@ -99,7 +117,6 @@ export abstract class FormGroupBase<
 
   /**Returns partial value of the group, containing all values of components that have values*/
   get value_partial(): Result<Partial<RT>, string> {
-    if (this._state) return err("State based component");
     return ok(this.#partial());
   }
 
@@ -121,7 +138,6 @@ export abstract class FormGroupBase<
 
   /**Returns partial value of the group, only containing values of components where value has changed*/
   get value_changed(): Result<Partial<RT>, string> {
-    if (this._state) return err("State based component");
     const result: Partial<RT> = {};
     for (const [key, comp] of this._value_elements) {
       const val = comp.get_value;
@@ -131,21 +147,15 @@ export abstract class FormGroupBase<
     return ok(result);
   }
 
+  /**Gives each element its value from the value of the group, as a fixed value it starts from*/
   protected new_value(val: RT): void {
     for (const key in val)
-      if (this._value_elements.has(key))
-        this._value_elements.get(key)!.value = val[key as keyof RT];
+      this._value_elements.get(key)?.set({ value: val[key as keyof RT] });
   }
 
   protected clear_value(): void {
     for (const comp of this._value_elements.values()) comp.clear();
   }
-
-  protected new_error(err: string): void {
-    console.error(err);
-  }
-
-  protected clear_error(): void {}
 
   protected state_related(_related: Option<{}>): void {}
 

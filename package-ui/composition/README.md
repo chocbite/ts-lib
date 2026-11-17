@@ -115,7 +115,7 @@ const panel = comp.panel(report, { x, y, width: 30 });
 | `titlebar`   | Whether the title bar is shown, true by default. Without it the panel can not be moved by the user.                               |
 | `layer`      | Panels in a higher layer are always above those in a lower one. Within a layer the panel the user worked in last is at the front. |
 
-`x`, `y`, `width`, `height` and `hidden` are changed by the user, by moving, sizing and auto hiding the panel. Each is changeable when it is a writable state, which the panel writes, or when it is not given, then the panel keeps it itself. A fixed value can not be changed, so `x: 4` with a state for `y` moves only up and down. A panel without a position starts centered.
+`x`, `y`, `width`, `height` and `hidden` are changed by the user, by moving, sizing and auto hiding the panel. A fixed value is where the panel starts, and the panel keeps the user's changes itself. A writable state is written by the panel. A read only state can not be changed, so `x: state.ok(4)` moves only up and down. A panel without a position starts centered.
 
 The position is kept as given, the panel only shows it clamped so its title bar stays on the page. When the window gets smaller and then bigger again, or the scale changes, the panel goes back to where it was.
 
@@ -136,7 +136,7 @@ const settings = comp.attach_customization_panel_to_element(
 settings.content.set({
   main: [
     form.text({ text: "Units" }),
-    form.toggle_button().bind({ value: units }),
+    form.toggle_button({ value: units }),
   ],
 });
 ```

@@ -52,28 +52,26 @@ describe("Text multiline options", () => {
   });
 
   it("applies placeholder, max length and max bytes", () => {
-    const { element, area } = make({
+    const { area, before_input } = make({
       placeholder: "Notes",
       max_length: 10,
-      max_bytes: 20,
+      max_bytes: 3,
     });
-    expect(element.placeholder).toBe("Notes");
     expect(area.placeholder).toBe("Notes");
-    expect(element.max_length).toBe(10);
     expect(area.maxLength).toBe(10);
-    expect(element.max_bytes).toBe(20);
+    //æ is two bytes
+    expect(before_input("ææ")).toBe(true);
   });
 
   it("applies the filter option", () => {
-    const filter = /^[0-9]+$/;
-    const element = form_text_multiline({ filter });
-    expect(element.filter).toBe(filter);
+    const { before_input } = make({ filter: /^[0-9]+$/ });
+    expect(before_input("a")).toBe(true);
+    expect(before_input("1")).toBe(false);
   });
 
-  it("max length can be removed again", () => {
+  it("max length can be removed again with 0", () => {
     const element = form_text_multiline({ max_length: 5 });
-    expect(() => (element.max_length = undefined)).not.toThrow();
-    expect(element.max_length).toBeUndefined();
+    element.set({ max_length: 0 });
     expect(element.querySelector("textarea")!.hasAttribute("maxlength")).toBe(
       false,
     );
@@ -187,7 +185,7 @@ describe("Text multiline user input", () => {
 
   it("blocks characters not matching the filter", () => {
     const { element, warn, before_input } = make();
-    element.filter = /^[0-9]+$/;
+    element.set({ filter: /^[0-9]+$/ });
     expect(before_input("a")).toBe(true);
     expect(warn.validationMessage).toBe("Invalid character entered");
     expect(before_input("1")).toBe(false);
@@ -203,8 +201,7 @@ describe("Text multiline user input", () => {
   it("blocks typing beyond max length and max bytes", () => {
     const { before_input, element } = make({ max_length: 3, value: "abc" });
     expect(before_input("d")).toBe(true);
-    element.max_length = 10;
-    element.max_bytes = 4;
+    element.set({ max_length: 10, max_bytes: 4 });
     expect(before_input("æ")).toBe(true);
     expect(before_input("d")).toBe(false);
   });
@@ -240,7 +237,7 @@ describe("Text multiline state", () => {
   it("shows the state value and writes entered values", async () => {
     const state = st.ok_w("first");
     const { element, area, change, enter } = make();
-    element.bind({ value: state });
+    element.set({ value: state });
     expect(area.value).toBe("first");
     await enter("second");
     expect(state.ok()).toBe("second");
@@ -258,17 +255,17 @@ describe("Text multiline state", () => {
       }),
       true,
     );
-    const { element, area } = make();
-    element.bind({ value: state });
-    expect(element.max_length).toBe(5);
+    const { element, area, before_input } = make();
+    element.set({ value: state });
     expect(area.maxLength).toBe(5);
-    expect(element.max_bytes).toBe(9);
+    area.value = "";
+    expect(before_input("æææææ")).toBe(true);
   });
 
   it("shows a state change made while focused once the focus leaves", async () => {
     const state = st.ok_w("first");
     const { element, area } = make();
-    element.bind({ value: state });
+    element.set({ value: state });
     area.focus();
     state.set_ok("second");
     await wait();

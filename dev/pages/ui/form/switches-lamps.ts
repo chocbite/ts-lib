@@ -9,7 +9,7 @@ import {
 } from "@chocbite/ts-lib-ui/icons";
 import { err, ok } from "@chocbite/ts-lib/result";
 import state, { type State } from "@chocbite/ts-lib/state";
-import { box, controls, row, section, demo_error } from "../../../helpers";
+import { box, controls, demo_error, row, section } from "../../../helpers";
 
 /**Shows the current value of a state as text and follows it*/
 function readout<T>(parent: HTMLElement, label: string, value: State<T>) {
@@ -47,7 +47,9 @@ const WIDTH = { width: "14rem" };
   for (const width of ["4rem", "10rem", "20rem"]) {
     const r = spaced_row(sec);
     box(r, width + ", off", { width }).appendChild(form.switch());
-    box(r, width + ", on", { width }).appendChild(form.switch({ value: true }));
+    box(r, width + ", on", { width }).appendChild(
+      form.switch({ value: true }),
+    );
     box(r, width + ", icon", { width }).appendChild(
       form.switch({ icon: material_wifi_rounded, value: true }),
     );
@@ -68,10 +70,18 @@ const WIDTH = { width: "14rem" };
   const off = spaced_row(sec);
   for (const [name, color] of COLORS) {
     box(on, "on_color " + name, { width: "9rem" }).appendChild(
-      form.switch({ on_color: color, value: true, icon: material_bolt_rounded }),
+      form.switch({
+        on_color: color,
+        value: true,
+        icon: material_bolt_rounded,
+      }),
     );
     box(off, "off_color " + name, { width: "9rem" }).appendChild(
-      form.switch({ off_color: color, value: false, icon: material_bolt_rounded }),
+      form.switch({
+        off_color: color,
+        value: false,
+        icon: material_bolt_rounded,
+      }),
     );
   }
   const both = spaced_row(sec);
@@ -95,7 +105,7 @@ const WIDTH = { width: "14rem" };
 {
   const sec = section(
     "Switch bound to states, errors and access",
-    "All switches share one state. Set error puts it in error, the switch shows its error look, the error_color one (yellow) is only settable through opts. The rejecting one writes to a state that refuses every write",
+    "All switches share one state given as value. Set error puts it in error, the switch shows the fault icon, click it for the details. The rejecting one writes to a state that refuses every write. A fixed value is the switch's own, it toggles without writing anything. A read only state is only shown, clicking it warns",
   );
   const shared = state.from_w(false);
   const access = state.ok_w<AccessTypes>("w");
@@ -109,37 +119,37 @@ const WIDTH = { width: "14rem" };
   });
   const r = spaced_row(sec);
   const a = box(r, "bound", WIDTH);
-  a.appendChild(form.switch({ icon: material_wifi_rounded }).bind({ value: shared }));
+  a.appendChild(form.switch({ icon: material_wifi_rounded, value: shared }));
   readout(a, "state", shared);
-  box(r, "bound, error_color yellow", WIDTH).appendChild(
-    form
-      .switch({ icon: material_wifi_rounded })
-      .opts({ error_color: FormColors.Yellow })
-      .bind({ value: shared }),
-  );
   const s = box(r, "bound, access from state", WIDTH);
   s.appendChild(
-    form
-      .switch({ icon: material_wifi_rounded })
-      .set({ access })
-      .bind({ value: shared }),
+    form.switch({ icon: material_wifi_rounded, access, value: shared }),
   );
   readout(s, "access", access);
   box(r, "starts in error", WIDTH).appendChild(
-    form
-      .switch({ icon: material_warning_rounded })
-      .bind({ value: state.err_w<boolean>(demo_error("Never had a value")) }),
+    form.switch({
+      icon: material_warning_rounded,
+      value: state.err_w<boolean>(demo_error("Never had a value")),
+    }),
   );
-  const rejecting = state.rosw(ok(false), async () => err(demo_error("Rejected", "Not allowed")));
+  const rejecting = state.rosw(ok(false), async () =>
+    err(demo_error("Rejected", "Not allowed")),
+  );
   box(r, "state rejects writes", WIDTH).appendChild(
-    form.switch().bind({ value: rejecting }),
+    form.switch({ value: rejecting }),
   );
   const fixed = spaced_row(sec);
-  box(fixed, "read, on", WIDTH).appendChild(
-    form.switch({ value: true }).set({ access: "r" }),
+  box(fixed, "fixed value, its own", WIDTH).appendChild(
+    form.switch({ value: true }),
   );
-  box(fixed, "read, off", WIDTH).appendChild(
-    form.switch({ value: false }).set({ access: "r" }),
+  box(fixed, "read only state", WIDTH).appendChild(
+    form.switch({ value: shared.read_only }),
+  );
+  box(fixed, "access read, on", WIDTH).appendChild(
+    form.switch({ value: true, access: "r" }),
+  );
+  box(fixed, "access read, off", WIDTH).appendChild(
+    form.switch({ value: false, access: "r" }),
   );
   box(fixed, "description (hover)", WIDTH).appendChild(
     form.switch({ description: "Turns the radio on and off" }),
@@ -166,7 +176,12 @@ const WIDTH = { width: "14rem" };
     form.lamp({ icon: material_bolt_rounded, colors, value: true }),
   );
   box(r, "icon + text", WIDTH).appendChild(
-    form.lamp({ text: "Running", icon: material_bolt_rounded, colors, value: true }),
+    form.lamp({
+      text: "Running",
+      icon: material_bolt_rounded,
+      colors,
+      value: true,
+    }),
   );
   box(r, "nothing", WIDTH).appendChild(form.lamp({ colors, value: true }));
   const c = spaced_row(sec);
@@ -174,7 +189,12 @@ const WIDTH = { width: "14rem" };
     form.lamp({ text: "Running", colors, value: true, center: true }),
   );
   box(c, "center, icon", WIDTH).appendChild(
-    form.lamp({ icon: material_bolt_rounded, colors, value: true, center: true }),
+    form.lamp({
+      icon: material_bolt_rounded,
+      colors,
+      value: true,
+      center: true,
+    }),
   );
   box(c, "center, icon + text", WIDTH).appendChild(
     form.lamp({
@@ -236,7 +256,11 @@ const WIDTH = { width: "14rem" };
   });
   const r = spaced_row(sec);
   const b = box(r, "boolean, switch drives it", WIDTH);
-  b.appendChild(form.switch({ icon: material_power_settings_new_rounded }).bind({ value: on }));
+  b.appendChild(
+    form
+      .switch({ icon: material_power_settings_new_rounded })
+      .set({ value: on }),
+  );
   b.appendChild(
     form
       .lamp({
@@ -244,7 +268,7 @@ const WIDTH = { width: "14rem" };
         icon: material_power_settings_new_rounded,
         colors: [FormColors.Red, FormColors.Green],
       })
-      .bind({ value: on }),
+      .set({ value: on }),
   );
   const n = box(r, "number, 4 colors", WIDTH);
   n.appendChild(
@@ -259,13 +283,13 @@ const WIDTH = { width: "14rem" };
           FormColors.Red,
         ],
       })
-      .bind({ value: level }),
+      .set({ value: level }),
   );
   readout(n, "level", level);
   box(r, "read access", WIDTH).appendChild(
     form
       .lamp({ text: "Read access", colors: [FormColors.None, FormColors.Blue] })
       .set({ access: "r" })
-      .bind({ value: on }),
+      .set({ value: on }),
   );
 }

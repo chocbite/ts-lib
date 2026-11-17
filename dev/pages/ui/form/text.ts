@@ -108,7 +108,7 @@ const SAMPLES = ["", "Short", "Æble på dansk, ½ € and 漢字", LONG];
     const value = state.ok_w("");
     const b = box(r, label, WIDTH);
     b.appendChild(
-      form.text_input({ ...opts, placeholder: label }).bind({ value }),
+      form.text_input({ ...opts, placeholder: label }).set({ value }),
     );
     readout(b, "state", value);
   }
@@ -138,16 +138,16 @@ const SAMPLES = ["", "Short", "Æble på dansk, ½ € and 漢字", LONG];
   });
   const r = spaced_row(sec);
   const a = box(r, "shared", WIDTH);
-  a.appendChild(form.text_input().bind({ value: shared }));
+  a.appendChild(form.text_input().set({ value: shared }));
   readout(a, "state", shared);
   box(r, "shared", WIDTH).appendChild(
-    form.text_input({ placeholder: "Empty" }).bind({ value: shared }),
+    form.text_input({ placeholder: "Empty" }).set({ value: shared }),
   );
   box(r, "shared, access from state", WIDTH).appendChild(
-    form.text_input().set({ access }).bind({ value: shared }),
+    form.text_input().set({ access }).set({ value: shared }),
   );
   const h = box(r, "string helper max_length", WIDTH);
-  h.appendChild(form.text_input().bind({ value: helped }));
+  h.appendChild(form.text_input().set({ value: helped }));
   readout(h, "state", helped);
   readout(h, "max_length", max_length);
   const d = spaced_row(sec);
@@ -222,12 +222,12 @@ const SAMPLES = ["", "Short", "Æble på dansk, ½ € and 漢字", LONG];
   );
   const s = spaced_row(sec);
   const a = box(s, "multi line, shared", WIDTH);
-  a.appendChild(form.text_multiline().bind({ value: shared }));
+  a.appendChild(form.text_multiline().set({ value: shared }));
   readout(a, "state", shared);
   box(s, "single line, shared", WIDTH).appendChild(
-    form.text_input().bind({ value: shared }),
+    form.text_input().set({ value: shared }),
   );
   box(s, "multi line, read access", WIDTH).appendChild(
-    form.text_multiline().set({ access: "r" }).bind({ value: shared }),
+    form.text_multiline().set({ access: "r" }).set({ value: shared }),
   );
 }

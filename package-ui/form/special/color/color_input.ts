@@ -1,20 +1,27 @@
-import { define_element } from "#base";
+import { define_element, input_key, type InputOptions } from "#base";
 import type { Option } from "@chocbite/ts-lib/result";
-import { FormValueWrite, FormValueWriteOptions } from "../../base";
+import type { StateOrVal } from "@chocbite/ts-lib/state";
+import {
+  FormValueWrite,
+  type FormValueCreateOptions,
+  type FormValueWriteOptions,
+} from "../../base";
 import "./color_input.scss";
 
-export interface FormColorOptions<
-  ID extends string | undefined,
-  RT = string,
-> extends FormValueWriteOptions<RT, ID> {
-  /**Whether the color input should update live*/
-  live?: boolean;
-}
+/**Inputs of the color input*/
+const COLOR = {
+  /**True writes the color while the user picks it, false only when the picker closes*/
+  live: input_key<StateOrVal<boolean>>(),
+};
+export type FormColorOptions = FormValueWriteOptions<string> &
+  InputOptions<typeof COLOR>;
+export type FormColorCreateOptions<ID extends string | undefined> =
+  FormColorOptions & FormValueCreateOptions<ID>;
 
-export class FormColor<ID extends string | undefined> extends FormValueWrite<
-  string,
-  ID
-> {
+/**Color input, the value is a hex color like #ff8800*/
+class FormColor<
+  ID extends string | undefined = string | undefined,
+> extends FormValueWrite<string, ID> {
   static element_name() {
     return "colorinput";
   }
@@ -24,8 +31,8 @@ export class FormColor<ID extends string | undefined> extends FormValueWrite<
 
   #live: boolean = false;
 
-  constructor(id?: ID) {
-    super(id);
+  constructor() {
+    super();
     this.appendChild(this.warn_input);
     this.warn_input.type = "color";
     this.warn_input.oninput = () => {
@@ -36,11 +43,12 @@ export class FormColor<ID extends string | undefined> extends FormValueWrite<
     };
   }
 
-  set live(val: boolean) {
-    this.#live = val;
-  }
-  get live(): boolean {
-    return this.#live;
+  set(options: FormColorOptions): this {
+    super.set(options);
+    this.set_input(COLOR.live, options.live, (live) => {
+      this.#live = live.ok && live.value;
+    });
+    return this;
   }
 
   protected new_value(val: string): void {
@@ -51,22 +59,15 @@ export class FormColor<ID extends string | undefined> extends FormValueWrite<
     this.warn_input.value = "#000000";
   }
 
-  protected new_error(_val: string): void {}
-
-  protected clear_error(): void {}
-
   protected state_related(_related: Option<{}>): void {}
 }
 define_element(FormColor);
 
-/**Creates a color input form element */
-export function form_color<ID extends string | undefined>(
-  options?: FormColorOptions<ID, string>,
+export type { FormColor };
+
+/**Creates a color input, the value is a hex color like #ff8800*/
+export function form_color<ID extends string | undefined = undefined>(
+  options: FormColorCreateOptions<ID> = {},
 ): FormColor<ID> {
-  const input = new FormColor<ID>(options?.id);
-  if (options) {
-    if (options.live) input.live = options.live;
-    FormValueWrite.apply_options(input, options);
-  }
-  return input;
+  return FormColor.create(options) as FormColor<ID>;
 }

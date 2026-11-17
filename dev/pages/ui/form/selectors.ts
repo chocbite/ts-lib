@@ -175,27 +175,27 @@ const MIXED: FormSelections<number> = [
     form
       .toggle_button({ selections: numbered(5, true) })
       .set({ access })
-      .bind({ value: shared }),
+      .set({ value: shared }),
   );
   readout(t, "state", shared);
   box(r, "dropdown, access from state", WIDTH).appendChild(
     form
       .dropdown({ selections: numbered(5, true) })
       .set({ access })
-      .bind({ value: shared }),
+      .set({ value: shared }),
   );
   const j = spaced_row(sec);
   const jt = box(j, "toggle, rejects option 3", WIDTH);
   jt.appendChild(
     form
       .toggle_button({ selections: numbered(4, false) })
-      .bind({ value: rejecting }),
+      .set({ value: rejecting }),
   );
   readout(jt, "state", rejecting);
   box(j, "dropdown, rejects option 3", WIDTH).appendChild(
     form
       .dropdown({ selections: numbered(4, false) })
-      .bind({ value: rejecting }),
+      .set({ value: rejecting }),
   );
   const changes = box(j, "unbound, change listener", WIDTH);
   const line = document.createElement("div");
@@ -241,9 +241,9 @@ const MIXED: FormSelections<number> = [
   });
   const r = spaced_row(sec);
   const t = box(r, "toggle", WIDTH);
-  t.appendChild(form.toggle_button().bind({ value: mode }));
+  t.appendChild(form.toggle_button().set({ value: mode }));
   readout(t, "state", mode);
-  box(r, "dropdown", WIDTH).appendChild(form.dropdown().bind({ value: mode }));
+  box(r, "dropdown", WIDTH).appendChild(form.dropdown().set({ value: mode }));
 }
 
 {

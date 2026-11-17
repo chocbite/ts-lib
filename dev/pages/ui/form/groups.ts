@@ -250,14 +250,16 @@ const content = (name: string) => [
       form.group_collapser(form.group({ border, elements: content(border) })),
     );
   const t = spaced_row(sec);
+  //The buttons and the collapser share a writable state, either changes it
+  const collapsed = state.ok_w(false);
   const collapser = form.group_collapser(
     form.group({ border: "outset", max_height: 8, elements: [...content("Scrolls"), ...content("More")] }),
-    { closed_text: "Toggled by the buttons" },
+    { closed_text: "Toggled by the buttons", collapsed },
   );
   const tb = box(t, "toggled from outside, max_height 8", WIDTH);
   controls(tb, {
-    Collapse: () => (collapser.collapsed = true),
-    Open: () => (collapser.collapsed = false),
+    Collapse: () => collapsed.set_ok(true),
+    Open: () => collapsed.set_ok(false),
   });
   tb.appendChild(collapser);
 }
@@ -316,14 +318,16 @@ const content = (name: string) => [
     "Print partial": () => print(group.value_partial),
     "Print changed": () => print(group.value_changed),
     "Set value": () =>
-      (group.value = {
-        name: "Pump 2",
-        enabled: true,
-        speed: 75,
-        mode: "manual",
-        run: false,
+      group.set({
+        value: {
+          name: "Pump 2",
+          enabled: true,
+          speed: 75,
+          mode: "manual",
+          run: false,
+        },
       }),
-    "Set speed only": () => (group.value = { speed: 10 }),
+    "Set speed only": () => group.set({ value: { speed: 10 } }),
     Clear: () => group.clear(),
   });
   controls(b, {

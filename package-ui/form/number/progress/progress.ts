@@ -1,14 +1,39 @@
-import { define_element } from "#base";
-import { none } from "@chocbite/ts-lib/result";
-import type { StateNumberRelated } from "@chocbite/ts-lib/state";
-import { FormValue } from "../../base";
-import { type FormNumberOptions } from "../number_base";
+import { define_element, input_key, type InputOptions } from "#base";
+import type { StateNumberRelated, StateOrVal } from "@chocbite/ts-lib/state";
+import {
+  FormSetting,
+  FormValue,
+  type FormValueCreateOptions,
+  type FormValueOptions,
+} from "../../base";
 import "./progress.scss";
 
-export class FormProgress<ID extends string | undefined> extends FormValue<
-  number,
-  ID
-> {
+/**Inputs of the progress bar, not given the related value of the value state is used*/
+const PROGRESS = {
+  /**Value of an empty bar, 0 by default*/
+  min: input_key<StateOrVal<number>>(),
+  /**Value of a full bar, 100 by default*/
+  max: input_key<StateOrVal<number>>(),
+  /**Decimals shown, 0 by default*/
+  decimals: input_key<StateOrVal<number>>(),
+  /**Unit shown after the value*/
+  unit: input_key<StateOrVal<string>>(),
+};
+const PROGRESS_RELATED = {
+  min: input_key<StateOrVal<number | null>>(),
+  max: input_key<StateOrVal<number | null>>(),
+  decimals: input_key<StateOrVal<number | null>>(),
+  unit: input_key<StateOrVal<string | null>>(),
+};
+export type FormProgressOptions = FormValueOptions<number> &
+  InputOptions<typeof PROGRESS>;
+export type FormProgressCreateOptions<ID extends string | undefined> =
+  FormProgressOptions & FormValueCreateOptions<ID>;
+
+/**Progress bar showing a number, only shows, the user can not change it*/
+class FormProgress<
+  ID extends string | undefined = string | undefined,
+> extends FormValue<number, ID> {
   static element_name() {
     return "progress";
   }
@@ -16,37 +41,43 @@ export class FormProgress<ID extends string | undefined> extends FormValue<
     return "form";
   }
 
-  #min: number = 0;
-  #max: number = 100;
-  #span: number = 100;
-  #decimals: number = 0;
+  #min_value: number = 0;
+  #max_value: number = 100;
+  #decimals_value: number = 0;
   #bar: HTMLDivElement = this.appendChild(document.createElement("div"));
   #val: HTMLSpanElement = this.appendChild(document.createElement("span"));
-  #unit: HTMLSpanElement = this.appendChild(document.createElement("span"));
-
-  /**Set the minimum value*/
-  set min(min: number) {
-    this.#min = min;
-    this.#span = this.#max - this.#min;
+  #unit_box: HTMLSpanElement = this.appendChild(document.createElement("span"));
+  #min = new FormSetting<number>((min) => {
+    this.#min_value = min ?? 0;
     this.#redraw();
-  }
-
-  /**Set the minimum value*/
-  set max(max: number) {
-    this.#max = max;
-    this.#span = this.#max - this.#min;
+  });
+  #max = new FormSetting<number>((max) => {
+    this.#max_value = max ?? 100;
     this.#redraw();
-  }
-
-  /**Sets the amount of decimals the element can have*/
-  set decimals(dec: number | undefined) {
-    this.#decimals = Math.max(dec ?? 0, 0);
+  });
+  #decimals = new FormSetting<number>((dec) => {
+    this.#decimals_value = Math.max(dec ?? 0, 0);
     this.#redraw();
-  }
+  });
+  #unit = new FormSetting<string>((unit) => {
+    this.#unit_box.textContent = unit ?? "";
+  });
 
-  /**Sets the unit of the element*/
-  set unit(unit: string | undefined) {
-    this.#unit.textContent = unit ?? "";
+  set(options: FormProgressOptions): this {
+    super.set(options);
+    this.set_input(PROGRESS.min, options.min, (r) =>
+      this.#min.input(r.ok ? r.value : undefined),
+    );
+    this.set_input(PROGRESS.max, options.max, (r) =>
+      this.#max.input(r.ok ? r.value : undefined),
+    );
+    this.set_input(PROGRESS.decimals, options.decimals, (r) =>
+      this.#decimals.input(r.ok ? r.value : undefined),
+    );
+    this.set_input(PROGRESS.unit, options.unit, (r) =>
+      this.#unit.input(r.ok ? r.value : undefined),
+    );
+    return this;
   }
 
   /**Shows the value again, after a change to how it is shown*/
@@ -55,10 +86,11 @@ export class FormProgress<ID extends string | undefined> extends FormValue<
   }
 
   protected new_value(value: number): void {
+    const span = this.#max_value - this.#min_value;
     this.#bar.style.width =
-      Math.min(Math.max(((value - this.#min) / this.#span) * 100, 0), 100) +
+      Math.min(Math.max(((value - this.#min_value) / span) * 100, 0), 100) +
       "%";
-    this.#val.textContent = value.toFixed(this.#decimals);
+    this.#val.textContent = value.toFixed(this.#decimals_value);
   }
 
   protected clear_value(): void {
@@ -66,46 +98,28 @@ export class FormProgress<ID extends string | undefined> extends FormValue<
     this.#val.textContent = "";
   }
 
-  protected new_error(err: string): void {
-    console.error(err);
-  }
-
-  protected clear_error(): void {}
-
-  /**Related states of the last bound state, a prop is only reset when it followed one of them*/
-  #related: Partial<StateNumberRelated> = {};
-
   protected state_related(related: Partial<StateNumberRelated>): void {
-    const old = this.#related;
-    this.#related = related;
-    if (related.min)
-      this.attach_state_to_prop("min", related.min, () => none());
-    else if (old.min) this.detach_state_from_prop("min").min = 0;
-    if (related.max)
-      this.attach_state_to_prop("max", related.max, () => none());
-    else if (old.max) this.detach_state_from_prop("max").max = 100;
-    if (related.decimals)
-      this.attach_state_to_prop("decimals", related.decimals, () => none());
-    else if (old.decimals)
-      this.detach_state_from_prop("decimals").decimals = undefined;
-    if (related.unit)
-      this.attach_state_to_prop("unit", related.unit, () => none());
-    else if (old.unit) this.detach_state_from_prop("unit").unit = undefined;
+    this.follow_related(PROGRESS_RELATED.min, related.min, (v) =>
+      this.#min.related(v),
+    );
+    this.follow_related(PROGRESS_RELATED.max, related.max, (v) =>
+      this.#max.related(v),
+    );
+    this.follow_related(PROGRESS_RELATED.decimals, related.decimals, (v) =>
+      this.#decimals.related(v),
+    );
+    this.follow_related(PROGRESS_RELATED.unit, related.unit, (v) =>
+      this.#unit.related(v),
+    );
   }
 }
 define_element(FormProgress);
 
-/**Creates a progress form element */
-export function form_progress<ID extends string | undefined>(
-  options?: FormNumberOptions<ID>,
+export type { FormProgress };
+
+/**Creates a progress bar showing a number*/
+export function form_progress<ID extends string | undefined = undefined>(
+  options: FormProgressCreateOptions<ID> = {},
 ): FormProgress<ID> {
-  const prog = new FormProgress<ID>(options?.id);
-  if (options) {
-    if (typeof options.min !== "undefined") prog.min = options.min;
-    if (typeof options.max !== "undefined") prog.max = options.max;
-    prog.decimals = options.decimals;
-    prog.unit = options.unit;
-    FormValue.apply_options(prog, options);
-  }
-  return prog;
+  return FormProgress.create(options) as FormProgress<ID>;
 }

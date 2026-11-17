@@ -13,14 +13,14 @@ import {
   type ResultNice,
 } from "@chocbite/ts-lib/result";
 import {
-  FormNumberWrite,
-  number_decimals,
-  type FormNumberWriteOptions,
+  FormNumberWrite, number_decimals,
+  type FormNumberCreateOptions,
 } from "../number_base";
 import "./number_input.scss";
 
-export class FormNumberInput<
-  ID extends string | undefined,
+/**Number input, typed values and arrow up and down steps*/
+class FormNumberInput<
+  ID extends string | undefined = string | undefined,
 > extends FormNumberWrite<ID> {
   static element_name() {
     return "numberinput";
@@ -46,8 +46,8 @@ export class FormNumberInput<
   #max_legend = this.#legend.appendChild(document.createElement("span"));
   #min_legend = this.#legend.appendChild(document.createElement("span"));
 
-  constructor(id?: ID) {
-    super(id);
+  constructor() {
+    super();
     this.appendChild(this.warn_input);
     this.#value_box.contentEditable = "true";
     this.onpointerdown = (e) => {
@@ -119,12 +119,12 @@ export class FormNumberInput<
     this.#value_box.focus(options);
   }
 
-  set unit(unit: string | undefined) {
+  protected apply_unit(unit: string | undefined): void {
     this.#unit = unit || "";
     this.#unit_box.textContent = this.#unit;
   }
 
-  set decimals(dec: number | undefined) {
+  protected apply_decimals(dec: number | undefined): void {
     this.#decimals_set = dec;
     this.#update_decimals();
   }
@@ -140,7 +140,7 @@ export class FormNumberInput<
       this.new_value(this.buffer);
   }
 
-  set min(min: number | undefined) {
+  protected apply_min(min: number | undefined): void {
     this.#min = min ?? -Infinity;
     this.#update_min_legend();
   }
@@ -149,7 +149,7 @@ export class FormNumberInput<
       this.#min === -Infinity ? "" : "Min:" + this.#min.toFixed(this.#decimals);
   }
 
-  set max(max: number | undefined) {
+  protected apply_max(max: number | undefined): void {
     this.#max = max ?? Infinity;
     this.#update_max_lengend();
   }
@@ -158,12 +158,12 @@ export class FormNumberInput<
       this.#max === Infinity ? "" : "Max:" + this.#max.toFixed(this.#decimals);
   }
 
-  set step(step: number | undefined) {
+  protected apply_step(step: number | undefined): void {
     this.#step = step || 0;
     this.#update_decimals();
   }
 
-  set start(step: number | undefined) {
+  protected apply_start(step: number | undefined): void {
     this.#start = step || 0;
     this.#update_decimals();
   }
@@ -177,10 +177,6 @@ export class FormNumberInput<
     this.#value_box.textContent = this.#shown = "";
     this.#edited = false;
   }
-
-  protected new_error(_val: string): void {}
-
-  protected clear_error(): void {}
 
   protected limit_value(val: number): PromiseLike<ResultNice<number>> {
     let lim = number_step_start_decimal(
@@ -226,13 +222,11 @@ export class FormNumberInput<
 }
 define_element(FormNumberInput);
 
-/**Creates a number input form element */
-export function form_number_input<ID extends string | undefined>(
-  options?: FormNumberWriteOptions<ID>,
+export type { FormNumberInput };
+
+/**Creates a number input, typed values and arrow up and down steps*/
+export function form_number_input<ID extends string | undefined = undefined>(
+  options: FormNumberCreateOptions<ID> = {},
 ): FormNumberInput<ID> {
-  const input = new FormNumberInput<ID>(options?.id);
-  if (options) {
-    FormNumberWrite.apply_options(input, options);
-  }
-  return input;
+  return FormNumberInput.create(options) as FormNumberInput<ID>;
 }

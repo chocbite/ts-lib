@@ -44,7 +44,7 @@ describe("Selector state list", () => {
     const { state } = make_enum();
     const element = form_toggle_button<Fruit, undefined>();
     document.body.appendChild(element);
-    element.bind({ value: state });
+    element.set({ value: state });
     expect(texts(element)).toEqual(["Apple", "Pear"]);
     expect(element.querySelector("svg")).not.toBeNull();
     expect(selected(element)).toBe(1);
@@ -54,7 +54,7 @@ describe("Selector state list", () => {
     const { state, list } = make_enum();
     const element = form_toggle_button<Fruit, undefined>();
     document.body.appendChild(element);
-    element.bind({ value: state });
+    element.set({ value: state });
     list.set_ok({ apple: { name: "Green apple" }, pear: { name: "Pear" } });
     await wait();
     expect(texts(element)).toEqual(["Green apple", "Pear"]);
@@ -65,7 +65,7 @@ describe("Selector state list", () => {
     const { state } = make_enum();
     const element = form_toggle_button<Fruit, undefined>();
     document.body.appendChild(element);
-    element.bind({ value: state });
+    element.set({ value: state });
     (element.querySelector(":scope > div") as HTMLElement).click();
     await wait();
     expect(state.ok()).toBe("apple");
@@ -75,7 +75,7 @@ describe("Selector state list", () => {
     const { state } = make_enum();
     const element = form_dropdown<Fruit, undefined>();
     document.body.appendChild(element);
-    element.bind({ value: state });
+    element.set({ value: state });
     expect(element.textContent).toContain("Pear");
   });
 
@@ -86,7 +86,7 @@ describe("Selector state list", () => {
     const state = st.rosw(st.e.help(ok<"1" | "2">("2"), { list }), true);
     const element = form_toggle_button<"1" | "2", undefined>();
     document.body.appendChild(element);
-    element.bind({ value: state });
+    element.set({ value: state });
     expect(texts(element)).toEqual(["One", "Two"]);
     expect(selected(element)).toBe(1);
     (element.querySelector(":scope > div") as HTMLElement).click();
@@ -98,8 +98,8 @@ describe("Selector state list", () => {
     const { state, list } = make_enum();
     const element = form_toggle_button<Fruit, undefined>();
     document.body.appendChild(element);
-    element.bind({ value: state });
-    element.bind({ value: st.ok_w<Fruit>("apple") });
+    element.set({ value: state });
+    element.set({ value: st.ok_w<Fruit>("apple") });
     list.set_ok({ apple: { name: "Old list" }, pear: { name: "Pear" } });
     await wait();
     expect(texts(element)).not.toContain("Old list");

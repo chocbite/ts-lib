@@ -21,10 +21,11 @@ const make = (options: Parameters<typeof form_color>[0] = {}) => {
 describe("Color input", () => {
   afterEach(() => document.body.replaceChildren());
 
-  it("uses a color input and is not live by default", () => {
-    const { input, element } = make();
+  it("uses a color input and is not live by default", async () => {
+    const { input, change, pick } = make();
     expect(input.type).toBe("color");
-    expect(element.live).toBe(false);
+    await pick("#00ff00", "input");
+    expect(change).not.toHaveBeenCalled();
   });
 
   it("shows the initial value", () => {
@@ -55,8 +56,7 @@ describe("Color input", () => {
 
   it("live can be changed after creation", async () => {
     const { element, change, pick } = make();
-    element.live = true;
-    expect(element.live).toBe(true);
+    element.set({ live: true });
     await pick("#00ff00", "input");
     expect(change).toHaveBeenCalledWith("#00ff00");
   });
@@ -72,7 +72,7 @@ describe("Color input", () => {
   it("follows and writes a bound state", async () => {
     const state = st.ok_w("#123456");
     const { element, input, change, pick } = make();
-    element.bind({ value: state });
+    element.set({ value: state });
     expect(input.value).toBe("#123456");
     await pick("#abcdef", "change");
     expect(state.ok()).toBe("#abcdef");

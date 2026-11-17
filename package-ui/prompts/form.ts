@@ -42,9 +42,8 @@ export type GroupToKeyVal<Arr extends FormValue<any, any>[]> = {
  * value_partial: the values of the elements that have one
  * value_changed: only the values the user changed in the prompt
  *
- * An element bound to a state is live, it writes to its state while the prompt is open,
- * its value is read from the state, it is left out of value_partial and value_changed,
- * and like an element without a value it makes get_value an error*/
+ * An element whose value is a writable state is live, it writes to its state while the prompt is open,
+ * and its value is in the answer like any other, in value_changed when the user changed it*/
 export type PromptFormValues<T extends object> = Pick<
   FormGroup<T, undefined>,
   "get_value" | "value_partial" | "value_changed"

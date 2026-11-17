@@ -127,7 +127,7 @@ const answer_line = (sec: HTMLElement) => {
 {
   const sec = section(
     "All form elements",
-    "A prompt with every form element, the answer lines show their values by id. The lamp follows the switch and the progress bar the slider. The live switch is bound to a state, it changes the line above the button right away and is never in the answer. Tab through them, Space toggles the switch, Enter submits from anywhere but the multi line text. When the prompt closes the focus is back on the button that opened it",
+    "A prompt with every form element, the answer lines show their values by id. The lamp follows the switch and the progress bar the slider. The live switch is bound to a state, it changes the line above the button right away, and is in the answer like the others. Tab through them, Space toggles the switch, Enter submits from anywhere but the multi line text. When the prompt closes the focus is back on the button that opened it",
   );
   const show = form_answer_lines(sec);
   const tuple = <T extends unknown[]>(...items: T) => items;
@@ -167,14 +167,14 @@ const answer_line = (sec: HTMLElement) => {
               value: 40,
               change: (v) => level.set_ok(v),
             }),
-            form.progress({ unit: "%" }).bind({ value: level }),
+            form.progress({ unit: "%" }).set({ value: level }),
             label("Switch, the lamp follows it"),
             form.switch({ id: "switch", change: (v) => on.set_ok(v) }),
             form
               .lamp({ text: "On", colors: [FormColors.Red, FormColors.Green] })
-              .bind({ value: on }),
+              .set({ value: on }),
             label("Live switch, bound to the state of the page"),
-            form.switch({ id: "live" }).bind({ value: live }),
+            form.switch({ id: "live" }).set({ value: live }),
             label("Toggle buttons"),
             form.toggle_button({ id: "toggle", selections: choices, value: 1 }),
             label("Dropdown"),

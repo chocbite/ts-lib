@@ -1,21 +1,29 @@
-import { define_element } from "#base";
+import { define_element, input_key, type InputOptions } from "#base";
 import { IPAddress, IPVersion, sleep } from "@chocbite/ts-lib/common";
 import { get_cursor_position, set_cursor_end, set_selection_all } from "#selection";
 import { err, ok, type Option, type Result } from "@chocbite/ts-lib/result";
-import { FormValueWrite, FormValueWriteOptions } from "../../base";
+import type { StateOrVal } from "@chocbite/ts-lib/state";
+import {
+  FormValueWrite,
+  type FormValueCreateOptions,
+  type FormValueWriteOptions,
+} from "../../base";
 import "./ip_input.scss";
 
-export interface FormIpOptions<
-  ID extends string | undefined,
-> extends FormValueWriteOptions<IPAddress, ID> {
-  /**Ip address type, this is overwritten if supplied with an ipaddress with a different type*/
-  type: IPVersion;
-}
+/**Inputs of the ip input*/
+const IP = {
+  /**Version of the address typed, V4 by default, a value of the other version switches to it, an error keeps the version*/
+  type: input_key<StateOrVal<IPVersion>>(),
+};
+export type FormIpOptions = FormValueWriteOptions<IPAddress> &
+  InputOptions<typeof IP>;
+export type FormIpCreateOptions<ID extends string | undefined> =
+  FormIpOptions & FormValueCreateOptions<ID>;
 
-export class FormIp<ID extends string | undefined> extends FormValueWrite<
-  IPAddress,
-  ID
-> {
+/**IP address input, a box per part of the address*/
+class FormIp<
+  ID extends string | undefined = string | undefined,
+> extends FormValueWrite<IPAddress, ID> {
   static element_name() {
     return "ipinput";
   }
@@ -23,7 +31,7 @@ export class FormIp<ID extends string | undefined> extends FormValueWrite<
     return "form";
   }
 
-  #type: IPVersion;
+  #type?: IPVersion;
   /**Amount of parts of the current type*/
   get #count() {
     return this.#type === IPVersion.V4 ? 4 : 8;
@@ -118,10 +126,9 @@ export class FormIp<ID extends string | undefined> extends FormValueWrite<
     return inp;
   });
 
-  constructor(type: IPVersion, id?: ID) {
-    super(id);
-    this.type = type;
-    this.#type = type;
+  constructor() {
+    super();
+    this.#set_type(IPVersion.V4);
     this.appendChild(this.warn_input);
     this.addEventListener("focusin", () => {
       this.selected = true;
@@ -231,7 +238,15 @@ export class FormIp<ID extends string | undefined> extends FormValueWrite<
     );
   }
 
-  set type(val: IPVersion) {
+  set(options: FormIpOptions): this {
+    super.set(options);
+    this.set_input(IP.type, options.type, (type) => {
+      if (type.ok) this.#set_type(type.value);
+    });
+    return this;
+  }
+
+  #set_type(val: IPVersion) {
     if (this.#type === val) return;
     this.#type = val;
     this.classList.toggle("ipv4", val === IPVersion.V4);
@@ -250,7 +265,7 @@ export class FormIp<ID extends string | undefined> extends FormValueWrite<
   }
 
   protected new_value(val: IPAddress): void {
-    this.type = val.version;
+    this.#set_type(val.version);
     val.as_array.forEach((part, i) => {
       this.#parts[i].textContent =
         val.version === IPVersion.V4 ? part.toString() : part.toString(16);
@@ -263,21 +278,15 @@ export class FormIp<ID extends string | undefined> extends FormValueWrite<
     });
   }
 
-  protected new_error(_val: string): void {}
-
-  protected clear_error(): void {}
-
   protected state_related(_related: Option<{}>): void {}
 }
 define_element(FormIp);
 
-/**Creates an IP input form element */
-export function form_ip<ID extends string | undefined>(
-  options: FormIpOptions<ID>,
+export type { FormIp };
+
+/**Creates an IP address input, V4 unless the type or the value says V6*/
+export function form_ip<ID extends string | undefined = undefined>(
+  options: FormIpCreateOptions<ID> = {},
 ): FormIp<ID> {
-  const input = new FormIp<ID>(options.type, options?.id);
-  if (options) {
-    FormValueWrite.apply_options(input, options);
-  }
-  return input;
+  return FormIp.create(options) as FormIp<ID>;
 }

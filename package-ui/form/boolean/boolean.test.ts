@@ -5,6 +5,7 @@ import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { FormColors } from "../base";
 import { form_button } from "./button/button";
 import { form_lamp } from "./lamp/lamp";
+import type { SVGFunc } from "#svg";
 import { form_switch } from "./switch/switch";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
@@ -24,20 +25,25 @@ const wait = (ms: number = 10) =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 describe("Boolean element icons", () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
   const makers = {
     button: () => form_button(),
+    lamp: () => form_lamp({ colors: [FormColors.Red, FormColors.Green] }),
     switch: () => form_switch(),
-    lamp: () => form_lamp(),
   };
   for (const [name, make] of Object.entries(makers))
-    it(`${name} replaces its icon when set again`, () => {
-      const element = make();
-      element.icon = custom_icon("first");
-      element.icon = custom_icon("second");
+    it(`${name} replaces its icon when set again, and follows a state`, () => {
+      //States are only followed while the element is in the document
+      const element = document.body.appendChild(make());
+      element.set({ icon: custom_icon("first") });
+      const icon = st.ok_w<SVGFunc | undefined>(custom_icon("second"));
+      element.set({ icon });
       expect(element.querySelector('[data-icon="first"]')).toBeNull();
       expect(element.querySelectorAll('[data-icon="second"]').length).toBe(1);
-      element.icon = undefined;
-      expect(element.querySelector('[data-icon="second"]')).toBeNull();
+      icon.set_ok(undefined);
+      expect(element.querySelector("svg")).toBeNull();
     });
 });
 
@@ -181,7 +187,7 @@ describe("Switch", () => {
   it("writes to and shows the bound state", async () => {
     const state = st.rosw(st.b.help(ok(false)), true);
     const { element, knob } = make_switch();
-    element.bind({ value: state });
+    element.set({ value: state });
     element.click();
     await wait();
     expect(state.ok()).toBe(true);
@@ -189,13 +195,13 @@ describe("Switch", () => {
     expect(knob.classList.contains("on")).toBe(false);
   });
 
-  it("shows an error of the bound state until it is ok again", () => {
+  it("shows an error of its state with the fault icon until it is ok again", () => {
     const state = st.err_w<boolean>(nice_err("broken"));
-    const { element, knob } = make_switch();
-    element.bind({ value: state });
-    expect(knob.classList.contains("error")).toBe(true);
+    const { element, knob } = make_switch({ value: state });
+    expect(element.faults.map((f) => f.nice)).toEqual(["broken"]);
+    expect(element.querySelector("base-fault")).not.toBeNull();
     state.set_ok(true);
-    expect(knob.classList.contains("error")).toBe(false);
+    expect(element.faults).toEqual([]);
     expect(knob.classList.contains("on")).toBe(true);
   });
 
@@ -206,10 +212,28 @@ describe("Switch", () => {
     });
     expect(knob.getAttribute("on-color")).toBe("green");
     expect(knob.getAttribute("off-color")).toBe("red");
-    element.on_color = FormColors.None;
-    element.off_color = FormColors.None;
+    element.set({ on_color: FormColors.None, off_color: FormColors.None });
     expect(knob.hasAttribute("on-color")).toBe(false);
     expect(knob.hasAttribute("off-color")).toBe(false);
+  });
+
+  it("follows color states, a color in error is removed", () => {
+    const on_color = st.from_w<FormColors>(FormColors.Green);
+    const { knob } = make_switch({ on_color });
+    on_color.set_ok(FormColors.Blue);
+    expect(knob.getAttribute("on-color")).toBe("blue");
+    on_color.set_err(nice_err("no color"));
+    expect(knob.hasAttribute("on-color")).toBe(false);
+  });
+
+  it("has no setters for its inputs", () => {
+    const compile_only = (element: ReturnType<typeof form_switch>) => {
+      // @ts-expect-error the icon is an input
+      element.icon = undefined;
+      // @ts-expect-error the colors are inputs
+      element.on_color = FormColors.Red;
+    };
+    expect(compile_only).toBeTypeOf("function");
   });
 
   it("is cleared to off", () => {
@@ -235,7 +259,7 @@ describe("Lamp", () => {
       value: true,
     });
     expect(lamp.getAttribute("color")).toBe("green");
-    lamp.value = false;
+    lamp.set({ value: false });
     expect(lamp.getAttribute("color")).toBe("red");
   });
 
@@ -245,7 +269,7 @@ describe("Lamp", () => {
       value: 2,
     });
     expect(lamp.getAttribute("color")).toBe("blue");
-    lamp.value = 5;
+    lamp.set({ value: 5 });
     expect(lamp.hasAttribute("color")).toBe(false);
   });
 
@@ -259,15 +283,22 @@ describe("Lamp", () => {
       colors: [FormColors.Red, FormColors.Green],
       value: true,
     });
-    lamp.colors = [FormColors.Red, FormColors.Blue];
+    document.body.appendChild(lamp);
+    lamp.set({ colors: [FormColors.Red, FormColors.Blue] });
     expect(lamp.getAttribute("color")).toBe("blue");
+    //Colors from a state, an error shows no color
+    const colors = st.from_w<[FormColors, FormColors]>([FormColors.Red, FormColors.Yellow]);
+    lamp.set({ colors });
+    expect(lamp.getAttribute("color")).toBe("yellow");
+    colors.set_err(nice_err("no colors"));
+    expect(lamp.hasAttribute("color")).toBe(false);
   });
 
   it("shows the bound state", () => {
     const state = st.ok_w(false);
     const lamp = form_lamp({ colors: [FormColors.Red, FormColors.Green] });
     document.body.appendChild(lamp);
-    lamp.bind({ value: state });
+    lamp.set({ value: state });
     expect(lamp.getAttribute("color")).toBe("red");
     state.set_ok(true);
     expect(lamp.getAttribute("color")).toBe("green");
@@ -289,10 +320,15 @@ describe("Lamp", () => {
       text: "Power",
       center: true,
     });
-    expect(lamp.text).toBe("Power");
-    expect(lamp.center).toBe(true);
-    lamp.center = false;
-    expect(lamp.center).toBe(false);
+    document.body.appendChild(lamp);
+    expect(lamp.textContent).toBe("Power");
+    expect(lamp.classList.contains("center")).toBe(true);
+    const text = st.from_w("Running");
+    lamp.set({ center: false, text });
+    expect(lamp.classList.contains("center")).toBe(false);
+    expect(lamp.textContent).toBe("Running");
+    text.set_err(nice_err("Unknown"));
+    expect(lamp.textContent).toBe("Unknown");
   });
 });
 
@@ -307,7 +343,7 @@ export function lamp_types() {
   // @ts-expect-error A two color lamp has a boolean value
   form_lamp({ colors: [FormColors.Red, FormColors.Green], value: 1 });
   // @ts-expect-error A two color lamp can not show a number state
-  two.bind({ value: st.ok_w(1) });
+  two.set({ value: st.ok_w(1) });
   form_switch({
     change: (value) => expectTypeOf(value).toEqualTypeOf<boolean>(),
   });

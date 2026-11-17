@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   form_date_time,
   FormDateTimeMode,
+  FormDateTimePrecision,
   FormDateTimeType,
 } from "./date_time_input";
 
@@ -22,10 +23,8 @@ describe("Date time input options", () => {
   it("defaults to a date time input with second steps", () => {
     const element = form_date_time({ mode: FormDateTimeMode.NUMBER });
     const input = element.querySelector("input")!;
-    expect(element.type).toBe(FormDateTimeType.DATETIME);
     expect(input.type).toBe("datetime-local");
-    expect(element.milliseconds).toBe(false);
-    expect(element.step).toBe(1);
+    expect(input.step).toBe("1");
   });
 
   it("switches the input type with the type option", () => {
@@ -34,25 +33,33 @@ describe("Date time input options", () => {
       type: FormDateTimeType.DATE,
     });
     const input = element.querySelector("input")!;
-    expect(element.type).toBe(FormDateTimeType.DATE);
     expect(input.type).toBe("date");
-    element.type = FormDateTimeType.TIME;
+    element.set({ type: FormDateTimeType.TIME });
     expect(input.type).toBe("time");
-    element.type = FormDateTimeType.DATETIME;
+    element.set({ type: FormDateTimeType.DATETIME });
     expect(input.type).toBe("datetime-local");
   });
 
-  it("uses millisecond steps with the milliseconds option", () => {
-    const element = form_date_time({
-      mode: FormDateTimeMode.NUMBER,
-      milliseconds: true,
-    });
-    expect(element.milliseconds).toBe(true);
-    expect(element.step).toBe(0.001);
-    element.milliseconds = false;
-    expect(element.step).toBe(1);
-    element.step = 60;
-    expect(element.step).toBe(60);
+  it("shows the fields of its precision, seconds by default", () => {
+    const input = (precision?: FormDateTimePrecision) =>
+      form_date_time({
+        mode: FormDateTimeMode.NUMBER,
+        precision,
+      }).querySelector("input")!;
+    expect(input().step).toBe("1");
+    expect(input(FormDateTimePrecision.MINUTES).step).toBe("60");
+    expect(input(FormDateTimePrecision.SECONDS).step).toBe("1");
+    expect(input(FormDateTimePrecision.MILLISECONDS).step).toBe("0.001");
+  });
+
+  it("has precision instead of milliseconds and step", () => {
+    const compile_only = () => {
+      // @ts-expect-error milliseconds is precision MILLISECONDS
+      form_date_time({ mode: FormDateTimeMode.NUMBER, milliseconds: true });
+      // @ts-expect-error step is the precision
+      form_date_time({ mode: FormDateTimeMode.NUMBER, step: 60 });
+    };
+    expect(compile_only).toBeTypeOf("function");
   });
 
   it("opens the picker when an icon is clicked", () => {
@@ -74,9 +81,9 @@ describe("Date time input options", () => {
     const [calendar, clock] = Array.from(element.querySelectorAll("svg"));
     expect(getComputedStyle(calendar).display).not.toBe("none");
     expect(getComputedStyle(clock).display).toBe("none");
-    element.type = FormDateTimeType.DATE;
+    element.set({ type: FormDateTimeType.DATE });
     expect(getComputedStyle(calendar).display).not.toBe("none");
-    element.type = FormDateTimeType.TIME;
+    element.set({ type: FormDateTimeType.TIME });
     expect(getComputedStyle(calendar).display).toBe("none");
     expect(getComputedStyle(clock).display).not.toBe("none");
   });
@@ -93,16 +100,49 @@ describe("Date time input number mode", () => {
     expect(element.querySelector("input")!.value).toBe("2024-01-15T10:30:05");
   });
 
-  it("drops milliseconds unless enabled", () => {
+  it("shows the value cut to its precision, without changing the value", () => {
     const value = Date.UTC(2024, 0, 15, 10, 30, 5, 250);
-    const without = form_date_time({ mode: FormDateTimeMode.NUMBER, value });
-    expect(without.querySelector("input")!.valueAsNumber).toBe(value - 250);
-    const with_ms = form_date_time({
+    const shown = (precision?: FormDateTimePrecision) =>
+      form_date_time({
+        mode: FormDateTimeMode.NUMBER,
+        precision,
+        value,
+      }).querySelector("input")!.valueAsNumber;
+    expect(shown()).toBe(value - 250);
+    expect(shown(FormDateTimePrecision.MINUTES)).toBe(value - 5250);
+    expect(shown(FormDateTimePrecision.MILLISECONDS)).toBe(value);
+    const element = form_date_time({
       mode: FormDateTimeMode.NUMBER,
-      milliseconds: true,
+      precision: FormDateTimePrecision.MINUTES,
       value,
     });
-    expect(with_ms.querySelector("input")!.valueAsNumber).toBe(value);
+    expect(element.get_value.unwrap()).toBe(value);
+  });
+
+  it("cuts the seconds of a string value at minute precision", () => {
+    const element = form_date_time({
+      mode: FormDateTimeMode.STRING,
+      precision: FormDateTimePrecision.MINUTES,
+      value: "2026-01-15T13:45:30",
+    });
+    expect(element.querySelector("input")!.value).toBe("2026-01-15T13:45");
+  });
+
+  it("follows a precision state, showing the value again", () => {
+    const value = Date.UTC(2024, 0, 15, 10, 30, 5, 250);
+    const precision = st.ok_w<FormDateTimePrecision>(
+      FormDateTimePrecision.SECONDS,
+    );
+    const element = document.body.appendChild(
+      form_date_time({ mode: FormDateTimeMode.NUMBER, precision, value }),
+    );
+    const input = element.querySelector("input")!;
+    precision.set_ok(FormDateTimePrecision.MILLISECONDS);
+    expect(input.step).toBe("0.001");
+    expect(input.valueAsNumber).toBe(value);
+    precision.set_ok(FormDateTimePrecision.MINUTES);
+    expect(input.step).toBe("60");
+    expect(input.valueAsNumber).toBe(value - 5250);
   });
 
   it("gives an entered value as a UTC number", async () => {
@@ -131,7 +171,7 @@ describe("Date time input number mode", () => {
     const state = st.ok_w(Date.UTC(2024, 0, 1, 12));
     const element = form_date_time({ mode: FormDateTimeMode.NUMBER });
     document.body.appendChild(element);
-    element.bind({ value: state });
+    element.set({ value: state });
     const input = element.querySelector("input")!;
     expect(input.value).toBe("2024-01-01T12:00");
     await enter(input, "2024-02-01T13:00");
@@ -145,7 +185,7 @@ describe("Date time input number mode", () => {
     const state = st.ok_w(Date.UTC(2024, 0, 1, 12));
     const element = form_date_time({ mode: FormDateTimeMode.NUMBER });
     document.body.appendChild(element);
-    element.bind({ value: state });
+    element.set({ value: state });
     const input = element.querySelector("input")!;
     input.focus();
     state.set_ok(Date.UTC(2025, 0, 1, 0));
