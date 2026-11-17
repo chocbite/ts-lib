@@ -6,7 +6,7 @@ Importing `@chocbite/ts-lib-ui` types depot icons as `SVGFunc`, so `type`, `grou
 
 ## `depot_ui.select(from, options?)`
 
-Opens a selector over the page for the entries of a type or group, and returns a promise of the selected entries. Cancelling, with the Cancel button or a press on the backdrop, gives an empty array.
+Opens a selector for the entries of a type or group in a modal panel of `composition`, like the prompts of `prompts`, and returns a promise of the selected entries. Cancelling, with the Cancel button, the close button of the panel or Escape, gives an empty array. The panel can be moved and sized, and its colors come from the composition theme.
 
 ```ts
 import depot from "@chocbite/ts-lib/depot";
@@ -48,7 +48,3 @@ The value column uses the unit and decimals of a number helper and the names of 
 ## `DepotTree`
 
 The filtered view the selector is built on, for building other selectors. `new DepotTree(group, filter?)` gives `rows(group?)`, a state of the shown children of a group, made for the rows and sub rows of a `list` container. Set `search` to filter by text, and call `dispose()` when done to drop the subscriptions to the depot. Changes in the depot are applied once after a burst of changes, in a microtask.
-
-## Theme
-
-The colors of the selector are the theme variables under `depot.colors`: `backdrop`, `background`, `text` and `shadow`.

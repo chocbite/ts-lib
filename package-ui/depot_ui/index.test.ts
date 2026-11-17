@@ -4,10 +4,22 @@ import state, { type StateROSW } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it } from "vitest";
 import depot_ui, { DepotTree } from ".";
 
+/**Closes the panels of open selectors*/
+const close_panels = () => {
+  for (const panel of document.querySelectorAll("composition-panel"))
+    (panel as HTMLElement & { close(): void }).close();
+};
+/**The panel of the open selector*/
+const selector_panel = () =>
+  document.querySelector("composition-panel") as HTMLElement & {
+    close(): void;
+  };
+const title = () => selector_panel().querySelector(".title")!.textContent;
+
 const types: DepotType<any>[] = [];
 afterEach(() => {
+  close_panels();
   for (const type of types.splice(0)) type.remove();
-  document.body.replaceChildren();
 });
 
 const setup = () => {
@@ -108,11 +120,12 @@ describe("select", () => {
   it("shows the entries and gives the preselected entries on select", async () => {
     const { type, rect } = setup();
     const result = depot_ui.select(type, { selected: [rect] });
-    expect(panel().querySelector("h2")!.textContent).toBe("Things");
+    expect(title()).toBe("Things");
     expect(rows()).toEqual(["Shapes", "Other"]);
     press(button("Select"));
     expect(await result).toEqual([rect]);
     expect(panel()).toBeNull();
+    expect(document.querySelector("composition-panel")).toBeNull();
   });
 
   it("gives nothing when cancelled", async () => {
@@ -122,11 +135,45 @@ describe("select", () => {
     expect(await result).toEqual([]);
   });
 
-  it("cancels on a press on the backdrop", async () => {
+  it("gives nothing when closed with Escape or by the panel", async () => {
+    const { type, rect } = setup();
+    const escaped = depot_ui.select(type, { selected: [rect] });
+    document.activeElement!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    expect(await escaped).toEqual([]);
+    const closed = depot_ui.select(type, { selected: [rect] });
+    selector_panel().close();
+    expect(await closed).toEqual([]);
+    expect(panel()).toBeNull();
+  });
+
+  it("clears the search on the first Escape and closes on the next", async () => {
     const { type } = setup();
     const result = depot_ui.select(type);
-    panel().dispatchEvent(new PointerEvent("pointerdown"));
+    const input = panel().querySelector("input")!;
+    const escape = () =>
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+      );
+    input.value = "circ";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(rows()).toEqual(["Shapes", "Circle"]);
+    escape();
+    await tick();
+    expect(input.value).toBe("");
+    //Every entry is back, the group opened by the search stays open
+    expect(rows()).toEqual(["Shapes", "Rectangle", "Circle", "Other"]);
+    escape();
     expect(await result).toEqual([]);
+  });
+
+  it("is a modal panel with a close button, the search focused", () => {
+    const { type } = setup();
+    void depot_ui.select(type);
+    expect(selector_panel().classList.contains("modal")).toBe(true);
+    expect(selector_panel().querySelector(".close-button")).not.toBeNull();
+    expect(document.activeElement).toBe(panel().querySelector("input"));
   });
 
   it("only shows entries passing the filter", () => {
@@ -252,7 +299,7 @@ describe("select_state", () => {
     void depot_ui.select_state({ kind: "number" });
     input("machine");
     expect(rows()).toEqual(["Machine", "Speed", "Temperature", "Remote"]);
-    document.body.replaceChildren();
+    close_panels();
     void depot_ui.select_state({ kind: ["enum", "boolean"], writable: true });
     input("machine");
     expect(rows()).toEqual(["Machine", "On", "Mode"]);
@@ -265,7 +312,7 @@ describe("select_state", () => {
       kind: "string",
       selected: [name],
     });
-    expect(panel().querySelector("h2")!.textContent).toBe("Machine");
+    expect(title()).toBe("Machine");
     expect(rows()).toEqual(["Name"]);
     button("Select").click();
     expect(await result).toEqual([name]);

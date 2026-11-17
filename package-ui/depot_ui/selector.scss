@@ -1,39 +1,20 @@
-depot-selector {
-  z-index: 4294967295;
-  position: fixed;
-  inset: 0;
+//Same specificity as the content rule of the panel box, which comes first, so the selector fills the panel as a column
+composition-panel > div:nth-child(3) > depot-selector {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--depot-colors-backdrop);
+  flex-direction: column;
+  gap: 0.5rem;
+  box-sizing: border-box;
+  height: 100%;
+  padding: 0.6rem;
 
-  > div {
+  > list-container {
+    flex-grow: 1;
+    min-height: 0;
+  }
+
+  > .buttons {
     display: flex;
-    flex-direction: column;
+    justify-content: flex-end;
     gap: 0.5rem;
-    box-sizing: border-box;
-    width: min(40rem, 100% - 2rem);
-    height: min(40rem, 100% - 2rem);
-    padding: 0.8rem;
-    border-radius: 0.6rem;
-    background-color: var(--depot-colors-background);
-    box-shadow: 0 0 10px var(--depot-colors-shadow);
-
-    > h2 {
-      margin: 0;
-      font-size: 1.2rem;
-      color: var(--depot-colors-text);
-    }
-
-    > list-container {
-      flex-grow: 1;
-      min-height: 0;
-    }
-
-    > div:last-child {
-      display: flex;
-      justify-content: flex-end;
-      gap: 0.5rem;
-    }
   }
 }
