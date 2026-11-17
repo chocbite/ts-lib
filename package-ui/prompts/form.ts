@@ -5,7 +5,7 @@ import form, {
   FormValueWrite,
   type FormGroup,
 } from "#form";
-import { type Option } from "@chocbite/ts-lib/result";
+import { none, some, type Option } from "@chocbite/ts-lib/result";
 import { open_prompt } from "./shared";
 
 interface PromptFormOptions {
@@ -37,30 +37,43 @@ export type GroupToKeyVal<Arr extends FormValue<any, any>[]> = {
   ]: K extends FormValue<infer T, any> ? T : never;
 };
 
-interface Submit<T extends object, L extends FormElement[]> {
+/**Values of a submitted form prompt, read the one that fits
+ * get_value: all values, an error when an element has no value
+ * value_partial: the values of the elements that have one
+ * value_changed: only the values the user changed in the prompt
+ *
+ * An element bound to a state is live, it writes to its state while the prompt is open,
+ * its value is read from the state, it is left out of value_partial and value_changed,
+ * and like an element without a value it makes get_value an error*/
+export type PromptFormValues<T extends object> = Pick<
+  FormGroup<T, undefined>,
+  "get_value" | "value_partial" | "value_changed"
+>;
+
+export interface PromptFormSubmit<T extends object, L extends FormElement[]> {
   text: string;
-  /**Callback function for submit button
-   * @param group The form group containing the form elements
-   * @param close Function to close the prompt with provided result
-   * @returns Return true if the form should not close automatically */
+  /**Called when the button is pressed, or by Enter for the last button
+   * @param group the form group of the elements, to check and warn them
+   * @param close closes the prompt, true resolves it with the values, false with none
+   * @returns true to keep the prompt open, then it closes when close is called*/
   click?: (
     group: FormGroup<T, undefined, L>,
-    close: (result: Option<Partial<T>>) => void,
+    close: (submit: boolean) => void,
   ) => boolean | void;
 }
 
 /**Opens a prompt with form elements and one or more submit buttons
- * Executes the last submit button's click handler when the Enter key is pressed.
- * */
+ * Resolves with the values of the form when submitted, typed by the ids of the elements, or none when closed
+ * Enter submits with the last button*/
 export function prompt_form<
   L extends FormElement[],
   T extends object = Prettify<GroupToKeyVal<GroupExtractVals<L>>>,
 >(
   text: string,
   elements: [...L],
-  submit: Submit<T, L> | Submit<T, L>[],
+  submit: PromptFormSubmit<T, L> | PromptFormSubmit<T, L>[],
   options?: PromptFormOptions,
-): Promise<Option<Partial<T>>> {
+): Promise<Option<PromptFormValues<T>>> {
   const group = form.group<L, undefined, T>({
     elements,
     embed: true,
@@ -68,11 +81,13 @@ export function prompt_form<
     row: options?.form_row,
   });
   const sub = Array.isArray(submit) ? submit : [submit];
-  return open_prompt<Partial<T>>(
+  return open_prompt<PromptFormValues<T>>(
     text,
-    (close) => {
-      const submit_with = (s: Submit<T, L>) => {
-        if (!s.click?.(group, close)) close(group.value_changed.to_option());
+    (close_prompt) => {
+      const close = (submit: boolean) =>
+        close_prompt(submit ? some(group) : none());
+      const submit_with = (s: PromptFormSubmit<T, L>) => {
+        if (!s.click?.(group, close)) close(true);
       };
       return {
         element: form.group({

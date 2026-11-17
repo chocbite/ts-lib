@@ -1,7 +1,8 @@
 import form from "#form";
-import { none, some } from "@chocbite/ts-lib/result";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { prompts } from ".";
+import { none, ok, some, type Option } from "@chocbite/ts-lib/result";
+import state from "@chocbite/ts-lib/state";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { prompts, type PromptFormValues } from ".";
 
 /**The prompt open now*/
 const current = () => {
@@ -52,14 +53,80 @@ describe("Prompt buttons", () => {
   });
 });
 
+/**The values of a submitted form prompt, fails the test when it was closed without submitting*/
+const submitted = async <T extends object>(
+  result: Promise<Option<PromptFormValues<T>>>,
+) => {
+  const answer = await result;
+  if (!answer.some) throw new Error("Prompt was not submitted");
+  return answer.value;
+};
+
 describe("Prompt form", () => {
-  it("resolves with the changed values on submit", async () => {
-    const swit = form.switch({ id: "on" });
-    const result = prompts.form("Settings", [swit], { text: "OK" });
+  it("resolves with the values of the form on submit, all, partial and changed", async () => {
+    const swit = form.switch({ id: "on", value: false });
+    const result = prompts.form(
+      "Settings",
+      [swit, form.text_input({ id: "name" })],
+      { text: "OK" },
+    );
     swit.click();
     await new Promise((r) => setTimeout(r, 0));
     button("OK").click();
-    expect(await result).toEqual(some({ on: true }));
+    const values = await submitted(result);
+    expect(values.value_changed).toEqual(ok({ on: true }));
+    expect(values.value_partial).toEqual(ok({ on: true }));
+    //The name has no value
+    expect(values.get_value.err).toBe(true);
+  });
+
+  it("gives get_value when every element has a value", async () => {
+    const result = prompts.form(
+      "Settings",
+      [
+        form.switch({ id: "on", value: true }),
+        form.text_input({ id: "name", value: "a" }),
+      ],
+      { text: "OK" },
+    );
+    button("OK").click();
+    const values = await submitted(result);
+    expect(values.get_value).toEqual(ok({ on: true, name: "a" }));
+    expect(values.value_changed).toEqual(ok({}));
+  });
+
+  it("leaves live elements bound to a state out of the values, their value is in the state", async () => {
+    const on = state.ok_w(false);
+    const swit = form.switch({ id: "on" }).bind({ value: on });
+    const result = prompts.form("Settings", [swit], { text: "OK" });
+    swit.click();
+    await new Promise((r) => setTimeout(r, 0));
+    //Written to the state right away, not on submit
+    expect(on.ok()).toBe(true);
+    button("OK").click();
+    const values = await submitted(result);
+    expect(values.value_changed).toEqual(ok({}));
+    expect(values.value_partial).toEqual(ok({}));
+    //Like an element without a value
+    expect(values.get_value.err).toBe(true);
+  });
+
+  it("types the values by the ids of the elements", () => {
+    const compile_only = () => {
+      const result = prompts.form(
+        "Settings",
+        [
+          form.text({ text: "Name" }),
+          form.text_input({ id: "name" }),
+          form.switch({ id: "on" }),
+        ],
+        { text: "OK" },
+      );
+      expectTypeOf(result).toEqualTypeOf<
+        Promise<Option<PromptFormValues<{ name: string; on: boolean }>>>
+      >();
+    };
+    expect(compile_only).toBeTypeOf("function");
   });
 
   it("submits with the last button when Enter is pressed", async () => {
@@ -69,27 +136,26 @@ describe("Prompt form", () => {
       [form.switch({ id: "on" })],
       [{ text: "First" }, { text: "Last", click: last }],
     );
-    key(
-      current().querySelector("prompts-prompt") ?? document.activeElement!,
-      "Enter",
-    );
-    expect(await result).toEqual(some({}));
+    key(document.activeElement!, "Enter");
+    expect((await result).some).toBe(true);
     expect(last).toHaveBeenCalledTimes(1);
   });
 
   it("stays open when the click of the button returns true, until it closes itself", async () => {
-    let close_with: ((v: ReturnType<typeof none>) => void) | undefined;
-    const result = prompts.form("Settings", [form.switch({ id: "on" })], {
-      text: "OK",
-      click: (_group, close) => {
-        close_with = close;
-        return true;
-      },
-    });
-    button("OK").click();
-    expect(current()).not.toBeNull();
-    close_with!(none());
-    expect(await result).toEqual(none());
+    for (const submit of [true, false]) {
+      let close_with: ((submit: boolean) => void) | undefined;
+      const result = prompts.form("Settings", [form.switch({ id: "on" })], {
+        text: "OK",
+        click: (_values, close) => {
+          close_with = close;
+          return true;
+        },
+      });
+      button("OK").click();
+      expect(current()).not.toBeUndefined();
+      close_with!(submit);
+      expect((await result).some).toBe(submit);
+    }
   });
 
   it("submits with Enter while a switch has the focus, without toggling it", async () => {
@@ -97,7 +163,7 @@ describe("Prompt form", () => {
       text: "OK",
     });
     key(document.activeElement!, "Enter");
-    expect(await result).toEqual(some({}));
+    expect((await submitted(result)).value_changed).toEqual(ok({}));
   });
 
   it("closes with Escape while a number input has the focus", async () => {
@@ -124,5 +190,86 @@ describe("Prompt form", () => {
       text: "OK",
     });
     expect(input.contains(document.activeElement)).toBe(true);
+  });
+});
+
+describe("Prompt focus", () => {
+  /**A focused button on the page, where the prompt is opened from*/
+  const opener = () => {
+    const element = document.body.appendChild(document.createElement("button"));
+    element.focus();
+    return element;
+  };
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it("goes back to the element that had it, when closed by a button, Escape or the cross", async () => {
+    const element = opener();
+    const by_button = prompts.buttons("A", [{ text: "Yes", value: 1 }]);
+    expect(document.activeElement).not.toBe(element);
+    button("Yes").click();
+    await by_button;
+    expect(document.activeElement).toBe(element);
+
+    const by_escape = prompts.buttons("B", [{ text: "Yes", value: 1 }]);
+    key(document.activeElement!, "Escape");
+    await by_escape;
+    expect(document.activeElement).toBe(element);
+
+    const by_cross = prompts.buttons("C", [{ text: "Yes", value: 1 }]);
+    current().close();
+    await by_cross;
+    expect(document.activeElement).toBe(element);
+  });
+
+  it("goes back after a form prompt submits", async () => {
+    const element = opener();
+    const result = prompts.form("Settings", [form.text_input({ id: "name" })], {
+      text: "OK",
+    });
+    button("OK").click();
+    await result;
+    expect(document.activeElement).toBe(element);
+  });
+
+  it("is kept where the click of the button moved it", async () => {
+    opener();
+    const other = document.body.appendChild(document.createElement("input"));
+    const result = prompts.buttons("A", [
+      { text: "Yes", value: 1, click: () => other.focus() },
+    ]);
+    button("Yes").click();
+    await result;
+    expect(document.activeElement).toBe(other);
+  });
+
+  it("goes back to the first element when a second prompt opens from a button", async () => {
+    const element = opener();
+    let second: Promise<unknown> | undefined;
+    const first = prompts.buttons("A", [
+      {
+        text: "Next",
+        value: 1,
+        click: () => {
+          second = prompts.buttons("B", [{ text: "Done", value: 2 }]);
+        },
+      },
+    ]);
+    button("Next").click();
+    await first;
+    expect(current()).not.toBeUndefined();
+    button("Done").click();
+    await second;
+    expect(document.activeElement).toBe(element);
+  });
+
+  it("is not given to an element removed while the prompt was open", async () => {
+    const element = opener();
+    const result = prompts.buttons("A", [{ text: "Yes", value: 1 }]);
+    element.remove();
+    button("Yes").click();
+    await result;
+    expect(document.activeElement).toBe(document.body);
   });
 });

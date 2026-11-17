@@ -23,8 +23,24 @@ export interface PromptBody {
   focus?: HTMLElement;
 }
 
+/**Gives the focus back to the element that had it before the prompt opened
+ * Only when the focus was lost with the prompt, focus the code closing the prompt moved elsewhere stays there*/
+function restore_focus(previous: Element | null, prompt: HTMLElement): void {
+  if (!(previous instanceof HTMLElement) || !previous.isConnected) return;
+  if (previous === previous.ownerDocument.body) return;
+  const active = previous.ownerDocument.activeElement;
+  if (
+    active &&
+    active !== active.ownerDocument.body &&
+    !prompt.contains(active)
+  )
+    return;
+  previous.focus({ preventScroll: true });
+}
+
 /**Opens a modal prompt in the middle of the main document
  * Resolves with the result given to close, or none when the user closes the prompt
+ * When it closes, the focus goes back to the element that had it when the prompt opened
  * @param width width in rem, not given the prompt fits its content*/
 export function open_prompt<T>(
   title: string,
@@ -33,12 +49,14 @@ export function open_prompt<T>(
 ): Promise<Option<T>> {
   return new Promise<Option<T>>((resolve) => {
     const prompt = Prompt.create({ title, closable: true });
+    const previous = document.activeElement;
     let done = false;
     const close = (result: Option<T>) => {
       if (done) return;
       done = true;
       resolve(result);
       prompt.content_close();
+      restore_focus(previous, prompt);
     };
     const { element, key, focus } = build(close);
     prompt.appendChild(element);

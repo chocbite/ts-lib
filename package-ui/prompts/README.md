@@ -1,6 +1,6 @@
 # @chocbite/ts-lib-ui/prompts
 
-Modal prompts that ask the user something and give the answer as a promise. A prompt opens in a panel of `composition`, in the middle of the page, and darkens the page behind it. Each resolves with `some(answer)`, or `none()` when the user closes it with the close button or Escape.
+Modal prompts that ask the user something and give the answer as a promise. A prompt opens in a panel of `composition`, in the middle of the page, and darkens the page behind it. Each resolves with `some(answer)`, or `none()` when the user closes it with the close button or Escape. When it closes, the focus goes back to the element that had it before, unless the code handling the answer moved it elsewhere.
 
 ```ts
 import { prompts } from "@chocbite/ts-lib-ui/prompts";
@@ -23,15 +23,43 @@ Resolves with the `value` of the clicked button. A button's `click` is called af
 ```ts
 const result = await prompts.form(
   "New user",
-  [form.text({ text: "Name" }), form.text_input({ id: "name" })],
+  [
+    form.text({ text: "Name" }),
+    form.text_input({ id: "name" }),
+    form.switch({ id: "admin" }),
+  ],
   { text: "Create" },
 );
-if (result.some) create(result.value.name);
+if (result.some) {
+  const values = result.value.get_value;
+  if (values.ok) create(values.value.name, values.value.admin);
+}
 ```
 
-Resolves with the values the user changed, by `id` of the form elements, typed from the elements. The first element the user can change gets the focus, and Enter submits with the last button.
+Resolves with the values of the form, typed by the `id` of the elements, or `none()` when closed without submitting. Read the values the way that fits:
 
-A submit button's `click(group, close)` runs on submit. Returning `true` keeps the prompt open, for example to check the values first, and `close(result)` closes it later. Options set the columns and rows of the form and of the submit buttons.
+- **`get_value`**: all values, an error when an element has no value, for forms where every field is needed.
+- **`value_partial`**: the values of the elements that have one.
+- **`value_changed`**: only the values the user changed in the prompt, for editing settings.
+
+The first element the user can change gets the focus, and Enter submits with the last button.
+
+A submit button's `click(group, close)` runs on submit, with the form group to check and warn its elements. Returning `true` keeps the prompt open, then `close(true)` submits it and `close(false)` closes it without submitting. Options set the columns and rows of the form and of the submit buttons.
+
+### Live elements
+
+An element bound to a state with `bind` is live: it writes to its state as soon as the user changes it, while the prompt is open, and submitting or closing does not undo it. This makes a prompt a quick small window for settings that apply right away, and live elements can be mixed with ones that are submitted. Their value is in the state, so they are left out of `value_partial` and `value_changed`, and like an element without a value they make `get_value` an error.
+
+```ts
+await prompts.form(
+  "Display",
+  [
+    form.text({ text: "Brightness" }),
+    form.slider().bind({ value: brightness }),
+  ],
+  { text: "Close" },
+);
+```
 
 ## Faults
 
