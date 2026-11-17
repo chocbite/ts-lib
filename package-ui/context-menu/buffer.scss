@@ -26,8 +26,6 @@ contextmenu-buffer {
       height: 3.2rem;
     }
 
-    > svg {
-      fill: var(--contextmenu-hoverText);
-    }
+    --spinners-color: var(--contextmenu-hoverText);
   }
 }

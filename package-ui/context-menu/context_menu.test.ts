@@ -950,3 +950,10 @@ describe("Combined menus", () => {
     }
   });
 });
+
+describe("Context menu styles", () => {
+  it("leave how the page scrolls alone, even when loaded late like with the fault prompt", () => {
+    //Overflow on html moves scrolling from the window to a body that scrolls itself, jumping to the top
+    expect(getComputedStyle(document.documentElement).overflow).toBe("visible");
+  });
+});

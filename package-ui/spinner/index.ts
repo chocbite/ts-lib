@@ -1,6 +1,5 @@
-import { Base, define_element } from "#base";
+import { Base, define_element, type BaseOptions } from "#base";
 import { GREY } from "@chocbite/ts-lib/colors";
-import { svg } from "#svg";
 import { theme_init_variable_root } from "#theme";
 import "./index.scss";
 
@@ -19,25 +18,15 @@ variables.make_variable(
   undefined,
 );
 
-const SPINNER_SVG = document.createElementNS(
-  "http://www.w3.org/2000/svg",
-  "svg",
-);
-SPINNER_SVG.setAttribute("viewBox", "0 0 64 64");
-SPINNER_SVG.appendChild(svg.circle(32, 6, 0).elem);
-SPINNER_SVG.appendChild(svg.circle(45, 9.483, 0).elem);
-SPINNER_SVG.appendChild(svg.circle(54.516, 19, 0).elem);
-SPINNER_SVG.appendChild(svg.circle(58, 32, 0).elem);
-SPINNER_SVG.appendChild(svg.circle(54.516, 45, 0).elem);
-SPINNER_SVG.appendChild(svg.circle(45, 54.516, 0).elem);
-SPINNER_SVG.appendChild(svg.circle(32, 58, 0).elem);
-SPINNER_SVG.appendChild(svg.circle(19, 54.516, 0).elem);
-SPINNER_SVG.appendChild(svg.circle(9.483, 45, 0).elem);
-SPINNER_SVG.appendChild(svg.circle(6, 32, 0).elem);
-SPINNER_SVG.appendChild(svg.circle(9.483, 19, 0).elem);
-SPINNER_SVG.appendChild(svg.circle(19, 9.483, 0).elem);
+/**Ring of twelve dots, each on an arm rotated into place, cloned for every spinner*/
+const RING = document.createElement("div");
+for (let i = 0; i < 12; i++)
+  RING.appendChild(document.createElement("div")).appendChild(
+    document.createElement("div"),
+  );
 
-export class Spinner extends Base {
+/**Placeholder for data with an unknown arrival time, dots going round*/
+class Spinner extends Base {
   /**Returns the name used to define the element */
   static element_name() {
     return "spinner";
@@ -49,8 +38,15 @@ export class Spinner extends Base {
 
   constructor() {
     super();
-    this.appendChild(SPINNER_SVG.cloneNode(true));
+    this.appendChild(RING.cloneNode(true));
   }
 }
 
 define_element(Spinner);
+
+export type { Spinner };
+
+/**Creates a spinner, a placeholder for data with an unknown arrival time*/
+export function spinner(options: BaseOptions = {}): Spinner {
+  return Spinner.create(options);
+}

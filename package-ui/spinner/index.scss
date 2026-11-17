@@ -1,34 +1,92 @@
+@use "sass:math";
+
+//Twelve dots in a ring, each dot pulses in turn, a wave going round
+//The ring fills the spinner, as big as fits in its smaller side
+$dots: 12;
+$period: 1.2s;
+//Size of a dot and its smallest scale, and the smallest opacity
+$dot: 15.625%;
+$small: 0.6;
+$faint: 0.6;
+
 spinner-spinner {
   display: block;
   height: 100%;
   width: 100%;
+  container-type: size;
 
-  @keyframes spinner {
-    0%,
-    100% {
-      r: 3px;
-      opacity: 0.6;
+  > div {
+    position: relative;
+    width: min(100cqw, 100cqh);
+    height: min(100cqw, 100cqh);
+    margin: auto;
+
+    //Arms, rotated into place and never moved
+    > div {
+      position: absolute;
+      inset: 0;
+
+      //Dots, at the top of their arm
+      > div {
+        position: absolute;
+        left: math.div(100% - $dot, 2);
+        top: 1.5625%;
+        width: $dot;
+        height: $dot;
+        border-radius: 50%;
+        background-color: var(--spinners-color);
+      }
     }
 
-    50% {
-      r: 5px;
-      opacity: 1;
-    }
-  }
+    @for $i from 1 through $dots {
+      //Where the wave is in its period for this dot, the pulse peaks halfway
+      $phase: math.div($dots - $i, $dots);
+      $strength: 1 - math.abs(2 * $phase - 1);
 
-  > svg {
-    max-height: 100%;
-    max-width: 100%;
+      > div:nth-child(#{$i}) {
+        transform: rotate(#{($i - 1) * math.div(360deg, $dots)});
 
-    > circle {
-      fill: var(--spinners-color);
-      animation: spinner 1.2s calc((var(--i) - 12) * 0.1s) infinite;
-
-      @for $i from 1 through 12 {
-        &:nth-child(#{$i}) {
-          --i: #{$i};
+        > div {
+          //Still dots, sized as the wave is at its start, the ring turns in steps for the low animation levels
+          scale: $small + (1 - $small) * $strength;
+          opacity: $faint + (1 - $faint) * $strength;
+          //Each dot pulses on its own a moment after the one before for the full animation level
+          animation-delay: ($i - $dots) * math.div($period, $dots);
         }
       }
     }
+
+    //Turns a dot at a time, one composited animation for the whole ring
+    animation: spinner-steps $period steps($dots) infinite;
+  }
+
+  //Full animation level, the ring stands still and each dot pulses, only scale and opacity are animated
+  .anim-all & > div {
+    animation: none;
+
+    > div > div {
+      animation-name: spinner-pulse;
+      animation-duration: $period;
+      animation-iteration-count: infinite;
+    }
+  }
+}
+
+@keyframes spinner-steps {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes spinner-pulse {
+  0%,
+  100% {
+    scale: $small;
+    opacity: $faint;
+  }
+
+  50% {
+    scale: 1;
+    opacity: 1;
   }
 }

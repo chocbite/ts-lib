@@ -26,7 +26,7 @@ function show_error(what: string, error?: unknown) {
 const one_of = <T>(values: { [key: string]: T }, value: unknown) =>
   Object.values(values).find((v) => v === value);
 
-/**Writes theme, input mode and scale to the library, stays a no-op if the theme module failed to load*/
+/**Writes theme, input mode, scale and animation level to the library, stays a no-op if the theme module failed to load*/
 let apply_library = async (_options: URLSearchParams) => {};
 
 //Loaded dynamically, so a broken theme module still lets the page show
@@ -40,6 +40,8 @@ try {
     if (input) await t.INPUT_MODE.write(input);
     const scale = Number(options.get("scale"));
     if (scale) await t.SCALE.write(scale);
+    const animation = one_of(t.AnimationLevels, options.get("animation"));
+    if (animation) await t.ANIMATION_LEVEL.write(animation);
   };
 } catch (error) {
   show_error("Loading the theme failed", error);

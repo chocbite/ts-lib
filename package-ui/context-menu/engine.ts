@@ -1,7 +1,6 @@
 import { DOCUMENT_HANDLER } from "#document";
 import type { Option } from "@chocbite/ts-lib/result";
 import { Container } from "./container";
-import "./engine.scss";
 import { ContextMenu } from "./menu";
 
 export const CONTEXT_MENY_SYMBOL = Symbol("context_menu");

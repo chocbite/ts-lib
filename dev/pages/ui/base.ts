@@ -386,7 +386,7 @@ const toggle_ticking = () => {
     loop.style.display = "block";
     loop.style.width = "14rem";
     loop.style.border = "1px solid #8888";
-    loop.attach_state_ROA_to_prop("array", array);
+    loop.set({ array });
     box(loops, label).appendChild(loop);
   }
   array.sub(() => queueMicrotask(update), true);

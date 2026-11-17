@@ -1,4 +1,4 @@
-import { Spinner } from "@chocbite/ts-lib-ui/spinner";
+import { spinner } from "@chocbite/ts-lib-ui/spinner";
 import { box, controls, row, section } from "../../helpers";
 
 //      _____ _____ ____________  _____
@@ -18,7 +18,7 @@ import { box, controls, row, section } from "../../helpers";
       width: size + "px",
       height: size + "px",
       outline: "1px dashed #8886",
-    }).appendChild(new Spinner());
+    }).appendChild(spinner());
 }
 
 //                _____ _____  ______ _____ _______
@@ -42,7 +42,7 @@ import { box, controls, row, section } from "../../helpers";
       width: width + "px",
       height: height + "px",
       outline: "1px dashed #8886",
-    }).appendChild(new Spinner());
+    }).appendChild(spinner());
 }
 
 //     _____ _   _ _      _____ _   _ ______
@@ -66,7 +66,7 @@ import { box, controls, row, section } from "../../helpers";
     holder.style.width = "1em";
     holder.style.height = "1em";
     holder.style.verticalAlign = "middle";
-    holder.appendChild(new Spinner());
+    holder.appendChild(spinner());
     text.append(" loading");
   }
   const button = box(items, "button").appendChild(
@@ -78,7 +78,7 @@ import { box, controls, row, section } from "../../helpers";
   const holder = button.appendChild(document.createElement("span"));
   holder.style.width = "1.2em";
   holder.style.height = "1.2em";
-  holder.appendChild(new Spinner());
+  holder.appendChild(spinner());
   button.append("Saving");
 }
 
@@ -103,7 +103,7 @@ import { box, controls, row, section } from "../../helpers";
       const holder = document.createElement("div");
       holder.style.width = "24px";
       holder.style.height = "24px";
-      holder.appendChild(new Spinner());
+      holder.appendChild(spinner());
       spinners.push(holder);
     }
     grid.replaceChildren(...spinners);

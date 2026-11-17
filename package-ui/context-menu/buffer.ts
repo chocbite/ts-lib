@@ -1,5 +1,5 @@
 import { define_element } from "#base";
-import { Spinner } from "#spinner";
+import { spinner } from "#spinner";
 import "./buffer.scss";
 import { MenuLine } from "./line";
 
@@ -11,7 +11,7 @@ export class Buffer extends MenuLine {
 
   constructor() {
     super();
-    this.appendChild(new Spinner());
+    this.appendChild(spinner());
   }
 
   get skips_focus() {

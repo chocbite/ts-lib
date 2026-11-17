@@ -80,7 +80,7 @@ Packages are published from `dist/ts-lib` and `dist/ts-lib-ui` in the repo root,
 - A page is a plain module that builds into `document.body` when imported, no exports. Every `.ts` file in `dev/pages/` is a page, so shared code goes in `dev/helpers.ts`.
 - Import the libraries like a consumer, `@chocbite/ts-lib-ui/list`, never `#` imports or relative paths into the package folders.
 - Show variations side by side with `section`, `row`, `box` and `controls` from `dev/helpers.ts`, with a note per section on what to look at. Deterministic data, expensive cases (thousands of elements) behind a button.
-- The trial frame calls `theme_init` and applies theme, input mode and scale from the shell, pages must not call `theme_init`.
+- The trial frame calls `theme_init` and applies theme, input mode, scale and animation level from the shell, pages must not call `theme_init`.
 - The shell (`dev/index.html`, `dev/shell.ts`) must never import from the libraries, so it keeps working while they are broken.
 - Check with `npm run typecheck:dev` (not part of `npm run typecheck`) and by loading the page.
 

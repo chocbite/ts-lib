@@ -9,7 +9,7 @@ npm run dev
 ## How it works
 
 - `index.html` / `shell.ts` is the shell: the page list and the controls. It must never import from the libraries, so it keeps working while they are broken. It remembers the selected page and controls in localStorage.
-- `trial.html` / `trial.ts` runs in the shell's iframe. It applies the theme, input mode and scale from the shell, then loads one page. Changing them in the shell applies them while the page runs, without a reload. Everything the libraries do to the document (global styles, custom elements, errors) stays in the frame.
+- `trial.html` / `trial.ts` runs in the shell's iframe. It applies the theme, input mode, scale and animation level from the shell, then loads one page. Changing them in the shell applies them while the page runs, without a reload. Everything the libraries do to the document (global styles, custom elements, errors) stays in the frame.
 - Libraries resolve to source through the `development` condition, so changes show without a build. A change reloads the frame and it scrolls back to where it was. SCSS changes apply without a reload.
 
 ## Pages

@@ -15,6 +15,8 @@ const PAGES = Object.keys(import.meta.glob("./pages/**/*.ts"))
 const THEMES = { light: "Light", dark: "Dark" };
 const INPUTS = { mouse: "Mouse", pen: "Pen", touch: "Touch" };
 const SCALES = { 75: "75%", 100: "100%", 125: "125%", 150: "150%", 200: "200%" };
+//The animation levels of the theme, the names its settings show
+const ANIMATIONS = { all: "Full", some: "Functional", none: "None" };
 const SIZES = {
   fill: "Fill",
   "800x480": "800 × 480",
@@ -28,6 +30,7 @@ interface ShellState {
   theme: string;
   input: string;
   scale: string;
+  animation: string;
   size: string;
   sidebar: boolean;
 }
@@ -37,6 +40,7 @@ const state: ShellState = {
   theme: "light",
   input: "mouse",
   scale: "100",
+  animation: "all",
   size: "fill",
   sidebar: true,
 };
@@ -65,6 +69,7 @@ const trial_url = (page: string) =>
     theme: state.theme,
     input: state.input,
     scale: state.scale,
+    animation: state.animation,
   }).toString();
 
 /**Loads the selected page in the frame, which reloads it*/
@@ -115,7 +120,7 @@ function render_pages() {
 function bind_select(
   id: string,
   options: { [value: string]: string },
-  key: "theme" | "input" | "scale" | "size",
+  key: "theme" | "input" | "scale" | "animation" | "size",
   changed: () => void,
 ) {
   const select = by_id<HTMLSelectElement>(id);
@@ -138,13 +143,19 @@ const update_frame = () => {
   render_pages();
   if (state.page) open.href = trial_url(state.page);
   frame.contentWindow?.postMessage(
-    { theme: state.theme, input: state.input, scale: state.scale },
+    {
+      theme: state.theme,
+      input: state.input,
+      scale: state.scale,
+      animation: state.animation,
+    },
     location.origin,
   );
 };
 bind_select("theme", THEMES, "theme", update_frame);
 bind_select("input", INPUTS, "input", update_frame);
 bind_select("scale", SCALES, "scale", update_frame);
+bind_select("animation", ANIMATIONS, "animation", update_frame);
 bind_select("size", SIZES, "size", apply_size);
 
 by_id("reload").onclick = () => frame.contentWindow?.location.reload();
