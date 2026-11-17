@@ -1,9 +1,12 @@
+import { list_errors } from "./errors";
 import { container } from "./container";
 import { ListDragGroup } from "./drag";
 import { node_field, number_field, text_field } from "./field";
 import { column, column_string } from "./types";
 
 export const list = {
+  /**The kinds of the NiceErrors the list makes, like list.errors.NOT_SELECTABLE*/
+  errors: list_errors,
   column,
   column_string,
   container,

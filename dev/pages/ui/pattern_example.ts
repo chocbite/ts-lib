@@ -12,7 +12,7 @@ import {
   type ExampleGroup,
 } from "@chocbite/ts-lib-ui/pattern_example";
 import { Base, define_element } from "@chocbite/ts-lib-ui/base";
-import { box, controls, row, section } from "../../helpers";
+import { box, controls, row, section, demo_error } from "../../helpers";
 
 /**The box written in the older style, with setters and getters, only for the cost comparison, not part of the example*/
 class SetterBox extends Base {
@@ -102,9 +102,9 @@ const output = (parent: HTMLElement): HTMLPreElement => {
     "Purple / green": () =>
       color.set_ok((purple = !purple) ? "#8e44ad" : "#27ae60"),
     "Error all": () => {
-      width.set_err("no width");
-      label.set_err("no label");
-      color.set_err("no color");
+      width.set_err(demo_error("no width"));
+      label.set_err(demo_error("no label"));
+      color.set_err(demo_error("no color"));
     },
   });
 }

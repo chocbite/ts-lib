@@ -1,4 +1,14 @@
-import { err, ok } from "#result";
+import { err_nice, NiceError, ok } from "#result";
+
+/**The kinds of the NiceErrors of the depot, their descriptions are the nice texts, given as depot.errors*/
+const depot_errors = Object.freeze({
+  /**The type of a path was removed, not supposed to happen, the cause is an Error*/
+  TYPE_REMOVED: Symbol("Data type removed"),
+  /**Nothing is registered at a path, normal use, a path can be held before it is registered*/
+  NOT_REGISTERED: Symbol("Data not available"),
+  /**A path that is not a valid depot path, like one with an empty segment, a bug, the cause is an Error whose stack shows the caller*/
+  INVALID_PATH: Symbol("Invalid data path"),
+});
 import state, {
   type StateLocalRES,
   type StateLocalROS,
@@ -234,7 +244,7 @@ class Group<T> extends Node {
 class Type<T> extends Group<T> {
   #lookups = new Lookups((lookup) =>
     this.removed
-      ? err(`Depot type "${this.id}" is removed`)
+      ? err_nice(depot_errors.TYPE_REMOVED, new Error(`Depot type "${this.id}" is removed`))
       : walk(lookup, this, 0, this.path + "/" + lookup.ids.join("/")),
   );
 
@@ -333,7 +343,7 @@ function walk(
   let node: Node = from;
   for (const id of lookup.ids.slice(start)) {
     if (!(node instanceof Group))
-      return err(`Depot path "${path}" is not registered`);
+      return err_nice(depot_errors.NOT_REGISTERED, `Depot path "${path}" is not registered`);
     lookup.depend(node[SLOTS], id);
     let next = node[LOOKUP](id);
     if (next instanceof Alias) {
@@ -343,7 +353,7 @@ function walk(
       next = next.target;
     }
     if (!next || next.removed)
-      return err(`Depot path "${path}" is not registered`);
+      return err_nice(depot_errors.NOT_REGISTERED, `Depot path "${path}" is not registered`);
     node = next;
   }
   return ok(node as DepotNode);
@@ -379,8 +389,8 @@ class Lookup {
   readonly state: StateLocalRES<DepotNode>;
   #resolve: (lookup: Lookup) => StateResult<DepotNode>;
   #slots: [Slots, string][] = [];
-  /**The last node or error message, so the state is only set on a change*/
-  #last: unknown;
+  /**The last result, so the state is only set on a change, compare treats equal NiceErrors as the same*/
+  #last: StateResult<DepotNode>;
 
   constructor(
     ids: string[],
@@ -389,7 +399,7 @@ class Lookup {
     this.ids = ids;
     this.#resolve = resolve;
     const result = resolve(this);
-    this.#last = result.ok ? result.value : result.error;
+    this.#last = result;
     this.state = state.res(result);
   }
 
@@ -404,9 +414,8 @@ class Lookup {
     for (const [slots, id] of this.#slots) slots.delete(this, id);
     this.#slots = [];
     const result = this.#resolve(this);
-    const last = result.ok ? result.value : result.error;
-    if (last === this.#last) return;
-    this.#last = last;
+    if (this.#last.compare(result)) return;
+    this.#last = result;
     this.state.set(result);
   }
 }
@@ -425,7 +434,9 @@ class Lookups {
     if (existing) return existing.state.read_only;
     const ids = split(path);
     if (!ids)
-      return state.err<DepotNode>(`Depot path "${path}" is invalid`).read_only;
+      return state.err<DepotNode>(
+        new NiceError(depot_errors.INVALID_PATH, new Error(`Depot path "${path}" is invalid`)),
+      ).read_only;
     const lookup = new Lookup(ids, this.#resolve);
     this.#map.set(path, lookup);
     return lookup.state.read_only;
@@ -490,7 +501,7 @@ const GLOBAL = new Lookups((lookup) => {
   const type_id = lookup.ids[0] ?? "";
   lookup.depend(TYPES.slots, type_id);
   const type = TYPES[LOOKUP](type_id);
-  if (!type) return err(`Depot path "${path}" is not registered`);
+  if (!type) return err_nice(depot_errors.NOT_REGISTERED, `Depot path "${path}" is not registered`);
   return walk(lookup, type, 1, path);
 });
 
@@ -502,6 +513,8 @@ const STATES = TYPES.add<unknown>(
 );
 
 export const depot = {
+  /**The kinds of the NiceErrors of the depot, like depot.errors.NOT_REGISTERED*/
+  errors: depot_errors,
   /**Registers a type, the root segment of a path, throws if the id exists
    * @template T the content type of every entry below the type*/
   type<T>(

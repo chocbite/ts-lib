@@ -1,7 +1,8 @@
 import { define_element } from "#base";
 import { ListField } from "#list";
 import type { DepotChild } from "@chocbite/ts-lib/depot";
-import type { Result } from "@chocbite/ts-lib/result";
+import type { StateResult } from "@chocbite/ts-lib/state";
+
 import "./value.scss";
 import { state_format } from "./kind";
 
@@ -28,9 +29,9 @@ export class DepotValueField extends ListField {
     this.attach_state_to_symbol(
       VALUE,
       child.value,
-      (result: Result<unknown, string>) => {
+      (result: StateResult<unknown>) => {
         this.classList.toggle("error", !result.ok);
-        this.textContent = result.ok ? format(result.value) : result.error;
+        this.textContent = result.ok ? format(result.value) : result.error.nice;
       },
     );
   }

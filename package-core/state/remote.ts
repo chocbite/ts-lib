@@ -4,13 +4,14 @@ import {
   sync_resolve,
 } from "#common";
 import {
-  err,
   none,
   ok,
   OptionNone,
   ResultInferOk,
   ResultOk,
+  err_nice,
 } from "#result";
+import { not_writable, state_errors } from "./errors";
 import { StateBase } from "./base";
 import { StateNoHelper as NoHelper, StateHelperBase } from "./helpers/helpers";
 import {
@@ -268,7 +269,7 @@ export abstract class StateRemote<
             //Ok states have no error value, their reads wait and the next read retries
             if (!this.rok)
               this.ful_r_prom(
-                err(`No response within ${this.timeout}ms`) as RRT,
+                err_nice(state_errors.TIMED_OUT, new Error(`No response within ${this.timeout}ms`)) as RRT,
               );
           }, this.timeout);
           if (this.debounce > 0)
@@ -317,7 +318,7 @@ export abstract class StateRemote<
     try {
       return await this.write_action(value, this);
     } catch (e) {
-      return err(`Write failed: ${e instanceof Error ? e.message : String(e)}`);
+      return err_nice(state_errors.WRITE_FAILED, e instanceof Error ? e : `Write failed: ${String(e)}`);
     }
   }
 }
@@ -405,7 +406,7 @@ class Func<
     state: StateRemoteOwner<RRT, WT, HEL>,
   ): PromiseLike<SR<void>> {
     if (this.#write_action) return this.#write_action(value, state);
-    else return sync_resolve(err("not writable"));
+    else return sync_resolve(not_writable());
   }
 
   related(): HELToREL<HEL> {

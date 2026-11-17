@@ -62,7 +62,7 @@ Options:
 - `mode`: `"single"` (radio buttons, none with sub rows) or `"multi"` (checkboxes). In multi mode the header checkbox selects all rows or clears, and shows whether some or all rows are selected. Right click (or long press) on it opens a menu with "Select all" and "Deselect all". In single mode the header cell is empty.
 - `key`: the identity of the data of a row. Defaults to the data itself. Give a key whenever the data can be equal between rows, like primitives, or is replaced by new objects on updates. Keys must be unique among all rows, sub rows included.
 
-A row with `selectable: false` in its row options, or an invalid row, can not be selected. Its radio button or checkbox cell is empty, and trying to select it shows "This row cannot be selected" at the row.
+A row with `selectable: false` in its row options, or an invalid row, can not be selected. Its radio button or checkbox cell is empty, and trying to select it shows "Not selectable" at the row, an error of kind `list.errors.NOT_SELECTABLE`.
 
 ### The state
 
@@ -70,7 +70,7 @@ A row with `selectable: false` in its row options, or an invalid row, can not be
 - The list writes the state only on user actions, never on its own. Rows that are removed, closed away, become invalid or unselectable, or get another key do not change the state.
 - Writes use array write instructions, so only the changed keys are sent and only their rows are touched: a toggle writes a `push` or `delete`, while a plain click, a range and single mode replace the selection with a `fresh` array. The bound state must apply these instructions, which local writable states like `state.ok_w` do.
 - A toggle or ctrl shift range keeps the keys the list does not show, so lists showing different rows can share a state. Select all replaces the selection with all visible selectable rows of the list, deselect all and escape clear the whole selection.
-- The rows show a change when the state gives it back, so a state that rejects a write, or writes asynchronously, is shown as it is. The reason of a rejected write is shown at the row as the validation message of the browser, like the form elements do. An error of the state shows nothing selected.
+- The rows show a change when the state gives it back, so a state that rejects a write, or writes asynchronously, is shown as it is. The nice text of the error of a rejected write is shown at the row as the validation message of the browser. An error of the state shows nothing selected.
 - The state is attached while the list is in the document, like other element states.
 - Without `bind` the selection is kept in a state of the list nobody else can reach, `bind({})` goes back to that.
 

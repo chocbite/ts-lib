@@ -1,5 +1,5 @@
 import depot, { type DepotGroup, type DepotType } from "@chocbite/ts-lib/depot";
-import { ok } from "@chocbite/ts-lib/result";
+import { ok, NiceError } from "@chocbite/ts-lib/result";
 import state, { type StateROSW } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it } from "vitest";
 import depot_ui, { DepotTree } from ".";
@@ -15,6 +15,8 @@ const selector_panel = () =>
     close(): void;
   };
 const title = () => selector_panel().querySelector(".title")!.textContent;
+/**A test error whose nice text is its message, so shown texts read as before*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 const types: DepotType<any>[] = [];
 afterEach(() => {
@@ -261,7 +263,7 @@ describe("select_state", () => {
       ),
     );
     const remote = machine.add("remote", "Remote", "", state.ok_w(1).read_only);
-    const broken = machine.add("broken", "Broken", "", state.err("offline"));
+    const broken = machine.add("broken", "Broken", "", state.err(nice_err("offline")));
     return { machine, speed, temp, name, on, mode, remote, broken };
   };
   const groups: DepotGroup<unknown>[] = [];

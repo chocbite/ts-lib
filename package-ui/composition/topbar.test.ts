@@ -1,6 +1,10 @@
+import { NiceError } from "@chocbite/ts-lib/result";
 import state from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { topbar, topbar_button, topbar_label } from "./topbar";
+
+/**A test error whose nice text is its message, so shown texts read as before*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 const attach = <T extends HTMLElement>(element: T): T =>
   document.body.appendChild(element);
@@ -57,7 +61,7 @@ describe("Topbar", () => {
   it("empties a side whose state gives an error", () => {
     const items = state.from_w<Element[]>([topbar_label({ text: "a" })]);
     const bar = attach(topbar({ mid: items }));
-    items.set_err("gone");
+    items.set_err(nice_err("gone"));
     expect(bar.textContent).toBe("");
   });
 });
@@ -93,8 +97,8 @@ describe("Topbar button", () => {
     const text = state.from_w("a");
     const ic = state.from_w<ReturnType<typeof icon> | undefined>(icon("a"));
     const button = attach(topbar_button({ text, icon: ic }));
-    text.set_err("no text");
-    ic.set_err("no icon");
+    text.set_err(nice_err("no text"));
+    ic.set_err(nice_err("no icon"));
     expect(button.textContent).toBe("⚠ no text");
     expect(button.querySelector("svg")).toBeNull();
   });
@@ -121,7 +125,7 @@ describe("Topbar label", () => {
     const text = state.from_w("b");
     const label = attach(topbar_label({ text }));
     expect(label.textContent).toBe("b");
-    text.set_err("gone");
+    text.set_err(nice_err("gone"));
     expect(label.textContent).toBe("⚠ gone");
   });
 });

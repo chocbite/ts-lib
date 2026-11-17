@@ -173,7 +173,7 @@ class Panel extends Base {
       this.#set_icon(icon.ok ? icon.value : undefined),
     );
     this.set_input(PANEL_CONTENT.title, content.content_title, (title) => {
-      this.#title.textContent = title.ok ? title.value : "⚠ " + title.error;
+      this.#title.textContent = title.ok ? title.value : "⚠ " + title.error.nice;
     });
     this.set_input(PANEL_CONTENT.closable, content.content_closable, (c) =>
       this.#set_closable(c.ok && c.value),

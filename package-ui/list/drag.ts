@@ -1,5 +1,5 @@
 import { Base, define_element } from "#base";
-import type { Option, Result } from "@chocbite/ts-lib/result";
+import type { NiceError, Option } from "@chocbite/ts-lib/result";
 import { state, type State, type StateREAW } from "@chocbite/ts-lib/state";
 import "./drag.scss";
 import type { ListWarn } from "./warn";
@@ -342,7 +342,7 @@ export class ListReorder<R> {
   /**Writes the moves of the rows to the place, rows next to each other in one parent move with one write
    * Moving to another parent inserts first and removes after, so a failure can leave a row twice but never loses it */
   async #drop(rows: AnyRow[], place: ListDropPlace) {
-    const errors: string[] = [];
+    const errors: NiceError[] = [];
     const into = place.mode === "into" ? place.row : undefined;
     //Rows are dropped in order before this row, undefined appends to the parent
     const before: AnyRow | undefined =
@@ -371,7 +371,7 @@ export class ListReorder<R> {
         continue;
       }
       const items = chunk.map((row) => row.data);
-      const inserted: Result<void, string> = await target_rows.write(
+      const inserted = await target_rows.write(
         before
           ? state.a.write.splice(before.index, 0, ...items)
           : state.a.write.push(...items),
@@ -393,7 +393,7 @@ export class ListReorder<R> {
     if (errors.length)
       (place.row.reorder as ListReorder<R> | undefined)?.warn(
         place.row,
-        [...new Set(errors)].join("\n"),
+        [...new Set(errors.map((error) => error.nice))].join("\n"),
       );
   }
 
@@ -428,6 +428,6 @@ export class ListReorder<R> {
     const result = await rows.write(state.a.write.move(from, to, 1));
     //Moving takes the row out of the document for a moment, which loses the focus
     row.focus_cell();
-    if (result.err) this.warn(row, result.error);
+    if (result.err) this.warn(row, result.error.nice);
   }
 }

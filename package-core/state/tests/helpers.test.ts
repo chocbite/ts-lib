@@ -1,7 +1,8 @@
 import { sync_resolve } from "#common";
-import { err, none, ok } from "#result";
+import { none, ok, err_nice } from "#result";
 import { describe, expect, it, vi } from "vitest";
 import { state as st, type StateResult } from "..";
+import { TEST_ERROR } from "./tests_shared";
 
 //##################################################################################################################################################
 //      _   _ _    _ __  __ ____  ______ _____
@@ -20,11 +21,11 @@ describe("State Number Min Max", async () => {
     expect((await state_inst.limit(11)).unwrap()).to.equal(10);
     expect((await state_inst.limit(-11)).unwrap()).to.equal(0);
     expect(await state_inst.write(11)).toEqual(
-      err("11 is bigger than the limit of 10"),
+      err_nice(st.errors.ABOVE_MAX, "11 is bigger than the limit of 10"),
     );
     expect((await state_inst).unwrap()).to.equal(5);
     expect(await state_inst.write(-11)).toEqual(
-      err("-11 is smaller than the limit of 0"),
+      err_nice(st.errors.BELOW_MIN, "-11 is smaller than the limit of 0"),
     );
     expect((await state_inst).unwrap()).to.equal(5);
     expect(await state_inst.write(7)).toEqual(ok(undefined));
@@ -37,10 +38,10 @@ describe("State Number Min Max", async () => {
     );
     expect((await state_inst).unwrap()).to.equal(5);
     expect(await state_inst.check(11)).toEqual(
-      err("11 is bigger than the limit of 10"),
+      err_nice(st.errors.ABOVE_MAX, "11 is bigger than the limit of 10"),
     );
     expect(await state_inst.check(-11)).toEqual(
-      err("-11 is smaller than the limit of 0"),
+      err_nice(st.errors.BELOW_MIN, "-11 is smaller than the limit of 0"),
     );
   });
   it("Checking related min max", async () => {
@@ -104,7 +105,7 @@ describe("State Number decimals", async () => {
     const state_inst = st.rosw(st.n.help(ok(5), { decimals: st.ok(2) }), true);
     expect(await state_inst.check(5.12)).toEqual(ok(5.12));
     expect(await state_inst.check(5.123)).toEqual(
-      err("5.123 has more than 2 decimals"),
+      err_nice(st.errors.TOO_MANY_DECIMALS, "5.123 has more than 2 decimals"),
     );
   });
 });
@@ -115,7 +116,7 @@ describe("State Number step start", async () => {
     expect((await state_inst.limit(11)).unwrap()).to.equal(11.05);
     expect((await state_inst.limit(-11)).unwrap()).to.equal(-11.05);
     expect(await state_inst.write(11)).toEqual(
-      err("11 is not on a step of 0.13"),
+      err_nice(st.errors.OFF_STEP, "11 is not on a step of 0.13"),
     );
     expect((await state_inst).unwrap()).to.equal(5);
     expect(await state_inst.write(11.05)).toEqual(ok(undefined));
@@ -134,7 +135,7 @@ describe("State Number step start", async () => {
       "-11.03",
     );
     expect(await state_inst.write(11)).toEqual(
-      err("11 is not on a step of 0.13 starting from 0.02"),
+      err_nice(st.errors.OFF_STEP, "11 is not on a step of 0.13 starting from 0.02"),
     );
     expect((await state_inst).unwrap()).to.equal(5);
     expect(await state_inst.write(10.94)).toEqual(ok(undefined));
@@ -198,7 +199,7 @@ describe("State String Max Len", async () => {
     );
     expect((await state_inst).unwrap()).to.equal("5");
     expect(await state_inst.check("123456789012")).toEqual(
-      err("the text is longer than the limit of 10 characters"),
+      err_nice(st.errors.TEXT_TOO_LONG, "the text is longer than the limit of 10 characters"),
     );
   });
   it("Checking related max len", async () => {
@@ -229,7 +230,7 @@ describe("State String Max Byte Len", async () => {
     );
     expect((await state_inst).unwrap()).to.equal("5");
     expect(await state_inst.check("1æøåæ01")).toEqual(
-      err("the text is longer than the limit of 10 bytes"),
+      err_nice(st.errors.TEXT_TOO_LONG, "the text is longer than the limit of 10 bytes"),
     );
   });
   it("Checking related max byte len", async () => {
@@ -312,7 +313,7 @@ describe("Custom helper", async () => {
     related: () => none(),
     limit: (value: number) => sync_resolve(ok(value)),
     check: (value: number) =>
-      sync_resolve(value < 0 ? err("negative") : ok(value)),
+      sync_resolve(value < 0 ? err_nice(TEST_ERROR, "negative") : ok(value)),
     on_change: vi.fn<(value: StateResult<number>) => void>(),
   });
 
@@ -321,7 +322,7 @@ describe("Custom helper", async () => {
     const state_inst = st.rosw([ok(1), helper], true);
     state_inst.set_ok(2);
     expect(await state_inst.write(3)).toEqual(ok(undefined));
-    expect(await state_inst.write(-1)).toEqual(err("negative"));
+    expect(await state_inst.write(-1)).toEqual(err_nice(TEST_ERROR, "negative"));
     expect(state_inst.ok()).toBe(3);
     expect(helper.on_change.mock.calls.map(([value]) => value)).toEqual([
       ok(1),

@@ -1,3 +1,4 @@
+import { NiceError } from "@chocbite/ts-lib/result";
 import form from "#form";
 import state from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it } from "vitest";
@@ -8,6 +9,9 @@ import {
   type CustomizationPanel,
 } from "./customization";
 import { CompAnchor } from "./shared";
+
+/**A test error whose nice text is its message, so shown texts read as before*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 const opened: CustomizationPanel[] = [];
 const open = (...args: Parameters<typeof customization_panel>) => {
@@ -47,7 +51,7 @@ describe("Customization", () => {
     expect(c.contains(a)).toBe(true);
     advanced.set_ok([a, b]);
     expect(c.contains(b)).toBe(true);
-    advanced.set_err("none");
+    advanced.set_err(nice_err("none"));
     expect(c.contains(a)).toBe(false);
     expect(c.contains(b)).toBe(false);
   });

@@ -1,4 +1,4 @@
-import { ok, some, type Option } from "@chocbite/ts-lib/result";
+import { ok, some, type NiceError, type Option } from "@chocbite/ts-lib/result";
 import {
   state,
   type State,
@@ -8,6 +8,7 @@ import {
   type StateSub,
 } from "@chocbite/ts-lib/state";
 import { AccessTypes } from "./access";
+import { fault_icon } from "./fault";
 import {
   CREATE,
   type InputKey,
@@ -159,11 +160,59 @@ export abstract class Base extends HTMLElement {
   ): void {
     if (input === undefined) return;
     if (state.is.state_of(input))
-      this.attach_state_to_symbol(key, input, apply as StateSub<any>);
+      //Every input reports its errors as faults, so every element shows the fault icon the same way.
+      //After apply, which can rewrite the children of the element and with them the icon
+      this.attach_state_to_symbol(key, input, ((value: InputResult<S>) => {
+        apply(value);
+        this.fault(key, value.err ? value.error : undefined);
+      }) as StateSub<any>);
     else {
       this.detach_state_from_symbol(key);
       apply(ok(input as InputValue<S>) as InputResult<S>);
+      this.fault(key, undefined);
     }
+  }
+
+  //       ______      _    _ _   _______ _____
+  //      |  ____/   | |  | | | |__   __/ ____|
+  //      | |__ /    | |  | | |    | | | (___
+  //      |  __/ /  | |  | | |    | |  ___   //      | | / ____ | |__| | |____| |  ____) |
+  //      |_|/_/    _____/|______|_| |_____/
+  /**Faults by key, made at the first fault, an element that never has one pays nothing*/
+  #faults?: Map<symbol, NiceError>;
+  #fault_icon?: Element;
+
+  /**The problems the element has now, the errors of its inputs and the faults it reports itself*/
+  get faults(): readonly NiceError[] {
+    return this.#faults ? [...this.#faults.values()] : [];
+  }
+
+  /**Sets or clears, with undefined, a fault of the element under a key, the errors of inputs are set by set_input
+   * For problems that are not inputs, use a key of its own, like Symbol("connection")
+   * The element shows the fault icon while it has a fault, clicking it lists them*/
+  protected fault(key: symbol, error: NiceError | undefined): void {
+    if (error) (this.#faults ??= new Map()).set(key, error);
+    else if (!this.#faults?.delete(key) && !this.#faults?.size) return;
+    const has = this.#faults.size > 0;
+    if (has) {
+      this.#fault_icon ??= fault_icon(() => this.faults);
+      //Setting the text of the anchor removes the icon, it is put back on the next input or fault
+      const anchor = this.fault_anchor();
+      if (this.#fault_icon.parentNode !== anchor) {
+        anchor.classList.add("base-fault-host");
+        anchor.appendChild(this.#fault_icon);
+      }
+    } else if (this.#fault_icon) {
+      this.#fault_icon.parentElement?.classList.remove("base-fault-host");
+      this.#fault_icon.remove();
+      this.#fault_icon = undefined;
+    }
+  }
+
+  /**Element the fault icon is put in, at its top right corner, the element itself by default
+   * Override it to put the icon in a child, like the box of a value instead of the label*/
+  protected fault_anchor(): Element {
+    return this;
   }
 
   /**The state an input has now, undefined when it has a fixed value or was never set
@@ -416,7 +465,7 @@ export abstract class Base extends HTMLElement {
   attach_state_to_prop<K extends keyof this>(
     prop: K,
     state: StateREA<this[K], any, any>,
-    map_err: (error: string) => Option<this[K]>,
+    map_err: (error: NiceError) => Option<this[K]>,
     visible?: boolean,
   ): this {
     this.detach_state_from_prop(prop).#props.set(
@@ -441,7 +490,7 @@ export abstract class Base extends HTMLElement {
   attach_state_to_prop_map<K extends keyof this, T = this[K]>(
     prop: K,
     state: StateREA<T, any, any>,
-    map_err: (error: string) => Option<this[K]>,
+    map_err: (error: NiceError) => Option<this[K]>,
     map: (val: T) => Option<this[K]>,
     visible?: boolean,
   ): this {
@@ -528,7 +577,7 @@ export abstract class Base extends HTMLElement {
   attach_state_to_attribute(
     qualified_name: string,
     state: StateREA<string, any, any>,
-    map_err: (error: string) => Option<string>,
+    map_err: (error: NiceError) => Option<string>,
     visible?: boolean,
   ): this {
     this.detach_state_from_attribute(qualified_name).#attr.set(
@@ -554,7 +603,7 @@ export abstract class Base extends HTMLElement {
   attach_state_to_attribute_map<U>(
     qualified_name: string,
     state: StateREA<U, any, any>,
-    map_err: (error: string) => Option<string>,
+    map_err: (error: NiceError) => Option<string>,
     map: (val: U) => Option<string>,
     visible?: boolean,
   ): this {

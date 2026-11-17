@@ -6,7 +6,7 @@ import form, {
 import { IPAddress, IPVersion } from "@chocbite/ts-lib/common";
 import { err, ok } from "@chocbite/ts-lib/result";
 import state, { type State } from "@chocbite/ts-lib/state";
-import { box, controls, row, section } from "../../../helpers";
+import { box, controls, row, section, demo_error } from "../../../helpers";
 
 /**Shows the current value of a state as text and follows it*/
 function readout<T>(
@@ -86,7 +86,7 @@ const WIDTH = { width: "18rem" };
   const rejecting = state.rosw(ok(new IPAddress("10.0.0.1")), async (v, s) =>
     v.as_array[0] === 10 && v.is_v4
       ? (s.set_ok(v), ok(undefined))
-      : err("Only 10.x.x.x addresses are allowed"),
+      : err(demo_error("Rejected", "Only 10.x.x.x addresses are allowed")),
   );
   const access = state.ok_w<AccessTypes>("w");
   controls(sec, {

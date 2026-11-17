@@ -8,7 +8,7 @@ import {
 } from "@chocbite/ts-lib-ui/icons";
 import { err, ok } from "@chocbite/ts-lib/result";
 import state, { type State } from "@chocbite/ts-lib/state";
-import { box, controls, row, section } from "../../../helpers";
+import { box, controls, row, section, demo_error } from "../../../helpers";
 
 /**Shows the current value of a state as text and follows it*/
 function readout<T>(parent: HTMLElement, label: string, value: State<T>) {
@@ -254,11 +254,11 @@ const VARIANTS = [
   );
   const value = state.from_w(0);
   const guarded = state.rosw(ok(0), async (v, s) =>
-    v > 3 && v < 6 ? err("Values between 3 and 6 are not allowed") : (s.set_ok(v), ok(undefined)),
+    v > 3 && v < 6 ? err(demo_error("Rejected", "Values between 3 and 6 are not allowed")) : (s.set_ok(v), ok(undefined)),
   );
   const access = state.ok_w<AccessTypes>("w");
   controls(sec, {
-    "Set error": () => value.set_err("Sensor disconnected"),
+    "Set error": () => value.set_err(demo_error("Sensor disconnected")),
     "Set 8": () => value.set_ok(8),
     "Access write": () => access.set_ok("w"),
     "Access read": () => access.set_ok("r"),

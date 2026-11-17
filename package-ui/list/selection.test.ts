@@ -1,6 +1,6 @@
 import ctm from "#context-menu";
 import { theme_init } from "#theme";
-import { err, ok, some, type Option } from "@chocbite/ts-lib/result";
+import { err, ok, some, type Option, NiceError } from "@chocbite/ts-lib/result";
 import {
   state,
   STATE_ARRAY_WRITE_KEY,
@@ -11,6 +11,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import list from ".";
 import type { ListRow } from "./row";
 import type { ListSelectionOptions } from "./selection";
+
+/**A test error whose nice text is its message, so shown texts read as before*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 //Glyphs and backgrounds come from theme variables
 theme_init();
@@ -400,7 +403,7 @@ describe("List selection state", () => {
 
   it("a rejected write changes nothing and shows why at the row", async () => {
     const selection = state.rosw<number[]>(ok([]), () =>
-      Promise.resolve(err("Not allowed")),
+      Promise.resolve(err(nice_err("Not allowed"))),
     );
     const container = create([item(1), item(2)], {}, false, selection);
     const row = rows_of(container)[1];
@@ -447,7 +450,7 @@ describe("List selection state", () => {
     container.bind({ selection });
     document.body.append(container);
     expect(selected(container)).toEqual(["item 1"]);
-    selection.set_err("broken");
+    selection.set_err(nice_err("broken"));
     expect(selected(container)).toEqual([]);
   });
 
@@ -963,7 +966,7 @@ describe("List selection of a row that can not be selected", () => {
   it("warns when the row is clicked", () => {
     const container = create([{ ...item(1), selectable: false }]);
     click(cell(rows_of(container)[0]));
-    expect(warning(container)).toBe("This row cannot be selected");
+    expect(warning(container)).toBe("Not selectable");
     expect(ids(container)).toEqual([]);
   });
 
@@ -996,18 +999,18 @@ describe("List selection of a row that can not be selected", () => {
   it("warns when its checkbox or radio button cell is clicked", () => {
     const container = create([{ ...item(1), selectable: false }]);
     click(check(rows_of(container)[0]));
-    expect(warning(container)).toBe("This row cannot be selected");
+    expect(warning(container)).toBe("Not selectable");
   });
 
   it("warns on space in its keyboard cell", () => {
     const container = create([{ ...item(1), selectable: false }], {}, true);
     key(key_field(rows_of(container)[0]), " ");
-    expect(warning(container)).toBe("This row cannot be selected");
+    expect(warning(container)).toBe("Not selectable");
   });
 
   it("warns for an invalid row", () => {
     const container = create([{ ...item(1), invalid: true }]);
     click(rows_of(container)[0].querySelector("list-error")!);
-    expect(warning(container)).toBe("This row cannot be selected");
+    expect(warning(container)).toBe("Not selectable");
   });
 });

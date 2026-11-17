@@ -2,7 +2,7 @@ import { CompAnchor, comp } from "@chocbite/ts-lib-ui/composition";
 import form, { type FormElement } from "@chocbite/ts-lib-ui/form";
 import { material_settings_rounded } from "@chocbite/ts-lib-ui/icons";
 import state from "@chocbite/ts-lib/state";
-import { controls, section } from "../../../helpers";
+import { controls, section, demo_error } from "../../../helpers";
 
 //      ____  _    _ _______ _______ ____  _   _
 //     |  _ \| |  | |__   __|__   __/ __ \| \ | |
@@ -65,7 +65,7 @@ function attach_customization_panel(button: HTMLElement) {
       list.pop();
       items.set_ok([...list]);
     },
-    Error: () => items.set_err("no settings"),
+    Error: () => items.set_err(demo_error("no settings")),
     Show: () => void c.hidden.write(false),
   });
 }

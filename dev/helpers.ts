@@ -1,3 +1,4 @@
+import { NiceError } from "@chocbite/ts-lib/result";
 //Small plain DOM helpers for laying out pages, they must not use the libraries
 
 /**Adds a titled section to the page and returns it to be filled
@@ -46,3 +47,6 @@ export function controls(
   }
   return controls;
 }
+
+/**An error for showing on a page, with its own kind, the nice text is what elements show, the message the details*/
+export const demo_error = (nice: string, message: string = nice) => new NiceError(Symbol(nice), message);

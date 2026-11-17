@@ -5,6 +5,7 @@ import state, {
   type StateRES,
   type StateROS,
 } from "#state";
+import { NiceError } from "#result";
 import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
 import depot, { type DepotChild, type DepotEntry, type DepotNode } from ".";
 
@@ -100,7 +101,7 @@ describe("content", () => {
     const value = state.from_w(5);
     const entry = depot.type<number>("t", "", "").add("e", "", "", value);
     expect(entry.value).toBe(value);
-    value.set_err("gone");
+    value.set_err(new NiceError(Symbol("Test error"), "gone"));
     expect((await entry.value).err).toBe(true);
   });
 
@@ -215,7 +216,10 @@ describe("get", () => {
 
   it("is an error until registered and after removed", () => {
     const s = depot.get("/widgets/basic/rect");
-    expect(error(s)).toBe('Depot path "/widgets/basic/rect" is not registered');
+    expect(error(s)?.kind).toBe(depot.errors.NOT_REGISTERED);
+    //Normal use, a path can be held before it is registered, so only a message
+    expect(error(s)?.cause).toBeUndefined();
+    expect(error(s)?.message).toBe('Depot path "/widgets/basic/rect" is not registered');
     const widgets = depot.type("widgets", "", "");
     const basic = widgets.group("basic", "", "");
     expect(error(s)).toBeDefined();
@@ -243,7 +247,10 @@ describe("get", () => {
   it.each(["", "a", "/", "/a/", "//a", "/a b"])(
     "is an error for the invalid path %j",
     (path) => {
-      expect(error(depot.get(path))).toBe(`Depot path "${path}" is invalid`);
+      expect(error(depot.get(path))?.kind).toBe(depot.errors.INVALID_PATH);
+      //A bug in the code giving the path, the stack shows it
+      expect(error(depot.get(path))?.cause?.stack).toContain("depot.test");
+      expect(error(depot.get(path))?.message).toBe(`Depot path "${path}" is invalid`);
     },
   );
 
@@ -286,7 +293,10 @@ describe("get", () => {
     const s = old.get("/a");
     old.remove();
     depot.type("t", "", "").add("a", "", "", 1);
-    expect(error(s)).toBe('Depot type "t" is removed');
+    expect(error(s)?.kind).toBe(depot.errors.TYPE_REMOVED);
+    //Not supposed to happen, so a full Error
+    expect(error(s)?.cause).toBeInstanceOf(Error);
+    expect(error(s)?.message).toBe('Depot type "t" is removed');
     expect(node(depot.get("/t/a"))).toBeDefined();
   });
 });

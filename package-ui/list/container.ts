@@ -6,9 +6,9 @@ import {
   type State,
   type StateInferSub,
   type StateREAW,
+  type StateResult,
   type StateSub,
 } from "@chocbite/ts-lib/state";
-import type { Result } from "@chocbite/ts-lib/result";
 import { ListAddRow, type ListAddRowOptions } from "./add_row";
 import { ListDragField, ListReorder, type ListReorderOptions } from "./drag";
 import "./container.scss";
@@ -228,7 +228,7 @@ class Container<
 
   #root: ListRoot<R, T, A, S>;
   #selection?: ListSelection<K>;
-  #selection_sub?: StateSub<Result<K[], string>>;
+  #selection_sub?: StateSub<StateResult<K[]>>;
   #parent: ListRowParent<A>;
   #box = this.appendChild(document.createElement("div"));
   #header?: HeaderRow<R, T, A, S>;
@@ -285,8 +285,8 @@ class Container<
       this.#root.selection = this.#selection;
       if (this.#selection.column) this.#box.classList.add("check");
       this.#box.classList.add(this.#selection.multi ? "multi" : "single");
-      this.#selection.on_error = (row, message) =>
-        warn!.show(row?.anchor ?? this.#header ?? this.#box, message);
+      this.#selection.on_error = (row, error) =>
+        warn!.show(row?.anchor ?? this.#header ?? this.#box, error.nice);
     }
     //Columns in front of the key field column, the error and add rows start after them
     const lead =
@@ -467,7 +467,7 @@ class Container<
     this.#parent.state = rows as A;
     if (state.is.state(rows))
       this.#state_sub = this.attach_state(rows, (r) =>
-        this.#update_rows(r.ok ? r.value : [], r.ok ? undefined : r.error),
+        this.#update_rows(r.ok ? r.value : [], r.ok ? undefined : r.error.nice),
       );
     else this.#update_rows(rows);
   }
@@ -499,7 +499,7 @@ class Container<
     selection.target = target;
     this.#selection_sub = this.attach_state(
       target as StateREAW<K[]>,
-      (value: Result<K[], string>) => selection.apply(value),
+      (value: StateResult<K[]>) => selection.apply(value),
     );
     return this;
   }

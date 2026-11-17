@@ -55,6 +55,8 @@ const typed = widgets.get("/basic/rectangle"); // typed by the type, path inside
 
 The state is an error while nothing is registered at the path, so a path can be held before its resource is registered. An invalid path gives an error state. The same path gives the same state.
 
+The errors are `NiceError`s with these kinds, in `depot.errors`: `NOT_REGISTERED` ("Data not available") while nothing is registered at the path, `TYPE_REMOVED` ("Data type removed") once the type of the path is removed, and `INVALID_PATH` ("Invalid data path") for a path that isn't valid. `NOT_REGISTERED` is normal use and has only a message. The other two aren't supposed to happen and have an `Error` as `cause`, for `INVALID_PATH` its stack shows the code that gave the path.
+
 ## Aliases
 
 When a resource moves, an alias keeps the old path working:

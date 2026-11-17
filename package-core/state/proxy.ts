@@ -1,5 +1,6 @@
 import { is_promise_like, sync_reject, sync_resolve } from "#common";
 import { err, none, ok, OptionNone, ResultInferOk, ResultOk } from "#result";
+import { not_writable } from "./errors";
 import { STATE_WRITE_DISABLED, StateBase } from "./base";
 import {
   StateResult as SR,
@@ -290,7 +291,7 @@ class RXXX<
   }
   write(value: WOUT): PromiseLike<SR<void>> {
     if (!this.#writable || !this.#state.write)
-      return sync_resolve(err("not writable"));
+      return sync_resolve(not_writable());
     return this.#state.write(this.transform_wout_win(value));
   }
 
@@ -299,7 +300,7 @@ class RXXX<
     const limit = this.#state.limit?.bind(this.#state);
     return limit
       ? (value) => {
-          if (!this.#writable) return sync_resolve(err("not writable"));
+          if (!this.#writable) return sync_resolve(not_writable());
           return limit(this.transform_wout_win(value)).then((res) => {
             if (res.err) return err(res.error);
             return ok(this.transform_win_wout(res.value));
@@ -312,7 +313,7 @@ class RXXX<
     const check = this.#state.check?.bind(this.#state);
     return check
       ? (value) => {
-          if (!this.#writable) return sync_resolve(err("not writable"));
+          if (!this.#writable) return sync_resolve(not_writable());
           return check(this.transform_wout_win(value)).then((res) => {
             if (res.err) return err(res.error);
             return ok(this.transform_win_wout(res.value));

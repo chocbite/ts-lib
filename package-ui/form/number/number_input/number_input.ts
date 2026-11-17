@@ -1,3 +1,4 @@
+import { state } from "@chocbite/ts-lib/state";
 import { define_element } from "#base";
 import { sync_resolve } from "@chocbite/ts-lib/common";
 import {
@@ -7,7 +8,10 @@ import {
   set_selection_all,
 } from "#selection";
 import { number_step_start_decimal } from "@chocbite/ts-lib/math";
-import { err, type Result } from "@chocbite/ts-lib/result";
+import {
+  err_nice,
+  type ResultNice,
+} from "@chocbite/ts-lib/result";
 import {
   FormNumberWrite,
   number_decimals,
@@ -178,7 +182,7 @@ export class FormNumberInput<
 
   protected clear_error(): void {}
 
-  protected limit_value(val: number): PromiseLike<Result<number, string>> {
+  protected limit_value(val: number): PromiseLike<ResultNice<number>> {
     let lim = number_step_start_decimal(
       Math.min(Math.max(val, this.#min), this.#max),
       this.#step,
@@ -190,14 +194,14 @@ export class FormNumberInput<
     return super.limit_value(lim);
   }
 
-  protected check_value(val: number): PromiseLike<Result<number, string>> {
+  protected check_value(val: number): PromiseLike<ResultNice<number>> {
     if (val < this.#min)
       return sync_resolve(
-        err("Minimum value " + this.#min.toFixed(this.#decimals) + this.#unit),
+        err_nice(state.errors.BELOW_MIN, "Minimum value " + this.#min.toFixed(this.#decimals) + this.#unit),
       );
     if (val > this.#max)
       return sync_resolve(
-        err("Maximum value " + this.#max.toFixed(this.#decimals) + this.#unit),
+        err_nice(state.errors.ABOVE_MAX, "Maximum value " + this.#max.toFixed(this.#decimals) + this.#unit),
       );
     let lim = number_step_start_decimal(
       val,

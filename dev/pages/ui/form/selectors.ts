@@ -12,7 +12,7 @@ import {
 import { array_from_length } from "@chocbite/ts-lib/common";
 import { err, ok } from "@chocbite/ts-lib/result";
 import state, { type State } from "@chocbite/ts-lib/state";
-import { box, controls, row, section } from "../../../helpers";
+import { box, controls, row, section, demo_error } from "../../../helpers";
 
 /**Shows the current value of a state as text and follows it*/
 function readout<T>(parent: HTMLElement, label: string, value: State<T>) {
@@ -158,7 +158,7 @@ const MIXED: FormSelections<number> = [
   );
   const shared = state.ok_w(1);
   const rejecting = state.rosw(ok(0), async (v, s) =>
-    v === 2 ? err("Option 3 is not allowed") : (s.set_ok(v), ok(undefined)),
+    v === 2 ? err(demo_error("Rejected", "Option 3 is not allowed")) : (s.set_ok(v), ok(undefined)),
   );
   const access = state.ok_w<AccessTypes>("w");
   controls(sec, {

@@ -1,0 +1,46 @@
+.prompts-faults {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem;
+
+  //Only the list scrolls, so the close button stays in view however many faults there are
+  > .list {
+    max-height: 60vh;
+    overflow-y: auto;
+    //Panels turn selection off, the messages and stacks are exactly what gets copied into a bug report
+    -webkit-user-select: text;
+    user-select: text;
+
+    > section {
+      margin-bottom: 0.75rem;
+
+      > h3 {
+        margin: 0;
+        font-size: 1rem;
+      }
+
+      > p {
+        margin: 0.2rem 0;
+        overflow-wrap: anywhere;
+      }
+
+      > details > summary {
+        cursor: pointer;
+      }
+
+      //Follows the text color, so it fits the light and the dark theme without variables of its own
+      > details > pre {
+        max-height: 20rem;
+        overflow: auto;
+        margin: 0.25rem 0 0;
+        padding: 0.5rem;
+        font-size: 0.75rem;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        border-radius: 0.2rem;
+        background-color: color-mix(in srgb, currentColor 10%, transparent);
+      }
+    }
+  }
+}

@@ -6,7 +6,10 @@ import {
   type OptionNone,
   type ResultInferOk as RIOK,
   type ResultOk as RO,
+  err_nice,
+  type NiceError,
 } from "#result";
+import { not_writable, state_errors } from "./errors";
 import { StateBase } from "./base";
 import {
   ARRAY,
@@ -102,7 +105,7 @@ export type StateLocalRES<
   WT = unknown,
 > = StateRES<RT, HELToREL<HEL>, WT> &
   Owner<StateResult<RT>, HEL, WT> & {
-    set_err(error: string): void;
+    set_err(error: NiceError): void;
     readonly read_only: StateRES<RT, HELToREL<HEL>, WT>;
     readonly read_write?: StateRESW<RT, HELToREL<HEL>, WT>;
   };
@@ -123,7 +126,7 @@ export type StateLocalREA<
   WT = unknown,
 > = StateREA<RT, HELToREL<HEL>, WT> &
   Owner<StateResult<RT>, HEL, WT> & {
-    set_err(error: string): void;
+    set_err(error: NiceError): void;
     readonly read_only: StateREA<RT, HELToREL<HEL>, WT>;
     readonly read_write?: StateREAW<RT, HELToREL<HEL>, WT>;
   };
@@ -145,7 +148,7 @@ export type StateLocalRESW<
   WT = RT,
 > = StateRESW<RT, HELToREL<HEL>, WT> &
   Owner<StateResult<RT>, HEL, WT> & {
-    set_err(error: string): void;
+    set_err(error: NiceError): void;
     readonly read_only: StateRES<RT, HELToREL<HEL>, WT>;
     readonly read_write: StateRESW<RT, HELToREL<HEL>, WT>;
   };
@@ -166,7 +169,7 @@ export type StateLocalREAW<
   WT = RT,
 > = StateREAW<RT, HELToREL<HEL>, WT> &
   Owner<StateResult<RT>, HEL, WT> & {
-    set_err(error: string): void;
+    set_err(error: NiceError): void;
     readonly read_only: StateREA<RT, HELToREL<HEL>, WT>;
     readonly read_write: StateREAW<RT, HELToREL<HEL>, WT>;
   };
@@ -465,8 +468,9 @@ class RXXX<
                 //Ok states have no error value, reads wait for a set or retry init on next read
                 if (this.#rok) return void (initializing = false);
                 this.ful_r_prom(
-                  (this.#value = err(
-                    `Failed to initialize state: ${String(e)}`,
+                  (this.#value = err_nice(
+                    state_errors.INIT_FAILED,
+                    e instanceof Error ? e : `Failed to initialize state: ${String(e)}`,
                   ) as RRT),
                 );
               }
@@ -608,7 +612,7 @@ class RXXX<
   set_ok(value: RIOK<RRT> | SRT<RIOK<RRT>>): void {
     this.set(ok(value) as RRT);
   }
-  set_err(error: string): void {
+  set_err(error: NiceError): void {
     this.set(err(error) as RRT);
   }
   set setter(setter: Setter<RRT, HEL, WT> | undefined) {
@@ -703,7 +707,7 @@ class RXXX<
   }
   write(value: WT): PromiseLike<StateResult<void>> {
     const setter = this.#setter;
-    if (!setter) return sync_resolve(err("not writable"));
+    if (!setter) return sync_resolve(not_writable());
     return this.write_gated(() => setter(value, this, this.#value));
   }
   limit(value: WT): PromiseLike<StateResult<WT>> {

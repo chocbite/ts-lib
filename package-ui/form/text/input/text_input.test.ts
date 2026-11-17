@@ -117,7 +117,7 @@ describe("Text input user input", () => {
     expect(element.buffer).toBe("ab");
     expect(input.value).toBe("ab");
     expect(input.validationMessage).toBe(
-      "A maximum of 3 characters is allowed",
+      "Text too long: A maximum of 3 characters is allowed",
     );
   });
 
@@ -127,7 +127,7 @@ describe("Text input user input", () => {
     expect(change).not.toHaveBeenCalled();
     expect(element.buffer).toBeUndefined();
     expect(input.value).toBe("");
-    expect(input.validationMessage).toBe("A maximum of 4 bytes is allowed");
+    expect(input.validationMessage).toBe("Text too long: A maximum of 4 bytes is allowed");
     await enter("ææ");
     expect(change).toHaveBeenCalledWith("ææ");
   });

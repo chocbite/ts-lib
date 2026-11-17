@@ -320,13 +320,15 @@ function read_settings(text: string): ResultNice<Settings> {
 }
 ```
 
-- **`kind`** is a symbol that identifies the error. Its description is the nice text. Code can check it with `error.kind === CONNECTION_LOST` instead of matching text. Each module exports its own kinds.
+- **`kind`** is a symbol that identifies the error. Its description is the nice text. Code can check it with `error.kind === CONNECTION_LOST` instead of matching text. Each module gives its kinds in an `errors` object, like `state.errors.NOT_WRITABLE` or `safe.fetch.errors.TIMED_OUT`, so they stay namespaced.
 - **Use `Symbol("…")`, never `Symbol.for("…")`.** `Symbol.for` gives the same symbol for the same text everywhere, so two modules with a "Connection lost" kind would share it.
 - **The detail is a message or an `Error`.** `err_nice(kind, "text")` uses the text as the message. `err_nice(kind, error)` uses the error's message and keeps the error as `cause`, with the stack of where it failed. A caught value that isn't an `Error` is turned into one of the two first, `cause instanceof Error ? cause : String(cause)`.
+- **A message for normal use, an `Error` for what isn't supposed to happen.** A rejected input, a closed write gate or data that hasn't arrived yet are normal and frequent, a message is enough and costs no more than a string. A bug, a lost connection or a server sending wrong data isn't supposed to happen and is rare, so give it an `Error`, made where the problem is found, its stack shows the code that caused it.
 
 | Member            | Gives                                                              |
 | ----------------- | ------------------------------------------------------------------ |
 | `kind`            | The symbol given.                                                  |
+| `detail`          | The message or `Error` given. A plain field, so `toEqual` in tests compares it. |
 | `nice`            | The description of `kind`, or `"Unknown error"` when it has none.  |
 | `message`         | The message given, or the message of the `Error` given.            |
 | `cause`           | The `Error` given, or `undefined` when made from a message.        |

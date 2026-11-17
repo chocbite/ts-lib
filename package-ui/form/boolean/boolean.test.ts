@@ -1,4 +1,4 @@
-import { ok } from "@chocbite/ts-lib/result";
+import { ok, NiceError } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import { theme_init } from "#theme";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -6,6 +6,9 @@ import { FormColors } from "../base";
 import { form_button } from "./button/button";
 import { form_lamp } from "./lamp/lamp";
 import { form_switch } from "./switch/switch";
+
+/**A test error whose nice text is its message, so shown texts read as before*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 //Sizes of the switch come from theme variables
 theme_init();
@@ -187,7 +190,7 @@ describe("Switch", () => {
   });
 
   it("shows an error of the bound state until it is ok again", () => {
-    const state = st.err_w<boolean>("broken");
+    const state = st.err_w<boolean>(nice_err("broken"));
     const { element, knob } = make_switch();
     element.bind({ value: state });
     expect(knob.classList.contains("error")).toBe(true);

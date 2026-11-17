@@ -9,7 +9,7 @@ import {
 } from "@chocbite/ts-lib-ui/icons";
 import { err, ok } from "@chocbite/ts-lib/result";
 import state, { type State } from "@chocbite/ts-lib/state";
-import { box, controls, row, section } from "../../../helpers";
+import { box, controls, row, section, demo_error } from "../../../helpers";
 
 /**Shows the current value of a state as text and follows it*/
 function readout<T>(parent: HTMLElement, label: string, value: State<T>) {
@@ -102,7 +102,7 @@ const WIDTH = { width: "14rem" };
   controls(sec, {
     "Set on": () => shared.set_ok(true),
     "Set off": () => shared.set_ok(false),
-    "Set error": () => shared.set_err("Sensor offline"),
+    "Set error": () => shared.set_err(demo_error("Sensor offline")),
     "Access write": () => access.set_ok("w"),
     "Access read": () => access.set_ok("r"),
     "Access none": () => access.set_ok("n"),
@@ -128,9 +128,9 @@ const WIDTH = { width: "14rem" };
   box(r, "starts in error", WIDTH).appendChild(
     form
       .switch({ icon: material_warning_rounded })
-      .bind({ value: state.err_w<boolean>("Never had a value") }),
+      .bind({ value: state.err_w<boolean>(demo_error("Never had a value")) }),
   );
-  const rejecting = state.rosw(ok(false), async () => err("Not allowed"));
+  const rejecting = state.rosw(ok(false), async () => err(demo_error("Rejected", "Not allowed")));
   box(r, "state rejects writes", WIDTH).appendChild(
     form.switch().bind({ value: rejecting }),
   );
@@ -232,7 +232,7 @@ const WIDTH = { width: "14rem" };
     "Level 2": () => level.set_ok(2),
     "Level 3": () => level.set_ok(3),
     "Level 4": () => level.set_ok(4),
-    "Level error": () => level.set_err("Unknown level"),
+    "Level error": () => level.set_err(demo_error("Unknown level")),
   });
   const r = spaced_row(sec);
   const b = box(r, "boolean, switch drives it", WIDTH);

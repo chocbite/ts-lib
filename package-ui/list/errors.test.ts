@@ -1,9 +1,12 @@
-import { err, ok } from "@chocbite/ts-lib/result";
+import { err, ok, NiceError } from "@chocbite/ts-lib/result";
 import { state, type State } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import list from ".";
 import type { ListTextField } from "./field";
 import { ListRow } from "./row";
+
+/**A test error whose nice text is its message, so shown texts read as before*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 type SubRow = ListRow<number, { col: string }, number[], true>;
 
@@ -79,20 +82,20 @@ describe("List container state error", () => {
     const rows = state.from_w([1, 2]);
     const { container } = plain_list(rows);
     await expect.poll(() => container.amount_rows()).toBe(2);
-    rows.set_err("Read failed");
+    rows.set_err(nice_err("Read failed"));
     await expect.poll(() => error_of(container)).toBe("Read failed");
     expect(container.amount_rows()).toBe(0);
   });
 
   it("shows an error state from the start", async () => {
-    const { container } = plain_list(state.err_w<number[]>("No data"));
+    const { container } = plain_list(state.err_w<number[]>(nice_err("No data")));
     await expect.poll(() => error_of(container)).toBe("No data");
   });
 
   it("removes the error and shows the rows when the state recovers", async () => {
     const rows = state.from_w([1, 2]);
     const { container } = plain_list(rows);
-    rows.set_err("Read failed");
+    rows.set_err(nice_err("Read failed"));
     await expect.poll(() => error_of(container)).toBe("Read failed");
     rows.set_ok([3]);
     await expect.poll(() => container.amount_rows()).toBe(1);
@@ -100,16 +103,16 @@ describe("List container state error", () => {
   });
 
   it("updates the text and keeps one element for a new error", async () => {
-    const rows = state.err_w<number[]>("First");
+    const rows = state.err_w<number[]>(nice_err("First"));
     const { container } = plain_list(rows);
     await expect.poll(() => error_of(container)).toBe("First");
-    rows.set_err("Second");
+    rows.set_err(nice_err("Second"));
     await expect.poll(() => error_of(container)).toBe("Second");
     expect(container.querySelectorAll("list-error").length).toBe(1);
   });
 
   it("removes the error when given an array instead of the state", async () => {
-    const { container } = plain_list(state.err_w<number[]>("No data"));
+    const { container } = plain_list(state.err_w<number[]>(nice_err("No data")));
     await expect.poll(() => error_of(container)).toBe("No data");
     container.rows = [1];
     expect(error_of(container)).toBeUndefined();
@@ -120,7 +123,7 @@ describe("List container state error", () => {
     const container = list.container(
       { col: list.column_string("Column") },
       (item: number) => ok({ values: { col: item.toString() } }),
-      state.err_w<number[]>("No data"),
+      state.err_w<number[]>(nice_err("No data")),
       { add_row: { text: "Add", on_add() {} } },
     );
     document.body.append(container);
@@ -129,13 +132,13 @@ describe("List container state error", () => {
   });
 
   it("does not parse the text as markup", async () => {
-    const { container } = plain_list(state.err_w<number[]>("<b>bold</b>"));
+    const { container } = plain_list(state.err_w<number[]>(nice_err("<b>bold</b>")));
     await expect.poll(() => error_of(container)).toBe("<b>bold</b>");
     expect(container.querySelector("b")).toBeNull();
   });
 
   it("shows an empty error as an error", async () => {
-    const { container } = plain_list(state.err_w<number[]>(""));
+    const { container } = plain_list(state.err_w<number[]>(nice_err("")));
     await expect
       .poll(() => container.querySelector("list-error"))
       .not.toBeNull();
@@ -236,7 +239,7 @@ describe("List invalid rows", () => {
 
 describe("List sub row state error", () => {
   const failing = async () => {
-    const sub = state.err_w<number[]>("Sub rows failed");
+    const sub = state.err_w<number[]>(nice_err("Sub rows failed"));
     const lists = sub_list([1, 2], () => sub);
     lists.row(1).open = true;
     await expect.poll(() => error_of(lists.row(1))).toBe("Sub rows failed");
@@ -278,7 +281,7 @@ describe("List sub row state error", () => {
     const with_sub_rows = list.container(
       { col: list.column_string("Column") },
       (item: number) => ok({ values: { col: item.toString() } }),
-      state.err_w<number[]>("No data"),
+      state.err_w<number[]>(nice_err("No data")),
       { sub_rows: true },
     );
     document.body.append(with_sub_rows);
@@ -286,7 +289,7 @@ describe("List sub row state error", () => {
     const key_field = with_sub_rows.querySelector("list-rowserror > list-keyfield")!;
     expect(key_field.querySelectorAll(":scope > div").length).toBe(0);
 
-    const { container } = plain_list(state.err_w<number[]>("No data"));
+    const { container } = plain_list(state.err_w<number[]>(nice_err("No data")));
     await expect.poll(() => error_of(container)).toBe("No data");
     expect(container.querySelector("list-rowserror > list-keyfield")).toBeNull();
   });
@@ -359,7 +362,7 @@ describe("List without value columns", () => {
   it("keeps the rows under each other with an error instead of the rows", () => {
     const rows = state.from_w<string[]>(["Alpha"]);
     const container = names_list(rows, true);
-    rows.set_err("broken");
+    rows.set_err(nice_err("broken"));
     in_one_column(container);
     expect(container.querySelector("list-rowserror")!.textContent).toBe(
       "broken",

@@ -1,8 +1,11 @@
-import { none, ok, type Option } from "@chocbite/ts-lib/result";
+import { none, ok, type Option, NiceError } from "@chocbite/ts-lib/result";
 import { state } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ListKeyField, type ListKeyFieldOptions } from "./key_field";
 import type { ListRowParent } from "./types";
+
+/**A test error whose nice text is its message, so shown texts read as before*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -98,7 +101,7 @@ describe("List key field", () => {
     const icon = state.from_w(svg);
     field.options = { icon };
     expect(field.querySelectorAll("svg")).toHaveLength(1);
-    icon.set_err("fail");
+    icon.set_err(nice_err("fail"));
     expect(field.querySelectorAll("svg")).toHaveLength(0);
   });
 
@@ -134,7 +137,7 @@ describe("List key field", () => {
     expect(box()).toBe("a");
     text.set_ok("b");
     expect(box()).toBe("b");
-    text.set_err("fail");
+    text.set_err(nice_err("fail"));
     expect(box()).toBe("fail");
     field.options = undefined;
     expect(box()).toBeUndefined();

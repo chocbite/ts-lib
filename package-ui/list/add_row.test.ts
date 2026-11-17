@@ -3,7 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ListAddRow } from "./add_row";
 import { ListKeyField } from "./key_field";
 import type { ListRoot, ListRowParent } from "./types";
-import { ok } from "@chocbite/ts-lib/result";
+import { ok, NiceError } from "@chocbite/ts-lib/result";
+
+/**A test error whose nice text is its message, so shown texts read as before*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -111,7 +114,7 @@ describe("List add row", () => {
     expect(button_of(row).textContent).toBe("One");
     text.set_ok("Two");
     expect(button_of(row).textContent).toBe("Two");
-    text.set_err("Broken");
+    text.set_err(nice_err("Broken"));
     expect(button_of(row).textContent).toBe("Broken");
   });
 
@@ -138,7 +141,7 @@ describe("List add row", () => {
     disabled.set_ok(false);
     expect(row.inert).toBe(false);
     disabled.set_ok(true);
-    disabled.set_err("fail");
+    disabled.set_err(nice_err("fail"));
     expect(row.inert).toBe(false);
   });
 

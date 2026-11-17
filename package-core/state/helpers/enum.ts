@@ -1,5 +1,6 @@
 import { sync_resolve } from "#common";
-import { err, ok, OptionSome, some } from "#result";
+import { err, ok, OptionSome, some, err_nice } from "#result";
+import { state_errors } from "../errors";
 import { StateResult as SR, State } from "../types";
 import {
   StateInit as Init,
@@ -79,9 +80,10 @@ export class StateEnumHelperBase<
 
   async check(value: K): Promise<SR<K>> {
     const list = await this.list;
-    if (list.err) return err("list is not available");
+    //The reason the list is missing is what the user needs to see
+    if (list.err) return err(list.error);
     if (value in list.value) return ok(value);
-    return err(String(value) + " is not in list");
+    return err_nice(state_errors.NOT_IN_LIST, String(value) + " is not in list");
   }
 
   related(): OptionSome<R> {

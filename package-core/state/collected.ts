@@ -4,12 +4,13 @@ import {
   sync_resolve,
 } from "#common";
 import {
-  err,
   none,
   OptionNone,
   ResultInferOk as RIOK,
   type ResultOk,
+  err_nice,
 } from "#result";
+import { not_writable, state_errors } from "./errors";
 import { StateBase } from "./base";
 import {
   StateInferResult as SIR,
@@ -155,7 +156,7 @@ export class RXX<RT, IN extends State<any>[], WT, RRT extends SR<RT>>
   protected on_sub() {
     const subscription_id = ++this.#subscription_id;
     if (!this.#states.length) {
-      this.#buffer = err("No states registered") as RRT;
+      this.#buffer = err_nice(state_errors.NO_STATES, "No states registered") as RRT;
       return;
     } else if (this.#rsync) {
       //Correct size of buffer array
@@ -314,10 +315,10 @@ export class RXX<RT, IN extends State<any>[], WT, RRT extends SR<RT>>
     return false;
   }
   limit(_value: WT): PromiseLike<SR<WT>> {
-    return sync_resolve(err("not writable"));
+    return sync_resolve(not_writable());
   }
   check(_value: WT): PromiseLike<SR<WT>> {
-    return sync_resolve(err("not writable"));
+    return sync_resolve(not_writable());
   }
 }
 

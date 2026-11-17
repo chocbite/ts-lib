@@ -71,7 +71,7 @@ class ExampleBox extends ExampleBase {
     this.set_input(BOX.label, options.label, (label) => {
       this.#text.textContent = label.ok
         ? this.format_label(label.value)
-        : "⚠ " + label.error;
+        : "⚠ " + label.error.nice;
     });
     this.set_input(BOX.color, options.color, (color) => {
       this.style.background = color.ok ? color.value : ERROR_COLOR;
@@ -189,7 +189,7 @@ class ExampleGroup extends ExampleBase {
     this.#items = options.items;
     this.set_input(GROUP_CREATE.items, options.items, (items) => {
       if (items.ok) this.replaceChildren(...items.value);
-      else this.textContent = "⚠ " + items.error;
+      else this.textContent = "⚠ " + items.error.nice;
     });
   }
 
@@ -228,7 +228,7 @@ class ExampleWatcher extends ExampleBase {
     this.set_input(WATCHER.group, options.group, (group) => {
       if (!group.ok) {
         this.detach_state_from_symbol(WATCHER_ITEMS);
-        this.textContent = "⚠ " + group.error;
+        this.textContent = "⚠ " + group.error.nice;
       } else if (!group.value) {
         this.detach_state_from_symbol(WATCHER_ITEMS);
         this.textContent = "no group";
@@ -238,7 +238,7 @@ class ExampleWatcher extends ExampleBase {
           const fixed = !state.is.state_of(group.value?.items);
           this.textContent = items.ok
             ? `${items.value.length} items${fixed ? ", fixed" : ""}`
-            : "⚠ " + items.error;
+            : "⚠ " + items.error.nice;
         });
     });
     return this;

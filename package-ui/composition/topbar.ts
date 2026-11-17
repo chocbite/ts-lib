@@ -93,7 +93,7 @@ class TopbarButton extends TopbarBase {
       this.#on_click = on_click.value;
     });
     this.set_input(BUTTON.text, options.text, (text) => {
-      this.#text.textContent = text.ok ? text.value : "⚠ " + text.error;
+      this.#text.textContent = text.ok ? text.value : "⚠ " + text.error.nice;
     });
     this.set_input(BUTTON.icon, options.icon, (icon) => {
       this.#icon?.remove();
@@ -126,7 +126,7 @@ class TopbarLabel extends TopbarBase {
 
   set(options: TopbarLabelOptions): this {
     this.set_input(LABEL.text, options.text, (text) => {
-      this.textContent = text.ok ? text.value : "⚠ " + text.error;
+      this.textContent = text.ok ? text.value : "⚠ " + text.error.nice;
     });
     return this;
   }

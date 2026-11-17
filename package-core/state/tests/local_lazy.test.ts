@@ -1,4 +1,4 @@
-import { err, ok, ResultOk } from "#result";
+import { ok, ResultOk, err_nice } from "#result";
 import { describe, expect, it } from "vitest";
 import { state as st, StateResult } from "..";
 import {
@@ -11,6 +11,7 @@ import {
   type TestStateOkSync,
   type TestStateSync,
 } from "./tests_shared";
+import { TEST_ERROR } from "./tests_shared";
 
 describe("Initialize lazy states", function () {
   describe("ROS", { timeout: 100 }, function () {
@@ -64,7 +65,7 @@ describe("Initialize lazy states", function () {
       st.res(() => ok(1));
     });
     it("err", async function () {
-      st.res(() => err("1"));
+      st.res(() => err_nice(TEST_ERROR, "1"));
     });
     it("rok is false", function () {
       expect(st.res(() => ok(1)).rok).toBe(false);
@@ -164,7 +165,7 @@ describe("Initialize lazy states", function () {
       st.resw(() => ok(1));
     });
     it("err", async function () {
-      st.resw(() => err("1"));
+      st.resw(() => err_nice(TEST_ERROR, "1"));
     });
     it("rok is false", function () {
       expect(st.resw(() => ok(1)).rok).toBe(false);
@@ -228,7 +229,7 @@ describe("Initialize lazy states", function () {
       let calls = 0;
       const state = st.res(() => {
         calls++;
-        return err("Not yet");
+        return err_nice(TEST_ERROR, "Not yet");
       });
       expect(state.rsync).toBe(true);
       expect(st.is.res(state)).toBe(true);

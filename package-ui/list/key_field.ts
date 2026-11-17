@@ -66,7 +66,7 @@ export class ListKeyField<A extends ListType<any>> extends Base {
       this.attach_state_to_prop("icon", options.icon, () => some(undefined));
     } else this.detach_state_from_prop("icon").icon = options?.icon;
     if (state.is.state(options?.text)) {
-      this.attach_state_to_prop("text", options.text, (e) => some(e));
+      this.attach_state_to_prop("text", options.text, (e) => some(e.nice));
     } else this.detach_state_from_prop("text").text = options?.text;
   }
 

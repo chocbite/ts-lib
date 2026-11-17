@@ -1,7 +1,7 @@
 import { BaseIntersectObserver } from "#base";
 import ctm from "#context-menu";
 import { px_to_rem } from "#theme";
-import { none, ok } from "@chocbite/ts-lib/result";
+import { none, ok, NiceError } from "@chocbite/ts-lib/result";
 import { state, type State } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import list from ".";
@@ -9,6 +9,9 @@ import { ListAddRow } from "./add_row";
 import { ListField } from "./field";
 import { ListKeyField } from "./key_field";
 import { ListRow } from "./row";
+
+/**A test error whose nice text is its message, so shown texts read as before*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 type AnyRow = ListRow<any, any, any, any>;
 
@@ -483,12 +486,12 @@ describe("List container rows from states", () => {
   });
 
   it("renders no rows for a state in error", () => {
-    const rows = state.err_w<number[]>("fail");
+    const rows = state.err_w<number[]>(nice_err("fail"));
     const container = number_list(rows);
     expect(container.amount_rows()).toBe(0);
     rows.set_ok([1]);
     expect(texts(container)).toEqual(["1"]);
-    rows.set_err("again");
+    rows.set_err(nice_err("again"));
     expect(container.amount_rows()).toBe(0);
   });
 

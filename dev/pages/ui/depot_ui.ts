@@ -11,7 +11,7 @@ import {
   material_square_rounded,
   material_thermostat_rounded,
 } from "@chocbite/ts-lib-ui/icons";
-import { box, controls, row, section } from "../../helpers";
+import { box, controls, row, section, demo_error } from "../../helpers";
 
 //Deterministic sample data
 const shapes = depot.type<{ sides: number }>(
@@ -95,7 +95,7 @@ machine.add(
   "offline",
   "Offline",
   "Read only, in error",
-  state.err("No connection"),
+  state.err(demo_error("No connection")),
 );
 const limits = machine.group("limits", "Limits", "");
 limits.add("max_speed", "Max speed", "Read only", state.ok(3000));

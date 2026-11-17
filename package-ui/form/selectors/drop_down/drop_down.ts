@@ -1,3 +1,4 @@
+import type { NiceError } from "@chocbite/ts-lib/result";
 import { Base, define_element } from "#base";
 import { DOCUMENT_HANDLER } from "#document";
 import {
@@ -187,7 +188,7 @@ export class FormDropdown<
 
   protected clear_error(): void {}
 
-  warn(message: string): void {
+  warn(message: string | NiceError): void {
     setTimeout(() => {
       super.warn(message);
     }, 0);

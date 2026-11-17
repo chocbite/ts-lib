@@ -1,6 +1,15 @@
-import { err, ok } from "#result";
+import { ok, err_nice, NiceError } from "#result";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { state as st, type State } from "..";
+import { state as st, type State, type StateResult } from "..";
+import { TEST_ERROR } from "./tests_shared";
+
+/**A write on a state that can not be written is a bug, its error has an Error whose stack shows the caller, this test file*/
+const expect_not_writable = (result: StateResult<unknown>) => {
+  expect(!result.ok && result.error.kind).toBe(st.errors.NOT_WRITABLE);
+  const cause = !result.ok ? result.error.cause : undefined;
+  expect(cause).toBeInstanceOf(Error);
+  expect(cause?.stack).toContain("write_enabled.test");
+};
 
 describe("Write gate", function () {
   it("Local write and check fail while the gate is false", async function () {
@@ -8,8 +17,8 @@ describe("Write gate", function () {
     const state = st.ok_w(1);
     state.set_write_enabled(gate);
     expect(state.write_enabled).toBe(gate);
-    expect(await state.check(2)).toEqual(err("not writable"));
-    expect(await state.write(2)).toEqual(err("not writable"));
+    expect(await state.check(2)).toEqual(err_nice(st.errors.WRITE_DISABLED, "writing is disabled"));
+    expect(await state.write(2)).toEqual(err_nice(st.errors.WRITE_DISABLED, "writing is disabled"));
     expect(state.ok()).toBe(1);
     gate.set_ok(true);
     expect(await state.check(2)).toEqual(ok(2));
@@ -23,14 +32,14 @@ describe("Write gate", function () {
       return Promise.resolve(ok(undefined));
     });
     state.set_write_enabled(st.ok(false));
-    expect(await state.check(6)).toEqual(err("not writable"));
-    expect(await state.write(6)).toEqual(err("not writable"));
+    expect(await state.check(6)).toEqual(err_nice(st.errors.WRITE_DISABLED, "writing is disabled"));
+    expect(await state.write(6)).toEqual(err_nice(st.errors.WRITE_DISABLED, "writing is disabled"));
     expect(called).toBe(false);
   });
   it("Gate in error blocks writing", async function () {
     const state = st.ok_w(1);
-    state.set_write_enabled(st.err<boolean>("offline"));
-    expect(await state.write(2)).toEqual(err("not writable"));
+    state.set_write_enabled(st.err<boolean>(new NiceError(TEST_ERROR, "offline")));
+    expect(await state.write(2)).toEqual(err_nice(st.errors.WRITE_DISABLED, "writing is disabled"));
   });
   it("Removing the gate allows writing again", async function () {
     const state = st.ok_w(1);
@@ -42,7 +51,7 @@ describe("Write gate", function () {
   it("Async gate is awaited", async function () {
     const state = st.ok_w(1);
     state.set_write_enabled(st.roa(async () => ok(false)));
-    expect(await state.write(2)).toEqual(err("not writable"));
+    expect(await state.write(2)).toEqual(err_nice(st.errors.WRITE_DISABLED, "writing is disabled"));
   });
   it("Remote write and check fail while the gate is false", async function () {
     let written: number | undefined;
@@ -56,8 +65,8 @@ describe("Write gate", function () {
       },
     );
     state.set_write_enabled(st.ok(false));
-    expect(await state.check(2)).toEqual(err("not writable"));
-    expect(await state.write(2)).toEqual(err("not writable"));
+    expect(await state.check(2)).toEqual(err_nice(st.errors.WRITE_DISABLED, "writing is disabled"));
+    expect(await state.write(2)).toEqual(err_nice(st.errors.WRITE_DISABLED, "writing is disabled"));
     expect(written).toBeUndefined();
   });
   it("Writable proxy uses the gate of its source", async function () {
@@ -66,7 +75,7 @@ describe("Write gate", function () {
     source.set_write_enabled(gate);
     const proxy = st.p.rosw(source);
     expect(proxy.write_enabled).toBe(gate);
-    expect(await proxy.write(2)).toEqual(err("not writable"));
+    expect(await proxy.write(2)).toEqual(err_nice(st.errors.WRITE_DISABLED, "writing is disabled"));
     expect(source.ok()).toBe(1);
   });
   it("Read only proxy has a gate that is always false", async function () {
@@ -84,8 +93,8 @@ describe("Read only view", function () {
     expect("write" in view).toBe(false);
     expect("set" in view).toBe(false);
     expect("setter" in view).toBe(false);
-    expect(await view.check!(2)).toEqual(err("not writable"));
-    expect(await view.limit!(2)).toEqual(err("not writable"));
+    expect_not_writable(await view.check!(2));
+    expect_not_writable(await view.limit!(2));
     expect(await view.write_enabled).toEqual(ok(false));
     expect(st.is.reaw(view)).toBe(false);
   });

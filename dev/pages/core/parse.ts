@@ -7,7 +7,7 @@ import {
   type FetchFunction,
   type FetchWrite,
 } from "@chocbite/ts-lib/parse";
-import { err, ok, type Result } from "@chocbite/ts-lib/result";
+import { err_nice, NiceError, ok, type Result } from "@chocbite/ts-lib/result";
 import state, { type StateREA } from "@chocbite/ts-lib/state";
 import { box, controls, row, section } from "../../helpers";
 
@@ -274,18 +274,21 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
 
   //The fake server is given to the parsers as their fetch, the global fetch is left alone.
   //It rejects like fetch when offline, that is an expected failure so it becomes an error
-  const call_server = async (init?: RequestInit): Promise<Result<Response, string>> => {
+  //Kinds of the errors of the fake server, their descriptions are what the elements show
+  const DEVICE_OFFLINE = Symbol("Device offline");
+  const DEVICE_REJECTED = Symbol("Rejected by device");
+  const call_server = async (init?: RequestInit): Promise<Result<Response, NiceError>> => {
     try {
       return ok(await server(init));
     } catch (cause) {
-      return err(`Fetch failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+      return err_nice(DEVICE_OFFLINE, cause instanceof Error ? cause : String(cause));
     }
   };
 
   const api_fetch: FetchFunction = async (_url, init) => {
     const response = await call_server(init);
     if (response.err) return response;
-    if (!response.value.ok) return err(`Fetch failed: HTTP ${response.value.status}`);
+    if (!response.value.ok) return err_nice(DEVICE_REJECTED, `HTTP ${response.value.status}`);
     return ok(await response.value.text());
   };
 
@@ -293,7 +296,7 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
   const patch_device: FetchWrite = async (payload) => {
     const response = await call_server({ method: "PATCH", body: JSON.stringify(payload) });
     if (response.err) return response;
-    if (!response.value.ok) return err(await response.value.text());
+    if (!response.value.ok) return err_nice(DEVICE_REJECTED, await response.value.text());
     return ok(undefined);
   };
 

@@ -61,7 +61,7 @@ Available on every state type:
 
 | Method                           | Description                                                                                                |
 | -------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `await state` / `state.then(fn)` | Get the current value. Returns `ResultOk<T>` on ok-only types, `Result<T, string>` on error-capable types. |
+| `await state` / `state.then(fn)` | Get the current value. Returns `ResultOk<T>` on ok-only types, `ResultNice<T>` on error-capable types, see [Errors](#errors). |
 | `sub(fn, immediate?)`            | Subscribe to value changes. Pass `true` to also call `fn` immediately with the current value.              |
 | `unsub(fn)`                      | Remove a subscription.                                                                                     |
 | `related()`                      | Returns helper metadata (e.g., number min/max, string max_length).                                         |
@@ -118,10 +118,10 @@ async function show_async(s: StateROA<number>) {
 }
 
 function handle_errors(s: StateRES<number>) {
-  // Sync + Error-capable → get() returns Result<T, string>
+  // Sync + Error-capable → get() returns ResultNice<T>
   const result = s.get();
   if (result.ok) console.log(result.value);
-  else console.log(result.error);
+  else console.log(result.error.nice); // "Value too high", the details are in result.error.message
 }
 
 async function update(s: StateROSW<number>) {
@@ -129,7 +129,7 @@ async function update(s: StateROSW<number>) {
   s.write(42);
   // This will only be correct if the state accepts the write
   console.log(s.ok()); // 42
-  // If the write is denied it should return a Result<void,string> with the reason for denying the write as a string
+  // If the write is denied it returns an error result with a NiceError saying why
   console.log(await s.write(42));
 }
 ```
@@ -159,8 +159,8 @@ state.ok(value); // ROS  — read-only, sync, always ok
 state.ok_w(value); // ROSW — writable, sync, always ok
 state.from(value); // RES  — read-only, sync, error-capable
 state.from_w(value); // RESW — writable, sync, error-capable
-state.err(message); // RES  — read-only, sync, starts with error
-state.err_w(message); // RESW — writable, sync, starts with error
+state.err(error); // RES  — read-only, sync, starts with the NiceError error
+state.err_w(error); // RESW — writable, sync, starts with the NiceError error
 ```
 
 ### Local States
@@ -168,12 +168,14 @@ state.err_w(message); // RESW — writable, sync, starts with error
 For full control over initial values, use the lower-level local factories. Each accepts a `Result` value:
 
 ```typescript
-import { ok, err } from "@chocbite/ts-lib/result";
+import { ok, err_nice } from "@chocbite/ts-lib/result";
+
+const NOT_CONNECTED = Symbol("Not connected");
 
 const a = state.ros(ok(42)); // ROS
 const b = state.rosw(ok(42)); // ROSW
 const c = state.res(ok(42)); // RES
-const d = state.resw(err("n/a")); // RESW
+const d = state.resw(err_nice(NOT_CONNECTED, "n/a")); // RESW
 ```
 
 State generators also accept a function which will be lazily executed at first access of state value:
@@ -200,7 +202,7 @@ const counter = state.rosw(ok(0));
 // Owner methods
 counter.set(ok(5)); // set the raw Result value
 counter.set_ok(5); // shorthand: wraps the value in ok() for you
-counter.set_err("fail"); // set an error (only on error-capable states: RES/REA)
+counter.set_err(new NiceError(Symbol("Sensor offline"), "fail")); // set an error (only on error-capable states: RES/REA)
 
 // The owner can get basic state types without access to the owner methods for passing on, or just set them to a variable with appropriate typeing
 const read_only = counter.read_only; //Returns a read only view as StateROS<number>
@@ -216,9 +218,11 @@ const state_type: State<number> = counter.state;
 You can also provide a custom setter to control how writes are applied:
 
 ```typescript
+const NOT_A_NUMBER = Symbol("Not a number");
+
 const limited = state.rosw(ok(0), async (value, owner, old) => {
   // Custom write logic
-  if (Number.isNaN(value)) return err("NaN is not allowed");
+  if (Number.isNaN(value)) return err_nice(NOT_A_NUMBER, "NaN is not allowed");
   owner.set_ok(Math.min(100, Math.max(0, value)));
   return ok(undefined);
 });
@@ -238,7 +242,7 @@ Assigning the owner to a read only type (`const s: StateROS<number> = counter`) 
 const logged_in = state.ok_w(false);
 const name = state.ok_w("");
 name.set_write_enabled(logged_in);
-await name.write("a"); // err("not writable")
+await name.write("a"); // error of kind state.errors.NOT_WRITABLE
 logged_in.set_ok(true);
 await name.write("a"); // ok
 name.set_write_enabled(undefined); // remove the gate
@@ -249,7 +253,7 @@ Local and remote states have `set_write_enabled`. Writable proxies use the gate 
 ## Subscribing to State
 
 ```typescript
-// Subscribe — callback receives a Result<T, string>
+// Subscribe — callback receives a ResultNice<T>
 const unsub = counter.sub((result) => {
   if (result.ok) {
     console.log(result.value);
@@ -374,6 +378,36 @@ const setting = state.r.roaw.from<number>(
 
 Available variants: `state.r.roa`, `state.r.rea`, `state.r.roaw`, `state.r.reaw`.
 
+## Errors
+
+The error of a state is a `NiceError` from `@chocbite/ts-lib/result`: a `kind` symbol whose description is a short text for the user, the `message` with the details, and for a failure caused by a thrown error, that error as `cause`, with its stack. `StateResult<T>` is `ResultNice<T>`. Two errors of the same kind and message count as the same value, so a state that fails the same way again doesn't notify its subscribers.
+
+Errors you put into a state yourself, with `set_err`, `state.err`, `err_nice` from a setter or a remote state, use your own kinds. Make them with `Symbol("…")`, the description is the text the user sees.
+
+Errors of normal use, like a value above its max, have only a message. Errors that aren't supposed to happen have an `Error` as `cause`, marked with ✱ below. For a write to a state that can't be written, its stack shows the code that tried to write.
+
+The state system makes these kinds, in `state.errors`:
+
+| Kind                | Nice text            | When                                                                          |
+| ------------------- | -------------------- | ----------------------------------------------------------------------------- |
+| `NOT_WRITABLE` ✱    | Not writable         | A write, check or limit on a state that can't be written, a bug.               |
+| `WRITE_DISABLED`    | Writing disabled     | A write or check while the write gate of the state is closed.                  |
+| `NO_STATES`         | No data              | A collected state without states.                                             |
+| `INIT_FAILED` ✱     | Failed to load value | The init function of a lazy state threw, the `cause` is what it threw.        |
+| `TIMED_OUT` ✱       | No response          | A remote state got no value within its timeout.                               |
+| `WRITE_FAILED` ✱    | Write failed         | The write action of a remote state threw, the `cause` is what it threw.       |
+| `ABOVE_MAX`         | Value too high       | A number above `max`.                                                         |
+| `BELOW_MIN`         | Value too low        | A number below `min`.                                                         |
+| `OFF_STEP`          | Value not on a step  | A number not on `step` from `start`.                                          |
+| `TOO_MANY_DECIMALS` | Too many decimals    | A number with more than `decimals` decimals.                                  |
+| `TEXT_TOO_LONG`     | Text too long        | A text longer than `max_length` characters or `max_length_bytes` bytes.      |
+| `NOT_IN_LIST`       | Value not available  | An enum value that isn't in the list. While the list itself is an error, a check gives the list's error. |
+
+```typescript
+const result = await temperature.write(150);
+if (result.err && result.error.kind === state.errors.ABOVE_MAX) show_max_hint();
+```
+
 ## Helpers
 
 ### Array
@@ -423,9 +457,9 @@ const temperature = state.rosw(
   true,
 );
 
-await temperature.write(150); // returns err("150 is bigger than the limit of 100"), value unchanged
+await temperature.write(150); // error ABOVE_MAX, "150 is bigger than the limit of 100", value unchanged
 await temperature.limit(150); // returns ok(100)
-await temperature.check(20.3); // returns err("20.3 is not on a step of 0.5")
+await temperature.check(20.3); // error OFF_STEP, "20.3 is not on a step of 0.5"
 temperature.related().unwrap().min; // state holding 0
 ```
 
@@ -442,9 +476,9 @@ const name = state.rosw(
   true,
 );
 
-await name.write("this is too long"); // returns err("the text is longer than the limit of 10 characters"), value unchanged
+await name.write("this is too long"); // error TEXT_TOO_LONG, "the text is longer than the limit of 10 characters", value unchanged
 await name.limit("this is too long"); // returns ok("this is to")
-await name.check("this is ææ"); // returns err("the text is longer than the limit of 10 bytes")
+await name.check("this is ææ"); // error TEXT_TOO_LONG, "the text is longer than the limit of 10 bytes"
 ```
 
 Options: `max_length`, `max_length_bytes`.

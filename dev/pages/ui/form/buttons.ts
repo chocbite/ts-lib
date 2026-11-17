@@ -10,7 +10,7 @@ import {
 } from "@chocbite/ts-lib-ui/icons";
 import { err, ok } from "@chocbite/ts-lib/result";
 import state, { type State } from "@chocbite/ts-lib/state";
-import { box, controls, row, section } from "../../../helpers";
+import { box, controls, row, section, demo_error } from "../../../helpers";
 
 /**Shows the current value of a state as text and follows it*/
 function readout<T>(parent: HTMLElement, label: string, value: State<T>) {
@@ -260,7 +260,7 @@ const WIDTH = { width: "14rem" };
   );
   const value = state.from_w(false);
   controls(sec, {
-    "Set error": () => value.set_err("Device not reachable"),
+    "Set error": () => value.set_err(demo_error("Device not reachable")),
     "Set ok false": () => value.set_ok(false),
     "Set ok true": () => value.set_ok(true),
   });
@@ -271,7 +271,7 @@ const WIDTH = { width: "14rem" };
   );
   readout(e, "state", value);
   const rejecting = state.rosw(ok(false), async () =>
-    err("Rejected by the state"),
+    err(demo_error("Rejected", "Rejected by the state")),
   );
   const j = box(r, "state rejects writes", WIDTH);
   j.appendChild(

@@ -2,6 +2,8 @@ import { is_promise_like, type Prettify } from "#common";
 import { fetch_text_safe } from "#safe";
 import {
   err,
+  err_nice,
+  NiceError,
   ok,
   result as result_util,
   type Option,
@@ -17,6 +19,7 @@ import {
   type StateREAW,
   type StateResult,
 } from "#state";
+import { fetch_parse_errors } from "./fetch_errors";
 import { make_parser, type Parsed } from "./parse";
 
 type FetchTypeCharOrder = ["n", "s", "b", "l"];
@@ -237,22 +240,22 @@ export type FetchParsed<S extends FetchSchema> = FetchContainer<ResolveSchema<S>
       : {});
 
 export type FetchRequest = string | readonly [string, RequestInit];
-/**Sends a write. An expected failure, like a rejection by the server, is returned as an error,
- * a throw is a bug and is logged with console.error*/
-export type FetchWrite = (payload: unknown) => PromiseLike<Result<void, string>>;
+/**Sends a write. An expected failure, like a rejection by the server, is returned as a NiceError,
+ * a throw is a bug and is logged with console.error. The ok value is not used, fetch_status_safe fits as is*/
+export type FetchWrite = (payload: unknown) => PromiseLike<Result<unknown, NiceError>>;
 
 /**Fetches a request and gives the body text. An expected failure, like a network error, a timeout or a failed status,
- * is returned as an error, a throw is a bug and is logged with console.error.
+ * is returned as a NiceError, a throw is a bug and is logged with console.error. fetch_text_safe fits as is.
  * init holds the signal that aborts the fetch when polling stops*/
 export type FetchFunction = (
   url: string,
   init: RequestInit,
-) => PromiseLike<Result<string, string>>;
+) => PromiseLike<Result<string, NiceError>>;
 
 export type FetchParserOptions = {
   /**Sends a write, required when the schema contains writable values*/
   readonly write?: FetchWrite;
-  /**Used in place of the default, fetch_text_safe with its error as "Fetch failed: <message>"*/
+  /**Used in place of the default, fetch_text_safe*/
   readonly fetch?: FetchFunction;
   /**Time in ms to wait after a read that gave an error, in place of update_rate, so a server that is down is not asked every update.
    * Any error counts, also a response that fails to parse. Defaults to update_rate*/
@@ -267,45 +270,52 @@ export type FetchParserOptions = {
   readonly write_debounce?: number;
 };
 
-const default_fetch: FetchFunction = async (url, init) =>
-  (await fetch_text_safe(url, init)).map_err(
-    (error) => `Fetch failed: ${error.message}`,
-  );
+const default_fetch: FetchFunction = fetch_text_safe;
 
-/**Logs a bug in code given to make_fetch_parser and gives the error result for it*/
-function bug(where: string, message: string, value: unknown): ResultErr<string> {
-  console.error(`make_fetch_parser: ${message}`, value);
-  return err(`Unexpected error in ${where}`);
+/**An error that is not supposed to happen, with an Error whose cause is where make_fetch_parser was called,
+ * the stack of the failure only shows the polling of the parser, not which parser it is*/
+function failure(kind: symbol, message: string, created_at: Error): NiceError {
+  return new NiceError(kind, new Error(message, { cause: created_at }));
+}
+
+/**Logs a bug in code given to make_fetch_parser and gives the error result for it, the message says what is wrong*/
+function bug(message: string, value: unknown, created_at: Error): ResultErr<NiceError> {
+  console.error(`make_fetch_parser: ${message}, got`, value);
+  return err(failure(fetch_parse_errors.UNEXPECTED, message, created_at));
 }
 
 /**Checks what a fetch function gave, the type is not enough as any and plain javascript get past it*/
-function checked_body(
-  value: unknown,
-): Result<string, string> {
-  if (!result_util.is_result(value))
-    return bug("fetch", "fetch must return a Result, it returned", value);
-  if (value.err) return value as ResultErr<string>;
+function checked_body(value: unknown, created_at: Error): Result<string, NiceError> {
+  if (!result_util.is_result(value)) return bug("fetch must return a Result", value, created_at);
+  if (value.err)
+    return value.error instanceof NiceError
+      ? (value as ResultErr<NiceError>)
+      : bug("fetch must give a NiceError as its error", value.error, created_at);
   const body: unknown = value.value;
   if (typeof body === "string") return ok(body);
   if (typeof Response !== "undefined" && body instanceof Response)
     return bug(
-      "fetch",
       "fetch returned a Response in its Result, return the body text instead, for example with fetch_text_safe from @chocbite/ts-lib/safe",
       body,
+      created_at,
     );
   if (is_promise_like(body))
     return bug(
-      "fetch",
       "fetch returned a promise in its Result, await it before wrapping it in ok",
       body,
+      created_at,
     );
-  return bug("fetch", "fetch must give the body as a string, it gave", body);
+  return bug("fetch must give the body as a string", body, created_at);
 }
 
-/**Logs a throw from code given to make_fetch_parser, it is a bug, and gives the error result for it*/
-function unexpected(where: string, cause: unknown): ResultErr<string> {
+/**Logs a throw from code given to make_fetch_parser, it is a bug, and gives the error result for it.
+ * The thrown Error is the cause, where it was thrown is only in the log*/
+function unexpected(where: string, cause: unknown): ResultErr<NiceError> {
   console.error(`make_fetch_parser: unexpected error in ${where}`, cause);
-  return err(`Unexpected error in ${where}`);
+  return err_nice(
+    fetch_parse_errors.UNEXPECTED,
+    cause instanceof Error ? cause : `${where} threw ${String(cause)}`,
+  );
 }
 
 /**Path part of a keyed array item, the occurrence-th item whose key member equals value*/
@@ -406,11 +416,14 @@ function result_at_path(
   value: StateResult<unknown>,
   path: readonly PathPart[],
   optional_at = Infinity,
+  created_at: Error,
 ): StateResult<unknown> {
   if (value.err) return err(value.error);
   const resolved = resolve_path(value.value, path);
   if (resolved instanceof MissingPart)
-    return resolved.at >= optional_at ? ok(undefined) : err(resolved.message);
+    return resolved.at >= optional_at
+      ? ok(undefined)
+      : err(failure(fetch_parse_errors.MEMBER_MISSING, resolved.message, created_at));
   let current: unknown = value.value;
   for (const part of resolved)
     current = (current as Record<IndexPart, unknown>)[part];
@@ -531,7 +544,7 @@ function array_changes(
 
 /**Payload of a write that can not be built, the write function is never called with it*/
 class UnsentWrite {
-  constructor(readonly reason: string) {}
+  constructor(readonly error: NiceError) {}
 }
 
 /**Payload of a write with the member it writes, as the server addresses it, so a batch can tell members apart*/
@@ -600,6 +613,11 @@ export function make_fetch_parser<const S extends FetchSchema>(
     );
   }
 
+  //Where this parser is made, the cause of its errors that are not supposed to happen, made once per parser
+  const created_at = new Error("make_fetch_parser was called here");
+  const at_path = (value: StateResult<unknown>, path: readonly PathPart[], optional_at?: number) =>
+    result_at_path(value, path, optional_at, created_at);
+
   const parse = make_parser(
     strip_writable(schema) as RuntimeSchema & Record<string, never>,
   );
@@ -622,14 +640,19 @@ export function make_fetch_parser<const S extends FetchSchema>(
     } catch (cause) {
       return unexpected("fetch", cause);
     }
-    const body = checked_body(fetched);
+    const body = checked_body(fetched, created_at);
     if (body.err) return body;
-    return parse(body.value);
+    return parse(body.value).map_err(
+      (message) => failure(fetch_parse_errors.INVALID_DATA, message, created_at),
+    );
   };
 
   // One-shot reads always answer so pending reads resolve, subscription fetches only notify while that subscription lasts
   //The last received value, write "all" arrays build their payload from it
-  let latest: StateResult<unknown> = err("No value received yet");
+  let latest: StateResult<unknown> = err_nice(
+    fetch_parse_errors.NO_VALUE,
+    "No value received yet",
+  );
   /**@returns if the read gave a value*/
   const load = async (
     owner: RemoteOwner,
@@ -658,7 +681,8 @@ export function make_fetch_parser<const S extends FetchSchema>(
 
   /**Calls write once, expected failures are its error, a throw or a wrong return value is a bug*/
   const send = async (payload: unknown): Promise<StateResult<void>> => {
-    if (!options?.write) return err("No write function given");
+    if (!options?.write)
+      return err(failure(state.errors.NOT_WRITABLE, "No write function given", created_at));
     let written: unknown;
     try {
       written = await options.write(payload);
@@ -666,9 +690,11 @@ export function make_fetch_parser<const S extends FetchSchema>(
       return unexpected("write", cause);
     }
     //The type is not enough as any and plain javascript get past it
-    if (!result_util.is_result(written))
-      return bug("write", "write must return a Result, it returned", written);
-    return written as StateResult<void>;
+    if (!result_util.is_result(written)) return bug("write must return a Result", written, created_at);
+    if (written.ok) return ok(undefined);
+    return written.error instanceof NiceError
+      ? (written as ResultErr<NiceError>)
+      : bug("write must give a NiceError as its error", written.error, created_at);
   };
 
   const write_debounce = options?.write_debounce ?? 0;
@@ -734,7 +760,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
       timer = undefined;
     },
     (payload) => {
-      if (payload instanceof UnsentWrite) return Promise.resolve(err(payload.reason));
+      if (payload instanceof UnsentWrite) return Promise.resolve(err(payload.error));
       //A write to the root itself is a member of its own
       const outgoing = payload instanceof Outgoing ? payload : new Outgoing(payload, "");
       if (write_debounce <= 0) return send(outgoing.payload);
@@ -758,7 +784,9 @@ export function make_fetch_parser<const S extends FetchSchema>(
       if (latest.err) return new UnsentWrite(latest.error);
       const items = resolve_path(latest.value, path.slice(0, last_key + 1));
       if (items instanceof MissingPart)
-        return new UnsentWrite("Failed to write, the item no longer exists");
+        return new UnsentWrite(
+          failure(fetch_parse_errors.ITEM_GONE, "Failed to write, the item no longer exists", created_at),
+        );
       concrete = [...items, ...(path.slice(last_key + 1) as IndexPart[])];
     }
     if (!all_path) {
@@ -777,20 +805,28 @@ export function make_fetch_parser<const S extends FetchSchema>(
     //Positions inside the array sent stay as they are, it is sent whole
     const array = with_value_at(base.value, concrete.slice(all_path.length), value);
     if (array === undefined)
-      return new UnsentWrite("Failed to write, the item no longer exists");
+      return new UnsentWrite(
+          failure(fetch_parse_errors.ITEM_GONE, "Failed to write, the item no longer exists", created_at),
+        );
     //The whole array is one member, a later write in it is built on this one and replaces it
     const sent_path = to_server(all_concrete);
     return new Outgoing(payload_at_path(sent_path, array), JSON.stringify(sent_path));
   };
 
   /**The array a write "all" array builds on, the one waiting in the batch, else the last received one*/
-  const array_base_at = (path: readonly IndexPart[]): Result<unknown[], string> => {
+  const array_base_at = (path: readonly IndexPart[]): Result<unknown[], NiceError> => {
     const pending = pending_array_at(path);
     if (pending) return ok(pending);
-    const base = result_at_path(latest, path);
+    const base = at_path(latest, path);
     if (base.err) return err(base.error);
     if (!Array.isArray(base.value))
-      return err("Failed to write array, the received value is not an array");
+      return err(
+        failure(
+          fetch_parse_errors.INVALID_DATA,
+          "Failed to write array, the received value is not an array",
+          created_at,
+        ),
+      );
     return ok(base.value as unknown[]);
   };
 
@@ -831,7 +867,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
       const optional =
         optional_at ?? (part_schema.startsWith("?") ? path.length - 1 : undefined);
       const transform = (result: StateResult<unknown>) =>
-        result_at_path(result, path, optional);
+        at_path(result, path, optional);
       if (!part_schema.endsWith("w"))
         return state.proxy.rea(root as any, transform);
       return writable(transform, (value) =>
@@ -938,17 +974,18 @@ export function make_fetch_parser<const S extends FetchSchema>(
           }
           return item_state;
         }
-        const current = result_at_path(latest, path, optional_at);
+        const current = at_path(latest, path, optional_at);
         if (current.err || !Array.isArray(current.value)) return undefined;
         return item_states(current.value)[index];
       };
       let previous_items: unknown[] = [];
       const transform = (result: StateResult<unknown>): StateResult<unknown> => {
-        const value = result_at_path(result, path, optional_at);
+        const value = at_path(result, path, optional_at);
         if (value.err) return value;
         //A missing optional array has no items
         const array: unknown = value.value === undefined ? [] : value.value;
-        if (!Array.isArray(array)) return err("Expected array");
+        if (!Array.isArray(array))
+          return err(failure(fetch_parse_errors.INVALID_DATA, "Expected array", created_at));
         //A copy, the list is cached and the read key is set on it
         const current_items = [...item_states(array)];
         const changes = array_changes(previous_items, current_items);
@@ -966,10 +1003,16 @@ export function make_fetch_parser<const S extends FetchSchema>(
             const base =
               concrete && !(concrete instanceof MissingPart)
                 ? array_base_at(concrete)
-                : result_at_path(latest, path);
+                : at_path(latest, path);
             if (base.err) return new UnsentWrite(base.error);
             if (!Array.isArray(base.value))
-              return new UnsentWrite("Failed to write array, the received value is not an array");
+              return new UnsentWrite(
+                failure(
+                  fetch_parse_errors.INVALID_DATA,
+                  "Failed to write array, the received value is not an array",
+                  created_at,
+                ),
+              );
             const [applied] = state.a.write_apply(values, [...(base.value as unknown[])]);
             return payload_for(path, applied, undefined, item_all_path);
           })
@@ -994,7 +1037,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
       set_fetch_state(
         record,
         state.proxy.rea(root as any, (result) =>
-          result_at_path(result, path, optional_at),
+          at_path(result, path, optional_at),
         ),
       );
       return new Proxy(record, {
@@ -1036,7 +1079,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
       set_fetch_state(
         tuple,
         state.proxy.rea(root as any, (result) =>
-          result_at_path(result, path, optional_at),
+          at_path(result, path, optional_at),
         ),
       );
       return tuple;
@@ -1048,7 +1091,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
       !Array.isArray(part_schema)
     ) {
       const object_state = state.proxy.rea(root as any, (result) =>
-        result_at_path(result, path, optional_at),
+        at_path(result, path, optional_at),
       );
       const object: Record<string, unknown> = {};
       set_fetch_state(object, object_state);
@@ -1058,7 +1101,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
     }
 
     return state.proxy.rea(root as any, (result) =>
-      result_at_path(result, path, optional_at),
+      at_path(result, path, optional_at),
     );
   };
 
