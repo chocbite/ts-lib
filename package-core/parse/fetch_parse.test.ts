@@ -12,6 +12,7 @@ import {
   make_fetch_parser,
   type FetchArrayOptions,
   type FetchFunction,
+  type FetchParsed,
   type FetchSchema,
 } from "./fetch_parse";
 
@@ -55,6 +56,12 @@ describe("make_fetch_parser", () => {
     }>();
     const age: StateREAW<number | undefined> = parsed.age;
     expect(age).toBeDefined();
+  });
+
+  it("resolves the parsed type of the generic schema type", () => {
+    //Lint rules ask for the constraint of FetchParsed<S> in generic code, which is FetchParsed<FetchSchema>.
+    //The schema union contains itself, so this failed as excessively deep and poisoned the types checked after it
+    expectTypeOf<FetchParsed<FetchSchema>>().not.toBeNever();
   });
 
   it("resolves a one-shot read with a fetch error when the global fetch rejects", async () => {

@@ -68,7 +68,13 @@ export type FetchSchema =
   | readonly FetchSchema[]
   | { readonly [key: string]: FetchSchema };
 
-type RemoveWritable<S> = S extends string
+/**True only for the generic FetchSchema itself, as in the constraint of a generic S.
+ * FetchSchema contains itself, so the recursive types below would recurse into it forever (TS2589).
+ * They give a wide type for it instead. Lint rules ask for such constraints, an error there leaks into other types*/
+type IsWholeSchema<S> = [FetchSchema] extends [S] ? true : false;
+
+type RemoveWritable<S> = IsWholeSchema<S> extends true ? S : RemoveWritableEach<S>;
+type RemoveWritableEach<S> = S extends string
   ? S extends `${infer Value}w`
     ? Value
     : S
@@ -99,7 +105,8 @@ type Repeat<
   N extends number,
   Acc extends unknown[] = [],
 > = Acc["length"] extends N ? Acc : Repeat<T, N, [...Acc, T]>;
-type ResolveSchema<S> = S extends string
+type ResolveSchema<S> = IsWholeSchema<S> extends true ? unknown : ResolveSchemaEach<S>;
+type ResolveSchemaEach<S> = S extends string
   ? ResolveString<RemoveWritable<S> & string>
   : S extends Parser
     ? Parsed<S>
@@ -162,7 +169,10 @@ type FetchRepeat<
   N extends number,
   Acc extends unknown[] = [],
 > = Acc["length"] extends N ? Acc : FetchRepeat<T, N, [...Acc, T]>;
-type FetchNode<S, Value> = S extends string
+type FetchNode<S, Value> = IsWholeSchema<S> extends true
+  ? StateREA<Value>
+  : FetchNodeEach<S, Value>;
+type FetchNodeEach<S, Value> = S extends string
   ? Writable<S> extends true
     ? StateREAW<Value, Option<{}>, Value>
     : StateREA<Value, Option<{}>, Value>
