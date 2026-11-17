@@ -939,3 +939,54 @@ describe("make_fetch_parser optional members", () => {
     }
   });
 });
+
+describe("make_fetch_parser retry_rate", () => {
+  /**A fetch that gives the results in order, the last one from then on*/
+  const fetch_giving = (...results: Result<string, string>[]) =>
+    vi.fn<FetchFunction>(async () => results.length > 1 ? results.shift()! : results[0]!);
+
+  /**Subscribes, runs the timers for each step in ms and gives the number of fetches after each step*/
+  const fetches_after = async (
+    fetch: ReturnType<typeof fetch_giving>,
+    options: { retry_rate?: number },
+    steps: number[],
+  ): Promise<number[]> => {
+    vi.useFakeTimers();
+    try {
+      const user = make_fetch_parser(() => "/user", 100, { name: "s" }, { fetch, ...options });
+      const update = () => {};
+      user.name.sub(update);
+      await vi.advanceTimersByTimeAsync(0);
+      const counts = [fetch.mock.calls.length];
+      for (const step of steps) {
+        await vi.advanceTimersByTimeAsync(step);
+        counts.push(fetch.mock.calls.length);
+      }
+      user.name.unsub(update);
+      return counts;
+    } finally {
+      vi.useRealTimers();
+    }
+  };
+
+  it("waits retry_rate after a failed fetch and update_rate again after a success", async () => {
+    const fetch = fetch_giving(err("offline"), err("offline"), ok('{"name":"Ada"}'));
+
+    //Fails at 0 and 1000, succeeds at 2000, then polls every 100
+    expect(await fetches_after(fetch, { retry_rate: 1000 }, [999, 1, 999, 1, 99, 1])).toEqual([
+      1, 1, 2, 2, 3, 3, 4,
+    ]);
+  });
+
+  it("waits update_rate after a failed fetch without retry_rate", async () => {
+    const fetch = fetch_giving(err("offline"));
+
+    expect(await fetches_after(fetch, {}, [99, 1, 100])).toEqual([1, 1, 2, 3]);
+  });
+
+  it("counts a response that fails to parse as a failed fetch", async () => {
+    const fetch = fetch_giving(ok("not json"));
+
+    expect(await fetches_after(fetch, { retry_rate: 1000 }, [100, 900])).toEqual([1, 1, 2]);
+  });
+});

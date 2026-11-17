@@ -244,6 +244,9 @@ export type FetchParserOptions = {
   readonly write?: FetchWrite;
   /**Used in place of the default, fetch_text_safe with its error as "Fetch failed: <message>"*/
   readonly fetch?: FetchFunction;
+  /**Time in ms to wait after a read that gave an error, in place of update_rate, so a server that is down is not asked every update.
+   * Any error counts, also a response that fails to parse. Defaults to update_rate*/
+  readonly retry_rate?: number;
 };
 
 const default_fetch: FetchFunction = async (url, init) =>
@@ -564,19 +567,25 @@ export function make_fetch_parser<const S extends FetchSchema>(
   // One-shot reads always answer so pending reads resolve, subscription fetches only notify while that subscription lasts
   //The last received value, write "all" arrays build their payload from it
   let latest: StateResult<unknown> = err("No value received yet");
-  const load = async (owner: RemoteOwner, signal?: AbortSignal) => {
+  /**@returns if the read gave a value*/
+  const load = async (
+    owner: RemoteOwner,
+    signal?: AbortSignal,
+  ): Promise<boolean> => {
     const result = await read(signal);
-    if (signal?.aborted) return;
+    if (signal?.aborted) return false;
     if (result.ok) latest = result;
     owner.update_single(result, Boolean(signal));
+    return result.ok;
   };
 
-  const schedule = (owner: RemoteOwner, signal: AbortSignal) => {
+  const retry_rate = options?.retry_rate ?? update_rate;
+  const schedule = (owner: RemoteOwner, signal: AbortSignal, loaded: boolean) => {
     if (signal.aborted) return;
-    timer = setTimeout(async () => {
-      await load(owner, signal);
-      schedule(owner, signal);
-    }, update_rate);
+    timer = setTimeout(
+      async () => schedule(owner, signal, await load(owner, signal)),
+      loaded ? update_rate : retry_rate,
+    );
   };
 
   const root = state.r.reaw.from<unknown, any, unknown>(
@@ -584,7 +593,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
     (owner) => {
       subscription = new AbortController();
       const signal = subscription.signal;
-      void load(owner, signal).then(() => schedule(owner, signal));
+      void load(owner, signal).then((loaded) => schedule(owner, signal, loaded));
     },
     () => {
       subscription?.abort();

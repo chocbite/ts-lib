@@ -108,7 +108,7 @@ The error of a function spec is wrapped in the member path: `Failed to parse due
 ```typescript
 import form from "@chocbite/ts-lib-ui/form";
 import { make_fetch_parser } from "@chocbite/ts-lib/parse";
-import { fetch_text_safe } from "@chocbite/ts-lib/safe";
+import { fetch_status_safe } from "@chocbite/ts-lib/safe";
 
 const device = make_fetch_parser(
   () => "/api/device",
@@ -116,7 +116,7 @@ const device = make_fetch_parser(
   { name: "sw", speed: "nw", temperature: "n", settings: { eco: "bw" } },
   {
     write: async (payload) =>
-      (await fetch_text_safe("/api/device", { method: "PATCH", body: JSON.stringify(payload) }))
+      (await fetch_status_safe("/api/device", { method: "PATCH", body: JSON.stringify(payload) }))
         .map(() => undefined)
         .map_err((e) => `Write failed: ${e.message}`),
   },
@@ -133,7 +133,7 @@ form.switch().bind({ value: device.settings.eco }); // writable, nested
 - **`request`** returns the URL, or `[url, init]` for `fetch` options. It's called for every fetch, so it can change.
 - **`fetch`** sends the request and gives the body text, `(url, init) => PromiseLike<Result<string, string>>`. The default is [`fetch_text_safe`](../safe/README.md) from `@chocbite/ts-lib/safe`, with its error as `Fetch failed: <message>`, for example `Fetch failed: HTTP 404` or `Fetch failed: Failed to fetch`.
 
-  A custom one can add authentication, retry, a timeout, or answer from a fake server in tests, usually by calling `fetch_text_safe` with changed arguments. `init.signal` aborts when polling stops. A fetch that ignores it runs to the end and its result is thrown away. `write` doesn't go through `fetch`, it sends however it wants, and can use `fetch_text_safe` too.
+  A custom one can add authentication, retry, a timeout, or answer from a fake server in tests, usually by calling `fetch_text_safe` with changed arguments. `init.signal` aborts when polling stops. A fetch that ignores it runs to the end and its result is thrown away. `write` doesn't go through `fetch`, it sends however it wants, for example with `fetch_status_safe`.
 
   ```typescript
   const device = make_fetch_parser(() => "/api/device", 1000, { temperature: "n" }, {
@@ -144,6 +144,11 @@ form.switch().bind({ value: device.settings.eco }); // writable, nested
   });
   ```
 - **Polling only runs while something is subscribed** to any of the states. The first subscription fetches at once, then the next fetch starts `update_rate` ms after the previous one finished. When the last subscriber is gone, polling stops and a fetch still running is ignored.
+- **`retry_rate`** is the wait in ms after a read that gave an error, used in place of `update_rate`, so a server that is down isn't asked at full speed. Any error counts, including a response that fails to parse. After the next successful read, polling is back at `update_rate`. It defaults to `update_rate`. Awaiting a state without subscribing still fetches at once, whatever the last read gave.
+
+  ```typescript
+  make_fetch_parser(() => "/api/device", 200, schema, { retry_rate: 5000 });
+  ```
 - **Awaiting a state without subscribing fetches once.**
 - **The body text is parsed** with `make_parser` and the schema, without the `w` markers. An error from `fetch` or from parsing becomes the error of every state.
 
@@ -216,7 +221,7 @@ const plant = make_fetch_parser(
   { pumps: [0, { id: "n", name: "sw" }, { write: "all", key: "id" }] },
   {
     write: async (payload) =>
-      (await fetch_text_safe("/api/plant", { method: "PATCH", body: JSON.stringify(payload) }))
+      (await fetch_status_safe("/api/plant", { method: "PATCH", body: JSON.stringify(payload) }))
         .map(() => undefined)
         .map_err((e) => `Write failed: ${e.message}`),
   },
