@@ -1,4 +1,5 @@
-import { Base, define_element } from "#base";
+import { define_element } from "#base";
+import { comp, ContentBase } from "#composition";
 import form from "#form";
 import list from "#list";
 import type {
@@ -9,7 +10,6 @@ import type {
 import { ok } from "@chocbite/ts-lib/result";
 import state from "@chocbite/ts-lib/state";
 import "./selector.scss";
-import "./shared";
 import { DepotTree } from "./tree";
 import { DepotValueField } from "./value";
 
@@ -25,112 +25,148 @@ export interface DepotSelectOptions<T> {
   title?: string;
 }
 
-interface SelectorValues<T> {
+/**Configuration of a selector, given once by depot_select, outside the element pattern as it never changes*/
+interface SelectorConfig {
+  from: DepotGroup<unknown>;
+  options: DepotSelectOptions<unknown>;
+  /**Show a column with the live value of the content of entries*/
+  values: boolean;
+}
+
+interface SelectorValues {
   description: string;
-  value?: DepotChild<T>;
+  value?: DepotChild<unknown>;
 }
 type ListColumnOf<V> = ReturnType<typeof list.column<V, any>>;
 
-class DepotSelector<T> extends Base {
+/**Content of the modal panel of a selector, built by depot_select*/
+class DepotSelector extends ContentBase {
   static element_name() {
     return "selector";
   }
-  static element_name_space(): string {
+  static element_name_space() {
     return "depot";
   }
 
-  #panel = this.appendChild(document.createElement("div"));
-  #title = this.#panel.appendChild(document.createElement("h2"));
-  #tree?: DepotTree<T>;
-  #selection = state.ok_w<DepotChild<T>[]>([]);
-  #resolve?: (entries: DepotEntry<T>[]) => void;
+  #search = this.appendChild(form.text_input({ placeholder: "Search" }));
+  #buttons = this.appendChild(document.createElement("div"));
+  #tree?: DepotTree<unknown>;
+  #selection = state.ok_w<DepotChild<unknown>[]>([]);
+  #resolve?: (entries: DepotEntry<unknown>[]) => void;
 
-  /**Opens the selector, the promise gives the selected entries, none when cancelled
-   * @param values show a column with the live value of the content of entries*/
-  open(
-    from: DepotGroup<T>,
-    options: DepotSelectOptions<T>,
-    values = false,
-  ): Promise<DepotEntry<T>[]> {
+  constructor() {
+    super();
+    this.#buttons.className = "buttons";
+    this.#buttons.append(
+      form.button({ text: "Cancel", on_click: () => this.#finish(false) }),
+      form.button({ text: "Select", on_click: () => this.#finish(true) }),
+    );
+    this.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") this.#finish(false);
+    });
+    //Closing the panel cancels
+    void this.content_on_close().then(() => this.#finish(false));
+  }
+
+  /**Builds the rows for the configuration, the promise gives the selected entries, none when cancelled*/
+  build(config: SelectorConfig): Promise<DepotEntry<unknown>[]> {
+    const { options } = config;
     const mode = options.mode ?? "single";
-    const tree = (this.#tree = new DepotTree(from, options.filter));
-    this.#title.textContent = options.title ?? from.name;
+    const tree = (this.#tree = new DepotTree(config.from, options.filter));
     this.#selection.set_ok([...(options.selected ?? [])]);
     //Filters while typing, the input itself only gives its value on change
-    const search = this.#panel.appendChild(
-      form.text_input({ placeholder: "Search" }),
-    );
-    search.oninput = (e) => {
+    this.#search.oninput = (e) => {
       if (e.target instanceof HTMLInputElement) tree.search = e.target.value;
     };
+    //Escape with typed text reverts the input without an input event, the next Escape closes the selector
+    this.#search.addEventListener("keydown", (e) => {
+      const input = e.target;
+      if (e.key === "Escape" && input instanceof HTMLInputElement)
+        queueMicrotask(() => (tree.search = input.value));
+    });
+
     const columns: {
-      [K in keyof SelectorValues<T>]: ListColumnOf<
-        NonNullable<SelectorValues<T>[K]>
-      >;
+      [K in keyof SelectorValues]: ListColumnOf<NonNullable<SelectorValues[K]>>;
     } = { description: list.column_string("Description") };
-    if (values)
+    if (config.values)
       columns.value = list.column({
         title: "Value",
         field_gen: () => new DepotValueField(),
-        field_apply: (field, child: DepotChild<T>) =>
-          (field.child = child as DepotChild<unknown>),
+        field_apply: (field, child: DepotChild<unknown>) =>
+          (field.child = child),
       });
-    const rows = this.#panel.appendChild(
-      list
-        .container(
-          columns,
-          (child) =>
-            ok({
-              key_field: { icon: child.icon, text: child.name },
-              values: { description: child.description, value: child },
-              openable: child.kind !== "entry",
-              opened: tree.searching,
-              sub_rows:
-                child.kind === "entry" ? undefined : () => tree.rows(child),
-              selectable: child.kind === "entry",
-            }),
-          tree.rows(),
-          { sub_rows: true, selection: { mode } },
-        )
-        .bind({ selection: this.#selection }),
-    );
+    const rows = list
+      .container(
+        columns,
+        (child) =>
+          ok({
+            key_field: { icon: child.icon, text: child.name },
+            values: { description: child.description, value: child },
+            openable: child.kind !== "entry",
+            opened: tree.searching,
+            sub_rows:
+              child.kind === "entry" ? undefined : () => tree.rows(child),
+            selectable: child.kind === "entry",
+          }),
+        tree.rows(),
+        { sub_rows: true, selection: { mode } },
+      )
+      .bind({ selection: this.#selection });
     //A double click on an entry in single mode picks it right away
     if (mode === "single")
       rows.ondblclick = () => {
-        if (this.#selection.ok().length) this.#close(true);
+        if (this.#selection.ok().length) this.#finish(true);
       };
-
-    const buttons = this.#panel.appendChild(document.createElement("div"));
-    buttons.appendChild(
-      form.button({ text: "Cancel", on_click: () => this.#close(false) }),
-    );
-    buttons.appendChild(
-      form.button({ text: "Select", on_click: () => this.#close(true) }),
-    );
-    //A click on the backdrop cancels, clicks in the panel stay there
-    this.onpointerdown = (e) => {
-      if (e.target === this) this.#close(false);
-    };
-
-    document.body.appendChild(this);
+    this.insertBefore(rows, this.#buttons);
     return new Promise((resolve) => (this.#resolve = resolve));
   }
 
-  #close(picked: boolean): void {
+  /**Focuses the search, for when the panel has opened*/
+  focus_search(): void {
+    this.#search.focus();
+  }
+
+  #finish(picked: boolean): void {
     const resolve = this.#resolve;
     if (!resolve) return;
     this.#resolve = undefined;
     const entries = picked
       ? this.#selection
           .ok()
-          .filter((child): child is DepotEntry<T> => child.kind === "entry")
+          .filter(
+            (child): child is DepotEntry<unknown> => child.kind === "entry",
+          )
       : [];
     this.#tree?.dispose();
-    this.remove();
     resolve(entries);
+    this.content_close();
   }
 }
 define_element(DepotSelector);
+
+/**Opens a selector in a modal panel, the promise gives the selected entries, none when cancelled*/
+function open_selector<T>(
+  from: DepotGroup<T>,
+  options: DepotSelectOptions<T>,
+  values: boolean,
+): Promise<DepotEntry<T>[]> {
+  const selector = DepotSelector.create({
+    title: options.title ?? from.name,
+    icon: from.icon,
+    closable: true,
+    min_width: 20,
+    min_height: 15,
+  });
+  //The selector works on unknown content, the entries it gives are the ones of from, so of T
+  const result = selector.build({
+    from: from as DepotGroup<unknown>,
+    options: options as DepotSelectOptions<unknown>,
+    values,
+  }) as Promise<DepotEntry<T>[]>;
+  comp.panel(selector, { modal: true, width: 40, height: 32 });
+  selector.focus_search();
+  return result;
+}
 
 /**Opens a selector for the entries of a type or group, the promise gives the selected entries, none when cancelled.
  * The selector follows the depot while it is open*/
@@ -138,7 +174,7 @@ export function depot_select<T>(
   from: DepotGroup<T>,
   options: DepotSelectOptions<T> = {},
 ): Promise<DepotEntry<T>[]> {
-  return new DepotSelector<T>().open(from, options);
+  return open_selector(from, options, false);
 }
 
 /**Opens the selector with a column of the live values, for the states type*/
@@ -146,5 +182,5 @@ export function depot_select_values<T>(
   from: DepotGroup<T>,
   options: DepotSelectOptions<T>,
 ): Promise<DepotEntry<T>[]> {
-  return new DepotSelector<T>().open(from, options, true);
+  return open_selector(from, options, true);
 }

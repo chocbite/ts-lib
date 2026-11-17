@@ -121,7 +121,7 @@ function result_box(parent: HTMLElement) {
 {
   const sec = section(
     "Select",
-    "Opens the selector over the page. Look at icons, indent and sizes, that the empty group is never shown, and that search filters while typing and opens the groups. Select gives the selection, Cancel and a press on the backdrop give nothing. In single mode a double click on an entry picks it",
+    "Opens the selector in a modal panel. Look at icons, indent and sizes, that the empty group is never shown, and that search filters while typing and opens the groups. Select gives the selection, Cancel, the close button and Escape give nothing. In single mode a double click on an entry picks it. Move and size the panel",
   );
   const show = result_box(row(sec));
   let last: DepotEntry<{ sides: number }>[] = [rect];
