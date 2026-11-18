@@ -140,7 +140,7 @@ describe("List columns of any element", () => {
   const wait = (ms: number) =>
     new Promise((resolve) => setTimeout(resolve, ms));
 
-  it("takes an element following the pattern as field, without wrapping it", () => {
+  it("takes an element following the pattern as field, wrapped in a cell", () => {
     const value = state.ok_w("Alpha");
     const container = list.container(
       {
@@ -163,6 +163,43 @@ describe("List columns of any element", () => {
     expect(cells.map((cell) => cell.textContent)).toEqual(["Alpha", "Beta"]);
     value.set_ok("Gamma");
     expect(cells[0].textContent).toBe("Gamma");
+    //The cell takes the row background and borders, so the element keeps its own look
+    for (const cell of cells) {
+      expect(cell.parentElement?.tagName).toBe("LIST-CELL");
+      expect(cell.parentElement?.parentElement?.parentElement?.tagName).toBe(
+        "LIST-ROW",
+      );
+    }
+  });
+
+  it("does not wrap list fields, they are cells themselves", () => {
+    const container = list.container(
+      { transform: (item: string) => ok({ values: { name: item } }) },
+      { columns: { name: list.column_string("Name") }, rows: ["Alpha"] },
+    );
+    document.body.append(container);
+    const field = container.querySelector("list-row list-textfield")!;
+    expect(field.textContent).toBe("Alpha");
+    expect(field.parentElement?.parentElement?.tagName).toBe("LIST-ROW");
+    expect(container.querySelector("list-cell")).toBeNull();
+  });
+
+  it("keeps the cells when the columns change", () => {
+    const probe_column = () =>
+      list.column({
+        title: "Name",
+        field_gen: () => PatternProbe.create({}),
+        field_apply: (field, value: StateOrVal<string>) => field.set({ value }),
+      });
+    const container = list.container(
+      { transform: (item: string) => ok({ values: { name: item } }) },
+      { columns: { name: probe_column() }, rows: ["Alpha"] },
+    );
+    document.body.append(container);
+    container.set({ columns: { name: probe_column() } });
+    const probes = [...container.querySelectorAll("listtest-patternprobe")];
+    expect(probes.map((probe) => probe.textContent)).toEqual(["Alpha"]);
+    expect(probes[0].parentElement?.tagName).toBe("LIST-CELL");
   });
 
   it("subscribes the states of a field only while it is visible with the observer of the list", async () => {

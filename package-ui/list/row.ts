@@ -12,7 +12,7 @@ import state_ui from "#state_ui";
 import { ListAddRow, type ListAddRowOptions } from "./add_row";
 import type { ListDragField } from "./drag";
 import { list_rows_error_update, ListError, type ListRowsError } from "./error";
-import { list_align_apply } from "./field";
+import { list_align_apply, list_cell } from "./field";
 import { ListKeyField, type ListKeyFieldOptions } from "./key_field";
 import "./row.scss";
 import { ListCheckField, type ListSelection } from "./selection";
@@ -71,7 +71,10 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   #child_box: HTMLSpanElement;
   #add_row?: ListAddRow<R, T, A, S>;
   #add_row_options?: ListAddRowOptions;
-  #fields: Base[];
+  /**Fields of the visible columns, the values are applied to them */
+  #fields: Base[] = [];
+  /**What the row shows for each field, the field itself or the cell wrapping it, see list_cell */
+  #cells: HTMLElement[] = [];
   #values!: T;
   /**Shown instead of the fields while the row is invalid */
   #invalid?: ListError;
@@ -102,15 +105,15 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
       this.#child_box.oncontextmenu = () => {
         this.#sub_row_menu = true;
       };
-    this.#fields = this.#generate_fields();
-    this.#show_cells(this.#fields);
+    this.#generate_fields();
+    this.#show_cells(this.#cells);
 
     //Updates row data
     this.data = data;
   }
 
-  #generate_fields(): Base[] {
-    return this.#root.columns_visible.map((key) => {
+  #generate_fields() {
+    this.#fields = this.#root.columns_visible.map((key) => {
       const column = this.#root.columns.get(key)!;
       const field = column.field_gen();
       list_align_apply(field, column.align);
@@ -118,6 +121,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
         field.attach_to_intersect_observer(this.#root.observer);
       return field;
     });
+    this.#cells = this.#fields.map(list_cell);
   }
 
   /**Shows the cells after the key field, which stays so an invalid row keeps its indent and arrow key navigation */
@@ -139,11 +143,11 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
 
   /**Regenerates the fields of the row and its sub rows after the columns changed */
   columns_changed() {
-    this.#fields = this.#generate_fields();
+    this.#generate_fields();
     //An invalid row has no values, the new fields are shown when it becomes valid
     if (this.#invalid) this.#show_invalid();
     else {
-      this.#show_cells(this.#fields);
+      this.#show_cells(this.#cells);
       this.#apply_values();
     }
     this.#add_row?.columns_changed();
@@ -283,7 +287,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     if (this.#invalid) {
       this.#invalid = undefined;
       if (this.#key_field) this.#key_field.tail = undefined;
-      this.#show_cells(this.#fields);
+      this.#show_cells(this.#cells);
     }
     this.#selection_update(row_options.selectable ?? true, data);
     if (this.#key_field) this.#key_field.options = row_options.key_field;

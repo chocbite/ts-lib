@@ -38,7 +38,7 @@ container.set({ rows: other_users });
 A column makes a field per row with `field_gen()` and gives it the value of the row with `field_apply(field, value)`. A field can be any element of the library:
 
 - **`list.text_field()`, `list.number_field()`, `list.node_field(node)`** are the plain fields, the cheapest for columns that only show values. `column_string(title)` is a column of text fields.
-- **An element following the element pattern, like a form element,** is used directly, `field_apply` gives it its value with `set`. A writable state then changes with the user, and a row reused for other data swaps its states:
+- **An element following the element pattern, like a form element,** is used directly, `field_apply` gives it its value with `set`. A writable state then changes with the user, and a row reused for other data swaps its states. The row wraps it in a `list-cell`, which gets the row background, borders and padding, so the element keeps its own look and fills the width of the column, giving up minimum widths of its own like the 14rem of a stepper in touch mode:
 
 ```ts
 list.column({

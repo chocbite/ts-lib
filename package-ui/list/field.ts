@@ -25,6 +25,15 @@ export abstract class ListField extends Base {
   }
 }
 
+/**The cell showing a field in a row, a list field is its own cell, any other element, like a form element, is wrapped in a list-cell
+ * The row background, borders and padding go on the cell, so a wrapped element keeps its own look */
+export function list_cell(field: Base): HTMLElement {
+  if (field instanceof ListField) return field;
+  const cell = document.createElement("list-cell");
+  cell.appendChild(field);
+  return cell;
+}
+
 export class ListTextField extends ListField {
   static element_name() {
     return "textfield";

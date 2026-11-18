@@ -32,7 +32,7 @@ const MODES = [
 {
   const sec = section(
     "Form elements in list cells",
-    "Form elements are list fields directly, the column gives each its value with set. They have no look for list cells yet. Each row binds its elements to its own states, so the switch, lamp and stepper in a row stay in sync. Do the elements fit the row height, do hover and focus inside a row work, does scrolling keep the right values in the right rows",
+    "Form elements are given to the columns directly, the column gives each its value with set. The row wraps each in a cell with the row background and padding, so they keep their own look. Each row binds its elements to its own states, so the switch, lamp and stepper in a row stay in sync. Do the elements fit the row height, do hover and focus inside a row work, does scrolling keep the right values in the right rows",
   );
   const rows = state.ok_w(array_from_length(200, machine));
   controls(sec, {
