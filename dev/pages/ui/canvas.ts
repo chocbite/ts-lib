@@ -477,7 +477,7 @@ const viewport_in = (
 {
   const sec = section(
     "Links to depot states",
-    "Options linked to states registered in depot.states, made with canvas.link. The state of an option holds a value or a link, writing it switches. Blue shows a counter that only the app changes, Switch blue text writes a value or the link to its text. Its x is linked to a writable state: drag it sideways and the number input follows, change the input and it moves. Green links its x to the same state through a linear transform from 0 to 320 into 320 to 0, so it mirrors blue, and dragging green moves blue. Red links its text to /states/dev-canvas/missing, which is not registered, so only the text shows an error until Register missing. The properties editor shows a linked option as its path. The line shows the page as it is saved",
+    "Options linked to states registered in depot.states, made with canvas.link. The state of an option holds a value or a link, writing it switches. Blue shows a counter that only the app changes, Switch blue text writes a value or the link to its text. Its x is linked to a writable state: drag it sideways and the number input follows, change the input and it moves. Green links its x to the same state through a linear transform from 0 to 320 into 320 to 0, so it mirrors blue, and dragging green moves blue. Red links its text to /states/dev-canvas/missing, which is not registered, so only the text shows an error until Register missing. The properties editor has a chain per option: filled when linked, pressing it opens the link menu, where Choose state picks a state of the depot, the linear transform maps its range, and Unlink keeps the value shown. Linked values are converted to the type of the option, so linking the y of green to the On state with a linear transform from 0 to 1 into 110 to 20 makes the switch move it. The line shows the page as it is saved",
   );
   const states = depot.states.group(
     "dev-canvas",
@@ -489,6 +489,8 @@ const viewport_in = (
   states.add("count", "Count", "Counts up every second", count.read_only);
   const x = state.ok_w(40);
   states.add("x", "X", "Position of the blue box", x);
+  const on = state.ok_w(false);
+  states.add("on", "On", "A switch, to link options to", on);
   const count_link = canvas.link<string>("/states/dev-canvas/count");
   const blue_text = state.ok_w<string | CanvasLink<string>>(count_link);
   const widgets: CanvasWidget[] = [
@@ -517,6 +519,7 @@ const viewport_in = (
   const line = row(sec);
   line.append("x state:");
   line.append(form.number_input({ value: x }));
+  line.append("On state:", form.switch({ value: on }));
   let missing: ReturnType<typeof states.add> | undefined;
   controls(sec, {
     "Switch blue text": () =>

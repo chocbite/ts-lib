@@ -79,7 +79,8 @@ const widget = canvas.widget(gauge, {
 - Every viewport looks the path up and gives the widget the registered state, so it works like that state given to the option: a writable state is written by the user, a read only state locks the option. Widgets never see links.
 - Until the path is registered as a state only that option is in error, the widget shows its fault, and it follows the state being registered, removed and registered again. Switching an option between a value and a link only changes that input, the widget is not made again.
 - A link fits any option, as the state is only known once the page is shown. Give the value type, `canvas.link<number>(...)`, to check it against the option. `canvas.link(entry)` takes the entry instead of the path.
-- The properties editor shows a linked option as its path, and follows the option switching.
+- **Values are converted to the type of the option,** by the kind of its property: numbers with `Number`, so `true` is 1, texts with `String` and booleans with `Boolean`. Any state can be linked to any option, a value giving no number, like the text "abc" for a number, faults the option. A value the widget writes back gets the type of the value of the linked state. Position, size and rotation are numbers, options without a property are not converted.
+- The properties editor links and unlinks options, see below.
 
 ### Transforms
 
@@ -91,7 +92,7 @@ canvas.link<number>("/states/machine/x", {
 });
 ```
 
-- **`canvas.linear(from, to)`** maps a number from one range to the other, 75 becomes 175, and back when written. A value that is not a number faults the option.
+- **`canvas.linear(from, to)`** maps a number from one range to the other, 75 becomes 175, and back when written. The value is made a number with `Number` first, so a boolean maps 0 and 1, like `canvas.linear([0, 1], [10, 50])` putting a widget at 10 or 50. A value giving no number faults the option.
 - An option is read only when the linked state is, or when a transform can not be reversed, like a linear transform to a range of one value.
 - More kinds can be added to canvas, each saved with its `kind`. A saved transform of a kind this version does not know is kept and faults the option.
 
@@ -143,7 +144,8 @@ const properties = canvas.properties({ selected });
 - The fields follow the options like form elements do: a writable state is written, so a change shows in every viewport, and a move in a viewport shows in the editor. A read only state is only shown.
 - Position, size and rotation come first, then the properties of the definition, see widget definitions.
 - The title is the name of the definition, or tells that the widget is not registered.
-- A linked option shows the path it is linked to, linking and unlinking in the editor is not there yet.
+- A linked option shows the path it is linked to and the value the link gives, read only, as it is a state of the app.
+- **The link column** has a chain for every option with a writable state, filled when linked. Pressing it opens the link menu: the path of the state, typed or picked with Choose state from `depot_ui.select_state`, and the fields of the transforms. Link writes the link to the option, Unlink writes the value the link gives now, or the default of the property when it gives none. An option not given to the widget has no state, so it has no field and can not be linked, widgets made by `canvas.new_widget` and the selector have a state for every property.
 - The fields are form elements in `form.list_field` for now, numbers in number inputs, texts in text inputs, colors in color inputs, booleans in switches and enums in dropdowns.
 
 ## Storing pages

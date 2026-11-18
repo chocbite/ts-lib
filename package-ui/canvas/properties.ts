@@ -1,4 +1,6 @@
+import { err_nice, ok, type ResultNice } from "@chocbite/ts-lib/result";
 import type { State } from "@chocbite/ts-lib/state";
+import { link_errors } from "./link";
 import type { WidgetBaseOptions } from "./widget";
 
 interface PropertyBase<T> {
@@ -118,4 +120,33 @@ export function geometry_properties(size: {
       },
     ],
   ];
+}
+
+/**A value as text, objects as JSON*/
+export const as_text = (value: unknown): string =>
+  typeof value === "object" && value !== null
+    ? JSON.stringify(value)
+    : String(value);
+
+/**Converts a value to the type of a kind of property, like the value of a state linked to the option
+ * Numbers with Number, so a boolean is 0 or 1, texts with String and booleans with Boolean,
+ * a value that gives no number, like the text "abc", is an error*/
+export function property_value(
+  kind: WidgetProperty["kind"],
+  value: unknown,
+): ResultNice<unknown> {
+  switch (kind) {
+    case "number": {
+      const number = Number(value);
+      return Number.isNaN(number)
+        ? err_nice(link_errors.CONVERT, `${as_text(value)} is not a number`)
+        : ok(number);
+    }
+    case "text":
+    case "color":
+    case "enum":
+      return ok(as_text(value));
+    case "boolean":
+      return ok(Boolean(value));
+  }
 }

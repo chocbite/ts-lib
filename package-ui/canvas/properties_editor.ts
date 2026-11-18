@@ -16,7 +16,7 @@ import {
   type CanvasWidget,
   type WidgetDefinition,
 } from "./data";
-import { property_field } from "./fields";
+import { LinkField, linked_field, property_field } from "./fields";
 import { CanvasLink, option_value_state, type OptionState } from "./link";
 import type { WidgetProperty } from "./properties";
 import "./properties_editor.scss";
@@ -70,7 +70,7 @@ class PropertiesEditor extends Base {
             field_apply: (field, row: PropertyRow) => {
               field.element = (
                 row.link
-                  ? form.text({ text: `Linked to ${row.link.path}` })
+                  ? linked_field(row.link, row.property)
                   : property_field(
                       row.property,
                       row.option && option_value_state(row.option),
@@ -78,10 +78,16 @@ class PropertiesEditor extends Base {
               ) as never;
             },
           }),
+          link: list.column({
+            title: "Link",
+            field_gen: () => new LinkField(),
+            field_apply: (field, row: PropertyRow) =>
+              field.show(row.option, row.property, row.link !== undefined),
+          }),
         },
         (row) =>
           ok({
-            values: { name: row.property.name, value: row },
+            values: { name: row.property.name, value: row, link: row },
           }),
         this.#rows,
         { headless: true },

@@ -1,15 +1,20 @@
 import { Base, define_element, input_key, type InputOptions } from "#base";
 import depot, { type DepotNode } from "@chocbite/ts-lib/depot";
-import { err_nice, type ResultNice } from "@chocbite/ts-lib/result";
-import state, { type State, type StateOrVal } from "@chocbite/ts-lib/state";
-import { WIDGETS, type CanvasWidget, type WidgetDefinition } from "./data";
+import { ok, type ResultNice } from "@chocbite/ts-lib/result";
+import type { State, StateOrVal } from "@chocbite/ts-lib/state";
+import {
+  widget_properties,
+  WIDGETS,
+  type CanvasWidget,
+  type WidgetDefinition,
+} from "./data";
 import {
   CanvasLink,
-  link_errors,
-  linked_state,
+  link_node_state,
   option_value_state,
   type OptionState,
 } from "./link";
+import { property_value, type WidgetProperty } from "./properties";
 import { WidgetBase, type WidgetBaseOptions } from "./widget";
 
 /**Inputs of the error widget*/
@@ -70,6 +75,10 @@ export class WidgetSlot extends Base {
   #definition: WidgetDefinition | string | undefined;
   /**The definition the shown element was made from, undefined while an error is shown*/
   #made: WidgetDefinition | undefined;
+  /**The kind of the property of every option, linked values are converted to it, position, size and rotation are numbers*/
+  #kinds = new Map<string, WidgetProperty["kind"]>(
+    [...GEOMETRY].map((key) => [key, "number"]),
+  );
   /**The state the widget gets for every option*/
   #options = new Map<string, Resolved>();
 
@@ -109,19 +118,14 @@ export class WidgetSlot extends Base {
     if (!link) return this.#give(key, undefined, option_value_state(option));
     //Until the lookup gives the linked state, the option holds the link, shown as an error
     this.#give(key, link, option_value_state(option));
-    this.attach_state_to_symbol(lookup, depot.get(link.path), (node) => {
-      if (!node.ok) return this.#give(key, link, state.err(node.error));
-      if (node.value.kind !== "entry" || node.value.type !== depot.states)
-        return this.#give(
-          key,
-          link,
-          state.err(
-            err_nice(link_errors.NOT_A_STATE, `"${link.path}" is not a state`)
-              .error,
-          ),
-        );
-      this.#give(key, link, linked_state(link, node.value.value));
-    });
+    //Converted by the kind of the property of the option, looked up at every value, as the definition can arrive later
+    const convert = (value: unknown) => {
+      const kind = this.#kinds.get(key);
+      return kind ? property_value(kind, value) : ok(value);
+    };
+    this.attach_state_to_symbol(lookup, depot.get(link.path), (node) =>
+      this.#give(key, link, link_node_state(link, node, convert)),
+    );
   }
 
   /**Gives the widget the state of an option*/
@@ -173,6 +177,8 @@ export class WidgetSlot extends Base {
       );
     }
     this.#made = definition;
+    for (const [key, property] of widget_properties(definition))
+      this.#kinds.set(key, property.kind);
     this.#show(definition.create(this.#states()));
   }
 
