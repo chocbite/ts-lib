@@ -832,6 +832,52 @@ describe("viewer", { timeout: 100 }, function () {
     });
   });
 
+  describe("plain objects and arrays", function () {
+    it("follows states in plain objects inside an array state, like pages of widgets", async function () {
+      const x = st.ok_w(1);
+      type Widget = { path: string; options: { x: typeof x; y?: number } };
+      const widgets = st.ok_w<Widget[]>([{ path: "/a", options: { x, y: 2 } }]);
+      const page = st.ok<any>({ width: 800, widgets });
+      let count = 0;
+      const v = st.v.viewer(page, () => count++);
+      x.set_ok(5);
+      expect(count).toBe(1);
+      const z = st.ok_w(1);
+      widgets.set_ok([...widgets.ok(), { path: "/b", options: { x: z } }]);
+      expect(count).toBe(2);
+      z.set_ok(3);
+      expect(count).toBe(3);
+      widgets.set_ok([]);
+      expect(x.amount()).toBe(0);
+      expect(z.amount()).toBe(0);
+      v.unsub();
+    });
+
+    it("starts from a value that carries array metadata of an earlier change", async function () {
+      const a = st.ok_w(1);
+      const root = st.ok_w<any[]>([]);
+      root.array.push(a.state);
+      let count = 0;
+      const v = st.v.viewer(root, () => count++);
+      a.set_ok(2);
+      expect(count).toBe(1);
+      v.unsub();
+      expect(a.amount()).toBe(0);
+    });
+
+    it("subscribes once to a state found twice in one value", async function () {
+      const a = st.ok_w(1);
+      const root = st.ok_w<any>({ first: a.state, second: [a.state] });
+      let count = 0;
+      const v = st.v.viewer(root, () => count++);
+      expect(a.amount()).toBe(1);
+      a.set_ok(2);
+      expect(count).toBe(1);
+      v.unsub();
+      expect(a.amount()).toBe(0);
+    });
+  });
+
   describe("OVERRIDE_KEY", function () {
     it("uses override to discover sub-states", async function () {
       const inner = st.ok_w(1);

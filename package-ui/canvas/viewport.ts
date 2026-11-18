@@ -1,9 +1,31 @@
-import { Base, define_element } from "#base";
-import type { Page } from "./page";
+import {
+  Base,
+  define_element,
+  input_key,
+  type BaseOptions,
+  type InputOptions,
+} from "#base";
+import type { StateOrVal } from "@chocbite/ts-lib/state";
+import type { CanvasPage, CanvasWidget } from "./data";
+import { page_element, type PageElement } from "./page";
+import { WIDGET_ELEMENTS_EVENT, WidgetSlot } from "./slot";
 import "./shared";
 import { Transformer } from "./transformer";
 import "./viewport.scss";
-import type { WidgetBase } from "./widget";
+
+/**Inputs of the viewport*/
+const VIEWPORT = {
+  /**Page shown, data that any number of viewports can show at once, undefined shows nothing*/
+  page: input_key<StateOrVal<CanvasPage | undefined>>(),
+  /**Enables zooming, panning and changing widgets, leaving it resets the view and clears the selection*/
+  edit: input_key<StateOrVal<boolean>>(),
+  /**Selected widget of the page, the transformer is shown on it in edit mode
+   * Pressing a widget selects it and pressing the page clears it: a writable state is written, so viewports and a properties editor
+   * can share the selection, a fixed value or no value is kept by the viewport, a read only state can not be changed by the user
+   * The viewport only changes the selection when the user presses, never on its own*/
+  selected: input_key<StateOrVal<CanvasWidget | undefined>>(),
+};
+export type CanvasViewportOptions = BaseOptions & InputOptions<typeof VIEWPORT>;
 
 const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 20;
@@ -19,6 +41,7 @@ const WHEEL_LINE_HEIGHT = 16;
 const WHEEL_SLOW = 0.1;
 
 /**Viewport showing a page of widgets
+ * The viewport makes its own elements for the page and its widgets, so a page can be shown in several viewports at once
  * The page is scaled to fit inside the viewport element while keeping its aspect ratio, and centered
  *
  * When edit is true the page can be zoomed and panned, and a checkerboard is shown behind it
@@ -29,8 +52,8 @@ const WHEEL_SLOW = 0.1;
  * Two finger touch pinch zooms and pans, middle or right mouse drag pans
  *
  * Pressing a widget in edit mode selects it and attaches a transformer to move, resize and rotate it
- * Pressing outside any widget clears the selection*/
-export class Viewport extends Base {
+ * Pressing outside any widget clears the selection, see the selected input*/
+class Viewport extends Base {
   /**Returns the name used to define the element */
   static element_name() {
     return "viewport";
@@ -40,12 +63,11 @@ export class Viewport extends Base {
     return "canvas";
   }
 
-  #background: HTMLDivElement = this.appendChild(
-    document.createElement("div"),
-  );
+  #background: HTMLDivElement = this.appendChild(document.createElement("div"));
   #container: HTMLDivElement = this.appendChild(document.createElement("div"));
   #transformer: Transformer = this.appendChild(new Transformer());
-  #page: Page | undefined;
+  #page: PageElement | undefined;
+  #selected: CanvasWidget | undefined;
   #page_observer = new ResizeObserver(() => {
     this.#update_view();
   });
@@ -66,35 +88,68 @@ export class Viewport extends Base {
     super();
     this.#background.className = "checkerboard";
     this.#container.className = "container";
+    //The transformer moves to the element the slot of the selected widget shows now
+    this.#container.addEventListener(WIDGET_ELEMENTS_EVENT, () =>
+      this.#attach(),
+    );
     this.attach_to_resize_observer();
   }
 
-  /**Sets the page shown in the viewport */
-  set page(page: Page | undefined) {
-    if (this.#page === page) return;
-    this.selected = undefined;
-    if (this.#page) {
-      this.#page_observer.unobserve(this.#page);
-      if (this.#page.parentElement === this.#container) this.#page.remove();
-    }
-    this.#page = page;
-    if (page) {
-      this.#container.appendChild(page);
-      this.#page_observer.observe(page);
-    }
-    this.#update_view();
-  }
-  /**Returns the page shown in the viewport */
-  get page(): Page | undefined {
-    return this.#page;
+  set(options: CanvasViewportOptions): this {
+    super.set(options);
+    this.set_input(VIEWPORT.page, options.page, (page) => {
+      //An error shows no page, the fault icon explains it
+      this.#show(page.ok ? page.value : undefined);
+    });
+    this.set_input(VIEWPORT.edit, options.edit, (edit) => {
+      this.#set_edit(edit.ok && edit.value);
+    });
+    this.set_input(VIEWPORT.selected, options.selected, (selected) => {
+      this.#selected = selected.ok ? selected.value : undefined;
+      this.#attach();
+    });
+    return this;
   }
 
-  /**Sets edit mode, which enables zooming and panning and shows a checkerboard background
-   * Leaving edit mode resets the view to fit the page */
-  set edit(edit: boolean) {
+  /**Shows the page data, making a page element for it*/
+  #show(page: CanvasPage | undefined) {
+    if (this.#page) {
+      this.#page_observer.unobserve(this.#page);
+      this.#page.remove();
+      this.#page = undefined;
+    }
+    if (page) {
+      this.#page = this.#container.appendChild(page_element(page));
+      this.#page_observer.observe(this.#page);
+    }
+    this.#attach();
+    this.#update_view();
+  }
+
+  /**Selects like the user does, a writable state is written, a fixed value or no value is kept, a read only state is left*/
+  #select(widget: CanvasWidget | undefined) {
+    const given = this.input_state(VIEWPORT.selected);
+    if (given === undefined) {
+      this.#selected = widget;
+      this.#attach();
+    } else if (given.writable) void given.write?.(widget);
+  }
+
+  /**Puts the transformer on the element of the selected widget, hidden outside edit mode or when the widget is not on the page*/
+  #attach() {
+    const slot =
+      this.#edit && this.#selected
+        ? this.#page?.slot_of(this.#selected)
+        : undefined;
+    this.#transformer.widget = slot?.element;
+  }
+
+  /**Enables zooming, panning and changing widgets, leaving it resets the view to fit the page */
+  #set_edit(edit: boolean) {
     if (this.#edit === edit) return;
     this.#edit = edit;
     this.toggleAttribute("edit", edit);
+    this.#attach();
     this.#listen_keys(edit && this.isConnected);
     if (edit) {
       this.addEventListener("wheel", this.#on_wheel, { passive: false });
@@ -114,25 +169,11 @@ export class Viewport extends Base {
       this.removeEventListener("contextmenu", this.#on_context_menu);
       this.#touches.clear();
       this.#pan_pointer_id = undefined;
-      this.selected = undefined;
       this.#zoom = 1;
       this.#pan_x = 0;
       this.#pan_y = 0;
       this.#update_view();
     }
-  }
-  /**Returns whether edit mode is enabled */
-  get edit(): boolean {
-    return this.#edit;
-  }
-
-  /**Sets the selected widget, which the transformer is attached to, selection is cleared when leaving edit mode */
-  set selected(widget: WidgetBase | undefined) {
-    this.#transformer.widget = widget;
-  }
-  /**Returns the selected widget */
-  get selected(): WidgetBase | undefined {
-    return this.#transformer.widget;
   }
 
   /**Returns the current scale from page units to screen pixels */
@@ -170,8 +211,8 @@ export class Viewport extends Base {
 
   #update_view() {
     if (!this.#page) return;
-    const width = this.#page.width;
-    const height = this.#page.height;
+    const width = this.#page.page_width;
+    const height = this.#page.page_height;
     if (width <= 0 || height <= 0) return;
     const rect = this.actual_size;
     const fit = Math.min(rect.width / width, rect.height / height);
@@ -204,10 +245,13 @@ export class Viewport extends Base {
   /**Selects the widget under the pointer, or clears the selection if there is none */
   #select_at(e: PointerEvent) {
     const page = this.#page;
+    //Widgets sit in a slot of the page, a slot has display contents so it is never the target itself
     let element = e.target instanceof Element ? e.target : null;
     while (element && element.parentElement !== page)
       element = element.parentElement;
-    this.selected = page?.widgets.find((widget) => widget === element);
+    this.#select(
+      page && element instanceof WidgetSlot ? element.widget : undefined,
+    );
   }
 
   /**Returns center and distance of the first two touches */
@@ -308,13 +352,9 @@ export class Viewport extends Base {
 }
 define_element(Viewport);
 
-export interface CanvasViewportOptions {
-  /**Page shown in the viewport */
-  page?: Page;
-  /**Enables zooming, panning and selecting widgets */
-  edit?: boolean;
-}
+export type { Viewport };
 
 /**Creates a viewport showing a page of widgets */
-export const canvas_viewport = (options?: CanvasViewportOptions): Viewport =>
-  options ? new Viewport().opts(options) : new Viewport();
+export function canvas_viewport(options: CanvasViewportOptions = {}): Viewport {
+  return Viewport.create(options);
+}

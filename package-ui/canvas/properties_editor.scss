@@ -1,0 +1,15 @@
+canvas-properties {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 0;
+
+  > .title {
+    font-weight: bold;
+  }
+
+  > list-container {
+    flex-grow: 1;
+    min-height: 0;
+  }
+}

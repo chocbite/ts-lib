@@ -7,7 +7,13 @@ import {
 import type { SVGFunc } from "#svg";
 import "./shared";
 import "./transformer.scss";
-import { WIDGET_TRANSFORM_EVENT, type WidgetBase } from "./widget";
+import {
+  WIDGET_CHANGE,
+  WIDGET_CHANGEABLE,
+  WIDGET_GEOMETRY,
+  WIDGET_TRANSFORM_EVENT,
+  type WidgetBase,
+} from "./widget";
 
 /**Smallest width and height a widget can be resized to */
 const MIN_SIZE = 1;
@@ -72,7 +78,10 @@ interface Drag {
  *
  * Resize and rotate cursors follow the rotation of the widget in 45 degree steps
  *
- * The transformer is drawn in viewport pixels, so it keeps its size when the page is zoomed*/
+ * The transformer is drawn in viewport pixels, so it keeps its size when the page is zoomed
+ *
+ * Changes go through the widget, which writes them to the states of its inputs,
+ * handles of parts given as read only states are hidden*/
 export class Transformer extends Base {
   /**Returns the name used to define the element */
   static element_name() {
@@ -98,7 +107,7 @@ export class Transformer extends Base {
     this.#add("line", undefined);
     for (const handle of RESIZE_HANDLES)
       this.#add(
-        "handle " + handle.name,
+        "handle resize " + handle.name,
         { type: "resize", x: handle.x, y: handle.y },
         material_arrow_range_rounded,
       );
@@ -161,13 +170,23 @@ export class Transformer extends Base {
     this.hidden = !widget;
     if (!widget) return;
     const scale = this.#scale;
-    this.style.left = this.#offset_x + widget.x * scale + "px";
-    this.style.top = this.#offset_y + widget.y * scale + "px";
-    this.style.width = widget.width * scale + "px";
-    this.style.height = widget.height * scale + "px";
-    this.style.transform = `rotate(${widget.rotation}deg)`;
+    const { x, y, width, height, rotation } = widget[WIDGET_GEOMETRY];
+    this.style.left = this.#offset_x + x * scale + "px";
+    this.style.top = this.#offset_y + y * scale + "px";
+    this.style.width = width * scale + "px";
+    this.style.height = height * scale + "px";
+    this.style.transform = `rotate(${rotation}deg)`;
+    const changeable = (
+      ...keys: Parameters<WidgetBase[typeof WIDGET_CHANGEABLE]>[0][]
+    ) => keys.every((key) => widget[WIDGET_CHANGEABLE](key));
+    this.classList.toggle("no-move", !changeable("x", "y"));
+    this.classList.toggle(
+      "no-resize",
+      !changeable("x", "y", "width", "height"),
+    );
+    this.classList.toggle("no-rotate", !changeable("rotation"));
     //Cursors only exist in 45 degree steps repeating every 180 degrees, the stylesheet picks the cursors from the closest step
-    const half_turn = ((widget.rotation % 180) + 180) % 180;
+    const half_turn = ((rotation % 180) + 180) % 180;
     this.setAttribute("cursor-step", String(Math.round(half_turn / 45) % 4));
   }
 
@@ -181,10 +200,9 @@ export class Transformer extends Base {
     const center_x = rect.left + rect.width / 2;
     const center_y = rect.top + rect.height / 2;
     const scale = this.#scale;
-    const origin_x =
-      center_x - this.#offset_x - (widget.x + widget.width / 2) * scale;
-    const origin_y =
-      center_y - this.#offset_y - (widget.y + widget.height / 2) * scale;
+    const { x, y, width, height, rotation } = widget[WIDGET_GEOMETRY];
+    const origin_x = center_x - this.#offset_x - (x + width / 2) * scale;
+    const origin_y = center_y - this.#offset_y - (y + height / 2) * scale;
     this.#drag = {
       action,
       pointer_id: e.pointerId,
@@ -194,11 +212,11 @@ export class Transformer extends Base {
       page_y: (e.clientY - origin_y - this.#offset_y) / scale,
       angle: Math.atan2(e.clientY - center_y, e.clientX - center_x),
       last: undefined,
-      x: widget.x,
-      y: widget.y,
-      width: widget.width,
-      height: widget.height,
-      rotation: widget.rotation,
+      x,
+      y,
+      width,
+      height,
+      rotation,
     };
     window.addEventListener("pointermove", this.#on_pointer_move);
     window.addEventListener("pointerup", this.#on_pointer_up);
@@ -251,8 +269,10 @@ export class Transformer extends Base {
     const action = drag.action;
     switch (action.type) {
       case "move":
-        widget.x = snap(drag.x + delta_x, grid);
-        widget.y = snap(drag.y + delta_y, grid);
+        widget[WIDGET_CHANGE]({
+          x: snap(drag.x + delta_x, grid),
+          y: snap(drag.y + delta_y, grid),
+        });
         break;
       case "resize": {
         const radians = (drag.rotation * Math.PI) / 180;
@@ -274,10 +294,12 @@ export class Transformer extends Base {
           drag.x + drag.width / 2 + shift_x * cos - shift_y * sin;
         const center_y =
           drag.y + drag.height / 2 + shift_x * sin + shift_y * cos;
-        widget.x = center_x - width / 2;
-        widget.y = center_y - height / 2;
-        widget.width = width;
-        widget.height = height;
+        widget[WIDGET_CHANGE]({
+          x: center_x - width / 2,
+          y: center_y - height / 2,
+          width,
+          height,
+        });
         break;
       }
       case "rotate": {
@@ -289,7 +311,7 @@ export class Transformer extends Base {
           drag.rotation + ((now - drag.angle) * 180) / Math.PI,
           e.shiftKey ? 0 : e.altKey ? SNAP_ANGLE_FINE : SNAP_ANGLE,
         );
-        widget.rotation = ((rotation % 360) + 360) % 360;
+        widget[WIDGET_CHANGE]({ rotation: ((rotation % 360) + 360) % 360 });
         break;
       }
     }

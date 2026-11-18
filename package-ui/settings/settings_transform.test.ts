@@ -28,9 +28,9 @@ describe("Settings name transform", () => {
 
   it("checks for a name used twice after the transform", () => {
     settings_init("@test/trans_formed", "1.0.0", "First", "");
-    expect(() => settings_init("@test/transformed", "1.0.0", "Second", "")).toThrow(
-      "already registered",
-    );
+    expect(() =>
+      settings_init("@test/transformed", "1.0.0", "Second", ""),
+    ).toThrow("already registered");
   });
 
   it("set after a group was made, reports the groups that already use their name", () => {

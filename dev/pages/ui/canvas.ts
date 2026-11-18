@@ -1,46 +1,85 @@
-import { define_element } from "@chocbite/ts-lib-ui/base";
-import canvas, { WidgetBase } from "@chocbite/ts-lib-ui/canvas";
+import {
+  define_element,
+  input_key,
+  type InputOptions,
+} from "@chocbite/ts-lib-ui/base";
+import canvas, {
+  WidgetBase,
+  type CanvasPage,
+  type CanvasLink,
+  type CanvasWidget,
+  type WidgetBaseOptions,
+  type WidgetOptionsInput,
+} from "@chocbite/ts-lib-ui/canvas";
+import form from "@chocbite/ts-lib-ui/form";
+import depot from "@chocbite/ts-lib/depot";
+import { settings_init } from "@chocbite/ts-lib-ui/settings";
+import state, { type StateOrVal, type StateROSW } from "@chocbite/ts-lib/state";
 import { box, controls, row, section } from "../../helpers";
+
+//      _____  ______ ______ _____ _   _ _____ _______ _____ ____  _   _  _____
+//     |  __ \|  ____|  ____|_   _| \ | |_   _|__   __|_   _/ __ \| \ | |/ ____|
+//     | |  | | |__  | |__    | | |  \| | | |    | |    | || |  | |  \| | (___
+//     | |  | |  __| |  __|   | | | . ` | | |    | |    | || |  | | . ` |\___ \
+//     | |__| | |____| |     _| |_| |\  |_| |_   | |   _| || |__| | |\  |____) |
+//     |_____/|______|_|    |_____|_| \_|_____|  |_|  |_____\____/|_| \_|_____/
+
+/**Inputs of the dev box*/
+const DEV_BOX = {
+  /**Background color*/
+  color: input_key<StateOrVal<string>>(),
+  /**Text in the box*/
+  text: input_key<StateOrVal<string>>(),
+};
+type DevBoxOptions = WidgetBaseOptions & InputOptions<typeof DEV_BOX>;
 
 /**Colored box with a label, does not stretch, so the text keeps its size when resized*/
 class DevBox extends WidgetBase {
   static element_name() {
     return "devbox";
   }
-  constructor(color: string, text: string) {
+  constructor() {
     super();
-    this.style.background = color;
     this.style.display = "flex";
     this.style.alignItems = "center";
     this.style.justifyContent = "center";
     this.style.fontFamily = "sans-serif";
     this.style.color = "white";
-    this.textContent = text;
   }
-  get original_width(): number {
-    return this.width;
-  }
-  get original_height(): number {
-    return this.height;
+  set(options: DevBoxOptions): this {
+    super.set(options);
+    this.set_input(DEV_BOX.color, options.color, (color) => {
+      this.style.background = color.ok ? color.value : "grey";
+    });
+    this.set_input(DEV_BOX.text, options.text, (text) => {
+      this.textContent = text.ok ? text.value : "⚠";
+    });
+    return this;
   }
 }
 define_element(DevBox);
+
+/**Inputs of the dev graphic*/
+const DEV_GRAPHIC = {
+  /**Fill of the circle*/
+  color: input_key<StateOrVal<string>>(),
+};
+type DevGraphicOptions = WidgetBaseOptions & InputOptions<typeof DEV_GRAPHIC>;
 
 /**64 x 64 graphic that stretches to the widget size*/
 class DevGraphic extends WidgetBase {
   static element_name() {
     return "devgraphic";
   }
-  constructor(color: string) {
+  #circle = this.appendChild(document.createElement("div"));
+  constructor() {
     super();
-    const circle = this.appendChild(document.createElement("div"));
-    Object.assign(circle.style, {
+    Object.assign(this.#circle.style, {
       boxSizing: "border-box",
       width: "64px",
       height: "64px",
       borderRadius: "50%",
       border: "4px solid black",
-      background: color,
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
@@ -48,134 +87,318 @@ class DevGraphic extends WidgetBase {
       fontSize: "24px",
       color: "black",
     });
-    circle.textContent = "A";
+    this.#circle.textContent = "A";
   }
-  get original_width(): number {
-    return 64;
+  protected original_size() {
+    return { width: 64, height: 64 };
   }
-  get original_height(): number {
-    return 64;
+  set(options: DevGraphicOptions): this {
+    super.set(options);
+    this.set_input(DEV_GRAPHIC.color, options.color, (color) => {
+      this.#circle.style.background = color.ok ? color.value : "grey";
+    });
+    return this;
   }
 }
 define_element(DevGraphic);
 
-/**The widgets of the old trial, on an 800 x 600 page*/
-const trial_widgets = () => [
-  new DevBox("#2980b9", "Small box").opts({ x: 20, y: 20, width: 160, height: 80 }),
-  new DevBox("#27ae60", "Wide box, text not stretched").opts({
-    x: 20,
-    y: 120,
-    width: 400,
-    height: 40,
+//The definitions are registered in the widgets type of the depot, pages refer to them by path
+const dev = canvas.widgets.group("dev", "Dev page", "Widgets of the dev page");
+const BOX = dev.add(
+  "box",
+  "Box",
+  "Colored box with a text",
+  canvas.definition({
+    create: (options: DevBoxOptions) => DevBox.create(options),
+    size: { width: 160, height: 80 },
+    properties: {
+      text: { kind: "text", name: "Text", default: "Box" },
+      color: { kind: "color", name: "Color", default: "#2980b9" },
+    },
   }),
-  new DevBox("#8e44ad", "Rotated 45").opts({
-    x: 20,
-    y: 220,
-    width: 160,
-    height: 80,
-    rotation: 45,
+);
+const GRAPHIC = dev.add(
+  "graphic",
+  "Graphic",
+  "Circle that stretches",
+  canvas.definition({
+    create: (options: DevGraphicOptions) => DevGraphic.create(options),
+    size: { width: 64, height: 64 },
+    properties: {
+      color: { kind: "color", name: "Fill", default: "#f1c40f" },
+    },
   }),
-  new DevGraphic("#f1c40f").opts({ x: 300, y: 300, width: 64, height: 64 }),
-  new DevGraphic("#f1c40f").opts({ x: 400, y: 300, width: 128, height: 64 }),
-  new DevGraphic("#f1c40f").opts({ x: 560, y: 300, width: 64, height: 128 }),
-  new DevGraphic("#f1c40f").opts({
-    x: 300,
-    y: 450,
-    width: 256,
-    height: 64,
-    rotation: 30,
+);
+
+/**Writable states for the place of a widget, so every viewport follows a change*/
+const place = (
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  rotation = 0,
+) => ({
+  x: state.ok_w(x),
+  y: state.ok_w(y),
+  width: state.ok_w(width),
+  height: state.ok_w(height),
+  rotation: state.ok_w(rotation),
+});
+type Place = ReturnType<typeof place>;
+
+//canvas.widget makes fixed values writable states, so every viewport shares them and the properties editor changes them
+const box_widget = (options: WidgetOptionsInput<DevBoxOptions>) =>
+  canvas.widget(BOX, options);
+const graphic_widget = (options: WidgetOptionsInput<DevGraphicOptions>) =>
+  canvas.widget(GRAPHIC, options);
+
+/**The widgets of the old trial, for an 800 x 600 page, with writable states*/
+const trial_widgets = (): CanvasWidget[] => [
+  box_widget({
+    color: "#2980b9",
+    text: "Small box",
+    ...place(20, 20, 160, 80),
   }),
+  box_widget({
+    color: "#27ae60",
+    text: "Wide box, text not stretched",
+    ...place(20, 120, 400, 40),
+  }),
+  box_widget({
+    color: "#8e44ad",
+    text: "Rotated 45",
+    ...place(20, 220, 160, 80, 45),
+  }),
+  graphic_widget({ color: "#f1c40f", ...place(300, 300, 64, 64) }),
+  graphic_widget({ color: "#f1c40f", ...place(400, 300, 128, 64) }),
+  graphic_widget({ color: "#f1c40f", ...place(560, 300, 64, 128) }),
+  graphic_widget({ color: "#f1c40f", ...place(300, 450, 256, 64, 30) }),
 ];
 
-//     ______ _____ _____ _______
-//    |  ____|  __ \_   _|__   __|
-//    | |__  | |  | || |    | |
-//    |  __| | |  | || |    | |
-//    | |____| |__| || |_   | |
-//    |______|_____/_____|  |_|
-{
-  const sec = section(
-    "Edit",
-    "In edit mode: click a widget to select it, drag the outline to move, handles to resize, the top handle to rotate. Wheel pans, ctrl + wheel zooms toward the pointer, alt slows down, middle or right drag pans. Leaving edit resets the view. Switch input mode to touch in the shell for bigger handles",
-  );
-  const page = canvas.page({ width: 800, height: 600 });
-  const vp = canvas.viewport({ page, edit: true });
+/**Number inputs bound to the states of a place, like a properties editor will be*/
+const place_inputs = (parent: HTMLElement, name: string, p: Place) => {
+  const line = row(parent);
+  line.append(name + ":");
+  for (const key of ["x", "y", "width", "height", "rotation"] as const) {
+    const input = form.number_input({ value: p[key] });
+    input.style.width = "6rem";
+    line.append(key, input);
+  }
+};
+
+/**A viewport filling a box*/
+const viewport_in = (
+  parent: HTMLElement,
+  label: string,
+  size: { width: string; height: string },
+  page: StateOrVal<CanvasPage | undefined>,
+  edit = false,
+  selected?: StateROSW<CanvasWidget | undefined>,
+) => {
+  const vp = canvas.viewport({ page, edit, selected });
   vp.style.width = "100%";
   vp.style.height = "100%";
-  const spinning = new DevGraphic("#c0392b").opts({
-    x: 600,
-    y: 100,
-    width: 128,
-    height: 64,
-  });
-  const widgets = [...trial_widgets(), spinning];
-  page.widgets = widgets;
+  box(parent, label, size).appendChild(vp);
+  return vp;
+};
 
-  const status = sec.appendChild(document.createElement("div"));
-  status.style.fontFamily = "monospace";
-  const update = () => {
-    const s = vp.selected;
-    status.textContent =
-      `edit ${vp.edit}, scale ${vp.scale.toFixed(3)}, page ${page.width} x ${page.height}, ` +
-      (s
-        ? `selected x ${s.x.toFixed(0)} y ${s.y.toFixed(0)} w ${s.width.toFixed(0)} h ${s.height.toFixed(0)} rotation ${s.rotation.toFixed(0)}`
-        : "nothing selected");
-  };
-  for (const widget of widgets)
-    widget.addEventListener(canvas.WIDGET_TRANSFORM_EVENT, update);
-  vp.addEventListener("pointerup", update);
-  vp.addEventListener("wheel", update);
-  //The scale is known once the viewport has been laid out
-  new ResizeObserver(() => requestAnimationFrame(update)).observe(vp);
-
-  let spin_frame: number | undefined;
-  const spin = (time: number) => {
-    spinning.rotation = (time / 20) % 360;
-    spin_frame = requestAnimationFrame(spin);
-  };
+//     _________          ______
+//    |__   __\ \        / / __ \
+//       | |   \ \  /\  / / |  | |
+//       | |    \ \/  \/ /| |  | |
+//       | |     \  /\  / | |__| |
+//       |_|      \/  \/   \____/
+{
+  const sec = section(
+    "One page, two viewports",
+    "The same page data in two editing viewports sharing a selection state, the line above them shows the selected widget. Selecting in one shows the transformer in both. Move, resize and rotate in either, the other follows, as both are bound to the same states. Add, remove and reorder change the array state of the widgets, only the widgets that change are made or removed. The page size buttons change the size states. Add with selector opens the selector of the registered widget definitions, the picked widgets are made from the defaults of their properties. The properties editor follows the selection: change a text or color there and the widget changes in both viewports, move the widget and the numbers follow. Every value of these widgets is a writable state, so every field is live",
+  );
+  const width = state.ok_w(800);
+  const height = state.ok_w(600);
+  const widgets = state.ok_w<CanvasWidget[]>(trial_widgets());
+  const page: CanvasPage = { width, height, widgets };
+  const selected = state.ok_w<CanvasWidget | undefined>(undefined);
+  const shown = sec.appendChild(document.createElement("div"));
+  shown.style.fontFamily = "monospace";
+  selected.sub((s) => {
+    shown.textContent =
+      s.ok && s.value ? "selected " + s.value.widget : "nothing selected";
+  }, true);
+  const boxes = row(sec);
+  viewport_in(
+    boxes,
+    "Editor",
+    { width: "36rem", height: "27rem" },
+    page,
+    true,
+    selected,
+  );
+  viewport_in(
+    boxes,
+    "Second editor",
+    { width: "20rem", height: "15rem" },
+    page,
+    true,
+    selected,
+  );
+  box(boxes, "Properties of the selected widget", {
+    width: "22rem",
+    height: "27rem",
+    display: "flex",
+  }).appendChild(canvas.properties({ selected })).style.flexGrow = "1";
+  let added = 0;
   controls(sec, {
-    "Toggle edit": () => {
-      vp.edit = !vp.edit;
-      update();
+    "Add box": () => {
+      added++;
+      widgets.set_ok([
+        ...widgets.ok(),
+        box_widget({
+          color: "#d35400",
+          text: "Added " + added,
+          ...place(40 + ((added * 30) % 400), 380, 120, 60),
+        }),
+      ]);
     },
-    "Start / stop spinning": () => {
-      if (spin_frame === undefined) spin_frame = requestAnimationFrame(spin);
-      else {
-        cancelAnimationFrame(spin_frame);
-        spin_frame = undefined;
-      }
+    "Add with selector": async () => {
+      const picked = await canvas.select_widget({
+        mode: "multi",
+        at: { x: 320, y: 260 },
+      });
+      widgets.set_ok([...widgets.ok(), ...picked]);
     },
-    "Select first": () => {
-      vp.selected = widgets[0];
-      update();
-    },
-    "Clear selection": () => {
-      vp.selected = undefined;
-      update();
-    },
+    "Remove last": () => widgets.set_ok(widgets.ok().slice(0, -1)),
+    "Reverse order": () => widgets.set_ok([...widgets.ok()].reverse()),
     "Page 800 x 600": () => {
-      page.width = 800;
-      page.height = 600;
-      update();
-    },
-    "Page 1920 x 1080": () => {
-      page.width = 1920;
-      page.height = 1080;
-      update();
+      width.set_ok(800);
+      height.set_ok(600);
     },
     "Page 400 x 800": () => {
-      page.width = 400;
-      page.height = 800;
-      update();
-    },
-    "Reverse order": () => {
-      page.widgets = [...page.widgets].reverse();
+      width.set_ok(400);
+      height.set_ok(800);
     },
   });
-  box(sec, "100% x 32rem box", { width: "100%", height: "32rem" }).appendChild(
-    vp,
+}
+
+//Kept across reloads
+{
+  const sec = section(
+    "Kept across reloads",
+    "The page is a state registered with register_debounced of settings, stored half a second after the last change, and loaded with get and canvas.page_from_json. Move, add or remove widgets, or change them in the properties editor, and reload the browser, the page comes back as it was. The line shows how much is stored. Reset puts the trial widgets back",
   );
-  update();
+  const SETTINGS = settings_init(
+    "dev/canvas-page",
+    "1.0.0",
+    "Dev canvas page",
+    "Pages stored by the canvas dev page",
+  );
+  const default_page = (): CanvasPage => ({
+    width: state.ok_w(800),
+    height: state.ok_w(600),
+    widgets: state.ok_w<CanvasWidget[]>(trial_widgets()),
+  });
+  const page = state.ok_w<CanvasPage>(
+    SETTINGS.get("page", default_page(), canvas.page_from_json).value,
+  );
+  SETTINGS.register_debounced(
+    "page",
+    "Page",
+    "The page of the canvas dev page",
+    page,
+  );
+  const stored = sec.appendChild(document.createElement("div"));
+  stored.style.fontFamily = "monospace";
+  const show_stored = () => {
+    const json = localStorage.getItem("dev/canvas-page/page");
+    stored.textContent = json
+      ? `stored ${json.length} characters: ${json.slice(0, 120)}…`
+      : "nothing stored yet";
+  };
+  show_stored();
+  setInterval(show_stored, 500);
+  /**The widgets state of the page shown now*/
+  const widgets = () =>
+    page.ok().widgets as ReturnType<typeof state.ok_w<CanvasWidget[]>>;
+  let added = 0;
+  controls(sec, {
+    "Add box": () => {
+      added++;
+      widgets().set_ok([
+        ...widgets().ok(),
+        box_widget({
+          color: "#16a085",
+          text: "Stored " + added,
+          ...place(500, 40 + ((added * 40) % 400), 140, 50),
+        }),
+      ]);
+    },
+    "Add with selector": async () => {
+      const picked = await canvas.select_widget({ at: { x: 320, y: 260 } });
+      widgets().set_ok([...widgets().ok(), ...picked]);
+    },
+    "Remove last": () => widgets().set_ok(widgets().ok().slice(0, -1)),
+    Reset: () => {
+      page.set_ok(default_page());
+      selected.set_ok(undefined);
+    },
+  });
+  const selected = state.ok_w<CanvasWidget | undefined>(undefined);
+  const boxes = row(sec);
+  viewport_in(
+    boxes,
+    "Editor",
+    { width: "36rem", height: "27rem" },
+    page,
+    true,
+    selected,
+  );
+  box(boxes, "Properties of the selected widget", {
+    width: "22rem",
+    height: "27rem",
+    display: "flex",
+  }).appendChild(canvas.properties({ selected })).style.flexGrow = "1";
+}
+
+//      _____ _______    _______ ______  _____
+//     / ____|__   __|/\|__   __|  ____|/ ____|
+//    | (___    | |  /  \  | |  | |__  | (___
+//     \___ \   | | / /\ \ | |  |  __|  \___ \
+//     ____) |  | |/ ____ \| |  | |____ ____) |
+//    |_____/   |_/_/    \_\_|  |______|_____/
+{
+  const sec = section(
+    "States",
+    "The place of widgets as inputs. Blue and the dashed green outline share writable states: moving or resizing either changes both, and the number inputs follow and change them too. Red is locked by read only states for x and y: it can only be rotated, as moving and resizing both change the position. Yellow was given fixed values, canvas.widget makes them writable states, so it moves in both viewports too",
+  );
+  const shared = place(40, 40, 160, 80);
+  const locked = place(300, 40, 160, 80);
+  const page: CanvasPage = {
+    width: 800,
+    height: 400,
+    widgets: [
+      box_widget({ color: "#2980b9", text: "Shared", ...shared }),
+      box_widget({ color: "transparent", text: "- - - - -", ...shared }),
+      box_widget({
+        color: "#c0392b",
+        text: "Locked position",
+        ...locked,
+        x: locked.x.read_only,
+        y: locked.y.read_only,
+      }),
+      box_widget({
+        color: "#f1c40f",
+        text: "Fixed",
+        x: 560,
+        y: 40,
+        width: 160,
+        height: 80,
+      }),
+    ],
+  };
+  place_inputs(sec, "Shared", shared);
+  place_inputs(sec, "Locked", locked);
+  const boxes = row(sec);
+  viewport_in(boxes, "Editor", { width: "36rem", height: "18rem" }, page, true);
+  viewport_in(boxes, "Preview", { width: "20rem", height: "10rem" }, page);
 }
 
 //      _____ _____ ____________  _____
@@ -187,21 +410,155 @@ const trial_widgets = () => [
 {
   const sec = section(
     "Fit",
-    "The same 800 x 600 page outside edit mode in different box shapes, it should scale to fit and center with the viewport background around it",
+    "One 800 x 600 page in three viewports of different shapes outside edit mode, it should scale to fit and center with the viewport background around it",
   );
+  const page: CanvasPage = {
+    width: 800,
+    height: 600,
+    widgets: trial_widgets(),
+  };
   const boxes = row(sec);
   for (const [width, height] of [
     ["16rem", "12rem"],
     ["24rem", "8rem"],
     ["8rem", "16rem"],
-  ]) {
-    const page = canvas.page({ width: 800, height: 600 });
-    page.widgets = trial_widgets();
-    const vp = canvas.viewport({ page });
-    vp.style.width = "100%";
-    vp.style.height = "100%";
-    box(boxes, `${width} x ${height}`, { width, height }).appendChild(vp);
-  }
+  ])
+    viewport_in(boxes, `${width} x ${height}`, { width, height }, page);
+}
+
+//     _      _______ ______
+//    | |    |__   __|  ____|
+//    | |       | |  | |__
+//    | |       | |  |  __|
+//    | |____   | |  | |____
+//    |______|  |_|  |______|
+{
+  const sec = section(
+    "Definitions registered late",
+    "The page refers to /widgets/dev/late, which is not registered yet, so an error is shown in its place. Register makes the widget appear, unregister shows the error again. Pages refer to widgets by path, so a page can be loaded before the widgets it uses",
+  );
+  //Written as data, canvas.widget needs the registered entry
+  const late_widget: CanvasWidget<DevBoxOptions> = {
+    widget: "/widgets/dev/late",
+    options: {
+      color: state.ok_w("#16a085"),
+      text: state.ok_w("Late widget"),
+      ...place(100, 60, 200, 80),
+    },
+  };
+  const page: CanvasPage = { width: 400, height: 200, widgets: [late_widget] };
+  let late: ReturnType<typeof dev.add> | undefined;
+  controls(sec, {
+    Register: () => {
+      late ??= dev.add("late", "Late", "Registered by a button", {
+        create: (options: DevBoxOptions) => DevBox.create(options),
+      });
+    },
+    Unregister: () => {
+      late?.remove();
+      late = undefined;
+    },
+  });
+  viewport_in(
+    row(sec),
+    "Editor",
+    { width: "24rem", height: "12rem" },
+    page,
+    true,
+  );
+}
+
+//     _      _____ _   _ _  __ _____
+//    | |    |_   _| \ | | |/ // ____|
+//    | |      | | |  \| | ' /| (___
+//    | |      | | | . ` |  <  \___ \
+//    | |____ _| |_| |\  | . \ ____) |
+//    |______|_____|_| \_|_|\_\_____/
+{
+  const sec = section(
+    "Links to depot states",
+    "Options linked to states registered in depot.states, made with canvas.link. The state of an option holds a value or a link, writing it switches. Blue shows a counter that only the app changes, Switch blue text writes a value or the link to its text. Its x is linked to a writable state: drag it sideways and the number input follows, change the input and it moves. Green links its x to the same state through a linear transform from 0 to 320 into 320 to 0, so it mirrors blue, and dragging green moves blue. Red links its text to /states/dev-canvas/missing, which is not registered, so only the text shows an error until Register missing. The properties editor shows a linked option as its path. The line shows the page as it is saved",
+  );
+  const states = depot.states.group(
+    "dev-canvas",
+    "Canvas dev page",
+    "States of the canvas dev page",
+  );
+  const count = state.ok_w(0);
+  setInterval(() => count.set_ok(count.ok() + 1), 1000);
+  states.add("count", "Count", "Counts up every second", count.read_only);
+  const x = state.ok_w(40);
+  states.add("x", "X", "Position of the blue box", x);
+  const count_link = canvas.link<string>("/states/dev-canvas/count");
+  const blue_text = state.ok_w<string | CanvasLink<string>>(count_link);
+  const widgets: CanvasWidget[] = [
+    box_widget({
+      color: "#2980b9",
+      text: blue_text,
+      ...place(40, 20, 160, 70),
+      x: canvas.link("/states/dev-canvas/x"),
+    }),
+    box_widget({
+      color: "#27ae60",
+      text: "Mirror",
+      ...place(280, 110, 160, 70),
+      x: canvas.link("/states/dev-canvas/x", {
+        transforms: [canvas.linear([0, 320], [320, 0])],
+      }),
+    }),
+    box_widget({
+      color: "#c0392b",
+      text: canvas.link("/states/dev-canvas/missing"),
+      ...place(280, 20, 160, 70),
+    }),
+  ];
+  const page: CanvasPage = { width: 480, height: 200, widgets };
+  const selected = state.ok_w<CanvasWidget | undefined>(widgets[0]);
+  const line = row(sec);
+  line.append("x state:");
+  line.append(form.number_input({ value: x }));
+  let missing: ReturnType<typeof states.add> | undefined;
+  controls(sec, {
+    "Switch blue text": () =>
+      blue_text.set_ok(
+        blue_text.ok() === count_link ? "A plain value" : count_link,
+      ),
+    "Register missing": () => {
+      missing ??= states.add(
+        "missing",
+        "Missing",
+        "Registered by a button",
+        state.ok("Registered"),
+      );
+    },
+    "Unregister missing": () => {
+      missing?.remove();
+      missing = undefined;
+    },
+  });
+  const saved = sec.appendChild(document.createElement("div"));
+  saved.style.fontFamily = "monospace";
+  const show_saved = () =>
+    void state
+      .ok(page)
+      .to_json()
+      .then((json) => (saved.textContent = json));
+  show_saved();
+  setInterval(show_saved, 500);
+  const boxes = row(sec);
+  viewport_in(
+    boxes,
+    "Editor",
+    { width: "30rem", height: "12.5rem" },
+    page,
+    true,
+    selected,
+  );
+  box(boxes, "Properties of the selected widget", {
+    width: "22rem",
+    height: "20rem",
+    display: "flex",
+  }).appendChild(canvas.properties({ selected })).style.flexGrow = "1";
 }
 
 //     __  __          _   ___     __
@@ -213,36 +570,45 @@ const trial_widgets = () => [
 {
   const sec = section(
     "Many widgets",
-    "Fills a 1920 x 1080 page with widgets in edit mode, how do panning, zooming and dragging feel",
+    "Fills a 1920 x 1080 page with widgets, each with five writable states, shown in an editor and a preview. Look at how long filling takes, and how panning, zooming and dragging feel",
   );
-  const page = canvas.page({ width: 1920, height: 1080 });
-  const vp = canvas.viewport({ page, edit: true });
-  vp.style.width = "100%";
-  vp.style.height = "100%";
+  const widgets = state.ok_w<CanvasWidget[]>([]);
+  const page: CanvasPage = { width: 1920, height: 1080, widgets };
   const colors = ["#2980b9", "#27ae60", "#8e44ad", "#c0392b", "#d35400"];
+  const status = sec.appendChild(document.createElement("div"));
+  status.style.fontFamily = "monospace";
+  status.textContent = "Not filled yet";
   const fill = (amount: number) => {
+    const start = performance.now();
     const columns = Math.ceil(Math.sqrt(amount * (1920 / 1080)));
     const size = 1920 / columns;
-    const widgets: WidgetBase[] = [];
+    const list: CanvasWidget[] = [];
     for (let i = 0; i < amount; i++)
-      widgets.push(
-        new DevBox(colors[i % colors.length], String(i)).opts({
-          x: (i % columns) * size,
-          y: Math.floor(i / columns) * size,
-          width: size * 0.8,
-          height: size * 0.8,
-          rotation: (i * 15) % 90,
+      list.push(
+        box_widget({
+          color: colors[i % colors.length],
+          text: String(i),
+          ...place(
+            (i % columns) * size,
+            Math.floor(i / columns) * size,
+            size * 0.8,
+            size * 0.8,
+            (i * 15) % 90,
+          ),
         }),
       );
-    page.widgets = widgets;
+    widgets.set_ok(list);
+    requestAnimationFrame(() => {
+      status.textContent = `${amount} widgets in two viewports, ${(performance.now() - start).toFixed(0)}ms to the next frame`;
+    });
   };
   controls(sec, {
     "100 widgets": () => fill(100),
     "1000 widgets": () => fill(1000),
     "5000 widgets": () => fill(5000),
-    Clear: () => (page.widgets = []),
+    Clear: () => widgets.set_ok([]),
   });
-  box(sec, "100% x 32rem box", { width: "100%", height: "32rem" }).appendChild(
-    vp,
-  );
+  const boxes = row(sec);
+  viewport_in(boxes, "Editor", { width: "36rem", height: "20rem" }, page, true);
+  viewport_in(boxes, "Preview", { width: "20rem", height: "11.25rem" }, page);
 }

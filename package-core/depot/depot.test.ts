@@ -112,6 +112,19 @@ describe("content", () => {
     // @ts-expect-error content must match the type
     depot.type<number>("u", "", "").add("e", "", "", "text");
   });
+
+  it("keeps the type of the content given to add for object types", () => {
+    interface Definition {
+      create(): string;
+    }
+    const type = depot.type<Definition>("t", "", "");
+    const entry = type.add("e", "", "", { create: () => "a", size: 1 });
+    expectTypeOf(entry).toEqualTypeOf<
+      DepotEntry<{ create: () => string; size: number }>
+    >();
+    // @ts-expect-error content must still match the type
+    type.add("f", "", "", { size: 1 });
+  });
 });
 
 describe("removing", () => {

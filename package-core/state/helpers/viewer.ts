@@ -4,182 +4,87 @@ import {
   StateResult,
   StateSub,
 } from "../types";
-import { ARRAY } from "./array";
 import { IS } from "./is";
-import { OBJECT } from "./object";
 
 declare global {
   interface Object {
-    [STATE_VIEWER_OVERRIDE_KEY]?: () =>
-      | State<unknown, any>
-      | State<unknown, any>[]
-      | { [key: string]: State<unknown, any> };
+    [STATE_VIEWER_OVERRIDE_KEY]?: () => unknown;
   }
 }
 
+/**Adds the states found in a value to found, going into arrays and objects at any depth, but not into the values of the states,
+ * the same tree to_json of a state writes
+ * A value can give what is walked instead of itself with the override key*/
+function collect(
+  value: unknown,
+  found: Set<State<unknown, any>>,
+  seen: Set<object>,
+): void {
+  if (typeof value !== "object" || value === null) return;
+  const walked = value[STATE_VIEWER_OVERRIDE_KEY]?.() ?? value;
+  if (IS.state(walked)) {
+    found.add(walked);
+    return;
+  }
+  if (typeof walked !== "object" || walked === null || seen.has(walked)) return;
+  seen.add(walked);
+  if (Array.isArray(walked)) {
+    for (const item of walked) collect(item, found, seen);
+    return;
+  }
+  //Objects converting themselves to JSON are values, like dates, to_json does not go into them either
+  if (typeof (walked as { toJSON?: unknown }).toJSON === "function") return;
+  for (const item of Object.values(walked)) collect(item, found, seen);
+}
+
+/**Follows one state and every state found in its value, by identity
+ * When the value changes the value is walked again, states still found keep their subscription,
+ * new states are subscribed and states no longer found are unsubscribed*/
 class StateViewer {
   #state?: State<unknown, any>;
   #func?: StateSub<any>;
-  #dead?: boolean = false;
-  #children?:
-    | StateViewer
-    | (StateViewer | undefined)[]
-    | { [key: string]: StateViewer };
+  #dead = false;
+  #children = new Map<State<unknown, any>, StateViewer>();
+
   constructor(state: State<unknown, any>, callback: () => void) {
+    //Waits for the first value, so nothing is called on setup and async states are subscribed once they have a value
     state.then((v) => {
       if (this.#dead) return;
-      this.#sub(v, callback);
+      this.#walk(v, callback);
       this.#func = state.sub((v) => {
-        this.#sub(v, callback);
+        this.#walk(v, callback);
         callback();
       });
       this.#state = state;
     });
   }
 
-  #sub(v: StateResult<unknown>, callback: () => void) {
-    if (v.err) return this.#unsub();
-    const val = v.value;
-    if (!(val instanceof Object)) return this.#unsub();
-    const value = val[STATE_VIEWER_OVERRIDE_KEY]?.() ?? val;
-    if (IS.state(value)) return this.#unsub(new StateViewer(value, callback));
-    if (Array.isArray(value)) {
-      ARRAY.read(value).forEach((e) => {
-        if (e.type === "added")
-          (this.#children as (StateViewer | undefined)[]).splice(
-            e.index,
-            0,
-            ...e.items.map((v) => {
-              if (IS.state(v)) return new StateViewer(v, callback);
-              else return undefined;
-            }),
-          );
-        else if (e.type === "removed") {
-          this.#unsub_array(
-            (this.#children as (StateViewer | undefined)[]).splice(
-              e.index,
-              e.items.length,
-            ),
-          );
-        } else if (e.type === "changed")
-          for (let i = 0; i < e.items.length; i++) {
-            (this.#children as (StateViewer | undefined)[])[
-              e.index + i
-            ]?.unsub();
-            const e_i = (e.items as unknown[])[i];
-            (this.#children as (StateViewer | undefined)[])[e.index + i] =
-              IS.state(e_i) ? new StateViewer(e_i, callback) : undefined;
-          }
-        else if (e.type === "moved") {
-          const items = (this.#children as (StateViewer | undefined)[]).splice(
-            e.from_index,
-            e.items.length,
-          );
-          (this.#children as (StateViewer | undefined)[]).splice(
-            e.to_index,
-            0,
-            ...items,
-          );
-        } else if (e.type === "fresh")
-          this.#unsub(
-            e.items.map((v) => {
-              if (IS.state(v)) return new StateViewer(v, callback);
-              else return undefined;
-            }),
-          );
-      });
-      return;
-    }
-    OBJECT.read(value as Record<PropertyKey, unknown>).forEach((e) => {
-      if (e.type === "added")
-        for (const key of Object.keys(e.items)) {
-          const v = e.items[key];
-          if (IS.state(v))
-            (
-              this.#children as {
-                [key: string]: StateViewer;
-              }
-            )[key] = new StateViewer(v, callback);
-        }
-      else if (e.type === "removed")
-        for (const key of Object.keys(e.items)) {
-          (
-            this.#children as {
-              [key: string]: StateViewer;
-            }
-          )[key]?.unsub();
-          delete (
-            this.#children as {
-              [key: string]: StateViewer;
-            }
-          )[key];
-        }
-      else if (e.type === "changed")
-        for (const key of Object.keys(e.items)) {
-          (
-            this.#children as {
-              [key: string]: StateViewer;
-            }
-          )[key]?.unsub();
-          const v = e.items[key];
-          if (IS.state(v))
-            (
-              this.#children as {
-                [key: string]: StateViewer;
-              }
-            )[key] = new StateViewer(v, callback);
-        }
-      else if (e.type === "fresh") {
-        this.#unsub({});
-        for (const key of Object.keys(e.items)) {
-          const v = e.items[key];
-          if (IS.state(v))
-            (
-              this.#children as {
-                [key: string]: StateViewer;
-              }
-            )[key] = new StateViewer(v, callback);
-        }
+  #walk(v: StateResult<unknown>, callback: () => void) {
+    const found = new Set<State<unknown, any>>();
+    if (v.ok) collect(v.value, found, new Set());
+    for (const [state, child] of this.#children)
+      if (!found.has(state)) {
+        child.unsub();
+        this.#children.delete(state);
       }
-    });
+    for (const state of found)
+      if (!this.#children.has(state))
+        this.#children.set(state, new StateViewer(state, callback));
   }
 
-  #unsub_array(arr: (StateViewer | undefined)[]) {
-    for (let i = 0; i < arr.length; i++) arr[i]?.unsub();
-  }
-
-  #unsub_object(obj: { [key: string]: StateViewer }) {
-    for (const key in obj) obj[key]?.unsub();
-  }
-
-  #unsub(
-    new_obs?:
-      | StateViewer
-      | (StateViewer | undefined)[]
-      | {
-          [key: string]: StateViewer;
-        },
-  ) {
-    if (this.#children)
-      if (this.#children instanceof StateViewer) this.#children.unsub();
-      else if (Array.isArray(this.#children)) this.#unsub_array(this.#children);
-      else this.#unsub_object(this.#children);
-    this.#children = new_obs;
-  }
-
+  /**Stops following the state and every state below it*/
   unsub() {
     this.#dead = true;
-    this.#state?.unsub(this.#func);
-    if (this.#children)
-      if (this.#children instanceof StateViewer) this.#children.unsub();
-      else if (Array.isArray(this.#children))
-        this.#children.forEach((child) => child?.unsub());
-      else Object.values(this.#children).forEach((child) => child?.unsub());
-    this.#children = undefined;
+    if (this.#func) this.#state?.unsub(this.#func);
+    for (const child of this.#children.values()) child.unsub();
+    this.#children.clear();
   }
 }
 
-/**Recursively subscribes to all states in a tree of states, and optionally if a state value declares a viewer override*/
+/**Calls the callback when the root or any state in its value changes, at any depth: states in states,
+ * and states in arrays and objects, the same tree to_json of a state writes
+ * A value can give what is followed instead of itself with OVERRIDE_KEY, like a class instance holding states
+ * The callback is not called for the first values, unsub stops following*/
 export function viewer(
   root: State<any, any>,
   callback: () => void,
@@ -188,8 +93,8 @@ export function viewer(
 }
 
 export const VIEWER = {
-  /**Recursively subscribes to all states in a tree of states, and optionally if a state value declares a viewer override*/
+  /**Calls the callback when the root or any state in its value changes, at any depth, see viewer*/
   viewer,
-  /**Key for state value to supply a function returning substates for the viewer to subscribe to*/
+  /**Key for a value to give what the viewer and to_json walk instead of the value itself*/
   OVERRIDE_KEY: STATE_VIEWER_OVERRIDE_KEY,
 };

@@ -1,11 +1,28 @@
-import { Base, define_element } from "#base";
+import {
+  Base,
+  define_element,
+  input_key,
+  type BaseOptions,
+  type InputOptions,
+} from "#base";
+import type { StateOrVal } from "@chocbite/ts-lib/state";
+import type { CanvasPage, CanvasWidget } from "./data";
 import "./page.scss";
 import "./shared";
+import { WIDGET_ELEMENTS_EVENT, WidgetSlot } from "./slot";
 import type { WidgetBase } from "./widget";
 
-/**Page of widgets with a fixed size
- * Width and height are the size of the page in page units (px before any viewport scaling)*/
-export class Page extends Base {
+/**Inputs of the page element, the values of a CanvasPage*/
+const PAGE = {
+  width: input_key<StateOrVal<number>>(),
+  height: input_key<StateOrVal<number>>(),
+  widgets: input_key<StateOrVal<readonly CanvasWidget[]>>(),
+};
+type PageElementOptions = BaseOptions & InputOptions<typeof PAGE>;
+
+/**Element showing a page in one viewport, internal to canvas, the viewport makes it from the page data
+ * Every widget gets a slot, which makes the widget element, the order of the slots is the drawing order*/
+export class PageElement extends Base {
   /**Returns the name used to define the element */
   static element_name() {
     return "page";
@@ -17,7 +34,6 @@ export class Page extends Base {
 
   #width: number = 1920;
   #height: number = 1080;
-  #widgets: readonly WidgetBase[] = [];
 
   constructor() {
     super();
@@ -25,55 +41,78 @@ export class Page extends Base {
     this.style.height = this.#height + "px";
   }
 
-  /**Sets the width of the page */
-  set width(width: number) {
-    this.#width = width;
-    this.style.width = width + "px";
-  }
-  /**Returns the width of the page */
-  get width(): number {
+  /**Width of the page in page units*/
+  get page_width(): number {
     return this.#width;
   }
-
-  /**Sets the height of the page */
-  set height(height: number) {
-    this.#height = height;
-    this.style.height = height + "px";
-  }
-  /**Returns the height of the page */
-  get height(): number {
+  /**Height of the page in page units*/
+  get page_height(): number {
     return this.#height;
   }
 
-  /**Sets the widgets on the page, the array order is the drawing order with the last widget on top
-   * Widgets already on the page are kept in place, so they are only reconnected if their order changes */
-  set widgets(widgets: readonly WidgetBase[]) {
-    const keep = new Set(widgets);
-    for (const widget of this.#widgets)
-      if (!keep.has(widget) && widget.parentElement === this) widget.remove();
-    for (let i = 0; i < widgets.length; i++) {
-      const current = this.children[i];
-      if (current !== widgets[i])
-        this.insertBefore(widgets[i], current ?? null);
+  /**The widget elements in drawing order*/
+  get widget_elements(): WidgetBase[] {
+    const elements: WidgetBase[] = [];
+    for (const slot of this.children as HTMLCollectionOf<WidgetSlot>) {
+      const element = slot.element;
+      if (element) elements.push(element);
     }
-    this.#widgets = widgets;
+    return elements;
   }
-  /**Returns the widgets on the page */
-  get widgets(): readonly WidgetBase[] {
-    return this.#widgets;
+
+  set(options: PageElementOptions): this {
+    super.set(options);
+    this.set_input(PAGE.width, options.width, (width) => {
+      if (!width.ok) return;
+      this.#width = width.value;
+      this.style.width = width.value + "px";
+    });
+    this.set_input(PAGE.height, options.height, (height) => {
+      if (!height.ok) return;
+      this.#height = height.value;
+      this.style.height = height.value + "px";
+    });
+    this.set_input(PAGE.widgets, options.widgets, (widgets) => {
+      //An error keeps the widgets shown, the fault icon explains it
+      if (widgets.ok) this.#apply(widgets.value);
+    });
+    return this;
+  }
+
+  /**Makes the slots follow the widgets by identity, so only slots of added, removed or moved widgets are touched
+   * The array is compared as a whole every time, so changes missed while the page was not in the document do not matter*/
+  #apply(widgets: readonly CanvasWidget[]): void {
+    const slots = this.children as HTMLCollectionOf<WidgetSlot>;
+    const old = new Map<CanvasWidget, WidgetSlot>();
+    for (const slot of slots) old.set(slot.widget, slot);
+    const next: WidgetSlot[] = [];
+    const seen = new Set<CanvasWidget>();
+    for (const widget of widgets) {
+      if (seen.has(widget)) continue;
+      seen.add(widget);
+      next.push(old.get(widget) ?? WidgetSlot.create({}, widget));
+      old.delete(widget);
+    }
+    for (const slot of old.values()) slot.remove();
+    for (let i = 0; i < next.length; i++)
+      if (slots[i] !== next[i]) this.insertBefore(next[i], slots[i] ?? null);
+    this.dispatchEvent(new Event(WIDGET_ELEMENTS_EVENT, { bubbles: true }));
+  }
+
+  /**The slot of a widget, undefined when the widget is not on the page*/
+  slot_of(widget: CanvasWidget): WidgetSlot | undefined {
+    for (const slot of this.children as HTMLCollectionOf<WidgetSlot>)
+      if (slot.widget === widget) return slot;
+    return undefined;
   }
 }
-define_element(Page);
+define_element(PageElement);
 
-export interface CanvasPageOptions {
-  /**Width of the page in page units, defaults to 1920 */
-  width?: number;
-  /**Height of the page in page units, defaults to 1080 */
-  height?: number;
-  /**Widgets on the page, the last widget is drawn on top */
-  widgets?: readonly WidgetBase[];
+/**Makes the element showing the page in one viewport*/
+export function page_element(page: CanvasPage): PageElement {
+  return PageElement.create({
+    width: page.width,
+    height: page.height,
+    widgets: page.widgets,
+  });
 }
-
-/**Creates a page of widgets with a fixed size */
-export const canvas_page = (options?: CanvasPageOptions): Page =>
-  options ? new Page().opts(options) : new Page();

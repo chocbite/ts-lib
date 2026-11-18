@@ -8,7 +8,10 @@ const SUB_KEY = "@test/migrate/sub/value";
 
 //The stored package versions are read when the settings module loads, so they are set up before the import,
 //every test file runs in its own browser context, so the settings module loads fresh here
-localStorage.setItem(VERSIONS_KEY, JSON.stringify({ "@test/migrate": "0.9.0" }));
+localStorage.setItem(
+  VERSIONS_KEY,
+  JSON.stringify({ "@test/migrate": "0.9.0" }),
+);
 localStorage.setItem(VALUE_KEY, JSON.stringify({ old: 5 }));
 localStorage.setItem(ONCE_KEY, JSON.stringify(1));
 localStorage.setItem(SUB_KEY, JSON.stringify("a"));
@@ -42,7 +45,8 @@ describe("Settings version change", () => {
     const sub = group.make_sub_group("sub", "Sub", "");
     expect(sub.version_changed).toBe("0.9.0");
     expect(
-      sub.get("value", "", undefined, (existing) => existing + "-migrated").value,
+      sub.get("value", "", undefined, (existing) => existing + "-migrated")
+        .value,
     ).toBe('"a"-migrated');
   });
 

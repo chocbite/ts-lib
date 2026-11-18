@@ -193,4 +193,12 @@ canvas-transformer {
   .touch & {
     @include hide_side_handles($handle_size_touch);
   }
+
+  //Parts of the widget given as read only states can not be changed, so their handles are hidden
+  &.no-move > .side,
+  &.no-move > .move,
+  &.no-resize > .resize,
+  &.no-rotate > .rotate {
+    display: none;
+  }
 }

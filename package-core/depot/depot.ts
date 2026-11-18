@@ -57,6 +57,9 @@ export type DepotIcon = ChocbiteDepotRegister extends { icon: infer I }
 
 /**A child of a group, either a group or an entry*/
 export type DepotChild<T> = DepotGroup<T> | DepotEntry<T>;
+/**Content type of an entry, the type of the content given to add for object types, like widget definitions,
+ * so their specific type is kept, and the type of the depot type otherwise, so 5 gives a number and not 5*/
+type ContentOf<T, C> = [T] extends [object] ? C : T;
 
 /**Any node a lookup can give*/
 export type DepotNode<T = unknown> = DepotType<T> | DepotChild<T>;
@@ -176,16 +179,17 @@ class Group<T> extends Node {
 
   /**Adds an entry to this group, throws if the id exists in this group
    * @param content the content, a fixed value never changes, use a state for content that changes*/
-  add(
+  add<C extends T>(
     id: string,
     name: string,
     description: string,
-    content: StateOrVal<T>,
+    content: StateOrVal<C>,
     icon?: DepotIcon,
-  ): DepotEntry<T> {
+  ): DepotEntry<ContentOf<T, C>> {
+    //The entry holds the content as given, its type is only narrower than T
     return this.#attach(
       new Entry<T>(this, id, name, description, content, icon),
-    );
+    ) as unknown as DepotEntry<ContentOf<T, C>>;
   }
 
   /**Adds a second path to a group or entry of the same type, for resources that moved.

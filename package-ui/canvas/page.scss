@@ -6,3 +6,20 @@ canvas-page {
   overflow: hidden;
   background: base.$color_page_background;
 }
+
+//The slot of a widget is not part of the layout, the widget is placed on the page
+canvas-slot {
+  display: contents;
+}
+
+//In the place of a widget that can not be made
+canvas-errorwidget {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 2px dashed #c0392b;
+  color: #c0392b;
+  font: 12px sans-serif;
+  text-align: center;
+}

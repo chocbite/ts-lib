@@ -59,24 +59,24 @@ Every state has a common set of methods. The specific state type determines whic
 
 Available on every state type:
 
-| Method                           | Description                                                                                                |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Method                           | Description                                                                                                                   |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `await state` / `state.then(fn)` | Get the current value. Returns `ResultOk<T>` on ok-only types, `ResultNice<T>` on error-capable types, see [Errors](#errors). |
-| `sub(fn, immediate?)`            | Subscribe to value changes. Pass `true` to also call `fn` immediately with the current value.              |
-| `unsub(fn)`                      | Remove a subscription.                                                                                     |
-| `related()`                      | Returns helper metadata (e.g., number min/max, string max_length).                                         |
-| `in_use()`                       | Returns the state if it has any subscribers, `undefined` otherwise.                                        |
-| `has(fn)`                        | Returns the state if `fn` is a current subscriber.                                                         |
-| `amount()`                       | Returns the subscriber count.                                                                              |
+| `sub(fn, immediate?)`            | Subscribe to value changes. Pass `true` to also call `fn` immediately with the current value.                                 |
+| `unsub(fn)`                      | Remove a subscription.                                                                                                        |
+| `related()`                      | Returns helper metadata (e.g., number min/max, string max_length).                                                            |
+| `in_use()`                       | Returns the state if it has any subscribers, `undefined` otherwise.                                                           |
+| `has(fn)`                        | Returns the state if `fn` is a current subscriber.                                                                            |
+| `amount()`                       | Returns the subscriber count.                                                                                                 |
 
 ### Narrowed Methods
 
 These methods are only guaranteed on certain state types. TypeScript will error if you call them on the wrong type:
 
-| Method         | Available when               | Description                                      |
-| -------------- | ---------------------------- | ------------------------------------------------ |
-| `get()`        | Sync (`rsync: true`)         | Synchronously read the current `Result` value.   |
-| `ok()`         | Sync + OK-only (`rok: true`) | Synchronously read the unwrapped value directly. |
+| Method         | Available when               | Description                                        |
+| -------------- | ---------------------------- | -------------------------------------------------- |
+| `get()`        | Sync (`rsync: true`)         | Synchronously read the current `Result` value.     |
+| `ok()`         | Sync + OK-only (`rok: true`) | Synchronously read the unwrapped value directly.   |
 | `write(value)` | Writable (`writable: true`)  | Request a value change, rejected if `check` fails. |
 | `limit(value)` | Writable                     | Clamp a value to the valid range via the helper.   |
 | `check(value)` | Writable                     | Validate a value without applying it.              |
@@ -388,19 +388,19 @@ Errors of normal use, like a value above its max, have only a message. Errors th
 
 The state system makes these kinds, in `state.errors`:
 
-| Kind                | Nice text            | When                                                                          |
-| ------------------- | -------------------- | ----------------------------------------------------------------------------- |
-| `NOT_WRITABLE` ✱    | Not writable         | A write, check or limit on a state that can't be written, a bug.               |
-| `WRITE_DISABLED`    | Writing disabled     | A write or check while the write gate of the state is closed.                  |
-| `NO_STATES`         | No data              | A collected state without states.                                             |
-| `INIT_FAILED` ✱     | Failed to load value | The init function of a lazy state threw, the `cause` is what it threw.        |
-| `TIMED_OUT` ✱       | No response          | A remote state got no value within its timeout.                               |
-| `WRITE_FAILED` ✱    | Write failed         | The write action of a remote state threw, the `cause` is what it threw.       |
-| `ABOVE_MAX`         | Value too high       | A number above `max`.                                                         |
-| `BELOW_MIN`         | Value too low        | A number below `min`.                                                         |
-| `OFF_STEP`          | Value not on a step  | A number not on `step` from `start`.                                          |
-| `TOO_MANY_DECIMALS` | Too many decimals    | A number with more than `decimals` decimals.                                  |
-| `TEXT_TOO_LONG`     | Text too long        | A text longer than `max_length` characters or `max_length_bytes` bytes.      |
+| Kind                | Nice text            | When                                                                                                     |
+| ------------------- | -------------------- | -------------------------------------------------------------------------------------------------------- |
+| `NOT_WRITABLE` ✱    | Not writable         | A write, check or limit on a state that can't be written, a bug.                                         |
+| `WRITE_DISABLED`    | Writing disabled     | A write or check while the write gate of the state is closed.                                            |
+| `NO_STATES`         | No data              | A collected state without states.                                                                        |
+| `INIT_FAILED` ✱     | Failed to load value | The init function of a lazy state threw, the `cause` is what it threw.                                   |
+| `TIMED_OUT` ✱       | No response          | A remote state got no value within its timeout.                                                          |
+| `WRITE_FAILED` ✱    | Write failed         | The write action of a remote state threw, the `cause` is what it threw.                                  |
+| `ABOVE_MAX`         | Value too high       | A number above `max`.                                                                                    |
+| `BELOW_MIN`         | Value too low        | A number below `min`.                                                                                    |
+| `OFF_STEP`          | Value not on a step  | A number not on `step` from `start`.                                                                     |
+| `TOO_MANY_DECIMALS` | Too many decimals    | A number with more than `decimals` decimals.                                                             |
+| `TEXT_TOO_LONG`     | Text too long        | A text longer than `max_length` characters or `max_length_bytes` bytes.                                  |
 | `NOT_IN_LIST`       | Value not available  | An enum value that isn't in the list. While the list itself is an error, a check gives the list's error. |
 
 ```typescript
@@ -557,6 +557,24 @@ const scale = state.as_state(options.scale ?? 1); // StateOrValROSW<number> give
 ```
 
 `as_state` returns the read only type matching the input, `StateOrValROSW` and `StateOrValROS` give `StateROS`, `StateOrValRES` gives `StateRES` and so on.
+
+## Viewer
+
+`state.v.viewer(root, callback)` calls the callback when the root, or any state in its value, changes, at any depth: states holding states, and states inside arrays and objects, the same tree `to_json` writes. It is for following a whole tree of data, like storing a page of widgets whenever anything on it changes.
+
+```typescript
+const x = state.ok_w(1);
+const widgets = state.ok_w([{ path: "/a", options: { x } }]);
+const view = state.v.viewer(widgets, () => console.log("changed"));
+x.set_ok(2); // changed
+widgets.set_ok([]); // changed, x is no longer followed
+view.unsub();
+```
+
+- The callback is not called for the first values, only for changes.
+- When a state changes, its new value is walked again. States still in it keep their subscription, new states are subscribed and states that are gone are unsubscribed, compared by identity.
+- Async states are followed once they have a value.
+- A value can give what is walked instead of itself with `state.v.OVERRIDE_KEY`, like a class instance holding states. `to_json` uses the same key.
 
 ## Utilities
 

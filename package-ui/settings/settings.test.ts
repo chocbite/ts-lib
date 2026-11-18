@@ -9,8 +9,13 @@ describe("Settings register types", function () {
     const check = (group: SettingsGroup) => {
       group.register("number", "Number", "Description", st.ok_w(5));
       group.register("object", "Object", "Description", st.ok_w({ a: [1] }));
-      // @ts-expect-error a Map can not be stored as JSON
-      group.register("map", "Map", "Description", st.ok_w(new Map<string, number>()));
+      group.register(
+        "map",
+        "Map",
+        "Description",
+        // @ts-expect-error a Map can not be stored as JSON
+        st.ok_w(new Map<string, number>()),
+      );
       group.register(
         "map",
         "Map",
@@ -183,6 +188,68 @@ describe("SettingsGroup register", () => {
     expect(() => group.register("twice", "Twice", "", st.ok_w(2))).toThrow(
       "already registered",
     );
+  });
+});
+
+describe("SettingsGroup register_debounced", () => {
+  const group = settings_init("@test/nested", "1.0.0", "Nested", "");
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const stored = (id: string) =>
+    JSON.parse(localStorage.getItem("@test/nested/" + id) ?? "null") as unknown;
+
+  /**A page like tree, an array state of plain objects holding states*/
+  const tree = () => {
+    const x = st.ok_w(1);
+    const items = st.ok_w<{ name: string; x: typeof x }[]>([{ name: "a", x }]);
+    return { x, items, root: st.ok_w({ size: 2, items }) };
+  };
+
+  it("stores the values of nested states a delay after the last change", async () => {
+    const { x, root } = tree();
+    group.register_debounced("delay", "Delay", "", root, 20);
+    key("@test/nested/delay");
+    x.set_ok(2);
+    await wait(10);
+    x.set_ok(3);
+    await wait(10);
+    expect(localStorage.getItem("@test/nested/delay")).toBeNull();
+    await wait(30);
+    expect(stored("delay")).toEqual({ size: 2, items: [{ name: "a", x: 3 }] });
+  });
+
+  it("follows states added to the tree", async () => {
+    const { items, root } = tree();
+    group.register_debounced("added", "Added", "", root, 5);
+    key("@test/nested/added");
+    const y = st.ok_w(10);
+    items.set_ok([...items.ok(), { name: "b", x: y }]);
+    await wait(20);
+    y.set_ok(11);
+    await wait(20);
+    expect(stored("added")).toEqual({
+      size: 2,
+      items: [
+        { name: "a", x: 1 },
+        { name: "b", x: 11 },
+      ],
+    });
+  });
+
+  it("stores right away when the page is hidden", async () => {
+    const { x, root } = tree();
+    group.register_debounced("hide", "Hide", "", root, 10000);
+    key("@test/nested/hide");
+    x.set_ok(7);
+    window.dispatchEvent(new Event("pagehide"));
+    await settle();
+    expect(stored("hide")).toEqual({ size: 2, items: [{ name: "a", x: 7 }] });
+  });
+
+  it("shares the ids of register", () => {
+    group.register("shared", "Shared", "", st.ok_w(1));
+    expect(() =>
+      group.register_debounced("shared", "Shared", "", tree().root),
+    ).toThrow("already registered");
   });
 });
 

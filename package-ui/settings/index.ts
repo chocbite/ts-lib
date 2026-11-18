@@ -16,6 +16,18 @@ try {
 let store_package_versions_timeout: number | undefined;
 const BOTTOM_GROUPS: { [key: string]: SettingsGroup } = {};
 
+/**Stores of nested settings waiting for their delay, by storage key, stored right away when the page is hidden or closed*/
+const pending_stores = new Map<string, () => void>();
+const store_pending = () => {
+  const stores = [...pending_stores.values()];
+  pending_stores.clear();
+  for (const store of stores) store();
+};
+window.addEventListener("pagehide", store_pending);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") store_pending();
+});
+
 /**Renames the settings groups of every package, the group name is the start of every stored key,
  * so an app can keep the library names, like @chocbite/ts-lib-theme, out of the local storage.
  *
@@ -207,6 +219,45 @@ export class SettingsGroup {
       localStorage[this.path_id + "/" + id] = await (transform
         ? transform(state)
         : state.to_json());
+    });
+    return state;
+  }
+
+  /**Registers a state like register, but stores it a delay after the last change, for states changing often or storing much, like a page of widgets
+   * The value is stored as JSON with the values of every state in it, see to_json of the state
+   * Changes of the state and of any state in its value are followed at any depth, see the viewer of the state module,
+   * and stored once a delay after the last change, so a burst of changes is stored once.
+   * Waiting stores are stored right away when the page is hidden or closed.
+   * Loading builds the states again from the JSON, give get a check that does it, as JSON alone does not tell which values were states
+   * @param id unique identifier for this setting in the parent group
+   * @param name name of setting formatted for user reading
+   * @param description a description of what the setting is about formatted for user reading
+   * @param state state holding the tree of states, its values must be JSON compatible
+   * @param delay milliseconds after the last change before it is stored*/
+  register_debounced<READ, S extends StateROAW<READ>>(
+    id: string,
+    name: string,
+    description: string,
+    state: S & (StateJsonCompatible<S> extends true ? unknown : never),
+    delay: number = 500,
+  ): S {
+    if (id in this.settings)
+      throw new Error("Settings already registered " + this.path_id + "/" + id);
+    this.settings[id] = new Setting(state, name, description);
+    const key = this.path_id + "/" + id;
+    const store = () => {
+      void state.to_json().then((json) => {
+        localStorage[key] = json;
+      });
+    };
+    let timeout: number | undefined;
+    st.v.viewer(state, () => {
+      clearTimeout(timeout);
+      pending_stores.set(key, store);
+      timeout = window.setTimeout(() => {
+        pending_stores.delete(key);
+        store();
+      }, delay);
     });
     return state;
   }
