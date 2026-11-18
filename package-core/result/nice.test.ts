@@ -116,3 +116,32 @@ describe("NiceError equality in tests", () => {
     expect(err_nice(CONNECTION_LOST, "a")).not.toEqual(err_nice(SERVER_ERROR, "a"));
   });
 });
+
+describe("NiceError with inner errors", () => {
+  const FORM_INVALID = Symbol("Invalid values");
+
+  it("has no inner errors by default, shared so an error without them costs no array", () => {
+    const a = new NiceError(CONNECTION_LOST, "a");
+    const b = new NiceError(CONNECTION_LOST, "b");
+
+    expect(a.errors).toEqual([]);
+    expect(a.errors).toBe(b.errors);
+  });
+
+  it("keeps the inner errors it is made with, like the errors of the elements of a form", () => {
+    const inner = [new NiceError(CONNECTION_LOST, "speed"), new NiceError(SERVER_ERROR, "unit")];
+
+    const error = new NiceError(FORM_INVALID, "Elements speed, unit have no value", inner);
+
+    expect(error.errors).toEqual(inner);
+    expect(err_nice(FORM_INVALID, "x", inner).error.errors).toEqual(inner);
+  });
+
+  it("is equal only with equal inner errors, so a change of an inner error is a change", () => {
+    const make = (inner: string) => new NiceError(FORM_INVALID, "same", [new NiceError(CONNECTION_LOST, inner)]);
+
+    expect(make("speed").equals(make("speed"))).toBe(true);
+    expect(make("speed").equals(make("unit"))).toBe(false);
+    expect(make("speed").equals(new NiceError(FORM_INVALID, "same"))).toBe(false);
+  });
+});

@@ -3,6 +3,7 @@ import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { AccessTypes } from "#base";
 import { FormColors } from "./base";
+import { form_errors } from "./errors";
 import { form_lamp } from "./boolean/lamp/lamp";
 import { form_switch } from "./boolean/switch/switch";
 import { form_stepper } from "./number/stepper/stepper";
@@ -119,7 +120,8 @@ describe("Form value buffer", () => {
   it("get_value fails without a value and gives the value when set", () => {
     const { element } = make_stepper();
     const empty = element.get_value;
-    expect(empty.err && empty.error).toBe("No value yet");
+    expect(!empty.ok && empty.error.kind).toBe(form_errors.NO_VALUE);
+    expect(!empty.ok && empty.error.message).toBe("No value yet");
     element.set({ value: 3 });
     expect(element.get_value.unwrap()).toBe(3);
   });
@@ -260,7 +262,8 @@ describe("Form value inputs", () => {
 
   it("keeps the value itself without value or initial, starting without a value", async () => {
     const { element, toggle } = make_switch();
-    expect(element.get_value.err).toBe(true);
+    const empty = element.get_value;
+    expect(!empty.ok && empty.error.kind).toBe(form_errors.NO_VALUE);
     await toggle();
     expect(element.get_value.unwrap()).toBe(true);
   });
@@ -311,7 +314,8 @@ describe("Form value inputs", () => {
     value.set_err(failed);
     expect(element.faults).toEqual([failed]);
     const during = element.get_value;
-    expect(during.err && during.error).toBe("Sensor offline");
+    //The whole error, with its kind and details, not just its text
+    expect(during.err && during.error).toBe(failed);
     value.set_ok(false);
     expect(element.faults).toEqual([]);
     expect(element.get_value.unwrap()).toBe(false);

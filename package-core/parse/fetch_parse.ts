@@ -244,13 +244,13 @@ export type FetchRequest = string | readonly [string, RequestInit];
  * a throw is a bug and is logged with console.error. The ok value is not used, fetch_status_safe fits as is*/
 export type FetchWrite = (payload: unknown) => PromiseLike<Result<unknown, NiceError>>;
 
-/**Fetches a request and gives the body text. An expected failure, like a network error, a timeout or a failed status,
+/**Fetches a request and gives the body text, or the text and the response like fetch_text_safe. An expected failure, like a network error, a timeout or a failed status,
  * is returned as a NiceError, a throw is a bug and is logged with console.error. fetch_text_safe fits as is.
  * init holds the signal that aborts the fetch when polling stops*/
 export type FetchFunction = (
   url: string,
   init: RequestInit,
-) => PromiseLike<Result<string, NiceError>>;
+) => PromiseLike<Result<string | readonly [string, unknown], NiceError>>;
 
 export type FetchParserOptions = {
   /**Sends a write, required when the schema contains writable values*/
@@ -293,6 +293,8 @@ function checked_body(value: unknown, created_at: Error): Result<string, NiceErr
       : bug("fetch must give a NiceError as its error", value.error, created_at);
   const body: unknown = value.value;
   if (typeof body === "string") return ok(body);
+  //The text and response of fetch_text_safe, only the text is parsed
+  if (Array.isArray(body) && typeof body[0] === "string") return ok(body[0]);
   if (typeof Response !== "undefined" && body instanceof Response)
     return bug(
       "fetch returned a Response in its Result, return the body text instead, for example with fetch_text_safe from @chocbite/ts-lib/safe",

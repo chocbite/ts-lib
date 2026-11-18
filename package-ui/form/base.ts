@@ -12,7 +12,6 @@ import {
   NiceError,
   ok,
   type Option,
-  type Result,
   type ResultNice,
 } from "@chocbite/ts-lib/result";
 import {
@@ -147,10 +146,11 @@ export abstract class FormValue<
   }
 
   /**Returns the value of the element, from wherever it comes, an error while the value is in error or there is none yet*/
-  get get_value(): Result<RT, string> {
-    if (this.#value_error) return err(this.#value_error.nice);
+  get get_value(): ResultNice<RT> {
+    //The whole error of the state, with its details for whoever has to fix it
+    if (this.#value_error) return err(this.#value_error);
     return typeof this._buffer === "undefined"
-      ? err("No value yet")
+      ? err_nice(form_errors.NO_VALUE, "No value yet")
       : ok(this._buffer);
   }
 

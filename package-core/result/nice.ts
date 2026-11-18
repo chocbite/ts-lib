@@ -1,6 +1,9 @@
 //Imports from ./index, which imports this file too, both only use the other inside functions, so the cycle is safe
 import { ResultErr, type Result } from "./index";
 
+/**Inner errors of an error without any, one shared array so such an error costs no array of its own*/
+const NO_ERRORS: readonly NiceError[] = Object.freeze([]);
+
 /**An error with a nice text for the user, and the details for whoever has to fix it.
  * It wraps an Error instead of extending it, creating an Error captures a stack trace,
  * which costs about a microsecond, the stack of a wrapped Error is where the failure happened.
@@ -13,6 +16,8 @@ export class NiceError {
     /**A message, or the Error that caused this, the message is then its message.
      * A plain field, so test equality like toEqual compares it*/
     readonly detail: string | Error,
+    /**Errors this one is made of, like the errors of the elements of a form for an error of the form, see AggregateError*/
+    readonly errors: readonly NiceError[] = NO_ERRORS,
   ) {}
 
   /**The text for the user, the description of the kind*/
@@ -30,9 +35,14 @@ export class NiceError {
     return typeof this.detail === "string" ? undefined : this.detail;
   }
 
-  /**Same kind and message, two failures that look the same to the user and in the details*/
+  /**Same kind and message, and equal inner errors, two failures that look the same to the user and in the details*/
   equals(other: NiceError): boolean {
-    return this.kind === other.kind && this.message === other.message;
+    return (
+      this.kind === other.kind &&
+      this.message === other.message &&
+      this.errors.length === other.errors.length &&
+      this.errors.every((error, i) => error.equals(other.errors[i]!))
+    );
   }
 
   toString(): string {
@@ -43,7 +53,7 @@ export class NiceError {
 /**A result whose error is a NiceError*/
 export type ResultNice<T> = Result<T, NiceError>;
 
-/**Creates an error result with a NiceError of the kind, from a message or wrapping an Error*/
-export function err_nice(kind: symbol, detail: string | Error) {
-  return new ResultErr<NiceError>(new NiceError(kind, detail));
+/**Creates an error result with a NiceError of the kind, from a message or wrapping an Error, with the errors it is made of*/
+export function err_nice(kind: symbol, detail: string | Error, errors?: readonly NiceError[]) {
+  return new ResultErr<NiceError>(new NiceError(kind, detail, errors));
 }

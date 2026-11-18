@@ -1,8 +1,9 @@
 import { AccessTypes } from "#base";
-import { ok, type Result } from "@chocbite/ts-lib/result";
+import { NiceError, ok, type ResultNice } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { FormColors } from "../base";
+import { form_errors } from "../errors";
 import { form_switch } from "../boolean/switch/switch";
 import { form_lamp } from "../boolean/lamp/lamp";
 import { form_stepper } from "../number/stepper/stepper";
@@ -26,10 +27,25 @@ describe("Group values", () => {
     document.body.replaceChildren();
   });
 
-  it("get_value fails while a component has no value", () => {
+  it("get_value fails while a component has no value, naming it, with its error inside", () => {
     const { group } = make({ a: 1 });
     const value = group.get_value;
-    expect(value.err && value.error).toBe("Component with id b has no value");
+    expect(!value.ok && value.error.kind).toBe(form_errors.INVALID);
+    expect(!value.ok && value.error.message).toBe("Elements without a valid value: b");
+    expect(!value.ok && value.error.errors.map((error) => error.kind)).toEqual([form_errors.NO_VALUE]);
+  });
+
+  it("get_value keeps the error of the state of a component, like a lost connection", () => {
+    const failed = new NiceError(Symbol("Connection failed"), new TypeError("Failed to fetch"));
+    const state = st.from_w(1);
+    const a = form_stepper({ id: "a", value: state });
+    const b = form_switch({ id: "b", value: true });
+    const group = form_group({ elements: [a, b] });
+    document.body.appendChild(group);
+    state.set_err(failed);
+    const value = group.get_value;
+    expect(!value.ok && value.error.message).toBe("Elements without a valid value: a");
+    expect(!value.ok && value.error.errors).toEqual([failed]);
   });
 
   it("get_value collects the values of all components by id", () => {
@@ -265,7 +281,7 @@ export function group_types() {
     ],
   });
   expectTypeOf(group.get_value).toEqualTypeOf<
-    Result<{ a: number; b: boolean }, string>
+    ResultNice<{ a: number; b: boolean }>
   >();
   expectTypeOf(group.value_elements.a.buffer).toEqualTypeOf<
     number | undefined
@@ -284,7 +300,7 @@ export function group_types() {
     ],
   });
   expectTypeOf(with_lamp.get_value).toEqualTypeOf<
-    Result<{ a: number }, string>
+    ResultNice<{ a: number }>
   >();
   return ok(undefined);
 }

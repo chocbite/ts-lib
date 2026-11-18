@@ -119,16 +119,16 @@ const device = make_fetch_parser(
   },
 );
 
-form.text_input().bind({ value: device.name }); // writable
-form.slider({ min: 0, max: 100 }).bind({ value: device.speed }); // writable
-form.progress({ unit: "°C" }).bind({ value: device.temperature }); // read only
-form.switch().bind({ value: device.settings.eco }); // writable, nested
+form.text_input({ value: device.name }); // writable
+form.slider({ min: 0, max: 100, value: device.speed }); // writable
+form.progress({ unit: "°C", value: device.temperature }); // read only
+form.switch({ value: device.settings.eco }); // writable, nested
 ```
 
 ### Fetching
 
 - **`request`** returns the URL, or `[url, init]` for `fetch` options. It's called for every fetch, so it can change.
-- **`fetch`** sends the request and gives the body text, `(url, init) => PromiseLike<Result<string, NiceError>>`. The default is [`fetch_text_safe`](../safe/README.md) from `@chocbite/ts-lib/safe`, whose errors, like `safe.fetch.errors.CONNECTION_FAILED`, reach the states unchanged.
+- **`fetch`** sends the request and gives the body text, or the text and the response like `fetch_text_safe`, `(url, init) => PromiseLike<Result<string | [string, unknown], NiceError>>`. The default is [`fetch_text_safe`](../safe/README.md) from `@chocbite/ts-lib/safe`, whose errors, like `safe.fetch.errors.CONNECTION_FAILED`, reach the states unchanged.
 
   A custom one can add authentication, retry, a timeout, or answer from a fake server in tests, usually by calling `fetch_text_safe` with changed arguments. `init.signal` aborts when polling stops. A fetch that ignores it runs to the end and its result is thrown away. `write` doesn't go through `fetch`, it sends however it wants, for example with `fetch_status_safe`.
 

@@ -325,14 +325,17 @@ function read_settings(text: string): ResultNice<Settings> {
 - **The detail is a message or an `Error`.** `err_nice(kind, "text")` uses the text as the message. `err_nice(kind, error)` uses the error's message and keeps the error as `cause`, with the stack of where it failed. A caught value that isn't an `Error` is turned into one of the two first, `cause instanceof Error ? cause : String(cause)`.
 - **A message for normal use, an `Error` for what isn't supposed to happen.** A rejected input, a closed write gate or data that hasn't arrived yet are normal and frequent, a message is enough and costs no more than a string. A bug, a lost connection or a server sending wrong data isn't supposed to happen and is rare, so give it an `Error`, made where the problem is found, its stack shows the code that caused it.
 
+`new NiceError(kind, detail, errors?)` and `err_nice(kind, detail, errors?)` take the errors an error is made of, like the errors of the elements of a form for an error of the whole form. Nothing is lost, each keeps its own kind, message and cause. The faults prompt of ts-lib-ui shows them nested under their error.
+
 | Member            | Gives                                                              |
 | ----------------- | ------------------------------------------------------------------ |
 | `kind`            | The symbol given.                                                  |
 | `detail`          | The message or `Error` given. A plain field, so `toEqual` in tests compares it. |
+| `errors`          | The errors this one is made of, like `AggregateError`, empty by default. |
 | `nice`            | The description of `kind`, or `"Unknown error"` when it has none.  |
 | `message`         | The message given, or the message of the `Error` given.            |
 | `cause`           | The `Error` given, or `undefined` when made from a message.        |
-| `equals(other)`   | True for the same `kind` and `message`.                            |
+| `equals(other)`   | True for the same `kind` and `message`, and equal `errors`.        |
 | `toString()`      | `"Connection lost: No network"`.                                   |
 
 **`compare` treats two NiceErrors as equal when `equals` says so,** even when they are different objects. A source makes a new `NiceError` for every failure, and states compare results to skip updates that change nothing. Other errors are still compared by identity.

@@ -1,6 +1,6 @@
 import { sleep } from "#common";
 import { err, err_nice, NiceError, ok, type Option, type Result } from "#result";
-import safe, { fetch_status_safe } from "#safe";
+import safe, { fetch_status_safe, fetch_text_safe } from "#safe";
 import state, {
   type StateArrayReadTypes,
   type StateREA,
@@ -1291,6 +1291,20 @@ describe("make_fetch_parser NiceErrors", () => {
     expect(!result.ok && result.error.kind).toBe(errors.UNEXPECTED);
     if (!result.ok) expect_created_here(result.error);
     console_error.mockRestore();
+  });
+
+  it("takes the text and response of fetch_text_safe as fetch, the text is parsed", async () => {
+    const parsed = make_fetch_parser(() => "/x", 60_000, { name: "s" }, {
+      fetch: async () => ok(['{"name":"Ada"}', new Response(null, { status: 200 })] as const),
+    });
+
+    expect((await parsed.name).unwrap()).toBe("Ada");
+  });
+
+  it("takes fetch_text_safe as fetch without mapping", () => {
+    const parsed = make_fetch_parser(() => "/x", 60_000, { name: "s" }, { fetch: fetch_text_safe });
+
+    expect(parsed.name).toBeDefined();
   });
 
   it("takes fetch_status_safe as write without mapping", () => {

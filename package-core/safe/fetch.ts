@@ -58,33 +58,40 @@ async function fetch_ok(
   return err_nice(fetch_errors.REJECTED, new FetchStatusError(response.status, body));
 }
 
-/**The global fetch, gives the body text of the response.
+/**A response whose body is read or cancelled already, for its status, headers and url.
+ * The body and the methods reading it are left out, reading it again would throw*/
+export type FetchResponse = Omit<
+  Response,
+  "body" | "bodyUsed" | "text" | "json" | "blob" | "arrayBuffer" | "formData" | "bytes" | "clone"
+>;
+
+/**The global fetch, gives the body text and the response, for its status and headers, as [text, response].
  * Only the fetch and the body read are caught, so the failures of the request are errors and nothing else is.
  * The error is a NiceError of kind from safe.fetch.errors, with the original error as cause*/
 export async function fetch_text_safe(
   url: string,
   init?: RequestInit,
-): Promise<ResultNice<string>> {
+): Promise<ResultNice<[string, FetchResponse]>> {
   const response = await fetch_ok(url, init);
   if (response.err) return response;
   try {
-    return ok(await response.value.text());
+    return ok([await response.value.text(), response.value]);
   } catch (cause) {
     return rejected(cause, fetch_errors.CONNECTION_LOST);
   }
 }
 
-/**The global fetch, gives the status of the response, for requests whose answer is not needed, like a post or patch.
+/**The global fetch, gives the response, for requests whose answer is not needed, like a post or patch, its status is response.status.
  * The body is not read, it is cancelled so it does not hold the connection.
  * Only the fetch is caught, so the failures of the request are errors and nothing else is.
  * The error is a NiceError of kind from safe.fetch.errors, with the original error as cause*/
 export async function fetch_status_safe(
   url: string,
   init?: RequestInit,
-): Promise<ResultNice<number>> {
+): Promise<ResultNice<FetchResponse>> {
   const response = await fetch_ok(url, init);
   if (response.err) return response;
   //Releasing the connection is cleanup, a failure there changes nothing for the caller
   response.value.body?.cancel().catch(() => {});
-  return ok(response.value.status);
+  return ok(response.value);
 }

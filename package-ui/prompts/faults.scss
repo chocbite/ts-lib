@@ -12,6 +12,18 @@
     -webkit-user-select: text;
     user-select: text;
 
+    //Inner errors, indented under the error they make up
+    section > .inner {
+      margin-left: 0.75rem;
+      padding-left: 0.5rem;
+      border-left: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+
+      > section > h4 {
+        margin: 0.25rem 0 0;
+        font-size: 0.9rem;
+      }
+    }
+
     > section {
       margin-bottom: 0.75rem;
 

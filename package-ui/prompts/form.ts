@@ -5,7 +5,7 @@ import form, {
   FormValueWrite,
   type FormGroup,
 } from "#form";
-import { none, some, type Option } from "@chocbite/ts-lib/result";
+import { none, ok, some, type Option } from "@chocbite/ts-lib/result";
 import { open_prompt } from "./shared";
 
 interface PromptFormOptions {
@@ -49,15 +49,23 @@ export type PromptFormValues<T extends object> = Pick<
   "get_value" | "value_partial" | "value_changed"
 >;
 
+/**Values given to close by a button, read like the values of the form, all three are the values given*/
+const given_values = <T extends object>(values: T): PromptFormValues<T> => ({
+  get_value: ok(values),
+  value_partial: ok(values),
+  value_changed: ok(values),
+});
+
 export interface PromptFormSubmit<T extends object, L extends FormElement[]> {
   text: string;
   /**Called when the button is pressed, or by Enter for the last button
    * @param group the form group of the elements, to check and warn them
-   * @param close closes the prompt, true resolves it with the values, false with none
+   * @param close closes the prompt, true resolves it with the values of the form, false with none,
+   * and values, like a time set to now by the button, resolve it with those values instead
    * @returns true to keep the prompt open, then it closes when close is called*/
   click?: (
     group: FormGroup<T, undefined, L>,
-    close: (submit: boolean) => void,
+    close: (submit: boolean | T) => void,
   ) => boolean | void;
 }
 
@@ -83,8 +91,14 @@ export function prompt_form<
   return open_prompt<PromptFormValues<T>>(
     text,
     (close_prompt) => {
-      const close = (submit: boolean) =>
-        close_prompt(submit ? some(group) : none());
+      const close = (submit: boolean | T) =>
+        close_prompt(
+          typeof submit === "object"
+            ? some(given_values(submit))
+            : submit
+              ? some(group)
+              : none(),
+        );
       const submit_with = (s: PromptFormSubmit<T, L>) => {
         if (!s.click?.(group, close)) close(true);
       };

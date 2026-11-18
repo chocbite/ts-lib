@@ -1,6 +1,6 @@
 import { NiceError, type Result } from "#result";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetch_status_safe, fetch_text_safe, FetchStatusError } from "./fetch";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { fetch_status_safe, fetch_text_safe, FetchStatusError, type FetchResponse } from "./fetch";
 import safe from "./index";
 
 const errors = safe.fetch.errors;
@@ -22,7 +22,8 @@ describe("fetch_text_safe", () => {
 
     const result = await fetch_text_safe("/x");
 
-    expect(result.ok && result.value).toBe("hello");
+    expect(result.ok && result.value[0]).toBe("hello");
+    expect(result.ok && result.value[1].status).toBe(200);
   });
 
   it("passes url and init to fetch", async () => {
@@ -56,13 +57,46 @@ describe("fetch_text_safe", () => {
   });
 });
 
+describe("the response given with the value", () => {
+  it("gives fetch_text_safe the text and the response, for the status and headers", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("{}", { status: 201, headers: { "x-token": "abc" } })),
+    );
+
+    const result = await fetch_text_safe("/login", { method: "POST" });
+
+    if (!result.ok) throw new Error("expected ok");
+    const [text, response] = result.value;
+    expect(text).toBe("{}");
+    expect(response.status).toBe(201);
+    expect(response.headers.get("x-token")).toBe("abc");
+  });
+
+  it("gives fetch_status_safe the response, its status is the status", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 201 })));
+
+    const result = await fetch_status_safe("/login", { method: "POST" });
+
+    expect(result.ok && result.value.status).toBe(201);
+  });
+
+  it("types the response without its body, which is read or cancelled already", () => {
+    expectTypeOf<FetchResponse>().toHaveProperty("status");
+    expectTypeOf<FetchResponse>().toHaveProperty("headers");
+    expectTypeOf<FetchResponse>().not.toHaveProperty("text");
+    expectTypeOf<FetchResponse>().not.toHaveProperty("json");
+    expectTypeOf<FetchResponse>().not.toHaveProperty("body");
+  });
+});
+
 describe("fetch_status_safe", () => {
   it("gives the status of an ok response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 204 })));
 
     const result = await fetch_status_safe("/x", { method: "PATCH" });
 
-    expect(result.ok && result.value).toBe(204);
+    expect(result.ok && result.value.status).toBe(204);
   });
 
   it("passes url and init to fetch", async () => {
@@ -92,7 +126,7 @@ describe("fetch_status_safe", () => {
 
     const result = await fetch_status_safe("/x");
 
-    expect(result.ok && result.value).toBe(200);
+    expect(result.ok && result.value.status).toBe(200);
   });
 });
 

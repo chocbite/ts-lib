@@ -152,8 +152,6 @@ for (const [i, folder] of folders.entries()) {
       "- Do not patch it in `node_modules` and do not silently work around it.",
       "- Tell the user, with the package name and version, the repo path and function or class from `SOURCE.md`, " +
         "what you expected, what happened, and what you did instead.",
-      "- Append the same to `chocbite-feedback.md` in the root of the project you are working on, create it if missing, " +
-        "so the report is not lost when the conversation ends.",
     ].join("\n"),
     demote(readFileSync(join(folder, "README.md"), "utf8").trim(), 1),
     ...pattern,

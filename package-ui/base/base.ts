@@ -58,7 +58,7 @@ const base_resize_observer = new ResizeObserver((e) => {
  *
  * New elements, and elements being reworked, follow the element pattern in package-ui/PATTERN.md:
  * The class is only exported as a type, a factory function taking optional options creates it with create
- * The constructor takes no arguments, it builds the children and sets the defaults
+ * The constructor takes only required references, never inputs, it builds the children and sets the defaults
  * The inputs are an object of keys made with input_key, the options type is InputOptions of it
  * set takes the options, each a fixed value or a state (StateOrVal), and applies them with set_input
  * Inputs handed out to other elements are given once, at creation, and applied by overriding [CREATE]
@@ -146,12 +146,14 @@ export abstract class Base extends HTMLElement {
   /**Creates the element, applies the creation inputs with [CREATE] and then the rest with set
    * Factories call it, and called on a subclass it creates the subclass, so a user subclass is made with MyElement.create(options)
    * The options are those of [CREATE] and set together, both run after every constructor has finished
-   * The constructor must take no arguments, abstract classes can not be created*/
-  static create<T extends Base>(
-    this: new () => T,
+   * The arguments after the options go to the constructor, only for required references that are not inputs, like a device a page shows,
+   * so the element can keep them in fields that are never unset. Abstract classes can not be created*/
+  static create<T extends Base, A extends unknown[]>(
+    this: new (...args: A) => T,
     options: Parameters<T[typeof CREATE]>[0] & Parameters<T["set"]>[0] = {},
+    ...args: A
   ): T {
-    const element = new this();
+    const element = new this(...args);
     element[CREATE](options);
     return element.set(options);
   }

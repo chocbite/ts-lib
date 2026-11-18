@@ -63,6 +63,22 @@ const submitted = async <T extends object>(
 };
 
 describe("Prompt form", () => {
+  it("resolves with values a button gives to close, like a button setting the time to now", async () => {
+    const result = prompts.form(
+      "Time",
+      [form.stepper({ id: "date_time" })],
+      [
+        { text: "Now", click: (_group, close) => (close({ date_time: 1234 }), true) },
+        { text: "OK" },
+      ],
+    );
+    button("Now").click();
+    const values = await submitted(result);
+    expect(values.get_value).toEqual(ok({ date_time: 1234 }));
+    expect(values.value_partial).toEqual(ok({ date_time: 1234 }));
+    expect(values.value_changed).toEqual(ok({ date_time: 1234 }));
+  });
+
   it("resolves with the values of the form on submit, all, partial and changed", async () => {
     const swit = form.switch({ id: "on", value: false });
     const result = prompts.form(

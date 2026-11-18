@@ -11,7 +11,7 @@ const by_kind = (faults: readonly NiceError[]): NiceError[][] => {
   for (const fault of faults) {
     let group = groups.get(fault.kind);
     if (!group) groups.set(fault.kind, (group = []));
-    if (!group.some((seen) => seen.message === fault.message)) group.push(fault);
+    if (!group.some((seen) => seen === fault || seen.equals(fault))) group.push(fault);
   }
   return [...groups.values()];
 };
@@ -28,16 +28,20 @@ const stack_chain = (error: Error): string => {
   return parts.join("\n\n");
 };
 
-/**The faults of one kind, its nice text once, then each message, with its stack and causes behind details when it has an Error*/
-const kind_section = (faults: readonly NiceError[]): HTMLElement => {
+/**Inner errors nested deeper than this are left out, an error made of itself would never end*/
+const MAX_DEPTH = 4;
+
+/**The faults of one kind, its nice text once, then each message, with its stack and causes behind details when it has an Error.
+ * Inner errors are nested under their error, grouped by kind again*/
+const kind_section = (faults: readonly NiceError[], depth: number): HTMLElement => {
   const section = document.createElement("section");
-  section.appendChild(document.createElement("h3")).textContent = faults[0].nice;
-  for (const fault of faults) add_fault(section, fault);
+  section.appendChild(document.createElement(depth ? "h4" : "h3")).textContent = faults[0].nice;
+  for (const fault of faults) add_fault(section, fault, depth);
   return section;
 };
 
 /**The message of a fault, and its stack with causes behind details when it has an Error*/
-const add_fault = (section: HTMLElement, fault: NiceError): void => {
+const add_fault = (section: HTMLElement, fault: NiceError, depth: number): void => {
   section.appendChild(document.createElement("p")).textContent = fault.message;
   const cause = fault.cause;
   if (cause) {
@@ -48,6 +52,11 @@ const add_fault = (section: HTMLElement, fault: NiceError): void => {
     details.addEventListener("toggle", () => {
       if (details.open && !pre.textContent) pre.textContent = stack_chain(cause);
     });
+  }
+  if (fault.errors.length && depth < MAX_DEPTH) {
+    const inner = section.appendChild(document.createElement("div"));
+    inner.className = "inner";
+    for (const group of by_kind(fault.errors)) inner.appendChild(kind_section(group, depth + 1));
   }
 };
 
@@ -68,7 +77,7 @@ export async function prompt_faults(faults: readonly NiceError[]): Promise<void>
       //Only the list scrolls, so the close button stays in view
       const list = element.appendChild(document.createElement("div"));
       list.className = "list";
-      for (const group of by_kind(faults)) list.appendChild(kind_section(group));
+      for (const group of by_kind(faults)) list.appendChild(kind_section(group, 0));
       element.appendChild(
         form.group({
           embed: true,

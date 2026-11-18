@@ -10,7 +10,7 @@ import {
 } from "@chocbite/ts-lib-ui/icons";
 import { prompts, type PromptFormValues } from "@chocbite/ts-lib-ui/prompts";
 import { IPAddress, IPVersion } from "@chocbite/ts-lib/common";
-import type { Option, Result } from "@chocbite/ts-lib/result";
+import type { NiceError, Option, Result } from "@chocbite/ts-lib/result";
 import state from "@chocbite/ts-lib/state";
 import { controls, section } from "../../helpers";
 
@@ -19,13 +19,13 @@ const form_answer_lines = (sec: HTMLElement) => {
   const lines = sec.appendChild(document.createElement("div"));
   lines.style.whiteSpace = "pre";
   lines.textContent = "No answer yet";
-  const text = (result: Result<object, string>) =>
+  const text = (result: Result<object, NiceError>) =>
     result.ok
       ? JSON.stringify(result.value, (_key, value: unknown) =>
           //An IP address holds a BigInt, which JSON can not write
           value instanceof IPAddress ? value.to_string() : value,
         )
-      : "error, " + result.error;
+      : "error, " + result.error.toString() + result.error.errors.map((inner) => "\n  " + inner.toString()).join("");
   return <T extends object>(answer: Option<PromptFormValues<T>>) =>
     (lines.textContent = answer.some
       ? [

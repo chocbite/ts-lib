@@ -44,7 +44,7 @@ Resolves with the values of the form, typed by the `id` of the elements, or `non
 
 The first element the user can change gets the focus, and Enter submits with the last button.
 
-A submit button's `click(group, close)` runs on submit, with the form group to check and warn its elements. Returning `true` keeps the prompt open, then `close(true)` submits it and `close(false)` closes it without submitting. Options set the columns and rows of the form and of the submit buttons.
+A submit button's `click(group, close)` runs on submit, with the form group to check and warn its elements. Returning `true` keeps the prompt open, then `close(true)` submits it and `close(false)` closes it without submitting. `close(values)` resolves it with values the button made instead of the values of the form, like a button setting a time to now, `close({ date_time: Date.now() })`. The answer is read the same way, `get_value`, `value_partial` and `value_changed` all give those values. Options set the columns and rows of the form and of the submit buttons.
 
 ### Live elements
 
@@ -67,6 +67,6 @@ await prompts.form(
 await prompts.faults(element.faults);
 ```
 
-Lists problems, the `NiceError`s from `@chocbite/ts-lib/result`. It is what the fault icon of an element opens, see the fault icon in [PATTERN.md](../PATTERN.md#the-fault-icon), so an app rarely calls it itself. Problems are grouped by kind: the nice text once, with each distinct message of that kind under it. An outage that fails every input shows up once, and several missing members of a fetch parser show one heading with every member named. A message with an `Error` also gets a Details toggle with the stack and the stacks of its causes, formatted only when opened. The text can be selected, to copy it into a bug report.
+Lists problems, the `NiceError`s from `@chocbite/ts-lib/result`. It is what the fault icon of an element opens, see the fault icon in [PATTERN.md](../PATTERN.md#the-fault-icon), so an app rarely calls it itself. Problems are grouped by kind: the nice text once, with each distinct message of that kind under it. An outage that fails every input shows up once, and several missing members of a fetch parser show one heading with every member named. A message with an `Error` also gets a Details toggle with the stack and the stacks of its causes, formatted only when opened. The errors an error is made of, its `errors`, are shown nested under it, grouped by kind again. The text can be selected, to copy it into a bug report.
 
 The prompt is 60% of the width of the page, at least 20rem and never wider than the page. Only the list scrolls, so the Close button stays in view however many problems there are. Resolves when it is closed.

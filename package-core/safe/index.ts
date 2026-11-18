@@ -1,7 +1,7 @@
 import { fetch_errors, fetch_status_safe, fetch_text_safe } from "./fetch";
 
 //Named so fetch_errors stays internal, it is reached as safe.fetch.errors
-export { fetch_status_safe, fetch_text_safe, FetchStatusError } from "./fetch";
+export { fetch_status_safe, fetch_text_safe, FetchStatusError, type FetchResponse } from "./fetch";
 
 export const safe = {
   fetch: {

@@ -31,7 +31,7 @@ An error of the state shows as the fault icon on the element, a click on it expl
 
 - **`change`** is called with every value the user changes the element to, after it is accepted. `set({ change })` replaces it.
 - **`description`** is shown as a tooltip.
-- **`element.get_value`** gives the value, wherever it comes from, an error while the element has none or its state is in error. **`element.changed`** is true once the user changed it.
+- **`element.get_value`** gives the value, wherever it comes from, as a `ResultNice`. While its state is in error it is that error, with all its details, and without a value yet it is a `form.errors.NO_VALUE` error. **`element.changed`** is true once the user changed it.
 
 ### Settings from the value state
 
@@ -56,10 +56,10 @@ const group = form.group({
     form.switch({ id: "admin", value: false }),
   ],
 });
-group.get_value; //Result<{ name: string; admin: boolean }, string>
+group.get_value; //ResultNice<{ name: string; admin: boolean }>
 ```
 
-- **`get_value`** gives every value, an error when an element has no value.
+- **`get_value`** gives every value. When elements have no valid value it is a `form.errors.INVALID` error naming them, like `Elements without a valid value: name`, with the error of each element in its `errors`.
 - **`value_partial`** gives the values of the elements that have one.
 - **`value_changed`** gives the values the user changed.
 - **`set({ value })`** gives each element its value from an object by id, as a fixed value it starts from.

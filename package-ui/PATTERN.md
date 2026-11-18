@@ -17,8 +17,8 @@ The pattern is the interface an element gives to users of the library: the input
 ## The rules
 
 1. **Inputs that change are states.** An input is a `StateOrVal<T>`, either a fixed value or a state (see `StateOrVal` in the state README). A fixed value is a constant and never changes. Elements have no setters or getters for their inputs, so an element never deals with properties and states for the same thing.
-2. **A factory creates the element.** It takes optional options and creates the element with `create`, which applies them. It may take required arguments for things outside the pattern, like the container an element lives in. The class is exported only as a type, unless it is meant to be subclassed, so nobody outside the module calls `new`.
-3. **The constructor takes no arguments.** It builds the children and sets visible defaults, so an element that never gets inputs still shows something sensible. Inputs are never applied in it.
+2. **A factory creates the element.** It takes optional options and creates the element with `create`, which applies them. It may take required arguments for things outside the pattern, like a device a page shows, and passes them on to the constructor through `create`. The class is exported only as a type, unless it is meant to be subclassed, so nobody outside the module calls `new`.
+3. **The constructor takes only required references, never inputs.** It builds the children and sets visible defaults, so an element that never gets inputs still shows something sensible. Its arguments are things the element can not exist without and that never change, like a device a page shows, so they are kept in fields that are never unset. Inputs are never given or applied in it.
 4. **Inputs are declared as keys.** Each element has a module-level object of keys made with `input_key`, and its options type is `BaseOptions & InputOptions` of that object, `BaseOptions` being the inputs every element has, like `access`.
 5. **`set(options)` can be called again.** Each input is applied with `set_input`. Options left out stay as they are.
 6. **Handed out inputs are given once.** An input that other elements follow is a creation input, applied by `[CREATE]` and left out of the options of `set`, so it can not be replaced while others follow it.
@@ -102,7 +102,29 @@ my_box().set({ access: user_access_state });
 
 Its options type is the options of `[CREATE]` and `set` together, taken from the class it is called on, so `MyBox.create({ nope: 1 })` is a compile error. Called on a subclass it creates the subclass with the subclass's options. An abstract class can not be created.
 
-Every factory calls `create`, also for elements without creation inputs, so all factories look the same. The constructor must take no arguments (rule 3), because `create` calls it without any.
+Every factory calls `create`, also for elements without creation inputs, so all factories look the same.
+
+### Required references
+
+Arguments after the options go to the constructor (rule 3), typed by it, so a missing or wrong one is a compile error. They are for references the element needs from its start and never changes, not for inputs. In the constructor they go into `readonly` fields, so TypeScript knows they are always set, no optional field and no `!`. A subclass passes them on to `super`, with arguments of its own after them. The factory takes them as required arguments in front of the options:
+
+```ts
+class DevicePage extends Base {
+  readonly #device: Device;
+  constructor(device: Device) {
+    super();
+    this.#device = device;
+    this.#name.textContent = device.name;
+  }
+  // set and [CREATE] can use this.#device, it is set before both
+}
+
+export function device_page(device: Device, options: DevicePageOptions = {}): DevicePage {
+  return DevicePage.create(options, device);
+}
+```
+
+A reference that exists once in the app, like the connection to a server, needs no argument, the module imports it. Classes without constructor arguments are created with only the options, like before.
 
 ## Keys
 
@@ -305,7 +327,7 @@ Elements created in large numbers, like list rows, list fields and canvas widget
 ## Checklist for a new or converted element
 
 - [ ] The class is exported only as a type, unless meant to be subclassed, and a factory taking optional options creates it with `create`.
-- [ ] The constructor takes no arguments, builds the children and sets visible defaults.
+- [ ] The constructor takes only required references, kept in `readonly` fields, builds the children and sets visible defaults.
 - [ ] A module-level keys object made with `input_key` declares every input, with a doc comment on each key.
 - [ ] The options type is `BaseOptions & InputOptions<typeof KEYS>`, or extends `BaseOptions` with `InputOf` for options built by hand.
 - [ ] `set` calls `super.set(options)`, so the inputs every element has, like `access`, work on it.

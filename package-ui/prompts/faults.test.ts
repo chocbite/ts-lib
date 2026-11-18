@@ -46,6 +46,23 @@ describe("Prompt faults", () => {
     ]);
   });
 
+  it("shows the inner errors of an error under it, grouped by kind again", () => {
+    const NO_VALUE = Symbol("No value");
+    void prompts.faults([
+      new NiceError(Symbol("Invalid values"), "Elements without a valid value: speed, unit, mode", [
+        new NiceError(OFFLINE, "Failed to fetch"),
+        new NiceError(NO_VALUE, "No value yet"),
+        new NiceError(NO_VALUE, "No value yet"),
+      ]),
+    ]);
+
+    const top = current().querySelector(".list > section")!;
+    expect(top.querySelector(":scope > h3")!.textContent).toBe("Invalid values");
+    const inner = [...top.querySelectorAll(":scope > .inner > section")];
+    expect(inner.map((section) => section.querySelector(":scope > h4")!.textContent)).toEqual(["Connection failed", "No value"]);
+    expect(inner[1].querySelectorAll(":scope > p").length).toBe(1);
+  });
+
   it("lets the text be selected, to copy it", async () => {
     void prompts.faults([new NiceError(INVALID, new Error("Failed to parse"))]);
     const details = current().querySelector("details")!;

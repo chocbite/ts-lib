@@ -16,8 +16,10 @@ Both call the global `fetch` and take the same `(url, init?)`. They are also on 
 
 | Function                        | Gives                                  | Use for                                                    |
 | ------------------------------- | -------------------------------------- | ---------------------------------------------------------- |
-| `fetch_text_safe(url, init?)`   | `ResultNice<string>`, the body text    | Reading, like a GET whose answer you parse.                |
-| `fetch_status_safe(url, init?)` | `ResultNice<number>`, the status       | Sending, like a POST or PATCH whose answer you don't need. The body isn't read. It's cancelled, so it doesn't hold the connection open. |
+| `fetch_text_safe(url, init?)`   | `ResultNice<[string, FetchResponse]>`, the body text and the response | Reading, like a GET whose answer you parse.                |
+| `fetch_status_safe(url, init?)` | `ResultNice<FetchResponse>`, the response, its status is `response.status` | Sending, like a POST or PATCH whose answer you don't need. The body isn't read. It's cancelled, so it doesn't hold the connection open. |
+
+`FetchResponse` is the `Response` without its body and the methods reading it, like `text` and `json`, because the body is read or cancelled already. The status, headers, url and `redirected` are there, for checks like a login answering 201.
 
 The error's `kind` is one of the symbols in `safe.fetch.errors`:
 
@@ -33,7 +35,7 @@ A rejection that isn't an `Error` becomes the message, as text, and there's no `
 
 ```typescript
 const result = await fetch_text_safe("/api/device", { signal: AbortSignal.timeout(5000) });
-if (result.ok) show(result.value);
+if (result.ok) show(result.value[0]); //[text, response]
 else if (result.error.kind === safe.fetch.errors.TIMED_OUT) show_offline();
 else show_warning(result.error.nice); //"Connection failed", "Request rejected by server", …
 
@@ -41,15 +43,11 @@ const saved = await fetch_status_safe("/api/device", { method: "PATCH", body: JS
 if (saved.err && saved.error.cause instanceof FetchStatusError) show_warning(saved.error.cause.body);
 ```
 
-With `make_fetch_parser` from `@chocbite/ts-lib/parse`, map the error to a string. `fetch_text_safe` fits the `fetch` option and `fetch_status_safe` the `write` option:
+With `make_fetch_parser` from `@chocbite/ts-lib/parse`, they fit as they are, `fetch_text_safe` as the `fetch` option and `fetch_status_safe` as the `write` option. Their `NiceError`s reach the states of the parser unchanged:
 
 ```typescript
 make_fetch_parser(() => "/api/device", 1000, schema, {
-  fetch: async (url, init) =>
-    (await fetch_text_safe(url, { ...init, headers: { Authorization: `Bearer ${token()}` } })).map_err((e) => e.message),
-  write: async (payload) =>
-    (await fetch_status_safe("/api/device", { method: "PATCH", body: JSON.stringify(payload) }))
-      .map(() => undefined)
-      .map_err((e) => (e.cause instanceof FetchStatusError && e.cause.body) || e.message),
+  fetch: (url, init) => fetch_text_safe(url, { ...init, headers: { Authorization: `Bearer ${token()}` } }),
+  write: (payload) => fetch_status_safe("/api/device", { method: "PATCH", body: JSON.stringify(payload) }),
 });
 ```

@@ -1,5 +1,13 @@
 import { AccessTypes, input_key, type InputOptions } from "#base";
-import { err, ok, Option, Result } from "@chocbite/ts-lib/result";
+import {
+  err_nice,
+  ok,
+  type NiceError,
+  type Option,
+  type ResultNice,
+  type ResultOk,
+} from "@chocbite/ts-lib/result";
+import { form_errors } from "../errors";
 import type { StateOrVal } from "@chocbite/ts-lib/state";
 import {
   FormElement,
@@ -105,18 +113,25 @@ export abstract class FormGroupBase<
   }
 
   /**Returns value of the group, returning err if any component has no value*/
-  get get_value(): Result<RT, string> {
+  get get_value(): ResultNice<RT> {
     const result: RT = {} as RT;
+    const failed: string[] = [];
+    const errors: NiceError[] = [];
     for (const [key, comp] of this._value_elements) {
       const val = comp.get_value;
-      if (val.err) return err("Component with id " + key + " has no value");
-      result[key as keyof RT] = val.value as RT[keyof RT];
+      if (val.err) {
+        failed.push(key);
+        errors.push(val.error);
+      } else result[key as keyof RT] = val.value as RT[keyof RT];
     }
+    //One error naming every element without a value, with the error of each inside
+    if (failed.length)
+      return err_nice(form_errors.INVALID, "Elements without a valid value: " + failed.join(", "), errors);
     return ok(result);
   }
 
   /**Returns partial value of the group, containing all values of components that have values*/
-  get value_partial(): Result<Partial<RT>, string> {
+  get value_partial(): ResultOk<Partial<RT>> {
     return ok(this.#partial());
   }
 
@@ -137,7 +152,7 @@ export abstract class FormGroupBase<
   }
 
   /**Returns partial value of the group, only containing values of components where value has changed*/
-  get value_changed(): Result<Partial<RT>, string> {
+  get value_changed(): ResultOk<Partial<RT>> {
     const result: Partial<RT> = {};
     for (const [key, comp] of this._value_elements) {
       const val = comp.get_value;

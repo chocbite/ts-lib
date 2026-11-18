@@ -5,7 +5,7 @@ import {
   material_stop_rounded,
 } from "@chocbite/ts-lib-ui/icons";
 import { array_from_length } from "@chocbite/ts-lib/common";
-import type { Result } from "@chocbite/ts-lib/result";
+import type { NiceError, Result } from "@chocbite/ts-lib/result";
 import state from "@chocbite/ts-lib/state";
 import { box, controls, row, section } from "../../../helpers";
 
@@ -309,10 +309,10 @@ const content = (name: string) => [
   const r = spaced_row(sec);
   const b = box(r, "group with ids", { width: "24rem" });
   const out = output(sec);
-  const print = (r: Result<object, string>) =>
+  const print = (r: Result<object, NiceError>) =>
     (out.textContent = r.ok
       ? JSON.stringify(r.value, null, 1)
-      : "error, " + r.error);
+      : "error, " + r.error.toString() + r.error.errors.map((inner) => "\n  " + inner.toString()).join(""));
   controls(b, {
     "Print value": () => print(group.get_value),
     "Print partial": () => print(group.value_partial),

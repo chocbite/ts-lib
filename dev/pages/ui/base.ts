@@ -340,18 +340,20 @@ const toggle_ticking = () => {
 {
   const sec = section(
     "Loop",
-    "Both loops follow the same array state. Every node shows the serial it got when created, so you can see which nodes were reused and which were recreated. The left one has a change handler and reuses nodes for changed values",
+    "Both loops follow the same array state. Every node shows the serial it got when its loop created it, each loop counts its own, so you can see which nodes were reused and which were recreated. The left one has a change handler and reuses nodes for changed values, sorting creates no nodes in it",
   );
   const array = state.ok<number[]>([1, 2, 3, 4, 5]);
   let next_value = 6;
   const status = status_line(sec);
-  let created = 0;
-  let destroyed = 0;
+  //Each loop counts its own nodes, a shared count would number the nodes of one loop by the nodes the other made
+  const counts = { with_change: { created: 0, destroyed: 0 }, without_change: { created: 0, destroyed: 0 } };
   const update = () =>
-    (status.textContent = `[${array.ok().join(", ")}], nodes created ${created}, destroyed ${destroyed}`);
-  const node = (value: number) => {
+    (status.textContent =
+      `[${array.ok().join(", ")}], with change: created ${counts.with_change.created}, destroyed ${counts.with_change.destroyed}, ` +
+      `without change: created ${counts.without_change.created}, destroyed ${counts.without_change.destroyed}`);
+  const node_for = (count: { created: number }) => (value: number) => {
     const el = document.createElement("div");
-    el.dataset.serial = String(++created);
+    el.dataset.serial = String(++count.created);
     el.textContent = `${value} (node ${el.dataset.serial})`;
     el.style.padding = "0.125rem 0.25rem";
     el.style.borderBottom = "1px solid #8884";
@@ -373,12 +375,14 @@ const toggle_ticking = () => {
     Empty: () => array.set_ok([]),
   });
   const loops = row(sec);
-  const with_change = base_loop(node, {
+  const with_change = base_loop(node_for(counts.with_change), {
     change: (el, value) =>
       (el.textContent = `${value} (node ${el.dataset.serial}, changed)`),
-    destructor: () => destroyed++,
+    destructor: () => counts.with_change.destroyed++,
   });
-  const without_change = base_loop(node, { destructor: () => destroyed++ });
+  const without_change = base_loop(node_for(counts.without_change), {
+    destructor: () => counts.without_change.destroyed++,
+  });
   for (const [label, loop] of [
     ["with change", with_change],
     ["without change", without_change],
@@ -671,6 +675,31 @@ const errors = {
 //     | |  | | |  | |  | | / /\ \| | |_ |  __|
 //     | |__| | |__| |  | |/ ____ \ |__| | |____
 //      \____/ \____/   |_/_/    \_\_____|______|
+{
+  const sec = section(
+    "Errors made of other errors",
+    "An error can hold the errors it is made of, like the error of a form group holds the error of each element without a valid value. " +
+      "Open the fault icon: the inner errors are indented under their error and grouped by kind again, the duplicate No value is listed once, " +
+      "the inner Invalid data from server holds an error of its own, one level deeper, and the bug has details with its cause chain. Each keeps its own kind, a lost connection stays a lost connection.",
+  );
+  const text = state.from_w("Speed 50%");
+  box(row(sec), "label with a nested error").appendChild(DemoLabel.create({ text }));
+  const NO_VALUE = Symbol("No value");
+  const made_of_errors = () =>
+    new NiceError(Symbol("Invalid values"), "Elements without a valid value: speed, unit, mode, limits", [
+      errors.connection(),
+      new NiceError(NO_VALUE, "No value yet"),
+      new NiceError(NO_VALUE, "No value yet"),
+      new NiceError(Symbol("Invalid data from server"), "Limits failed to parse", [errors.bug()]),
+    ]);
+  controls(sec, {
+    "Fail with inner errors": () => text.set_err(made_of_errors()),
+    "Fail, only a lost connection inside": () =>
+      text.set_err(new NiceError(Symbol("Invalid values"), "Elements without a valid value: speed", [errors.connection()])),
+    "All ok": () => text.set_ok("Speed 50%"),
+  });
+}
+
 {
   const sec = section(
     "Outage on many elements",
