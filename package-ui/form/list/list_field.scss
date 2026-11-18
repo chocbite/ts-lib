@@ -2,5 +2,13 @@
 
 form-listfield {
   @include base.base;
-  padding: 0.2rem;
+  padding: 0.15rem 0.25rem;
+  margin: 0;
+
+  //The column decides the width, not the minimum widths elements have on their own
+  //:nth-child(n) matches every child, it is there to win over `.touch form-xxx`
+  > :nth-child(n),
+  .touch & > :nth-child(n) {
+    min-width: 0;
+  }
 }

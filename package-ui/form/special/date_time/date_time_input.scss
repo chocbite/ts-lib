@@ -2,12 +2,8 @@
 
 form-datetimeinput {
   @include base.base;
-  border: base.$border;
+  @include base.field;
   height: base.$size_height;
-  box-shadow: base.$shadow_in;
-  border-radius: base.$size_cornerRadius;
-  background-color: base.$color_background;
-  box-sizing: border-box;
   min-width: min-content;
   display: flex;
   flex-direction: row;
@@ -16,21 +12,10 @@ form-datetimeinput {
   user-select: none;
   outline: none;
   overflow: hidden;
-  padding-inline: 0.2rem;
-  padding-top: 0.1rem;
-
-  &:focus-within {
-    box-shadow: base.$shadow_in_focus_out;
-  }
+  padding-inline: base.$field_padding 0.3rem;
 
   .touch & {
     height: base.$size_touchHeight;
-  }
-
-  @media (pointer: fine) {
-    &:hover {
-      background-color: base.$color_background_hover;
-    }
   }
 
   > input {
@@ -55,9 +40,10 @@ form-datetimeinput {
 
   > svg {
     display: none;
-    fill: base.$color_text;
+    fill: base.$color_text_unselected;
     width: auto;
-    height: calc(base.$size_height / 1.3);
+    flex-shrink: 0;
+    height: 1.1rem;
   }
 
   > input[type="date"] ~ svg[icon="material_calendar_month_rounded"],

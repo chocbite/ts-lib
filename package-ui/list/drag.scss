@@ -74,7 +74,7 @@ span.list-drag-label {
   color: var(--list-colors-text-field);
   background-color: var(--list-colors-background-row_even);
   border: 1px solid var(--list-colors-border-header);
-  box-shadow: 0 0.1rem 0.3rem var(--list-colors-border-header);
+  box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.25);
 
   //Nowhere to drop
   &.none {

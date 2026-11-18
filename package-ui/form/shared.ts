@@ -192,8 +192,8 @@ colors_background.make_variable(
   "normal",
   "Normal Background Color",
   "Color of normal form element backgrounds",
-  GREY["50"],
-  GREY["900"],
+  "#FFFFFF",
+  "#2B2B2B",
   "Color",
   undefined,
 );
@@ -201,8 +201,8 @@ colors_background.make_variable(
   "hover",
   "Hover Background Color",
   "Color of form element backgrounds when hovering",
-  GREY["400"],
-  GREY["700"],
+  GREY["100"],
+  "#333333",
   "Color",
   undefined,
 );
@@ -231,8 +231,17 @@ colors_border.make_variable(
   "normal",
   "Normal Border Color",
   "Color of normal form element borders",
+  GREY["400"],
   GREY["700"],
-  GREY["300"],
+  "Color",
+  undefined,
+);
+colors_border.make_variable(
+  "hover",
+  "Hover Border Color",
+  "Color of form element borders when hovering",
+  GREY["600"],
+  GREY["500"],
   "Color",
   undefined,
 );
@@ -240,8 +249,8 @@ colors_border.make_variable(
   "unselected",
   "Unselected Border Color",
   "Color of unselected form element borders",
+  GREY["400"],
   GREY["700"],
-  GREY["300"],
   "Color",
   undefined,
 );
@@ -261,8 +270,92 @@ colors_focus.make_variable(
   "normal",
   "Focus Color",
   "Color of focussed form element",
-  ORANGE["600"],
-  ORANGE["300"],
+  BLUE["400"],
+  BLUE["300"],
+  "Color",
+  undefined,
+);
+
+//Accent, the color of what is on or selected
+const colors_accent = colors.make_sub_group(
+  "accent",
+  "Accent Colors",
+  "Color of what is on or selected in form elements, like a switch that is on or the selected option",
+);
+colors_accent.make_variable(
+  "normal",
+  "Accent Color",
+  "Background of what is on or selected",
+  BLUE["700"],
+  BLUE["300"],
+  "Color",
+  undefined,
+);
+colors_accent.make_variable(
+  "hover",
+  "Accent Hover Color",
+  "Background of what is on or selected when hovering",
+  BLUE["800"],
+  BLUE["200"],
+  "Color",
+  undefined,
+);
+colors_accent.make_variable(
+  "text",
+  "Accent Text Color",
+  "Text and icon color on the accent color",
+  "#FFFFFF",
+  GREY["900"],
+  "Color",
+  undefined,
+);
+
+//Buttons, filled so they stand apart from the fields that take input
+const colors_button = colors.make_sub_group(
+  "button",
+  "Button Colors",
+  "Background colors of buttons in form elements",
+);
+colors_button.make_variable(
+  "normal",
+  "Button Color",
+  "Background of buttons",
+  GREY["300"],
+  GREY["800"],
+  "Color",
+  undefined,
+);
+colors_button.make_variable(
+  "hover",
+  "Button Hover Color",
+  "Background of buttons when hovering",
+  "#D2D2D2",
+  GREY["700"],
+  "Color",
+  undefined,
+);
+colors_button.make_variable(
+  "active",
+  "Button Pressed Color",
+  "Background of buttons while pressed",
+  GREY["400"],
+  GREY["600"],
+  "Color",
+  undefined,
+);
+
+//Shadow, only for things that float above the page, like the open dropdown and the switch knob
+const colors_shadow = colors.make_sub_group(
+  "shadow",
+  "Shadow Colors",
+  "Shadow colors of form elements floating above the page",
+);
+colors_shadow.make_variable(
+  "normal",
+  "Shadow Color",
+  "Color of shadows",
+  "rgba(0, 0, 0, 0.25)",
+  "rgba(0, 0, 0, 0.6)",
   "Color",
   undefined,
 );
@@ -351,8 +444,8 @@ sizes.make_variable(
   "height",
   "Height",
   "Default height used in all form elements",
-  "1.3rem",
-  "1.3rem",
+  "1.6rem",
+  "1.6rem",
   "Length",
   { min: 0.1, max: 10 },
 );
