@@ -129,6 +129,8 @@ Saving was done first, as it does not need the properties.
 
 9. **Options as states of a value or a link,** done: every option is a state, `canvas.widget` makes fixed values and links writable states. The state holds the value or a `CanvasLink`, writing it switches. The slot follows every option and gives the widget the option state through a proxy, or the linked state, with `set`, so switching does not make the widget again and a missing state only faults its option. Links have transforms, `linear` first, in a table in `link.ts` that more kinds are added to, and are saved as `{ "$link": { ... } }`.
 
-Later: linking and unlinking options in the properties editor, with a selector of depot states and fields for the transforms, several selected widgets, undo.
+10. **Linking in the properties editor,** done: a link column with a chain per option, opening a link menu, a prompt with the path, Choose state with `depot_ui.select_state`, and fields per transform kind from a table in `link_menu.ts`. Unlink keeps the value shown. Linked values are converted to the type of the option by its property kind.
+
+Later: several selected widgets, undo. The link menu shows each transform kind once, in a fixed order, a list of transforms to add and order is for when there are more kinds.
 
 Each step ends with typecheck, tests and lint passing, and a stop for review.

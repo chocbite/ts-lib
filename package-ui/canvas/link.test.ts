@@ -277,9 +277,11 @@ describe("Links to depot states", () => {
           (row) => row.querySelector("list-textfield")!.textContent === "Text",
         )!
         .querySelector("form-listfield")!;
-    expect(field().textContent).toContain(`Linked to ${TEXT}`);
+    expect(field().querySelector("canvas-linkedvalue")!.textContent).toContain(
+      TEXT,
+    );
     text.set_ok("plain");
-    expect(field().textContent).not.toContain("Linked to");
+    expect(field().querySelector("canvas-linkedvalue")).toBeNull();
     expect(field().querySelector("input")!.value).toBe("plain");
   });
 });

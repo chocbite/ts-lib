@@ -1,4 +1,4 @@
-import type { DepotEntry } from "@chocbite/ts-lib/depot";
+import depot, { type DepotEntry, type DepotNode } from "@chocbite/ts-lib/depot";
 import {
   err_nice,
   none,
@@ -19,8 +19,10 @@ export const link_errors = Object.freeze({
   LINKED: Symbol("Linked"),
   /**The path of a link is registered, but not in the states type of the depot*/
   NOT_A_STATE: Symbol("Not a state"),
-  /**A transform of a link can not transform the value, like linear for a value that is not a number*/
+  /**A transform of a link can not transform the value, like linear for a value that gives no number*/
   TRANSFORM: Symbol("Value can not be transformed"),
+  /**A linked value can not be converted to the type of the option, like the text "abc" for a number*/
+  CONVERT: Symbol("Value can not be converted"),
 });
 
 //      _______ _____            _   _  _____ ______ ____  _____  __  __  _____
@@ -64,18 +66,20 @@ const TRANSFORMS: {
   >;
 } = {
   linear: {
+    //Any value giving a number with Number works, so a boolean maps 0 and 1
     read: ({ from: [a, b], to: [c, d] }, value) => {
-      if (typeof value !== "number")
+      const number = Number(value);
+      if (Number.isNaN(number))
         return err_nice(
           link_errors.TRANSFORM,
-          `Linear transform of a ${typeof value}`,
+          "Linear transform of a value that is not a number",
         );
       if (a === b)
         return err_nice(
           link_errors.TRANSFORM,
           "Linear transform from an empty range",
         );
-      return ok(c + ((value - a) * (d - c)) / (b - a));
+      return ok(c + ((number - a) * (d - c)) / (b - a));
     },
     reverse: ({ from: [a, b], to: [c, d] }) =>
       a === b || c === d
@@ -224,13 +228,32 @@ export function option_value_state(
     : state.proxy.rea(option, read);
 }
 
-/**The state the widget gets for a link, the linked state through the transforms of the link
+/**Converts a value to the type an option needs*/
+export type OptionConvert = (value: unknown) => ResultNice<unknown>;
+
+/**Converts a value written back to the type of the value read from the linked state, so a boolean state stays boolean*/
+function like(read: unknown, value: unknown): unknown {
+  switch (typeof read) {
+    case "number":
+      return Number(value);
+    case "boolean":
+      return Boolean(value);
+    case "string":
+      return typeof value === "string" ? value : JSON.stringify(value);
+    default:
+      return value;
+  }
+}
+
+/**The state the widget gets for a link, the linked state through the transforms of the link,
+ * then converted to the type of the option, a value written back goes in reverse and gets the type of the linked value
  * Writable when the linked state is and every transform can be reversed*/
 export function linked_state(
   link: CanvasLink,
   linked: State<unknown, any, any>,
+  convert?: OptionConvert,
 ): State<unknown, any, any> {
-  if (!link.transforms.length) return linked;
+  if (!link.transforms.length && !convert) return linked;
   const steps: [TransformKind<LinkTransform>, LinkTransform][] = [];
   for (const transform of link.transforms) {
     const kind = transform_kind(transform);
@@ -241,22 +264,53 @@ export function linked_state(
       );
     steps.push([kind, transform]);
   }
+  /**The latest value of the linked state, to give a value written back its type*/
+  let raw: unknown;
   const read = (result: ResultNice<unknown>): ResultNice<unknown> => {
+    if (result.ok) raw = result.value;
     for (const [kind, transform] of steps) {
       if (!result.ok) return result;
       result = kind.read(transform, result.value);
     }
-    return result;
+    if (!result.ok || !convert) return result;
+    return convert(result.value);
   };
   const reverses = steps.map(([kind, transform]) => kind.reverse(transform));
   if (!linked.writable || !reverses.every((reverse) => reverse))
     return state.proxy.rea(linked, read);
   return state.proxy.reaw(linked as StateREAW<unknown>, read, {
     wout_win: (value) =>
-      reverses.reduceRight<unknown>((v, reverse) => reverse!(v), value),
+      like(
+        raw,
+        reverses.reduceRight<unknown>((v, reverse) => reverse!(v), value),
+      ),
     win_wout: (value) => {
       const result = read(ok(value));
       return result.ok ? result.value : value;
     },
   });
+}
+
+/**The state the widget gets for a link, from the node the depot gives for its path,
+ * an error state while the path is not registered as a state*/
+export function link_node_state(
+  link: CanvasLink,
+  node: ResultNice<DepotNode>,
+  convert?: OptionConvert,
+): State<unknown, any, any> {
+  if (!node.ok) return state.err(node.error);
+  if (node.value.kind !== "entry" || node.value.type !== depot.states)
+    return state.err(
+      err_nice(link_errors.NOT_A_STATE, `"${link.path}" is not a state`).error,
+    );
+  return linked_state(link, node.value.value, convert);
+}
+
+/**The value a link gives now, through its transforms and converted, an error when the state is not registered*/
+export async function link_value(
+  link: CanvasLink,
+  convert?: OptionConvert,
+): Promise<ResultNice<unknown>> {
+  const node = await depot.get(link.path);
+  return await link_node_state(link, node, convert);
 }
