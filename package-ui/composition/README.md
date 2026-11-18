@@ -6,7 +6,7 @@ Builds up the page of an app: a top bar, panels floating over the page, and cont
 import { comp } from "@chocbite/ts-lib-ui/composition";
 ```
 
-The elements follow the element pattern of ts-lib-ui: factories take options, every option is a fixed value or a state, and `set` changes options later. Give a state for anything that changes.
+The elements follow the element pattern of ts-lib-ui: factories take options, every option is an initial value or a state, and `set` changes options later. Give a state for anything changed from outside.
 
 ## Top bar
 
@@ -122,7 +122,7 @@ const panel = comp.panel(report, { x, y, width: 30 });
 | `titlebar`   | Whether the title bar is shown, true by default. Without it the panel can not be moved by the user.                                                          |
 | `layer`      | Panels in a higher layer are always above those in a lower one. Within a layer the panel the user worked in last is at the front.                            |
 
-`x`, `y`, `width`, `height` and `hidden` are changed by the user, by moving, sizing and auto hiding the panel. A fixed value is where the panel starts, and the panel keeps the user's changes itself. A writable state is written by the panel. A read only state can not be changed, so `x: state.ok(4)` moves only up and down. A panel without a position starts centered.
+`x`, `y`, `width`, `height` and `hidden` are changed by the user, by moving, sizing and auto hiding the panel. An initial value is where the panel starts, and the panel keeps the user's changes itself. A writable state is written by the panel. A read only state can not be changed, so `x: state.ok(4)` moves only up and down. A panel without a position starts centered.
 
 The position is kept as given, the panel only shows it clamped so its title bar stays on the page. When the window gets smaller and then bigger again, or the scale changes, the panel goes back to where it was.
 

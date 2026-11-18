@@ -53,10 +53,10 @@ export type BaseOptions = InputOptions<typeof BASE>;
  * The class is only exported as a type, a factory function taking optional options creates it with create
  * The constructor takes only required references, never inputs, it builds the children and sets the defaults
  * The inputs are an object of keys made with input_key, the options type is InputOptions of it
- * set takes the options, each a fixed value or a state (StateOrVal), and applies them with set_input
+ * set takes the options, each an initial value or a state (StateOrVal), and applies them with set_input
  * Inputs handed out to other elements are given once, at creation, and applied by overriding [CREATE]
  * so element_factory({ width: 100, label: label_state }).set({ width: 120 })
- * A fixed value never changes, anything that changes must be a state
+ * An initial value is applied once and not followed, anything changed from outside must be a state
  *
  * All none abstracts classes must override the static method element_name to return the name of the element
  * Abstract classes should return @abstract@
@@ -113,7 +113,7 @@ export abstract class Base extends HTMLElement {
     this.internal_set_visible(false);
   }
 
-  /**Sets any attribute on the base element, to either a fixed value or a state value
+  /**Sets any attribute on the base element, to either an initial value or a state value
    * Older style, new elements take their inputs with set and set_input, see PATTERN.md of ts-lib-ui*/
   opts(opts: WithStateROA<DataProps<this>>): this {
     for (const key in opts) {
@@ -156,9 +156,9 @@ export abstract class Base extends HTMLElement {
    * Elements override it with their own options type and call super[CREATE] with the options, like set*/
   [CREATE](_options: object): void {}
 
-  /**Sets an input that is either a fixed value or a state, see set
+  /**Sets an input that is either an initial value or a state, see set
    * undefined leaves the input unchanged
-   * A fixed value is applied right away as an ok result, and detaches any state the key had
+   * An initial value is applied right away as an ok result, and detaches any state the key had
    * A state replaces any state the key had, and is applied while the element is connected
    * The key decides the type of the input, and the result apply gets:
    * inputs that can not be errors give ok results, others results the element must handle
@@ -225,7 +225,7 @@ export abstract class Base extends HTMLElement {
     return this;
   }
 
-  /**The state an input has now, undefined when it has a fixed value or was never set
+  /**The state an input has now, undefined when it has an initial value or was never set
    * Typed by the key, so a writable input gives a writable state to write to,
    * the element keeps no reference of its own to the state*/
   protected input_state<S>(key: InputKey<S>): InputState<S> | undefined {

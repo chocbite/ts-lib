@@ -63,7 +63,7 @@ describe("Group collapser without animation", () => {
     expect(button.textContent).toBe("Expand");
   });
 
-  it("toggles itself when the button is clicked, starting from a fixed value", () => {
+  it("toggles itself when the button is clicked, starting from an initial value", () => {
     const { button, collapsed } = make({ collapsed: false });
     button.click();
     expect(collapsed()).toBe(true);

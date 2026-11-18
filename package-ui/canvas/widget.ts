@@ -54,7 +54,7 @@ export const WIDGET_CHANGE = Symbol("widget_change");
  * Rotation is in degrees clockwise around the center of the widget
  *
  * Position, size and rotation are inputs the user changes, by moving, resizing and rotating the widget in an editing viewport:
- * a writable state is written, a fixed value or no value is kept by the widget, and a read only state locks that part
+ * a writable state is written, an initial value or no value is kept by the widget, and a read only state locks that part
  * Width and height are 0 until given
  *
  * Widgets can lay out their content at an original size, which is then scaled to the width and height of the widget,
@@ -121,7 +121,7 @@ export abstract class WidgetBase extends Base {
     return given === undefined || given.writable;
   }
 
-  /**Changes the geometry like the user does, a writable state is written, a fixed value is kept by the widget,
+  /**Changes the geometry like the user does, a writable state is written, an initial value is kept by the widget,
    * parts given as read only states are left unchanged*/
   [WIDGET_CHANGE](change: Partial<WidgetGeometry>): void {
     let kept = false;

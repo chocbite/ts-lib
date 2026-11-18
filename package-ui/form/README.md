@@ -6,13 +6,13 @@ Form elements: buttons, switches, number and text inputs, selectors, and groups 
 import form from "@chocbite/ts-lib-ui/form";
 ```
 
-Every element follows the element pattern of ts-lib-ui: `form.switch(options)` creates it, every option is a fixed value or a state, and `set(options)` changes options later. Options every element takes, like `access`, are in [PATTERN.md](../PATTERN.md).
+Every element follows the element pattern of ts-lib-ui: `form.switch(options)` creates it, every option is an initial value or a state, and `set(options)` changes options later. Options every element takes, like `access`, are in [PATTERN.md](../PATTERN.md).
 
 ## The value
 
 Elements with a value take it as the `value` option, and the user changes it:
 
-- **A fixed value** is where the element starts. The element keeps the user's changes itself.
+- **An initial value** is where the element starts. The element keeps the user's changes itself.
 - **A writable state** is written when the user changes the value, so the element is live: everything following the state sees the change right away.
 - **A read only state** is only shown, a change by the user is refused with a warning.
 - **Not given**, the element starts without a value and keeps it itself.
@@ -62,7 +62,7 @@ group.get_value; //ResultNice<{ name: string; admin: boolean }>
 - **`get_value`** gives every value. When elements have no valid value it is a `form.errors.INVALID` error naming them, like `Elements without a valid value: name`, with the error of each element in its `errors`.
 - **`value_partial`** gives the values of the elements that have one.
 - **`value_changed`** gives the values the user changed.
-- **`set({ value })`** gives each element its value from an object by id, as a fixed value it starts from.
+- **`set({ value })`** gives each element its value from an object by id, as an initial value.
 
 The `id` and the `elements` are given at creation, as they decide the value of the group. Only elements the user changes have a value in a group, a lamp or progress bar is not part of it. A group `change` listener gets the values every time an element with an id changes.
 

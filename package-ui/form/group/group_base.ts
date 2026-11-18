@@ -162,7 +162,7 @@ export abstract class FormGroupBase<
     return ok(result);
   }
 
-  /**Gives each element its value from the value of the group, as a fixed value it starts from*/
+  /**Gives each element its value from the value of the group, as an initial value*/
   protected new_value(val: RT): void {
     for (const key in val)
       this._value_elements.get(key)?.set({ value: val[key as keyof RT] });

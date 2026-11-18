@@ -23,14 +23,14 @@ The same page can be shown in several viewports at once, like an editor and a pr
 - **Position and size are inputs the user changes,** with the pattern's model:
   - **A writable state** is written by the transformer, and every viewport follows it.
   - **A read only state** locks the widget.
-  - **A fixed value** is the element's own. Each viewport's element would then move on its own, so shared pages use writable states.
+  - **An initial value** is the element's own. Each viewport's element would then move on its own, so shared pages use writable states.
 - **The widget definition comes from the depot.** Canvas registers the `widgets` type. A widget holds the depot entry, which gives files a path to save later.
 - **The page is an input of the viewport,** `StateOrVal<CanvasPage | undefined>`, so a state can switch which page a viewport shows.
 - **The page element is internal.** The viewport makes it from the page data. `canvas.page()` as an element factory goes away.
 - **Widget elements are made per item, and only when needed.** An array state of widgets uses its change metadata, so adding, removing or moving one widget touches only that one. The array order is the drawing order.
 - **The content of a depot entry is a state,** and possibly async. Each widget therefore gets a small internal slot element with `display: contents`. It follows the entry's content and makes the widget element when the content arrives, or again if it changes.
 - **Locked parts hide their handles.** Moving needs `x` and `y`, resizing needs `x`, `y`, `width` and `height`, because it keeps the opposite corner in place, which moves the position, and rotating needs `rotation`. A read only state for any of them hides the handles of the action.
-- **The transformer writes through the widget.** `WidgetBase` gets an internal method that writes a change to the states of its inputs, or keeps it for fixed values, and refuses it for read only states. The transformer reads the current values from internal getters. This is internal logic, outside the pattern.
+- **The transformer writes through the widget.** `WidgetBase` gets an internal method that writes a change to the states of its inputs, or keeps it for initial values, and refuses it for read only states. The transformer reads the current values from internal getters. This is internal logic, outside the pattern.
 
 ## Sketch
 
@@ -127,7 +127,7 @@ Saving was done first, as it does not need the properties.
 7. **Saving and loading** a page, done: `group.register_debounced("page", ..., page_state)` and `group.get("page", fallback, canvas.page_from_json)`. Dev page: a page kept across reloads.
 8. **Links to depot states,** done: `canvas.link(path)` in place of any option, the slot looks every link up next to the definition and gives the widget the registered state, showing an error until all are registered. Saved as `{ "link": path }`. The properties editor shows the path. Dev page: links to a counter and a writable x, and one to a state registered by a button.
 
-9. **Options as states of a value or a link,** done: every option is a state, `canvas.widget` makes fixed values and links writable states. The state holds the value or a `CanvasLink`, writing it switches. The slot follows every option and gives the widget the option state through a proxy, or the linked state, with `set`, so switching does not make the widget again and a missing state only faults its option. Links have transforms, `linear` first, in a table in `link.ts` that more kinds are added to, and are saved as `{ "$link": { ... } }`.
+9. **Options as states of a value or a link,** done: every option is a state, `canvas.widget` makes initial values and links writable states. The state holds the value or a `CanvasLink`, writing it switches. The slot follows every option and gives the widget the option state through a proxy, or the linked state, with `set`, so switching does not make the widget again and a missing state only faults its option. Links have transforms, `linear` first, in a table in `link.ts` that more kinds are added to, and are saved as `{ "$link": { ... } }`.
 
 10. **Linking in the properties editor,** done: a link column with a chain per option, opening a link menu, a prompt with the path, Choose state with `depot_ui.select_state`, and fields per transform kind from a table in `link_menu.ts`. Unlink keeps the value shown. Linked values are converted to the type of the option by its property kind.
 

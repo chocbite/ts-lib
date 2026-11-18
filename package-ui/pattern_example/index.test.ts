@@ -63,7 +63,7 @@ describe("set", () => {
     expect(box.style.height).toBe("32px");
   });
 
-  it("applies fixed values right away", () => {
+  it("applies initial values right away", () => {
     const box = example_box({ width: 120, label: "a" });
     expect(box.style.width).toBe("120px");
     expect(box.textContent).toBe("a");
@@ -108,7 +108,7 @@ describe("set", () => {
     expect(box.style.width).toBe("80px");
   });
 
-  it("setting a fixed value detaches the previous state", () => {
+  it("setting an initial value detaches the previous state", () => {
     const width = state.ok_w(120);
     const box = attach(example_box({ width }));
     box.set({ width: 60 });
@@ -147,7 +147,7 @@ describe("set", () => {
     expect(box.textContent).toBe("ba");
   });
 
-  it("an override can use fields of the subclass with a fixed value", () => {
+  it("an override can use fields of the subclass with an initial value", () => {
     const box = example_override_box({ prefix: "p", label: "a" });
     expect(box.textContent).toBe("pa");
   });
@@ -274,7 +274,7 @@ describe("options from keys", () => {
 });
 
 describe("input_state", () => {
-  it("gives the state of an input, undefined for a fixed value", () => {
+  it("gives the state of an input, undefined for an initial value", () => {
     const probe = new TypeProbe();
     expect(probe.state_of_writable()).toBeUndefined();
     const first = state.ok_w(1);
@@ -302,7 +302,7 @@ describe("input_state", () => {
     await Promise.resolve();
     expect(second.ok()).toBe(70);
     expect(first.ok()).toBe(10);
-    //A fixed value after a state is kept by the slider, nothing is written
+    //An initial value after a state is kept by the slider, nothing is written
     slider.set({ value: 5 });
     input.value = "80";
     input.dispatchEvent(new Event("input"));
@@ -346,7 +346,7 @@ describe("errors", () => {
 });
 
 describe("values the user changes", () => {
-  it("a fixed slider value is kept by the slider, the user changes it", () => {
+  it("an initial slider value is kept by the slider, the user changes it", () => {
     const slider = attach(example_slider({ value: 30, max: 100 }));
     const input = slider.querySelector("input")!;
     expect(input.disabled).toBe(false);
@@ -366,12 +366,12 @@ describe("values the user changes", () => {
     expect(input.disabled).toBe(false);
   });
 
-  it("a watcher shows a fixed list of a group", () => {
+  it("a watcher shows an initial list of a group", () => {
     const group = example_group({
       items: [example_box(), example_box()],
     });
     const watcher = attach(example_watcher({ group }));
-    expect(watcher.textContent).toBe("2 items, fixed");
+    expect(watcher.textContent).toBe("2 items, initial list");
   });
 });
 
@@ -444,15 +444,15 @@ describe("nested subscriptions", () => {
     expect(watcher.textContent).toBe("no group");
   });
 
-  it("drops the inner subscription for a group with a fixed list", () => {
+  it("drops the inner subscription for a group with an initial list", () => {
     const { items_a, group, watcher } = setup();
     attach(watcher);
     group.set_ok(example_group({ items: [example_box()] }));
     expect(items_a.amount()).toBe(0);
-    expect(watcher.textContent).toBe("1 items, fixed");
+    expect(watcher.textContent).toBe("1 items, initial list");
   });
 
-  it("drops both subscriptions when bound to a fixed group", () => {
+  it("drops both subscriptions when bound to an initial group", () => {
     const { items_a, b, group, watcher } = setup();
     attach(watcher);
     watcher.set({ group: b });
@@ -504,7 +504,7 @@ describe("editor", () => {
     expect(square.style.transform).toBe("scale(2)");
   });
 
-  it("hands out a fixed scale as a state the slider changes", async () => {
+  it("hands out an initial scale as a state the slider changes", async () => {
     const editor = attach(example_editor({ scale: 2 }));
     expect(editor.scale.ok()).toBe(2);
     const { square, input, label } = parts(editor);

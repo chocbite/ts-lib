@@ -75,14 +75,14 @@ const output = (parent: HTMLElement): HTMLPreElement => {
 {
   const sec = section(
     "Mixed inputs and errors",
-    "Fixed values and states use the same options. Buttons change the states, only boxes bound to them should react. On an error the width keeps its last value, the label shows the error and the color turns grey",
+    "Initial values and states use the same options. Buttons change the states, only boxes bound to them should react. On an error the width keeps its last value, the label shows the error and the color turns grey",
   );
   const width = state.from_w(120);
   const label = state.from_w("state label");
   const color = state.from_w("#8e44ad");
   const boxes = row(sec);
-  box(boxes, "All fixed").appendChild(
-    example_box({ width: 120, height: 40, label: "fixed" }),
+  box(boxes, "All initial").appendChild(
+    example_box({ width: 120, height: 40, label: "initial" }),
   );
   box(boxes, "Width state").appendChild(
     example_box({ width, height: 40, label: "width state" }),
@@ -118,7 +118,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
 {
   const sec = section(
     "Linked values",
-    "The main goal: both sliders and the box share one writable state, and the label is derived from it. Moving either slider should move everything. A slider with a fixed value keeps it itself and moves alone, one with a read only state of the width follows it but can not be moved",
+    "The main goal: both sliders and the box share one writable state, and the label is derived from it. Moving either slider should move everything. A slider with an initial value keeps it itself and moves alone, one with a read only state of the width follows it but can not be moved",
   );
   const width = state.ok_w(150);
   const label = state.p.ros(width, (value) => ok(`${value.value}px`));
@@ -127,7 +127,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
     example_slider({ value: width, min: 40, max: 300 }),
     example_slider({ value: width, min: 40, max: 300 }),
   );
-  box(boxes, "Fixed value, its own").appendChild(
+  box(boxes, "Initial value, its own").appendChild(
     example_slider({ value: 150, min: 40, max: 300 }),
   );
   box(boxes, "Read only state, disabled").appendChild(
@@ -147,7 +147,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
 {
   const sec = section(
     "Subclasses",
-    "A subclass adds its inputs by overriding set. The override box reads a private field of the subclass from an overridden method, which works for both a fixed value and a state, as set runs after every constructor has finished",
+    "A subclass adds its inputs by overriding set. The override box reads a private field of the subclass from an overridden method, which works for both an initial value and a state, as set runs after every constructor has finished",
   );
   const boxes = row(sec);
   box(boxes, "Own input").appendChild(
@@ -166,7 +166,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
       label: state.ok("label"),
     }),
   );
-  box(boxes, "Override, label is fixed").appendChild(
+  box(boxes, "Override, initial label").appendChild(
     example_override_box({
       width: 140,
       height: 40,
@@ -215,13 +215,13 @@ const output = (parent: HTMLElement): HTMLPreElement => {
   box(boxes, "Group B", { width: "16rem", minHeight: "2rem" }).appendChild(
     b.group,
   );
-  const fixed = example_group({
+  const initial = example_group({
     items: [example_box({ width: 48, height: 32, label: "F" })],
   });
-  box(boxes, "Group F, fixed list", {
+  box(boxes, "Group F, initial list", {
     width: "8rem",
     minHeight: "2rem",
-  }).appendChild(fixed);
+  }).appendChild(initial);
   const watcher_box = box(boxes, "Watcher", {
     width: "10rem",
     minHeight: "2rem",
@@ -243,7 +243,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
     "Add to B": then(b.add),
     "Watch A": then(() => current.set_ok(a.group)),
     "Watch B": then(() => current.set_ok(b.group)),
-    "Watch F": then(() => current.set_ok(fixed)),
+    "Watch F": then(() => current.set_ok(initial)),
     "Watch nothing": then(() => current.set_ok(null)),
     "Gap 4 / 12 on A and B": () => gap.set_ok(gap.ok() === 4 ? 12 : 4),
     "Detach / attach watcher": then(() => {
@@ -258,7 +258,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
 {
   const sec = section(
     "Writing to the input state",
-    "The slider keeps no reference to its value state, its input handler writes to whatever state the value key has now through input_state. Switch the slider between the A and B states and drag it: only the box of the state it has moves. With a fixed value the slider keeps the value itself and writes nothing",
+    "The slider keeps no reference to its value state, its input handler writes to whatever state the value key has now through input_state. Switch the slider between the A and B states and drag it: only the box of the state it has moves. With an initial value the slider keeps the value itself and writes nothing",
   );
   const a = state.ok_w(60);
   const b = state.ok_w(140);
@@ -282,9 +282,10 @@ const output = (parent: HTMLElement): HTMLPreElement => {
       slider.set({ value: b });
       label.textContent = "slider writes to B";
     },
-    "Slider fixed 100": () => {
+    "Slider initial 100": () => {
       slider.set({ value: 100 });
-      label.textContent = "slider keeps a fixed value itself, writes nothing";
+      label.textContent =
+        "slider keeps an initial value itself, writes nothing";
     },
   });
 }
@@ -298,13 +299,13 @@ const output = (parent: HTMLElement): HTMLPreElement => {
 {
   const sec = section(
     "Editor",
-    "The editor passes its scale on to a view and a slider unchanged, and uses as_state to derive the label and to hand the scale out. The scale is given at creation as it is handed out, the slider limits are passed on through set and can change. A fixed scale becomes a state the editor keeps, so its slider still moves its view. The outside readout subscribes to the scale the editor hands out",
+    "The editor passes its scale on to a view and a slider unchanged, and uses as_state to derive the label and to hand the scale out. The scale is given at creation as it is handed out, the slider limits are passed on through set and can change. An initial scale becomes a state the editor keeps, so its slider still moves its view. The outside readout subscribes to the scale the editor hands out",
   );
   const shared = state.ok_w(1);
   const boxes = row(sec);
   const editors: ReturnType<typeof example_editor>[] = [];
   for (const [name, scale] of [
-    ["Fixed 1.5", 1.5],
+    ["Initial 1.5", 1.5],
     ["State", shared],
     ["Same state", shared],
   ] as const) {
@@ -338,7 +339,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
   const ROWS = 4;
   const sec = section(
     "Reused rows",
-    `${ROWS} boxes are rebound to a window of 20 data states, like a list reusing its rows when scrolling. Every other entry is a fixed value. Only the ${ROWS} shown states should have a subscriber, the "Change all" button proves the hidden ones are released`,
+    `${ROWS} boxes are rebound to a window of 20 data states, like a list reusing its rows when scrolling. Every other entry is an initial value. Only the ${ROWS} shown states should have a subscriber, the "Change all" button proves the hidden ones are released`,
   );
   const colors = ["#2980b9", "#27ae60", "#8e44ad", "#c0392b", "#d35400"];
   const data: {
@@ -346,7 +347,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
     color: string | StateROSW<string>;
   }[] = Array.from({ length: 20 }, (_, i) =>
     i % 2
-      ? { label: `fixed ${i}`, color: colors[i % 5] }
+      ? { label: `initial ${i}`, color: colors[i % 5] }
       : { label: state.ok_w(`state ${i}`), color: state.ok_w(colors[i % 5]) },
   );
   const rows = Array.from({ length: ROWS }, () =>
@@ -396,20 +397,20 @@ const output = (parent: HTMLElement): HTMLPreElement => {
 {
   const sec = section(
     "When values arrive",
-    "Fixed values are applied by the factory, states only after the element is connected, and an async state later still. Does anything feel wrong because of this",
+    "Initial values are applied by the factory, states only after the element is connected, and an async state later still. Does anything feel wrong because of this",
   );
   const status = output(sec);
-  const fixed = example_box({ width: 120, height: 32, label: "fixed" });
+  const initial = example_box({ width: 120, height: 32, label: "initial" });
   const bound = example_box({
     width: state.ok(120),
     height: 32,
     label: "state",
   });
-  const before = `before connect: fixed width "${fixed.style.width}", state width "${bound.style.width}"`;
+  const before = `before connect: initial width "${initial.style.width}", state width "${bound.style.width}"`;
   const boxes = row(sec);
-  box(boxes, "Fixed").appendChild(fixed);
+  box(boxes, "Initial").appendChild(initial);
   box(boxes, "State").appendChild(bound);
-  status.textContent = `${before}\nafter connect: fixed width "${fixed.style.width}", state width "${bound.style.width}"`;
+  status.textContent = `${before}\nafter connect: initial width "${initial.style.width}", state width "${bound.style.width}"`;
   const delayed = box(boxes, "Async state", { minWidth: "8rem" });
   controls(sec, {
     "Add box with a width arriving after 1 second": () => {
@@ -442,7 +443,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
   );
   const variants: [string, (i: number) => HTMLElement][] = [
     [
-      "Fixed values",
+      "Initial values",
       (i) =>
         example_box({
           width: 40 + (i % 8),

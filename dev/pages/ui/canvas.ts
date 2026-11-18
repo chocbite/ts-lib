@@ -146,7 +146,7 @@ const place = (
 });
 type Place = ReturnType<typeof place>;
 
-//canvas.widget makes fixed values writable states, so every viewport shares them and the properties editor changes them
+//canvas.widget makes initial values writable states, so every viewport shares them and the properties editor changes them
 const box_widget = (options: WidgetOptionsInput<DevBoxOptions>) =>
   canvas.widget(BOX, options);
 const graphic_widget = (options: WidgetOptionsInput<DevGraphicOptions>) =>
@@ -367,7 +367,7 @@ const viewport_in = (
 {
   const sec = section(
     "States",
-    "The place of widgets as inputs. Blue and the dashed green outline share writable states: moving or resizing either changes both, and the number inputs follow and change them too. Red is locked by read only states for x and y: it can only be rotated, as moving and resizing both change the position. Yellow was given fixed values, canvas.widget makes them writable states, so it moves in both viewports too",
+    "The place of widgets as inputs. Blue and the dashed green outline share writable states: moving or resizing either changes both, and the number inputs follow and change them too. Red is locked by read only states for x and y: it can only be rotated, as moving and resizing both change the position. Yellow was given initial values, canvas.widget makes them writable states, so it moves in both viewports too",
   );
   const shared = place(40, 40, 160, 80);
   const locked = place(300, 40, 160, 80);
@@ -386,7 +386,7 @@ const viewport_in = (
       }),
       box_widget({
         color: "#f1c40f",
-        text: "Fixed",
+        text: "Initial values",
         x: 560,
         y: 40,
         width: 160,

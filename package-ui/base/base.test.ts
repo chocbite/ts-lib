@@ -757,7 +757,7 @@ describe("Base access", () => {
     expect(element.access_calls).toEqual([AccessTypes.Read, AccessTypes.Write]);
   });
 
-  it("follows a state, and a fixed value set again releases it", () => {
+  it("follows a state, and an initial value set again releases it", () => {
     const state = st.ok_w<AccessTypes>(AccessTypes.Read);
     const element = document.body.appendChild(new ProbeElement());
     element.set({ access: state });
@@ -997,7 +997,7 @@ describe("Base set", () => {
   const attach = <T extends HTMLElement>(element: T): T =>
     document.body.appendChild(element);
 
-  it("applies fixed values right away", () => {
+  it("applies initial values right away", () => {
     const element = new SetProbe().set({ width: 5, label: "a" });
     expect(element.style.width).toBe("5px");
     expect(element.textContent).toBe("a");
@@ -1035,7 +1035,7 @@ describe("Base set", () => {
     expect(element.style.width).toBe("6px");
   });
 
-  it("setting a fixed value detaches the previous state, also after reconnecting", () => {
+  it("setting an initial value detaches the previous state, also after reconnecting", () => {
     const width = st.ok_w(5);
     const element = attach(new SetProbe().set({ width }));
     element.set({ width: 9 });
@@ -1072,7 +1072,7 @@ describe("Base set", () => {
     expect(element.style.width).toBe("5px");
   });
 
-  it("an override can use fields of the subclass, with a fixed value or a state", () => {
+  it("an override can use fields of the subclass, with an initial value or a state", () => {
     expect(new SetPrefix().set({ prefix: "p", label: "a" }).textContent).toBe(
       "pa",
     );

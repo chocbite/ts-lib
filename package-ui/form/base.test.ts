@@ -241,7 +241,7 @@ describe("Form value inputs", () => {
     document.body.replaceChildren();
   });
 
-  it("starts at a fixed value, the user changes it and the element keeps the change", async () => {
+  it("starts at an initial value, the user changes it and the element keeps the change", async () => {
     const { element, change, knob, toggle } = make_switch({ value: true });
     expect(is_on(knob)).toBe(true);
     expect(element.changed).toBe(false);
@@ -252,7 +252,7 @@ describe("Form value inputs", () => {
     expect(change).toHaveBeenCalledExactlyOnceWith(false);
   });
 
-  it("set again with a fixed value starts over from it", async () => {
+  it("set again with an initial value starts over from it", async () => {
     const { element, knob, toggle } = make_switch({ value: true });
     await toggle();
     element.set({ value: true });
@@ -299,7 +299,7 @@ describe("Form value inputs", () => {
     await toggle();
     expect(second.ok()).toBe(true);
     expect(first.ok()).toBe(true);
-    //A fixed value after a state is the element's own again, nothing is written
+    //An initial value after a state is the element's own again, nothing is written
     element.set({ value: false });
     expect(second.amount()).toBe(0);
     await toggle();
@@ -321,7 +321,7 @@ describe("Form value inputs", () => {
     expect(element.get_value.unwrap()).toBe(false);
   });
 
-  it("shows the description as a tooltip, fixed or from a state", () => {
+  it("shows the description as a tooltip, initial or from a state", () => {
     const description = st.ok_w("Turns the radio on");
     const { element } = make_switch({ description: "Radio" });
     expect(element.title).toBe("Radio");

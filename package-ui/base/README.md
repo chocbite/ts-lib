@@ -1,6 +1,6 @@
 # @chocbite/ts-lib-ui/base
 
-`Base`, the class every element of ts-lib-ui extends, and what it gives elements: inputs that are fixed values or states, states that are only followed while the element is shown, faults, access, and size and visibility.
+`Base`, the class every element of ts-lib-ui extends, and what it gives elements: inputs that are initial values or states, states that are only followed while the element is shown, faults, access, and size and visibility.
 
 ```ts
 import {
@@ -47,7 +47,7 @@ export function my_box(options: MyBoxOptions = {}): MyBox {
 }
 ```
 
-- **`set_input(key, input, apply)`** takes a fixed value or a state. A fixed value is applied right away, a state is followed while the element is in the document. Setting the key again replaces the state it had.
+- **`set_input(key, input, apply)`** takes an initial value or a state. An initial value is applied right away, a state is followed while the element is in the document. Setting the key again replaces the state it had.
 - **`input_state(key)`** gives the state an input has now, to write to it when the user changes the value.
 - **`Base.create(options, ...args)`** creates the element and applies the options. Arguments after the options go to the constructor, for required references like a device a page shows, see [PATTERN.md](../PATTERN.md#required-references). Inputs other elements follow are given once, at creation, through the `[CREATE]` hook.
 - **`super.set(options)`** must be called by every `set`, it applies the inputs every element has.

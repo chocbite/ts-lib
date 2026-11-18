@@ -25,7 +25,7 @@ const PANEL = {
   /**Layer of the panel, panels in a higher layer are always above panels in a lower one*/
   layer: input_key<StateOrVal<number>>(),
   /**Horizontal position in rem from the left of the page, of the anchor point of the panel
-   * Not given the panel starts centered, a fixed value is where it starts, the user moves it from there,
+   * Not given the panel starts centered, an initial value is where it starts, the user moves it from there,
    * a writable state is written when the user moves the panel, a read only state can not be moved*/
   x: input_key<StateOrValROS<number>>(),
   /**Vertical position in rem from the top of the page, of the anchor point of the panel, works like x*/
@@ -33,7 +33,7 @@ const PANEL = {
   /**Point of the panel that x and y place, top_left by default*/
   anchor: input_key<StateOrVal<CompAnchor>>(),
   /**Width in rem, not given the panel fits its content
-   * A fixed value is the width it starts with, the user sizes it from there,
+   * An initial value is the width it starts with, the user sizes it from there,
    * a writable state is written when the user sizes the panel, a read only state can not be sized*/
   width: input_key<StateOrValROS<number>>(),
   /**Height in rem, works like width*/
@@ -319,12 +319,12 @@ class Panel extends Base {
     return state === undefined || state.writable;
   }
 
-  /**The state the input has, undefined for a fixed value or one never given*/
+  /**The state the input has, undefined for an initial value or one never given*/
   #state_of(name: Changeable) {
     return this.input_state<StateOrValROS<number | boolean>>(PANEL[name]);
   }
 
-  /**Writes a change by the user, to a writable state, or to the panel for a fixed value or one never given*/
+  /**Writes a change by the user, to a writable state, or to the panel for an initial value or one never given*/
   #change<N extends Changeable>(
     name: N,
     value: NonNullable<ChangeableValues[N]>,

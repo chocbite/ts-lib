@@ -44,7 +44,7 @@ const close_all = () => {
 //     |_|    |_____/_/ \_\______|_____/
 {
   const sec = section(
-    "Fixed values",
+    "Initial values",
     "The title, icon, closable and minimum width are given when the content is created, the panel shows them. Only the closable one has a close button. Drag the right edge of each, the wide one stops at 16rem",
   );
   controls(sec, {

@@ -47,7 +47,7 @@ export const IS = {
   state(s: any): s is State<any, any> {
     return Boolean(s && (s as { [STATE_KEY]: boolean })[STATE_KEY]);
   },
-  /**Narrows a StateOrVal to its state, the else branch is the fixed value
+  /**Narrows a StateOrVal to its state, the else branch is the initial value
    * Unlike state it keeps the exact state type, so a StateOrValROSW narrows to StateROSW, also in generic code
    * The value type is only inferred from the state part, see as_state*/
   state_of,

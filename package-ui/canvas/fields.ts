@@ -14,7 +14,7 @@ import { as_text, property_value, type WidgetProperty } from "./properties";
 import "./fields.scss";
 
 /**Form element editing the value of a property, bound to the option of the widget
- * A writable state is written, a fixed value is kept by the element, a read only state is only shown, as form elements do
+ * A writable state is written, an initial value is kept by the element, a read only state is only shown, as form elements do
  * Kept in a file of its own, to be replaced by real list fields later*/
 export function property_field(
   property: WidgetProperty,

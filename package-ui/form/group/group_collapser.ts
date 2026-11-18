@@ -19,7 +19,7 @@ import "./group_collapser.scss";
 /**Inputs of the group collapser*/
 const COLLAPSER = {
   /**Whether the group is collapsed, the user changes it with the button
-   * A fixed value is how it starts, a writable state is written, a read only state locks it*/
+   * An initial value is how it starts, a writable state is written, a read only state locks it*/
   collapsed: input_key<StateOrValROS<boolean>>(),
   /**Text of the button while the group is open, Collapse by default*/
   opened_text: input_key<StateOrVal<string>>(),
@@ -88,7 +88,7 @@ class FormGroupCollapser extends FormElement {
     return this;
   }
 
-  /**A click of the user, written to a writable state, kept for a fixed value, nothing for a read only state*/
+  /**A click of the user, written to a writable state, kept for an initial value, nothing for a read only state*/
   #toggle() {
     const collapsed = this.input_state(COLLAPSER.collapsed);
     if (!collapsed) this.#set_collapsed(!this.#collapsed);

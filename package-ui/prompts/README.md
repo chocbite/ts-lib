@@ -48,7 +48,7 @@ A submit button's `click(group, close)` runs on submit, with the form group to c
 
 ### Live elements
 
-An element whose `value` is a writable state is live: it writes to its state as soon as the user changes it, while the prompt is open, and submitting or closing does not undo it. This makes a prompt a quick small window for settings that apply right away, and live elements can be mixed with ones that are submitted. Their values are in the answer like any other, `value_changed` holds them when the user changed them. Elements that should only give their value on submit keep it themselves, started with a fixed `value`.
+An element whose `value` is a writable state is live: it writes to its state as soon as the user changes it, while the prompt is open, and submitting or closing does not undo it. This makes a prompt a quick small window for settings that apply right away, and live elements can be mixed with ones that are submitted. Their values are in the answer like any other, `value_changed` holds them when the user changed them. Elements that should only give their value on submit keep it themselves, started with an initial `value`.
 
 ```ts
 await prompts.form(

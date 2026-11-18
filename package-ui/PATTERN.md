@@ -16,7 +16,7 @@ The pattern is the interface an element gives to users of the library: the input
 
 ## The rules
 
-1. **Inputs that change are states.** An input is a `StateOrVal<T>`, either a fixed value or a state (see `StateOrVal` in the state README). A fixed value is a constant and never changes. Elements have no setters or getters for their inputs, so an element never deals with properties and states for the same thing.
+1. **Inputs changed from outside are states.** An input is a `StateOrVal<T>`, either an initial value or a state (see `StateOrVal` in the state README). An initial value is applied once and not followed: it stays until `set` gives the input again, or, for an input the user changes, it is where the element starts. Anything else that changes the element while it lives is a state. Elements have no setters or getters for their inputs, so an element never deals with properties and states for the same thing.
 2. **A factory creates the element.** It takes optional options and creates the element with `create`, which applies them. It may take required arguments for things outside the pattern, like a device a page shows, and passes them on to the constructor through `create`. The class is exported only as a type, unless it is meant to be subclassed, so nobody outside the module calls `new`.
 3. **The constructor takes only required references, never inputs.** It builds the children and sets visible defaults, so an element that never gets inputs still shows something sensible. Its arguments are things the element can not exist without and that never change, like a device a page shows, so they are kept in fields that are never unset. Inputs are never given or applied in it.
 4. **Inputs are declared as keys.** Each element has a module-level object of keys made with `input_key`, and its options type is `BaseOptions & InputOptions` of that object, `BaseOptions` being the inputs every element has, like `access`.
@@ -139,7 +139,7 @@ Keys are module constants, so they can't be generic. An element that is generic 
 ## `set_input(key, input, apply)`
 
 - `undefined` leaves the input unchanged.
-- A fixed value detaches the state the key had and calls `apply` right away with an ok result.
+- An initial value detaches the state the key had and calls `apply` right away with an ok result.
 - A state replaces the state the key had. `apply` is subscribed while the element is in the document, like every element state, so an element that is never shown costs nothing for its states.
 - Giving a key a new value always drops the old state, also while the element is not in the document.
 - The key decides the type: an input that doesn't match the key is a compile error.
@@ -155,7 +155,7 @@ Every element decides what an error looks like for each input. `ExampleBox` keep
 
 #### The fault icon
 
-On top of that, `set_input` reports every error of an input as a fault of the element, and clears it when the input is ok again or gets a fixed value. While an element has a fault it shows a small broken link icon in its top right corner, and a click on it opens `prompts.faults` listing the faults: the nice text, the message, and the stack with its causes for errors with an `Error`. This needs no code in the element and can't be turned off, so every element shows problems the same way, even one too small for any text.
+On top of that, `set_input` reports every error of an input as a fault of the element, and clears it when the input is ok again or gets an initial value. While an element has a fault it shows a small broken link icon in its top right corner, and a click on it opens `prompts.faults` listing the faults: the nice text, the message, and the stack with its causes for errors with an `Error`. This needs no code in the element and can't be turned off, so every element shows problems the same way, even one too small for any text.
 
 - **An element only shows what fits.** Like the dot that just turns grey, or a label showing a dash, the icon explains the rest.
 - **`fault_anchor()`** is the element the icon is put in, the element itself by default. Override it to put the icon on the part with the problem, like the value box of a field.
@@ -169,12 +169,12 @@ On top of that, `set_input` reports every error of an input as a fault of the el
 
 An input the user changes, like the value of a slider or the position of a moveable panel, works the same way in every element:
 
-- **A fixed value** is the element's own value, starting at what was given. The user changes it, and the element keeps the change itself.
+- **An initial value** is the element's own value, starting at what was given. The user changes it, and the element keeps the change itself.
 - **A writable state** is written when the user changes the value, and every element following the state sees it.
 - **A read only state** is only shown, the user can not change it. This is how an element is locked, like a panel that can not be moved.
-- **Not given**, the element keeps a value of its own, like a fixed value.
+- **Not given**, the element keeps a value of its own, like an initial value.
 
-The key takes any state, such as `input_key<StateOrValROS<number>>()`, and the element checks `writable` at runtime. `input_state(key)` returns the state the input has right now, typed by the key, or `undefined` for a fixed value or an input that was never set. The element keeps no reference of its own, because `Base` already stores the state under the key:
+The key takes any state, such as `input_key<StateOrValROS<number>>()`, and the element checks `writable` at runtime. `input_state(key)` returns the state the input has right now, typed by the key, or `undefined` for an initial value or an input that was never set. The element keeps no reference of its own, because `Base` already stores the state under the key:
 
 ```ts
 constructor() {
@@ -196,7 +196,7 @@ set(options: SliderOptions): this {
 }
 ```
 
-A parent that hands out a value its child changes, like an editor handing out the scale its slider changes, makes a writable state from a fixed value, so everything following the value sees the change. See `ExampleEditor`.
+A parent that hands out a value its child changes, like an editor handing out the scale its slider changes, makes a writable state from an initial value, so everything following the value sees the change. See `ExampleEditor`.
 
 ### Plain values
 
@@ -293,7 +293,7 @@ class MyLabelBox extends MyBox {
 
 A subclass that adds creation inputs does the same with `[CREATE]`: its own keys object, an options type combining its creation options with the parent's, and an override calling `super[CREATE](options)` once. `create` takes the options of the subclass automatically.
 
-Inputs are never applied in the constructor. When a base constructor applies a fixed value, a subclass override called from it runs before the subclass's own fields exist. That throws for `#private` fields and silently gives `undefined` for plain fields. `[CREATE]` and `set` run after every constructor has finished, so overrides called from them can use all fields.
+Inputs are never applied in the constructor. When a base constructor applies an initial value, a subclass override called from it runs before the subclass's own fields exist. That throws for `#private` fields and silently gives `undefined` for plain fields. `[CREATE]` and `set` run after every constructor has finished, so overrides called from them can use all fields.
 
 Elements meant to be subclassed by library users are exported as classes. The user creates the subclass with `MySubclass.create(options)`, never with `new`, which would skip the creation inputs.
 
@@ -303,7 +303,7 @@ Elements meant to be subclassed by library users are exported as classes. The us
 - **A parent passes inputs on unchanged**, like `this.#view.set({ scale: options.scale })`. Only convert with `state.as_state` when the parent needs a state itself, for example to derive a value with a proxy, or to hand it out.
 - **A parent's options for inputs it only passes on** are written by hand with `InputOf`, so they always match the child: `scale?: InputOf<typeof SLIDER.value>`.
 - **A value an element hands out**, like a state other elements follow, is a creation input, kept in a private field with a getter, see [Inputs given at creation](#inputs-given-at-creation).
-- **Inputs inside inputs**, like a group state whose value holds an items state, use their own key for the inner input, typed with `InputOf` of the inner key. Setting the outer input again replaces the inner subscription automatically. Fixed inner values need their own branch, since nothing is subscribed for them.
+- **Inputs inside inputs**, like a group state whose value holds an items state, use their own key for the inner input, typed with `InputOf` of the inner key. Setting the outer input again replaces the inner subscription automatically. Initial inner values need their own branch, since nothing is subscribed for them.
 - **References up the tree** are outside the pattern. A child that needs its parent or container finds it from the DOM, or the parent gives it directly.
 
 ## Reused elements
@@ -312,7 +312,7 @@ Because `set` can be called again, an element can be reused for other data, like
 
 ## When not to use it
 
-Elements created in large numbers, like list rows, list fields and canvas widgets, can keep a lighter way of taking their data when the pattern costs too much. Measure it on a dev page with thousands of elements. In the example, 5000 boxes took about 17ms with fixed values against about 16ms for the old setters, see the Cost section of the dev page.
+Elements created in large numbers, like list rows, list fields and canvas widgets, can keep a lighter way of taking their data when the pattern costs too much. Measure it on a dev page with thousands of elements. In the example, 5000 boxes took about 17ms with initial values against about 16ms for the old setters, see the Cost section of the dev page.
 
 ## `set` and `bind`
 
@@ -334,9 +334,9 @@ Elements created in large numbers, like list rows, list fields and canvas widget
 - [ ] Every input is applied with `set_input`, in `set`, or in `[CREATE]` for creation inputs.
 - [ ] Inputs handed out to other elements are creation inputs, applied by overriding `[CREATE]`, and left out of the options of `set`.
 - [ ] Each input handles its errors in a way that makes sense to the user, the fault icon explains them, and `fault_anchor` puts it where the problem shows if that isn't the element itself.
-- [ ] Inputs the user changes write a writable state with `input_state`, keep a fixed value themselves, and lock for a read only state.
+- [ ] Inputs the user changes write a writable state with `input_state`, keep an initial value themselves, and lock for a read only state.
 - [ ] Subclasses have their own keys objects and call `super.set(options)` and `super[CREATE](options)` once.
 - [ ] Configuration that never changes, references up the tree and internal logic are kept out of the inputs.
-- [ ] Tests cover fixed values, states, setting again with both, and errors.
-- [ ] A dev page shows fixed values and states side by side.
+- [ ] Tests cover initial values, states, setting again with both, and errors.
+- [ ] A dev page shows initial values and states side by side.
 - [ ] When the pattern itself changes, this file and `package-ui/pattern_example` change with it.

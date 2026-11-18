@@ -69,8 +69,8 @@ describe("Panel content", () => {
     expect(title.amount()).toBe(0);
   });
 
-  it("shows the title of the content, fixed, as a state and its error", () => {
-    expect(title_of(panel_with({ title: "Fixed" })).textContent).toBe("Fixed");
+  it("shows the title of the content, initial, as a state and its error", () => {
+    expect(title_of(panel_with({ title: "Initial" })).textContent).toBe("Initial");
     const title = state.from_w("a");
     const panel = panel_with({ title });
     expect(title_of(panel).textContent).toBe("a");
@@ -307,7 +307,7 @@ describe("Panel position", () => {
     expect(y.ok()).toBe(6);
   });
 
-  it("starts at a fixed position and moves from there by itself", () => {
+  it("starts at an initial position and moves from there by itself", () => {
     const panel = panel_with({}, { x: 5, y: 5, width: 10, height: 6 });
     press(panel, "ArrowRight");
     expect(left_of(panel)).toBeCloseTo(6);
@@ -341,7 +341,7 @@ describe("Panel sizing", () => {
     expect(
       sizer_of(panel_with({}, { width, height: state.ok(6) })).className,
     ).toBe("x");
-    //A fixed size is where the panel starts, the user sizes it from there
+    //An initial size is where the panel starts, the user sizes it from there
     expect(sizer_of(panel_with({}, { width: 10, height: 6 })).className).toBe(
       "x y",
     );
@@ -372,7 +372,7 @@ describe("Panel hiding", () => {
     expect(panel.classList.contains("hidden")).toBe(false);
   });
 
-  it("auto_hide hides a panel with a fixed hidden by itself", () => {
+  it("auto_hide hides a panel with an initial hidden by itself", () => {
     const panel = panel_with({}, { hidden: false, auto_hide: true });
     press_outside();
     expect(panel.classList.contains("hidden")).toBe(true);

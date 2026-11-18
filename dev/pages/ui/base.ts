@@ -602,7 +602,7 @@ const errors = {
   const unit = state.from_w("°C");
   const boxes = row(sec);
   box(boxes, "gauge").appendChild(DemoGauge.create({ label, value, unit }));
-  box(boxes, "same states, fixed unit").appendChild(DemoGauge.create({ label, value, unit: "°C" }));
+  box(boxes, "same states, initial unit").appendChild(DemoGauge.create({ label, value, unit: "°C" }));
   controls(sec, {
     "Fail label, waiting": () => label.set_err(errors.waiting()),
     "Fail value, connection": () => value.set_err(errors.connection()),

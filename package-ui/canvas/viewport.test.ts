@@ -342,7 +342,7 @@ describe("Widget", () => {
     expect(b[WIDGET_GEOMETRY].x).toBe(30);
   });
 
-  it("keeps changes of fixed values and of values not given itself", () => {
+  it("keeps changes of initial values and of values not given itself", () => {
     const w = TestWidget.create({ x: 5 });
     w[WIDGET_CHANGE]({ x: 30, y: 40 });
     expect(w[WIDGET_GEOMETRY].x).toBe(30);
