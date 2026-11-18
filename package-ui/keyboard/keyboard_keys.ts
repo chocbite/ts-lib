@@ -11,6 +11,10 @@ import {
   KeyboardSpecialKeys,
 } from "./types";
 
+const SPECIAL_KEYS: ReadonlySet<string> = new Set(
+  Object.values(KeyboardSpecialKeys),
+);
+
 class KeyboardKey extends Base {
   static element_name(): string {
     return "key";
@@ -37,6 +41,9 @@ class KeyboardKey extends Base {
     this.style.gridRowEnd = `${ri + 1 + rows}`;
     this.style.gridColumnEnd = `${col_count + 1 + cols}`;
     this.onclick = () => keyboard.execute_key(key);
+    //Special and layer keys look different from the keys that type
+    if (SPECIAL_KEYS.has(key)) this.setAttribute("special", key);
+    else if (key.startsWith("layer:")) this.setAttribute("special", "layer");
     if (key.includes("layer")) {
       const layer_name = key.split(":")[1];
       this.attach_state_ROA_to_attribute_map("active", keyboard.layer, (v) =>

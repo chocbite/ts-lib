@@ -1,0 +1,44 @@
+//Shared look of the keyboards, a tray at the bottom of the screen with keys on it
+
+$radius: 0.45rem;
+$key_shadow: 0 0.0625rem 0 0 var(--keyboard-colors-shadow);
+
+//The tray along the bottom of the screen
+@mixin tray {
+  z-index: 4294967296;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
+  background-color: var(--keyboard-colors-background);
+  box-shadow: 0 -0.125rem 0.75rem 0 var(--keyboard-colors-shadow);
+  color: var(--keyboard-colors-keytext);
+  user-select: none;
+  pointer-events: all;
+}
+
+//A key that types, flat with a small shadow under it like a key cap, darker while pressed
+@mixin key {
+  border: none;
+  border-radius: $radius;
+  background-color: var(--keyboard-colors-key);
+  box-shadow: $key_shadow;
+  color: var(--keyboard-colors-keytext);
+  fill: var(--keyboard-colors-keytext);
+  font: inherit;
+  cursor: pointer;
+
+  &:active {
+    background-color: var(--keyboard-colors-active);
+    box-shadow: none;
+    transform: translateY(0.0625rem);
+  }
+}
+
+//The accent, for enter, an active layer and the selected day or time
+@mixin accent {
+  background-color: var(--keyboard-colors-accent);
+  color: var(--keyboard-colors-accent_text);
+  fill: var(--keyboard-colors-accent_text);
+}
