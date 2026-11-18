@@ -204,7 +204,8 @@ type FetchNodeEach<S, Value> = S extends string
                 readonly [key: string]: FetchNode<Item, RecordItem<Value>>;
               }
             : S extends readonly [infer Count extends number, infer Item]
-            ? FetchRepeat<FetchArrayItem<Item, ArrayItem<Value>>, Count>
+            ? FetchContainer<Value> &
+                FetchRepeat<FetchArrayItem<Item, ArrayItem<Value>>, Count>
             : S extends Parser
               ? StateREA<Value>
               : S extends object
@@ -1065,9 +1066,17 @@ export function make_fetch_parser<const S extends FetchSchema>(
     if (Array.isArray(part_schema) && typeof part_schema[0] === "number") {
       const count = part_schema[0];
       const item: unknown = part_schema[1];
-      return Array.from({ length: count }, (_value, index) =>
+      const fixed = Array.from({ length: count }, (_value, index) =>
         array_item(item, [...path, index]),
       );
+      //The whole array, like every other container
+      set_fetch_state(
+        fixed,
+        state.proxy.rea(root as any, (result) =>
+          at_path(result, path, optional_at),
+        ),
+      );
+      return fixed;
     }
 
     //A list of only type strings is a tuple, a state per position, other lists are unions with one state

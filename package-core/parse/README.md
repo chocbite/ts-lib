@@ -179,14 +179,14 @@ The fetch parser makes these kinds, in `parse.fetch.errors`:
 | `"nw"`, `"?sw"`, …      | A writable state of the member, see [Writing](#writing).                                         |
 | `{ key: spec }`         | An object with a node per key.                                                                   |
 | `["{}", spec]`          | An object that gives a node for any key you read.                                                |
-| `[3, spec]`             | A real array of 3 nodes, see the note on primitive items below.                                  |
+| `[3, spec]`             | A real array of 3 nodes, and the whole array under `FETCH_PARSE`, see the note on primitive items below. |
 | `["n", "sw"]`         | A tuple: a real array with a state per position, `point[0]`, and the whole tuple under `FETCH_PARSE`. |
 | `[0, spec]`             | A state of the array of item nodes, plus index access, see [Dynamic arrays](#dynamic-arrays).    |
 | `["?", spec]`           | What `spec` gives. Everything in it reads `undefined` while the member is missing.               |
 | `["?", spec, () => v]`  | What `spec` gives, filled in by the default while the member is missing.                         |
 | function or parser      | One read-only state of the parsed member.                                                        |
 
-- **A container's own value:** every object, record and fixed-array item also has the state of its whole value under the `FETCH_PARSE` symbol, `device.settings[FETCH_PARSE]`. On the root, `device[FETCH_PARSE]` is the state of the whole response. Schema keys never collide with it.
+- **A container's own value:** every object, record, tuple, fixed array and fixed-array item also has the state of its whole value under the `FETCH_PARSE` symbol, `device.settings[FETCH_PARSE]`. On the root, `device[FETCH_PARSE]` is the state of the whole response. Schema keys never collide with it.
 - **Primitive items of a fixed array** are wrapped, so their state is `fixed[0][FETCH_PARSE]`.
 - **A missing optional member reads as `undefined`.** That covers a `"?n"` the server leaves out and everything in a missing `["?", spec]`. A missing optional dynamic array has no items. A missing required member, such as a record key the server doesn't have, reads as a `MEMBER_MISSING` error.
 

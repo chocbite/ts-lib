@@ -371,6 +371,36 @@ describe("make_fetch_parser", () => {
     vi.unstubAllGlobals();
   });
 
+  it("gives the whole value of a fixed array under FETCH_PARSE, like other containers", async () => {
+    const parsed = make_fetch_parser(() => "/user", 1_000, {
+      fixed: [2, "n"],
+      nested: { pairs: [2, { a: "s" }] },
+    });
+    const fixed = parsed.fixed[FETCH_PARSE];
+    expectTypeOf<StateRV<(typeof parsed.fixed)[typeof FETCH_PARSE]>>().toEqualTypeOf<
+      [number, number]
+    >();
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockImplementation(() =>
+          Promise.resolve(
+            new Response('{"fixed":[1,2],"nested":{"pairs":[{"a":"x"},{"a":"y"}]}}'),
+          ),
+        ),
+    );
+
+    expect(await fixed).toMatchObject({ ok: true, value: [1, 2] });
+    expect(await parsed.nested.pairs[FETCH_PARSE]).toMatchObject({
+      ok: true,
+      value: [{ a: "x" }, { a: "y" }],
+    });
+    expect(Array.isArray(parsed.fixed)).toBe(true);
+    expect(parsed.fixed).toHaveLength(2);
+    vi.unstubAllGlobals();
+  });
+
   it("emits added and removed events for dynamic array length changes", async () => {
     const fetch_mock = vi
       .fn()
