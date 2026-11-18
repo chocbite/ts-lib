@@ -95,6 +95,12 @@ Prompts made with `prompts.form` of `@chocbite/ts-lib-ui/prompts` are a group in
 
 Limits of 0, like `max_length: 0`, mean no limit. Every option of the elements is described on its key, an editor shows it on hover.
 
+## Look
+
+The elements are flat. Fields that take input (text, numbers, dropdowns) are white with a faint border that darkens on hover and gets a ring with focus, buttons are filled grey, and what is on or selected (a switch that is on, the selected option, a toggled button) uses one accent color. Shadows are only on things floating above the page, the open dropdown and the switch knob. Lamps and progress bars are read only and have no hover.
+
+All of it comes from the theme variables of the `form` group: `form.colors.accent` (`normal`, `hover`, `text`), `form.colors.button` (`normal`, `hover`, `active`), `form.colors.background`, `form.colors.border` (`normal`, `hover`), `form.colors.focus`, `form.colors.shadow` and `form.size.height` (1.6rem, `touchHeight` 2rem in touch mode). A `color` option (`FormColors`) fills a button, lamp or switch with that color instead.
+
 ## Keyboard
 
 Text and number inputs revert typed text on Escape, with nothing to revert Escape is left to parents, like a prompt closing. A switch toggles on Space, Enter is left to parents, like a form submitting. Buttons press on Enter and Space.

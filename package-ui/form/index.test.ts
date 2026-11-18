@@ -96,7 +96,7 @@ describe("Form theme variables", () => {
     ];
     for (const variable of variables)
       expect(style.getPropertyValue(variable), variable).not.toBe("");
-    expect(style.getPropertyValue("--form-size-height").trim()).toBe("1.3rem");
+    expect(style.getPropertyValue("--form-size-height").trim()).toBe("1.6rem");
     expect(style.getPropertyValue("--form-read-filter").trim()).toBe(
       "opacity(0.6)",
     );
@@ -105,7 +105,7 @@ describe("Form theme variables", () => {
   it("gives the form elements the themed height", () => {
     const element = document.body.appendChild(form.ip({ type: 4 }));
     const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
-    expect(element.getBoundingClientRect().height).toBeCloseTo(1.3 * rem, 0);
+    expect(element.getBoundingClientRect().height).toBeCloseTo(1.6 * rem, 0);
     element.remove();
   });
 });

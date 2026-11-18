@@ -1,21 +1,25 @@
 @use "../base";
 
-$padding: 0.4rem;
+$padding: 0.5rem;
+$radius: 0.5rem;
 
 @mixin base {
+  //Sunk into the page, a tinted background
   &.inset {
-    border: base.$border;
-    box-shadow: base.$shadow_in;
-    border-radius: base.$size_cornerRadius;
+    border: base.$border_thickness solid transparent;
+    border-radius: $radius;
+    background-color: base.$color_background_hover;
   }
+  //A card raised above the page
   &.outset {
     border: base.$border;
-    border-radius: base.$size_cornerRadius;
-    box-shadow: base.$shadow_out;
+    border-radius: $radius;
+    background-color: base.$color_background;
+    box-shadow: base.$shadow_knob;
   }
   &.line {
     border: base.$border;
-    border-radius: base.$size_cornerRadius;
+    border-radius: $radius;
   }
   &.embed {
     padding: 0;

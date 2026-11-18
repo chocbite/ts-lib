@@ -1,19 +1,26 @@
 @use "../../base";
 
+//Read only, flat with no border so it does not look clickable, the color is the message
 form-lamp {
   @include base.base;
 
-  border: 1px solid base.$color_border;
+  border: base.$border_thickness solid base.$color_border;
   min-height: base.$size_height;
-  box-shadow: base.$shadow_out;
-  border-radius: base.$size_height;
+  border-radius: base.$size_cornerRadius;
   background-color: base.$color_background;
   display: flex;
+  gap: 0.3rem;
+  padding-inline: 0.5rem;
   box-sizing: border-box;
   min-width: min-content;
   -webkit-user-select: none;
   user-select: none;
   align-items: center;
+
+  //A lit lamp is filled with its color, the border would only add noise
+  &[color]:not([color="none"]) {
+    border-color: transparent;
+  }
 
   &.center {
     justify-content: center;
@@ -21,7 +28,7 @@ form-lamp {
 
   .touch & {
     min-height: base.$size_touchHeight;
-    border-radius: base.$size_touchHeight;
+    padding-inline: 0.7rem;
   }
 
   .anim-all & {
@@ -33,17 +40,12 @@ form-lamp {
 
   > svg {
     fill: base.$color_text;
-    height: calc(base.$size_height - 2px);
-    box-sizing: border-box;
+    height: 1.1rem;
     width: auto;
     flex-shrink: 0;
-    background-color: initial;
-    padding: 0.1rem;
-    padding-left: 0.3rem;
 
     .touch & {
-      height: calc(base.$size_touchHeight - 2px);
-      padding: 0.3rem;
+      height: 1.4rem;
     }
 
     .anim-all & {
@@ -57,8 +59,9 @@ form-lamp {
     color: base.$color_text;
     display: flex;
     justify-content: center;
-    font-size: 0.9rem;
-    padding-inline: 0.4rem;
+    font-size: base.$font_size;
+    line-height: 1.2;
+    padding-block: 0.2rem;
 
     .touch & {
       font-size: base.$touch_font_size;
@@ -71,10 +74,6 @@ form-lamp {
     .anim-all & {
       transition: color base.$animation;
     }
-  }
-
-  > svg + span {
-    padding-left: 0.1rem !important;
   }
 
   @include base.form-colors(color, background-color);

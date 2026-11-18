@@ -3,13 +3,9 @@
 
 form-numberinput {
   @include base.base;
-  border: base.$border;
+  @include base.field;
   height: base.$size_height;
-  box-shadow: base.$shadow_in;
-  border-radius: base.$size_cornerRadius;
-  background-color: base.$color_background;
   position: relative;
-  box-sizing: border-box;
   min-width: min-content;
   display: flex;
   align-items: center;
@@ -18,24 +14,14 @@ form-numberinput {
   cursor: text;
   outline: none;
 
-  &:focus-within {
-    box-shadow: base.$shadow_in_focus_out;
-  }
-
   .touch & {
     min-width: 14rem;
     height: base.$size_touchHeight;
   }
 
-  @media (pointer: fine) {
-    &:hover {
-      background-color: base.$color_background_hover;
-    }
-  }
-
   > span:first-child {
     @include base.value-font;
-    padding-left: 0.5rem;
+    padding-left: base.$field_padding;
     min-width: 4rem;
     outline: none;
     height: 100%;
@@ -57,14 +43,12 @@ form-numberinput {
   }
 
   > div {
-    color: base.$color_text;
     display: flex;
     flex-direction: column;
     text-align: end;
     flex-grow: 1;
-    padding-right: 0.3rem;
+    padding-right: base.$field_padding;
     align-items: flex-end;
-    padding-top: 0.1rem;
 
     > span {
       @include base.limit-legend;

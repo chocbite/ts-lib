@@ -43,6 +43,7 @@ list-container {
           display: flex;
           justify-content: flex-end;
           color: var(--list-colors-text-header);
+          font-weight: 500;
           height: 100%;
           overflow: hidden;
           border-right: 1px solid var(--list-colors-border-column);
@@ -53,11 +54,13 @@ list-container {
             justify-content: center;
             text-align: center;
             flex-grow: 1;
-            padding-left: 0.2rem;
+            padding-left: 0.4rem;
+            padding-block: 0.2rem;
             height: 100%;
+            box-sizing: border-box;
 
             &:only-child {
-              padding-right: 0.2rem;
+              padding-right: 0.4rem;
             }
           }
 
@@ -82,8 +85,12 @@ list-container {
             &::after {
               content: "";
               width: 2px;
-              height: 80%;
-              background-color: var(--list-colors-border-column);
+              height: 60%;
+              border-radius: 1px;
+            }
+
+            &:hover::after {
+              background-color: var(--list-colors-border-header);
             }
 
             &.active::after {
@@ -98,7 +105,8 @@ list-container {
                 width: 3px;
                 height: 60%;
                 transform: translateX(-0.2rem);
-                box-shadow: 0.4rem 0 0 var(--list-colors-border-column);
+                background-color: var(--list-colors-border-header);
+                box-shadow: 0.4rem 0 0 var(--list-colors-border-header);
               }
 
               &.active::after {

@@ -2,6 +2,7 @@
 
 $padding: 0.2rem;
 
+//Segmented control, odd children are the segments, even children the texts under them when the options have icons
 form-togglebutton {
   @include base.base;
   overflow-y: hidden;
@@ -12,7 +13,6 @@ form-togglebutton {
   grid-template-rows: auto auto;
   grid-auto-columns: 1fr;
   position: relative;
-  margin-bottom: base.$element_spacing - 0.2rem;
 
   .touch & {
     font-size: base.$touch_font_size;
@@ -26,7 +26,6 @@ form-togglebutton {
     text-align: center;
     box-sizing: border-box;
     position: relative;
-    padding-inline: base.$border_thickness;
 
     &.selected {
       color: base.$color_text_selected;
@@ -37,52 +36,23 @@ form-togglebutton {
       grid-row: 1;
       align-items: center;
       background-color: base.$color_background;
-      border-block: base.$border_thickness solid base.$color_border;
+      border-block: base.$border;
+      padding-inline: 0.3rem;
       outline: none;
       min-height: base.$size_height;
-      font-size: 0.9rem;
+      font-size: base.$font_size;
+      line-height: 1.2;
+      cursor: pointer;
 
-      &.selected {
-        background-color: base.$color_background_hover;
-        z-index: 2;
-
-        &::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          box-shadow:
-            0 0.21rem 0.2rem 0 base.$color_border,
-            0 0 0 1px base.$color_border;
-          z-index: 1;
-        }
+      //A faint line between segments
+      &:not(:first-child) {
+        border-left: base.$border_thickness solid base.$color_border;
       }
 
-      .touch & {
-        min-height: base.$size_touchHeight;
-        font-size: 1rem;
-      }
-
-      &:focus-within {
-        z-index: 1;
-
-        &::before {
-          content: "";
-          position: absolute;
-          box-shadow: base.$focus_in;
-          inset: -1px;
-          z-index: 2;
-        }
-
-        &:first-child {
-          &::before {
-            border-radius: base.$size_cornerRadius 0 0 base.$size_cornerRadius;
-          }
-        }
-        &:nth-last-child(2) {
-          &::before {
-            border-radius: 0 base.$size_cornerRadius base.$size_cornerRadius 0;
-          }
-        }
+      .anim-all & {
+        transition:
+          background-color base.$animation,
+          color base.$animation;
       }
 
       @media (pointer: fine) {
@@ -91,15 +61,43 @@ form-togglebutton {
         }
       }
 
+      &.selected {
+        background-color: base.$color_accent;
+        border-color: base.$color_accent;
+        color: base.$color_accent_text;
+        fill: base.$color_accent_text;
+
+        @media (pointer: fine) {
+          &:hover {
+            background-color: base.$color_accent_hover;
+          }
+        }
+      }
+
+      .touch & {
+        min-height: base.$size_touchHeight;
+        font-size: base.$touch_font_size;
+      }
+
+      &:focus-visible {
+        z-index: 1;
+
+        &::before {
+          content: "";
+          position: absolute;
+          box-shadow: base.$focus_in;
+          inset: -1px;
+          border-radius: inherit;
+          z-index: 2;
+        }
+      }
+
       > svg {
-        height: calc(base.$size_height - $padding - base.$border_thickness * 2);
+        height: 1.1rem;
         width: auto;
 
         .touch & {
-          margin: 0;
-          height: calc(
-            base.$size_touchHeight - $padding * 2 - base.$border_thickness * 2
-          );
+          height: 1.4rem;
         }
       }
 
@@ -115,11 +113,10 @@ form-togglebutton {
 
     &:nth-child(even) {
       grid-row: 2;
-      padding: $padding;
-      padding-top: 0;
-      padding-bottom: 0;
+      padding-inline: $padding;
+      padding-top: 0.1rem;
       min-height: 0.2rem;
-      font-size: 0.9rem;
+      font-size: 0.8rem;
 
       &:empty {
         padding: 0rem;
@@ -132,20 +129,25 @@ form-togglebutton {
 
     &:first-child {
       border-radius: base.$size_cornerRadius 0 0 base.$size_cornerRadius;
-      border-left: base.$border_thickness solid base.$color_border;
+      border-left: base.$border;
 
-      &::after {
-        border-radius: base.$size_cornerRadius 0 0 base.$size_cornerRadius;
+      &.selected {
+        border-left-color: base.$color_accent;
       }
     }
 
     &:nth-last-child(2) {
       border-radius: 0 base.$size_cornerRadius base.$size_cornerRadius 0;
-      border-right: base.$border_thickness solid base.$color_border;
+      border-right: base.$border;
 
-      &::after {
-        border-radius: 0 base.$size_cornerRadius base.$size_cornerRadius 0;
+      &.selected {
+        border-right-color: base.$color_accent;
       }
+    }
+
+    //A single option is rounded on both sides
+    &:first-child:nth-last-child(2) {
+      border-radius: base.$size_cornerRadius;
     }
   }
 }

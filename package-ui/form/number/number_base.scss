@@ -1,34 +1,32 @@
 @use "../base";
 
+//The - and + buttons at the ends of a stepper or slider, quiet inside the field until hovered
 @mixin svg-stepper-button {
-  top: -(base.$border_thickness);
   fill: base.$color_text;
-  width: base.$size_height;
-  border: base.$border;
-  height: base.$size_height;
-  box-shadow: base.$shadow_out;
-  border-radius: base.$size_cornerRadius;
-  background-color: base.$color_background;
+  width: calc(base.$size_height - #{base.$border_thickness * 2});
+  height: calc(base.$size_height - #{base.$border_thickness * 2});
+  border-radius: calc(#{base.$size_cornerRadius} - #{base.$border_thickness});
+  background-color: transparent;
   box-sizing: border-box;
   position: relative;
-  padding: 0.14rem;
+  padding: 0.2rem;
   flex-shrink: 0;
   pointer-events: all;
-  cursor: auto;
+  cursor: pointer;
 
   &.active {
-    box-shadow: base.$shadow_out_active;
+    background-color: base.$color_button_active;
   }
 
   .touch & {
-    height: base.$size_touchHeight;
-    width: base.$size_touchHeight;
-    padding: 0.2rem;
+    height: calc(base.$size_touchHeight - #{base.$border_thickness * 2});
+    width: calc(base.$size_touchHeight - #{base.$border_thickness * 2});
+    padding: 0.3rem;
   }
 
   @media (pointer: fine) {
     &:hover {
-      background-color: base.$color_background_hover;
+      background-color: base.$color_button_hover;
     }
   }
 }

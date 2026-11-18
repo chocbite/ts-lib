@@ -2,12 +2,10 @@
 
 form-colorinput {
   @include base.base;
+  @include base.field;
   height: base.$size_height;
-  border: base.$border;
-  border-radius: base.$size_cornerRadius;
-  background-color: base.$color_background;
   position: relative;
-  box-sizing: border-box;
+  padding: 0.1875rem;
   min-width: min-content;
   display: flex;
   flex-direction: column;
@@ -17,27 +15,11 @@ form-colorinput {
   outline: none;
   overflow: hidden;
 
-  &:focus-within {
-    box-shadow: base.$shadow_in_focus_out;
-  }
 
   .touch & {
     height: base.$size_touchHeight;
   }
 
-  &::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    box-shadow: base.$shadow_in;
-    pointer-events: none;
-  }
-
-  @media (pointer: fine) {
-    &:hover {
-      background-color: base.$color_background_hover;
-    }
-  }
 
   > input {
     outline: none;
@@ -46,6 +28,8 @@ form-colorinput {
     height: 100%;
     border: none;
     padding: 0;
+    background: none;
+    cursor: pointer;
 
     &::-webkit-color-swatch-wrapper {
       padding: 0;
@@ -53,6 +37,7 @@ form-colorinput {
 
     &::-webkit-color-swatch {
       border: none;
+      border-radius: 0.2rem;
     }
   }
 }

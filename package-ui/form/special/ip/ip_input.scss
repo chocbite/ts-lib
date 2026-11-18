@@ -2,12 +2,8 @@
 
 form-ipinput {
   @include base.base;
-  border: base.$border;
+  @include base.field;
   height: base.$size_height;
-  box-shadow: base.$shadow_in;
-  border-radius: base.$size_cornerRadius;
-  background-color: base.$color_background;
-  box-sizing: border-box;
   min-width: min-content;
   display: flex;
   align-items: center;
@@ -18,25 +14,14 @@ form-ipinput {
   overflow: hidden;
   padding-inline: 0.2rem;
 
-  &:focus-within {
-    box-shadow: base.$shadow_in_focus_out;
-  }
-
   .touch & {
     height: base.$size_touchHeight;
     font-size: base.$touch_font_size;
   }
 
-  @media (pointer: fine) {
-    &:hover {
-      background-color: base.$color_background_hover;
-    }
-  }
-
   > div {
     all: unset;
     @include base.value-font;
-    padding-top: 0.2rem;
     display: flex;
     align-items: center;
     justify-content: center;

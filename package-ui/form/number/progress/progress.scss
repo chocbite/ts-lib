@@ -1,12 +1,14 @@
 @use "../../base";
 @use "../number_base";
 
+//Read only, a track with a fill in the accent color and the value on top
 form-progress {
   @include base.base;
   height: base.$size_height;
   border-radius: base.$size_cornerRadius;
-  background-color: base.$color_background;
+  background-color: base.$color_button;
   position: relative;
+  overflow: hidden;
   -webkit-user-select: none;
   user-select: none;
   display: flex;
@@ -24,12 +26,13 @@ form-progress {
 
   > div {
     position: absolute;
-    border-radius: base.$size_cornerRadius;
     height: 100%;
     left: 0px;
     top: 0px;
     width: 0%;
-    background-color: base.$color_basic_green;
+    //Light enough that the value on top stays readable in both themes
+    background-color: base.$color_accent;
+    opacity: 0.35;
     z-index: 1;
   }
 
@@ -44,7 +47,7 @@ form-progress {
       @include base.value-font;
       min-width: 3rem;
       text-align: end;
-      padding-left: 0.5rem;
+      padding-left: base.$field_padding;
 
       .touch & {
         min-width: 5rem;
@@ -53,16 +56,7 @@ form-progress {
 
     &:last-child {
       @include base.unit-container;
+      padding-left: 0.2rem;
     }
-  }
-
-  &::after {
-    content: "";
-    border: base.$border;
-    box-shadow: base.$shadow_in;
-    border-radius: base.$size_cornerRadius;
-    inset: 0;
-    position: absolute;
-    z-index: 1;
   }
 }
