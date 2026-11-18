@@ -2,12 +2,17 @@ import { Base, define_element } from "#base";
 import ctm, { ContextMenu, type ContextMenuLines } from "#context-menu";
 import { NiceError, none, some, type Option } from "@chocbite/ts-lib/result";
 import { list_errors } from "./errors";
-import { state, type State, type StateInferSub } from "@chocbite/ts-lib/state";
+import {
+  state,
+  type State,
+  type StateInferSub,
+  type StateOrVal,
+} from "@chocbite/ts-lib/state";
 import state_ui from "#state_ui";
 import { ListAddRow, type ListAddRowOptions } from "./add_row";
 import type { ListDragField } from "./drag";
 import { list_rows_error_update, ListError, type ListRowsError } from "./error";
-import { list_align_apply, type ListField } from "./field";
+import { list_align_apply } from "./field";
 import { ListKeyField, type ListKeyFieldOptions } from "./key_field";
 import "./row.scss";
 import { ListCheckField, type ListSelection } from "./selection";
@@ -24,7 +29,7 @@ import type {
 const not_selectable = () =>
   new NiceError(list_errors.NOT_SELECTABLE, "This row cannot be selected");
 
-export type ListSubRows<R> = () => R[] | State<R[]>;
+export type ListSubRows<R> = () => StateOrVal<R[]>;
 
 export interface ListRowOptions<R, T extends {}, S extends boolean> {
   opened?: boolean;
@@ -59,13 +64,14 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   #check?: ListCheckField;
   #data!: R;
   /**Sub rows of a closed row given for a drop, used when it opens so the sub rows function is called once */
-  #drop_rows?: R[] | State<R[]>;
+  #drop_rows?: ListType<R>;
   /**Key of the row in the selection, undefined when the row can not be selected */
   selection_key?: unknown;
   #field_box: HTMLDivElement;
   #child_box: HTMLSpanElement;
   #add_row?: ListAddRow<R, T, A, S>;
-  #fields: ListField[];
+  #add_row_options?: ListAddRowOptions;
+  #fields: Base[];
   #values!: T;
   /**Shown instead of the fields while the row is invalid */
   #invalid?: ListError;
@@ -103,7 +109,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     this.data = data;
   }
 
-  #generate_fields(): ListField[] {
+  #generate_fields(): Base[] {
     return this.#root.columns_visible.map((key) => {
       const column = this.#root.columns.get(key)!;
       const field = column.field_gen();
@@ -135,12 +141,27 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   columns_changed() {
     this.#fields = this.#generate_fields();
     //An invalid row has no values, the new fields are shown when it becomes valid
-    if (!this.#invalid) {
+    if (this.#invalid) this.#show_invalid();
+    else {
       this.#show_cells(this.#fields);
       this.#apply_values();
     }
+    this.#add_row?.columns_changed();
+    this.#error?.columns_changed();
     for (let i = 0; i < this.#child_box.childElementCount; i++)
       (this.#child_box.children[i] as ListRow<R, T, A, S>).columns_changed();
+  }
+
+  /**The error text of an invalid row after the tree lines, in the key field only without value columns, see place_after of the key field*/
+  #show_invalid() {
+    const invalid = this.#invalid!;
+    if (this.#key_field && this.#root.columns_visible.length === 0) {
+      this.#show_cells([]);
+      this.#key_field.tail = invalid;
+    } else {
+      if (this.#key_field) this.#key_field.tail = undefined;
+      this.#show_cells([invalid]);
+    }
   }
 
   //      _____        _____  ______ _   _ _______
@@ -328,29 +349,25 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     this.#sub_row_menu = false;
     if (!this.#invalid) {
       this.#invalid = new ListError();
-      //With sub rows the text is in the key field after the tree lines, it runs from the key column to the end
-      if (this.#key_field) {
-        this.#key_field.tail = this.#invalid;
-        this.#show_cells([]);
-      } else this.#show_cells([this.#invalid]);
+      this.#show_invalid();
     }
     this.#invalid.text = text;
   }
 
+  /**Makes a new add row for new options, so options a transform leaves out are gone, as they would stay with set*/
   set add_row(options: ListAddRowOptions | undefined) {
-    if (!options && this.#add_row) {
-      this.#add_row.remove();
-      this.classList.remove("addrow");
-      this.#add_row = undefined;
-    } else if (options) {
-      if (!this.#add_row) {
-        this.classList.add("addrow");
-        this.#add_row = this.appendChild(
-          new ListAddRow<R, T, A, S>(this.#root, this),
-        );
-      }
-      this.#add_row.options = options;
-    }
+    if (options === this.#add_row_options) return;
+    this.#add_row_options = options;
+    this.#add_row?.remove();
+    this.#add_row = options
+      ? this.appendChild(
+          ListAddRow.create<
+            ListAddRow<R, T, A, S>,
+            [ListRoot<R, T, A, S>, ListRowParent<A>]
+          >(options, this.#root, this),
+        )
+      : undefined;
+    this.classList.toggle("addrow", Boolean(options));
   }
 
   //       ____  _____  ______ _   _ _____ _   _  _____
@@ -405,7 +422,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     return count;
   }
 
-  set rows(rows: R[] | State<R[]>) {
+  set rows(rows: ListType<R>) {
     if (this.#state_sub) this.detach_state(this.#state_sub);
     this.#state_sub = undefined;
     //R is the item type of A
@@ -422,7 +439,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
       this.#child_box,
       this.#error,
       error,
-      this.#root.sub_rows,
+      this.#root,
       this,
     );
     this.classList.toggle("open", rows.length > 0 || error !== undefined);
@@ -574,7 +591,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   }
 
   /**The sub rows rows are dropped into, also of a closed row */
-  drop_rows(): R[] | State<R[]> | undefined {
+  drop_rows(): ListType<R> | undefined {
     if (this.open) return this.state;
     return (this.#drop_rows ??= this.#sub_rows?.());
   }

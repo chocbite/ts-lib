@@ -1,11 +1,12 @@
-import { BaseIntersectObserver } from "#base";
+import { AccessTypes, BaseIntersectObserver } from "#base";
 import ctm from "#context-menu";
 import { px_to_rem } from "#theme";
 import { none, ok, NiceError } from "@chocbite/ts-lib/result";
 import { state, type State } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import list from ".";
-import { ListAddRow } from "./add_row";
+import { ListAddRow, type ListAddRowOptions } from "./add_row";
+import type { ListContainerConfig } from "./container";
 import { ListField } from "./field";
 import { ListKeyField } from "./key_field";
 import { ListRow } from "./row";
@@ -61,17 +62,21 @@ function header_texts(container: HTMLElement): string[] {
   return [...header_of(container)!.children].map((e) => e.textContent);
 }
 
+/**List of numbers, the options are the configuration and the add row*/
 function number_list(
   rows: number[] | State<number[]>,
-  options?: Parameters<
-    typeof list.container<number[], { col: string }, boolean, number>
-  >[3],
+  options: Omit<
+    ListContainerConfig<{ col: string }, number, boolean, number>,
+    "transform"
+  > & { add_row?: ListAddRowOptions } = {},
 ) {
+  const { add_row, ...config } = options;
   const container = list.container(
-    { col: list.column_string("Column") },
-    (item: number) => ok({ values: { col: item.toString() } }),
-    rows,
-    options,
+    {
+      ...config,
+      transform: (item: number) => ok({ values: { col: item.toString() } }),
+    },
+    { columns: { col: list.column_string("Column") }, rows, add_row },
   );
   document.body.append(container);
   return container;
@@ -83,10 +88,11 @@ describe("List container", () => {
     const observe = vi.spyOn(observer, "observe");
     document.body.append(
       list.container(
-        { col: list.column_string("Column") },
-        (item: number) => ok({ values: { col: item.toString() } }),
-        [1, 2],
-        { observer },
+        {
+          transform: (item: number) => ok({ values: { col: item.toString() } }),
+          observer,
+        },
+        { columns: { col: list.column_string("Column") }, rows: [1, 2] },
       ),
     );
     expect(observe).toHaveBeenCalled();
@@ -97,12 +103,18 @@ describe("List container", () => {
     const observe = vi.spyOn(observer, "observe");
     document.body.append(
       list.container(
-        { a: list.column_string("A"), b: list.column_string("B") },
-        (item: number) => ok({
-          values: { a: item.toString(), b: item.toString() },
-        }),
-        [1, 2],
-        { observer, sub_rows: true },
+        {
+          transform: (item: number) =>
+            ok({
+              values: { a: item.toString(), b: item.toString() },
+            }),
+          observer,
+          sub_rows: true,
+        },
+        {
+          columns: { a: list.column_string("A"), b: list.column_string("B") },
+          rows: [1, 2],
+        },
       ),
     );
     const observed = observe.mock.calls.map((c) => c[0]);
@@ -130,9 +142,17 @@ describe("List container", () => {
 describe("List container header and columns", () => {
   it("renders a header field per column with the column title", () => {
     const container = list.container(
-      { a: list.column_string("First"), b: list.column_string("Second") },
-      (item: number) => ok({ values: { a: `${item}a`, b: `${item}b` } }),
-      [1],
+      {
+        transform: (item: number) =>
+          ok({ values: { a: `${item}a`, b: `${item}b` } }),
+      },
+      {
+        columns: {
+          a: list.column_string("First"),
+          b: list.column_string("Second"),
+        },
+        rows: [1],
+      },
     );
     document.body.append(container);
     expect(header_texts(container)).toEqual(["First", "Second"]);
@@ -179,9 +199,7 @@ describe("List container header and columns", () => {
       "max-content auto",
     );
 
-    container.columns = {
-      col: list.column_string("Other"),
-    };
+    container.set({ columns: { col: list.column_string("Other") } });
     expect(key_width()).toBeCloseTo(width);
 
     //Second press within 300ms resets to fit the key fields
@@ -196,54 +214,59 @@ describe("List container header and columns", () => {
   it("sets grid column widths from the column options", () => {
     const container = list.container(
       {
-        auto: list.column({
-          title: "Auto",
-          field_gen: () => list.text_field(),
-          field_apply: () => {},
-        }),
-        init: list.column({
-          title: "Init",
-          init_width: 10,
-          field_gen: () => list.text_field(),
-          field_apply: () => {},
-        }),
-        tiny: list.column({
-          title: "Tiny",
-          init_width: 0.5,
-          field_gen: () => list.text_field(),
-          field_apply: () => {},
-        }),
-        min: list.column({
-          title: "Min",
-          fixed_width: "min",
-          field_gen: () => list.text_field(),
-          field_apply: () => {},
-        }),
-        max: list.column({
-          title: "Max",
-          fixed_width: "max",
-          field_gen: () => list.text_field(),
-          field_apply: () => {},
-        }),
-        fixed: list.column({
-          title: "Fixed",
-          init_width: 20,
-          fixed_width: 4,
-          field_gen: () => list.text_field(),
-          field_apply: () => {},
-        }),
+        transform: () =>
+          ok({
+            values: {
+              auto: undefined,
+              init: undefined,
+              tiny: undefined,
+              min: undefined,
+              max: undefined,
+              fixed: undefined,
+            },
+          }),
       },
-      () => ok({
-        values: {
-          auto: undefined,
-          init: undefined,
-          tiny: undefined,
-          min: undefined,
-          max: undefined,
-          fixed: undefined,
+      {
+        columns: {
+          auto: list.column({
+            title: "Auto",
+            field_gen: () => list.text_field(),
+            field_apply: () => {},
+          }),
+          init: list.column({
+            title: "Init",
+            init_width: 10,
+            field_gen: () => list.text_field(),
+            field_apply: () => {},
+          }),
+          tiny: list.column({
+            title: "Tiny",
+            init_width: 0.5,
+            field_gen: () => list.text_field(),
+            field_apply: () => {},
+          }),
+          min: list.column({
+            title: "Min",
+            fixed_width: "min",
+            field_gen: () => list.text_field(),
+            field_apply: () => {},
+          }),
+          max: list.column({
+            title: "Max",
+            fixed_width: "max",
+            field_gen: () => list.text_field(),
+            field_apply: () => {},
+          }),
+          fixed: list.column({
+            title: "Fixed",
+            init_width: 20,
+            fixed_width: 4,
+            field_gen: () => list.text_field(),
+            field_apply: () => {},
+          }),
         },
-      }),
-      [],
+        rows: [],
+      },
     );
     document.body.append(container);
     expect(box_of(container).style.gridTemplateColumns).toBe(
@@ -253,17 +276,19 @@ describe("List container header and columns", () => {
 
   it("only gives resize handles to columns without a fixed width", () => {
     const container = list.container(
+      { transform: () => ok({ values: { a: "", b: "" } }) },
       {
-        a: list.column_string("A"),
-        b: list.column({
-          title: "B",
-          fixed_width: 5,
-          field_gen: () => list.text_field(),
-          field_apply: (f, v: string) => (f.text = v),
-        }),
+        columns: {
+          a: list.column_string("A"),
+          b: list.column({
+            title: "B",
+            fixed_width: 5,
+            field_gen: () => list.text_field(),
+            field_apply: (f, v: string) => (f.text = v),
+          }),
+        },
+        rows: [],
       },
-      () => ok({ values: { a: "", b: "" } }),
-      [],
     );
     document.body.append(container);
     const [a, b] = [...header_of(container)!.children];
@@ -310,9 +335,8 @@ describe("List container header and columns", () => {
   it("does not write a resized width into the given column options", () => {
     const col = list.column_string("Column");
     const container = list.container(
-      { col },
-      (item: number) => ok({ values: { col: item.toString() } }),
-      [1],
+      { transform: (item: number) => ok({ values: { col: item.toString() } }) },
+      { columns: { col }, rows: [1] },
     );
     document.body.append(container);
     const field = header_of(container)!.firstElementChild as HTMLElement;
@@ -332,22 +356,24 @@ describe("List container header and columns", () => {
 
   it("orders columns by their order option", () => {
     const container = list.container(
+      { transform: () => ok({ values: { a: "a", b: "b" } }) },
       {
-        a: list.column({
-          title: "A",
-          order: 2,
-          field_gen: () => list.text_field(),
-          field_apply: (f, v: string) => (f.text = v),
-        }),
-        b: list.column({
-          title: "B",
-          order: 1,
-          field_gen: () => list.text_field(),
-          field_apply: (f, v: string) => (f.text = v),
-        }),
+        columns: {
+          a: list.column({
+            title: "A",
+            order: 2,
+            field_gen: () => list.text_field(),
+            field_apply: (f, v: string) => (f.text = v),
+          }),
+          b: list.column({
+            title: "B",
+            order: 1,
+            field_gen: () => list.text_field(),
+            field_apply: (f, v: string) => (f.text = v),
+          }),
+        },
+        rows: [1],
       },
-      () => ok({ values: { a: "a", b: "b" } }),
-      [1],
     );
     document.body.append(container);
     expect(header_texts(container)).toEqual(["B", "A"]);
@@ -358,12 +384,11 @@ describe("List container header and columns", () => {
     const a = list.column_string("A");
     const b = list.column_string("B");
     const container = list.container(
-      { a, b },
-      () => ok({ values: { a: "a", b: "b" } }),
-      [1],
+      { transform: () => ok({ values: { a: "a", b: "b" } }) },
+      { columns: { a, b }, rows: [1] },
     );
     document.body.append(container);
-    container.columns = { b, a };
+    container.set({ columns: { b, a } });
     expect(header_texts(container)).toEqual(["B", "A"]);
     expect(cells(rows_of(container)[0])).toEqual(["b", "a"]);
   });
@@ -384,7 +409,7 @@ describe("List container rows from arrays", () => {
   it("reuses existing rows when given a new longer array", () => {
     const container = number_list([1, 2]);
     const before = rows_of(container);
-    container.rows = [5, 6, 7];
+    container.set({ rows: [5, 6, 7] });
     expect(texts(container)).toEqual(["5", "6", "7"]);
     expect(rows_of(container).slice(0, 2)).toEqual(before);
   });
@@ -392,20 +417,25 @@ describe("List container rows from arrays", () => {
   it("removes surplus rows when given a new shorter array", () => {
     const container = number_list([1, 2, 3, 4]);
     const first = rows_of(container)[0];
-    container.rows = [9];
+    container.set({ rows: [9] });
     expect(texts(container)).toEqual(["9"]);
     expect(rows_of(container)[0]).toBe(first);
-    container.rows = [];
+    container.set({ rows: [] });
     expect(container.amount_rows()).toBe(0);
   });
 
   it("calls the transformer with the item, the row and the rows", () => {
     const rows = [4, 5];
-    const transform = vi.fn((item: number, _row: unknown, _rows: unknown) => ok({
-      values: { col: item.toString() },
-    }));
+    const transform = vi.fn((item: number, _row: unknown, _rows: unknown) =>
+      ok({
+        values: { col: item.toString() },
+      }),
+    );
     document.body.append(
-      list.container({ col: list.column_string("Col") }, transform, rows),
+      list.container(
+        { transform: transform },
+        { columns: { col: list.column_string("Col") }, rows },
+      ),
     );
     expect(transform).toHaveBeenCalledTimes(2);
     expect(transform.mock.calls[0][0]).toBe(4);
@@ -422,15 +452,17 @@ describe("List container rows from arrays", () => {
 
   it("counts sub rows recursively", () => {
     const container = list.container(
-      { col: list.column_string("Col") },
-      (item: number, row) => ok({
-        openable: true,
-        opened: row.depth < 2,
-        sub_rows: () => [item * 10, item * 10 + 1],
-        values: { col: item.toString() },
-      }),
-      [1, 2],
-      { sub_rows: true },
+      {
+        transform: (item: number, row) =>
+          ok({
+            openable: true,
+            opened: row.depth < 2,
+            sub_rows: () => [item * 10, item * 10 + 1],
+            values: { col: item.toString() },
+          }),
+        sub_rows: true,
+      },
+      { columns: { col: list.column_string("Col") }, rows: [1, 2] },
     );
     document.body.append(container);
     expect(container.amount_rows()).toBe(2);
@@ -440,19 +472,21 @@ describe("List container rows from arrays", () => {
 
   it("attaches the context menu given by the transformer to the row", () => {
     const container = list.container(
-      { col: list.column_string("Col") },
-      (item: number) => ok({
-        context_menu:
-          item === 1 ? ctm.menu([ctm.line("Do", () => {})]) : undefined,
-        values: { col: item.toString() },
-      }),
-      [1, 2],
+      {
+        transform: (item: number) =>
+          ok({
+            context_menu:
+              item === 1 ? ctm.menu([ctm.line("Do", () => {})]) : undefined,
+            values: { col: item.toString() },
+          }),
+      },
+      { columns: { col: list.column_string("Col") }, rows: [1, 2] },
     );
     document.body.append(container);
     const [one, two] = rows_of(container);
     expect(ctm.has(one)).toBe(true);
     expect(ctm.has(two)).toBe(false);
-    container.rows = [2, 1];
+    container.set({ rows: [2, 1] });
     expect(ctm.has(one)).toBe(false);
     expect(ctm.has(two)).toBe(true);
   });
@@ -460,9 +494,8 @@ describe("List container rows from arrays", () => {
   it("calls the context menu function of the row that was right clicked", () => {
     const lines = vi.fn(() => none());
     const container = list.container(
-      { col: list.column_string("Col") },
-      () => ok({ context_menu: lines, values: { col: "x" } }),
-      [1],
+      { transform: () => ok({ context_menu: lines, values: { col: "x" } }) },
+      { columns: { col: list.column_string("Col") }, rows: [1] },
     );
     document.body.append(container);
     rows_of(container)[0].dispatchEvent(
@@ -476,9 +509,8 @@ describe("List container rows from states", () => {
   it("only renders state rows once connected", () => {
     const rows = state.ok_w([1, 2]);
     const container = list.container(
-      { col: list.column_string("Col") },
-      (item) => ok({ values: { col: item.toString() } }),
-      rows,
+      { transform: (item) => ok({ values: { col: item.toString() } }) },
+      { columns: { col: list.column_string("Col") }, rows },
     );
     expect(container.amount_rows()).toBe(0);
     document.body.append(container);
@@ -600,7 +632,7 @@ describe("List container rows from states", () => {
   it("stops following a state after the rows are replaced with an array", () => {
     const rows = state.ok_w([1, 2]);
     const container = number_list(rows);
-    container.rows = [5];
+    container.set({ rows: [5] });
     rows.array.push(3);
     expect(texts(container)).toEqual(["5"]);
     expect(rows.amount()).toBe(0);
@@ -610,7 +642,7 @@ describe("List container rows from states", () => {
     const first = state.ok_w([1]);
     const second = state.ok_w([2, 3]);
     const container = number_list(first);
-    container.rows = second;
+    container.set({ rows: second });
     expect(texts(container)).toEqual(["2", "3"]);
     first.array.push(9);
     second.array.push(4);
@@ -652,10 +684,10 @@ describe("List container add row", () => {
       add_row: { text: "Add", on_add: () => {} },
     });
     const add = add_row_of(container);
-    container.add_row = { text: "New", on_add: () => {} };
+    container.set({ add_row: { text: "New", on_add: () => {} } });
     expect(add_row_of(container)).toBe(add);
     expect(add.textContent).toBe("New");
-    container.add_row = undefined;
+    container.set({ add_row: null });
     expect(add_row_of(container)).toBeUndefined();
     expect(box_of(container).classList.contains("addrow")).toBe(false);
   });
@@ -670,12 +702,12 @@ describe("List container add row", () => {
     );
   });
 
-  it("re-enables the add row when disabled is set back to false", () => {
+  it("unlocks the add row when access is set back to write", () => {
     const container = number_list([1], {
-      add_row: { text: "Add", disabled: true, on_add: () => {} },
+      add_row: { text: "Add", access: AccessTypes.Read, on_add: () => {} },
     });
     expect(add_row_of(container).inert).toBe(true);
-    container.add_row = { text: "Add", disabled: false, on_add: () => {} };
+    container.set({ add_row: { access: AccessTypes.Write } });
     expect(add_row_of(container).inert).toBe(false);
   });
 });
@@ -684,49 +716,59 @@ describe("List container add row", () => {
 export function container_type_tests() {
   //Item type is inferred from a state
   list.container(
-    { col: list.column_string("Col") },
-    (item, _row, rows) => {
-      expectTypeOf(item).toEqualTypeOf<number>();
-      expectTypeOf(rows).toEqualTypeOf<State<number[]>>();
-      return ok({ values: { col: item.toString() } });
+    {
+      transform: (item, _row, rows) => {
+        expectTypeOf(item).toEqualTypeOf<number>();
+        //The rows input can be swapped between an array and a state with set
+        expectTypeOf(rows).toEqualTypeOf<number[] | State<number[]>>();
+        return ok({ values: { col: item.toString() } });
+      },
     },
-    state.ok([1, 2]) as State<number[]>,
+    {
+      columns: { col: list.column_string("Col") },
+      rows: state.ok([1, 2]) as State<number[]>,
+    },
   );
 
   list.container(
-    { col: list.column_string("Col") },
-    //@ts-expect-error A value for every column is required
-    () => ok({ values: {} }),
-    [1],
+    {
+      //@ts-expect-error A value for every column is required
+      transform: () => ok({ values: {} }),
+    },
+    { columns: { col: list.column_string("Col") }, rows: [1] },
   );
 
   list.container(
-    { col: list.column_string("Col") },
-    //@ts-expect-error The value must match the column type
-    () => ok({ values: { col: 5 } }),
-    [1],
+    {
+      //@ts-expect-error The value must match the column type
+      transform: () => ok({ values: { col: 5 } }),
+    },
+    { columns: { col: list.column_string("Col") }, rows: [1] },
   );
 
   list.container(
-    { col: list.column_string("Col") },
-    //@ts-expect-error Sub rows are not allowed without the sub_rows option
-    (item: number) => ok({ sub_rows: () => [item], values: { col: "" } }),
-    [1],
+    {
+      //@ts-expect-error Sub rows are not allowed without the sub_rows option
+      transform: (item: number) =>
+        ok({ sub_rows: () => [item], values: { col: "" } }),
+    },
+    { columns: { col: list.column_string("Col") }, rows: [1] },
   );
 
   //Sub rows may come from a state even when the top level rows are an array,
   //the transformer then receives that state for the sub rows
   list.container(
-    { col: list.column_string("Col") },
-    (item: number, _row, rows) => {
-      expectTypeOf(rows).toEqualTypeOf<number[] | State<number[]>>();
-      return ok({
-        sub_rows: () => state.ok([item]) as State<number[]>,
-        values: { col: "" },
-      });
+    {
+      transform: (item: number, _row, rows) => {
+        expectTypeOf(rows).toEqualTypeOf<number[] | State<number[]>>();
+        return ok({
+          sub_rows: () => state.ok([item]) as State<number[]>,
+          values: { col: "" },
+        });
+      },
+      sub_rows: true,
     },
-    [1],
-    { sub_rows: true },
+    { columns: { col: list.column_string("Col") }, rows: [1] },
   );
 
   //The state of a row and of its add row are the row's sub rows, which can be a state
@@ -734,9 +776,9 @@ export function container_type_tests() {
   expectTypeOf<ListRow<number, {}, number[], true>["state"]>().toEqualTypeOf<
     number[] | State<number[]>
   >();
-  expectTypeOf<
-    ListAddRow<number, {}, number[], true>["state"]
-  >().toEqualTypeOf<number[] | State<number[]>>();
+  expectTypeOf<ListAddRow<number, {}, number[], true>["state"]>().toEqualTypeOf<
+    number[] | State<number[]>
+  >();
 }
 
 describe("List container sub row transformer argument", () => {
@@ -745,21 +787,185 @@ describe("List container sub row transformer argument", () => {
     const received: unknown[] = [];
     document.body.append(
       list.container(
-        { col: list.column_string("Col") },
-        (item: number, row, rows) => {
-          if (row.depth === 1) received.push(rows);
-          return ok({
-            openable: true,
-            opened: true,
-            sub_rows: row.depth === 0 ? () => sub : undefined,
-            values: { col: item.toString() },
-          });
+        {
+          transform: (item: number, row, rows) => {
+            if (row.depth === 1) received.push(rows);
+            return ok({
+              openable: true,
+              opened: true,
+              sub_rows: row.depth === 0 ? () => sub : undefined,
+              values: { col: item.toString() },
+            });
+          },
+          sub_rows: true,
         },
-        [1],
-        { sub_rows: true },
+        { columns: { col: list.column_string("Col") }, rows: [1] },
       ),
     );
     //Runtime value is a state, while the transformer type says number[]
     expect(received).toEqual([sub]);
+  });
+});
+
+describe("List container on the element pattern", () => {
+  const names = () => ({ name: list.column_string("Name") });
+  const name_values = (name: string) => ok({ values: { name } });
+  const shown = (container: HTMLElement) =>
+    [...container.querySelectorAll("list-row list-textfield")].map(
+      (field) => field.textContent,
+    );
+  const warning = (container: HTMLElement) =>
+    container.querySelector<HTMLInputElement>("input.list-warn")
+      ?.validationMessage ?? "";
+
+  it("takes fixed configuration first and inputs second, set changes the inputs", () => {
+    const container = list.container(
+      { transform: name_values },
+      { columns: names(), rows: ["a", "b"] },
+    );
+    document.body.append(container);
+    expect(shown(container)).toEqual(["a", "b"]);
+    //Left out inputs stay
+    container.set({});
+    expect(shown(container)).toEqual(["a", "b"]);
+    const rows = state.ok_w(["c"]);
+    container.set({ rows });
+    expect(shown(container)).toEqual(["c"]);
+    rows.set_ok(["d", "e"]);
+    expect(shown(container)).toEqual(["d", "e"]);
+    //A fixed value drops the state
+    container.set({ rows: ["f"] });
+    rows.set_ok(["g"]);
+    expect(shown(container)).toEqual(["f"]);
+  });
+
+  it("shows an error of the rows state as the error row and as a fault", () => {
+    const rows = state.from_w<string[]>(["a"]);
+    const container = list.container(
+      { transform: name_values },
+      { columns: names(), rows },
+    );
+    document.body.append(container);
+    rows.set_err(nice_err("broken"));
+    expect(container.querySelector("list-error")!.textContent).toBe("broken");
+    expect(container.faults.map((fault) => fault.nice)).toEqual(["broken"]);
+  });
+
+  it("shows the fault icon of a rows state error above the header", () => {
+    for (const headless of [false, true]) {
+      const rows = state.from_w<string[]>(["a"]);
+      const container = list.container(
+        { transform: name_values, headless },
+        { columns: names(), rows },
+      );
+      container.style.width = "20rem";
+      document.body.append(container);
+      rows.set_err(nice_err("broken"));
+      const icon = container.querySelector(":scope > base-fault")!;
+      const rect = icon.getBoundingClientRect();
+      const top = document.elementFromPoint(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+      );
+      expect(top).toBe(icon);
+      container.remove();
+    }
+  });
+
+  it("changes the columns with set, keeping their keys and types", () => {
+    const container = list.container(
+      { transform: name_values },
+      { columns: names(), rows: ["a"] },
+    );
+    document.body.append(container);
+    container.set({ columns: { name: list.column_string("Other") } });
+    expect(header_texts(container)).toEqual(["Other"]);
+    expect(shown(container)).toEqual(["a"]);
+    // @ts-expect-error the transform gives values for the columns of the list, other keys can not be set
+    container.set({ columns: { other: list.column_string("Other") } });
+  });
+
+  it("adds, changes and removes the add row with set, left out leaves it", () => {
+    const on_add = vi.fn();
+    const text = state.ok_w("Add");
+    const container = list.container(
+      { transform: name_values },
+      { columns: names(), add_row: { text, on_add } },
+    );
+    document.body.append(container);
+    const add = () =>
+      container.querySelector<HTMLElement>(":scope > div > list-addrow");
+    expect(add()!.textContent).toBe("Add");
+    text.set_ok("More");
+    expect(add()!.textContent).toBe("More");
+    add()!.querySelector<HTMLElement>("span.add")!.click();
+    expect(on_add).toHaveBeenCalledOnce();
+    container.set({ rows: ["a"] });
+    expect(add()).not.toBeNull();
+    //Locked with access like every element
+    container.set({ add_row: { access: AccessTypes.Read } });
+    expect(add()!.inert).toBe(true);
+    expect(add()!.textContent).toBe("More");
+    container.set({ add_row: null });
+    expect(add()).toBeNull();
+  });
+
+  it("keeps a fixed selection itself, the user changes it", () => {
+    const container = list.container(
+      { transform: name_values, selection: { mode: "multi" } },
+      { columns: names(), rows: ["a", "b"], selected: ["a"] },
+    );
+    document.body.append(container);
+    const rows = rows_of(container);
+    expect(rows.map((row) => row.selected)).toEqual([true, false]);
+    rows[1].querySelector<HTMLElement>("list-checkfield")!.click();
+    expect(rows.map((row) => row.selected)).toEqual([true, true]);
+  });
+
+  it("writes a writable selection state, and swaps it with set", () => {
+    const first = state.ok_w<string[]>([]);
+    const container = list.container(
+      { transform: name_values, selection: { mode: "multi" } },
+      { columns: names(), rows: ["a", "b"], selected: first },
+    );
+    document.body.append(container);
+    const checks = () => [
+      ...container.querySelectorAll<HTMLElement>("list-row list-checkfield"),
+    ];
+    checks()[0].click();
+    expect(first.ok()).toEqual(["a"]);
+    const second = state.ok_w<string[]>(["b"]);
+    container.set({ selected: second });
+    expect(rows_of(container).map((row) => row.selected)).toEqual([
+      false,
+      true,
+    ]);
+    checks()[0].click();
+    expect(second.ok()).toEqual(["b", "a"]);
+    expect(first.ok()).toEqual(["a"]);
+  });
+
+  it("shows a read only selection state and refuses changes with a warning", () => {
+    const selected = state.ok<string[]>(["a"]);
+    const container = list.container(
+      { transform: name_values, selection: { mode: "multi" } },
+      { columns: names(), rows: ["a", "b"], selected },
+    );
+    document.body.append(container);
+    const rows = rows_of(container);
+    rows[1].querySelector<HTMLElement>("list-checkfield")!.click();
+    expect(rows.map((row) => row.selected)).toEqual([true, false]);
+    expect(warning(container)).toBe("Selection read only");
+  });
+
+  it("keeps a selection of its own without a selected input", () => {
+    const container = list.container(
+      { transform: name_values, selection: { mode: "single" } },
+      { columns: names(), rows: ["a", "b"] },
+    );
+    document.body.append(container);
+    const rows = rows_of(container);
+    rows[1].querySelector<HTMLElement>("list-checkfield")!.click();
+    expect(rows.map((row) => row.selected)).toEqual([false, true]);
   });
 });

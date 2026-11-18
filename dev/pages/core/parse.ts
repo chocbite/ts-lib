@@ -457,36 +457,46 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
     box(arr, label, { width: "48rem", height: "14rem", display: "grid" }).appendChild(
       list.container(
         {
-          id: list.column({
-            title: "Server id",
-            init_width: 6,
-            field_gen: () => form.list_field(form.number_input()),
-            field_apply: (field, v: Pump["id"]) => field.element.set({ value: v }),
-          }),
-          name: list.column({
-            title: "Name",
-            init_width: 12,
-            field_gen: () => form.list_field(form.text_input()),
-            field_apply: (field, v: Pump["name"]) => field.element.set({ value: v }),
-          }),
-          running: list.column({
-            title: "Running",
-            fixed_width: "min",
-            field_gen: () => form.list_field(form.switch()),
-            field_apply: (field, v: Pump["running"]) => field.element.set({ value: v }),
-          }),
-          speed: list.column({
-            title: "Speed",
-            init_width: 12,
-            field_gen: () => form.list_field(form.stepper({ min: 0, max: 100, unit: "%" })),
-            field_apply: (field, v: Pump["speed"]) => field.element.set({ value: v }),
-          }),
+          transform: (pump) =>
+            ok({
+              values: {
+                id: pump.id,
+                name: pump.name,
+                running: pump.running,
+                speed: pump.speed,
+              },
+            }),
         },
-        (pump) =>
-          ok({
-            values: { id: pump.id, name: pump.name, running: pump.running, speed: pump.speed },
-          }),
-        pumps,
+        {
+          columns: {
+            id: list.column({
+              title: "Server id",
+              init_width: 6,
+              field_gen: () => form.number_input(),
+              field_apply: (field, v: Pump["id"]) => field.set({ value: v }),
+            }),
+            name: list.column({
+              title: "Name",
+              init_width: 12,
+              field_gen: () => form.text_input(),
+              field_apply: (field, v: Pump["name"]) => field.set({ value: v }),
+            }),
+            running: list.column({
+              title: "Running",
+              fixed_width: "min",
+              field_gen: () => form.switch(),
+              field_apply: (field, v: Pump["running"]) =>
+                field.set({ value: v }),
+            }),
+            speed: list.column({
+              title: "Speed",
+              init_width: 12,
+              field_gen: () => form.stepper({ min: 0, max: 100, unit: "%" }),
+              field_apply: (field, v: Pump["speed"]) => field.set({ value: v }),
+            }),
+          },
+          rows: pumps,
+        },
       ),
     );
   pump_list("pumps: [0, { id: n, name: sw, running: bw, speed: nw }], no key, write single", parsed.pumps);

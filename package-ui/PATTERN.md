@@ -18,7 +18,7 @@ The pattern is the interface an element gives to users of the library: the input
 
 1. **Inputs changed from outside are states.** An input is a `StateOrVal<T>`, either an initial value or a state (see `StateOrVal` in the state README). An initial value is applied once and not followed: it stays until `set` gives the input again, or, for an input the user changes, it is where the element starts. Anything else that changes the element while it lives is a state. Elements have no setters or getters for their inputs, so an element never deals with properties and states for the same thing.
 2. **A factory creates the element.** It takes optional options and creates the element with `create`, which applies them. It may take required arguments for things outside the pattern, like a device a page shows, and passes them on to the constructor through `create`. The class is exported only as a type, unless it is meant to be subclassed, so nobody outside the module calls `new`.
-3. **The constructor takes only required references, never inputs.** It builds the children and sets visible defaults, so an element that never gets inputs still shows something sensible. Its arguments are things the element can not exist without and that never change, like a device a page shows, so they are kept in fields that are never unset. Inputs are never given or applied in it.
+3. **The constructor takes only what never changes, never inputs.** Its arguments are references the element needs, like a device a page shows, and values that will not or can not change while the element lives, like configuration the element builds its children from. They are kept in fields that are never unset. It builds the children and sets visible defaults, so an element that never gets inputs still shows something sensible. Inputs are never given or applied in it.
 4. **Inputs are declared as keys.** Each element has a module-level object of keys made with `input_key`, and its options type is `BaseOptions & InputOptions` of that object, `BaseOptions` being the inputs every element has, like `access`.
 5. **`set(options)` can be called again.** Each input is applied with `set_input`. Options left out stay as they are.
 6. **Handed out inputs are given once.** An input that other elements follow is a creation input, applied by `[CREATE]` and left out of the options of `set`, so it can not be replaced while others follow it.
@@ -104,9 +104,9 @@ Its options type is the options of `[CREATE]` and `set` together, taken from the
 
 Every factory calls `create`, also for elements without creation inputs, so all factories look the same.
 
-### Required references
+### Required references and fixed values
 
-Arguments after the options go to the constructor (rule 3), typed by it, so a missing or wrong one is a compile error. They are for references the element needs from its start and never changes, not for inputs. In the constructor they go into `readonly` fields, so TypeScript knows they are always set, no optional field and no `!`. A subclass passes them on to `super`, with arguments of its own after them. The factory takes them as required arguments in front of the options:
+Arguments after the options go to the constructor (rule 3), typed by it, so a missing or wrong one is a compile error. They are for references the element needs from its start, and for values that will not or can not change while it lives, like the configuration a list builds its header and columns from, not for inputs. In the constructor they go into `readonly` fields, so TypeScript knows they are always set, no optional field and no `!`. A subclass passes them on to `super`, with arguments of its own after them. The factory takes them as required arguments in front of the options:
 
 ```ts
 class DevicePage extends Base {
@@ -140,7 +140,7 @@ Keys are module constants, so they can't be generic. An element that is generic 
 
 - `undefined` leaves the input unchanged.
 - An initial value detaches the state the key had and calls `apply` right away with an ok result.
-- A state replaces the state the key had. `apply` is subscribed while the element is in the document, like every element state, so an element that is never shown costs nothing for its states.
+- A state replaces the state the key had. `apply` is subscribed while the element is in the document, like every element state, so an element that is never shown costs nothing for its states. An element given an intersection observer before it is first connected subscribes them only while it is visible, see the base README.
 - Giving a key a new value always drops the old state, also while the element is not in the document.
 - The key decides the type: an input that doesn't match the key is a compile error.
 
@@ -316,18 +316,18 @@ Elements created in large numbers, like list rows, list fields and canvas widget
 
 ## `set` and `bind`
 
-`set` gives inputs. Form elements take their value as the `value` input like any other, see the form README. List containers still have a `bind` that two-way binds their `selection`, which is older than this pattern.
+`set` gives inputs. Form elements take their value as the `value` input like any other, see the form README, and list containers take their selected keys as the `selected` input. There is no `bind`.
 
 ## Status
 
 - **Done and tested** in `package-ui/base/base.test.ts`: `Base.create` with `[CREATE]`, `Base.set` with the `access` input, `Base.set_input`, `Base.input_state`, and the key helpers `input_key`, `InputOptions` and `InputOf`.
-- **Being converted:** `composition` is the first production module written to the pattern. `form` is converted too, every form element takes its inputs with `set`, with the value model of the form README. Other elements are converted one at a time, canvas `Page` and `Viewport` after the depot work.
+- **Being converted:** `composition` is the first production module written to the pattern. `form` is converted too, every form element takes its inputs with `set`, with the value model of the form README. The list container and its add row are converted, rows, key fields and the plain fields keep their lighter way, as they are made in large numbers. Other elements are converted one at a time, canvas `Page` and `Viewport` after the depot work.
 - **Example:** `package-ui/pattern_example` is kept as the reference and must stay in line with this file. It is never built or exported, its source reaches consumers through the `SOURCE.md` of the package.
 
 ## Checklist for a new or converted element
 
 - [ ] The class is exported only as a type, unless meant to be subclassed, and a factory taking optional options creates it with `create`.
-- [ ] The constructor takes only required references, kept in `readonly` fields, builds the children and sets visible defaults.
+- [ ] The constructor takes only references and values that never change, kept in `readonly` fields, builds the children and sets visible defaults.
 - [ ] A module-level keys object made with `input_key` declares every input, with a doc comment on each key.
 - [ ] The options type is `BaseOptions & InputOptions<typeof KEYS>`, or extends `BaseOptions` with `InputOf` for options built by hand.
 - [ ] `set` calls `super.set(options)`, so the inputs every element has, like `access`, work on it.

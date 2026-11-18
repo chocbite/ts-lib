@@ -9,9 +9,8 @@ const text_align = (element: Element) => getComputedStyle(element).textAlign;
 
 function text_list(align?: ListColumnAlign) {
   const container = list.container(
-    { col: list.column_string("Column", { align }) },
-    (item: number) => ok({ values: { col: item.toString() } }),
-    [1],
+    { transform: (item: number) => ok({ values: { col: item.toString() } }) },
+    { columns: { col: list.column_string("Column", { align }) }, rows: [1] },
   );
   document.body.append(container);
   return {
@@ -56,7 +55,7 @@ describe("List column alignment", () => {
 
   it("follows new columns on existing rows and header", () => {
     const { container } = text_list();
-    container.columns = { col: list.column_string("New", { align: "right" }) };
+    container.set({ columns: { col: list.column_string("New", { align: "right" }) } });
     expect(justify(container.querySelector("list-textfield")!)).toBe("flex-end");
     expect(
       justify(container.querySelector("list-headerfield > div > span")!),
@@ -65,23 +64,25 @@ describe("List column alignment", () => {
 
   it("is followed by number and node fields", () => {
     const container = list.container(
+      { transform: () => ok({ values: { number: 1, node: "Press" } }) },
       {
-        number: list.column({
-          title: "Number",
-          align: "right",
-          field_gen: () => list.number_field(),
-          field_apply: (field, value: number) => (field.number = value),
-        }),
-        node: list.column({
-          title: "Node",
-          align: "right",
-          field_gen: () => list.node_field(document.createElement("button")),
-          field_apply: (field, value: string) =>
-            (field.node.textContent = value),
-        }),
+        columns: {
+          number: list.column({
+            title: "Number",
+            align: "right",
+            field_gen: () => list.number_field(),
+            field_apply: (field, value: number) => (field.number = value),
+          }),
+          node: list.column({
+            title: "Node",
+            align: "right",
+            field_gen: () => list.node_field(document.createElement("button")),
+            field_apply: (field, value: string) =>
+              (field.node.textContent = value),
+          }),
+        },
+        rows: [1],
       },
-      () => ok({ values: { number: 1, node: "Press" } }),
-      [1],
     );
     document.body.append(container);
     expect(justify(container.querySelector("list-numberfield")!)).toBe(
@@ -92,22 +93,21 @@ describe("List column alignment", () => {
     );
   });
 
-  it("is not followed by form fields", () => {
+  it("is not followed by form elements as fields", () => {
     const column = (align?: ListColumnAlign) =>
       list.column({
         title: "Form",
         align,
-        field_gen: () => form.list_field(form.switch()),
+        field_gen: () => form.switch(),
         field_apply: () => undefined,
       });
     const styles = [undefined, "right" as const].map((align) => {
       const container = list.container(
-        { col: column(align) },
-        () => ok({ values: { col: undefined } }),
-        [1],
+        { transform: () => ok({ values: { col: undefined } }) },
+        { columns: { col: column(align) }, rows: [1] },
       );
       document.body.append(container);
-      return justify(container.querySelector("form-listfield")!);
+      return justify(container.querySelector("list-row > div > :last-child")!);
     });
     expect(styles[1]).toBe(styles[0]);
   });

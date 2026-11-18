@@ -146,7 +146,7 @@ const properties = canvas.properties({ selected });
 - The title is the name of the definition, or tells that the widget is not registered.
 - A linked option shows the path it is linked to and the value the link gives, read only, as it is a state of the app.
 - **The link column** has a chain for every option with a writable state, filled when linked. Pressing it opens the link menu: the path of the state, typed or picked with Choose state from `depot_ui.select_state`, and the fields of the transforms. Link writes the link to the option, Unlink writes the value the link gives now, or the default of the property when it gives none. An option not given to the widget has no state, so it has no field and can not be linked, widgets made by `canvas.new_widget` and the selector have a state for every property.
-- The fields are form elements in `form.list_field` for now, numbers in number inputs, texts in text inputs, colors in color inputs, booleans in switches and enums in dropdowns.
+- The fields are form elements in a `list.node_field` for now, as each property has an element of its own kind, numbers in number inputs, texts in text inputs, colors in color inputs, booleans in switches and enums in dropdowns.
 
 ## Storing pages
 

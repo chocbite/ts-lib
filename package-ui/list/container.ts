@@ -1,13 +1,17 @@
-import { Base, define_element, type BaseIntersectObserver } from "#base";
+import {
+  Base,
+  define_element,
+  input_key,
+  type BaseIntersectObserver,
+  type BaseOptions,
+} from "#base";
 import ctm from "#context-menu";
 import { px_to_rem } from "#theme";
 import {
   state,
-  type State,
-  type StateInferSub,
-  type StateREAW,
+  type StateOrVal,
+  type StateREA,
   type StateResult,
-  type StateSub,
 } from "@chocbite/ts-lib/state";
 import { ListAddRow, type ListAddRowOptions } from "./add_row";
 import { ListDragField, ListReorder, type ListReorderOptions } from "./drag";
@@ -28,7 +32,6 @@ import type {
   ListRowParent,
   ListRowTransformer,
   ListType,
-  ListTypeExtract,
 } from "./types.ts";
 
 /**Most rows open all opens at a time, a mistake making the sub rows recursive would otherwise never end */
@@ -197,27 +200,56 @@ class HeaderRow<
 }
 define_element(HeaderRow);
 
-interface ContainerOptions<S extends boolean = false, R = unknown, K = R> {
-  /**Should header row be omitted */
+/**Columns of a list by column key, each giving its fields values of the type of its key*/
+export type ListColumns<T extends {}> = {
+  [C in keyof T]: ListColumnOptions<T[C], any>;
+};
+
+/**Configuration of a list, fixed for its life, as the header, the lead columns and the rows are built from it*/
+export interface ListContainerConfig<T extends {}, R, S extends boolean, K> {
+  /**Turns the data of a row into its options, with a value per column key */
+  transform: ListRowTransformer<R, NoInfer<T>, ListType<R>, S>;
+  /**Leaves out the header row */
   headless?: boolean;
-  /**Can rows have sub rows */
+  /**Lets rows have sub rows */
   sub_rows?: S;
-  /**Options for an add row button */
-  add_row?: ListAddRowOptions;
-  /**If list should use a container to give fields the option of attach/detach to states when visible */
+  /**Observer given to every field, so the states of a field are only subscribed while it is in view */
   observer?: BaseIntersectObserver;
-  /**Lets the user select rows, only rows that are visible can be selected */
+  /**Lets the user select rows, only rows that are visible can be selected, the selected keys are the selected input */
   selection?: ListSelectionOptions<R, K>;
   /**Lets the user move rows with a drag handle in front of the rows, rows in a writable array state can be moved */
   reorder?: ListReorderOptions<R>;
 }
 
+/**Inputs of a list, written by hand as the list is generic in its rows and columns*/
+export interface ListContainerOptions<T extends {}, R, K> extends BaseOptions {
+  /**Columns by column key, a plain value, with the keys and value types the list was created with, as the transform gives values for them */
+  columns?: ListColumns<T>;
+  /**Rows of the list, an array or an array state, an error of the state shows as the error row */
+  rows?: StateOrVal<R[]>;
+  /**Button below the rows, null removes it, options left out of a later set stay as they are */
+  add_row?: ListAddRowOptions | null;
+  /**Keys of the selected rows, needs the selection configuration
+   * A fixed value is kept by the list and changed by the user, without it the list starts with none selected
+   * A writable state is written with array write instructions when the user changes the selection, so it must apply them, like a local writable state
+   * A read only state is only shown, a change by the user is refused with a warning */
+  selected?: K[] | StateREA<K[], any, any>;
+}
+
+/**Inputs of the list, loosely typed as keys can not be generic */
+const CONTAINER = {
+  columns: input_key<ListColumns<any>>(),
+  rows: input_key<StateOrVal<unknown[]>>(),
+  add_row: input_key<ListAddRowOptions | null>(),
+  selected: input_key<StateOrVal<unknown[]>>(),
+};
+
 class Container<
-  A extends ListType<any>,
-  T extends { [key: string]: ListColumnOptions<any, any> },
+  T extends {},
+  R,
   S extends boolean = false,
-  R = ListTypeExtract<A>,
   K = R,
+  A extends ListType<R> = ListType<R>,
 > extends Base {
   static element_name() {
     return "container";
@@ -228,32 +260,26 @@ class Container<
 
   #root: ListRoot<R, T, A, S>;
   #selection?: ListSelection<K>;
-  #selection_sub?: StateSub<StateResult<K[]>>;
   #parent: ListRowParent<A>;
   #box = this.appendChild(document.createElement("div"));
   #header?: HeaderRow<R, T, A, S>;
   #child_box: HTMLDivElement;
   #error?: ListRowsError<A>;
   #add_row?: ListAddRow<R, T, A, S>;
-  #state_sub?: StateInferSub<State<R[]>>;
   /**Width of the key field column in rem set by resizing, fits the key fields when undefined */
   #key_width?: number;
   /**Shows why a write failed, or that open all stopped */
   #warn?: ListWarn;
 
-  constructor(
-    columns: { [C in keyof T]: ListColumnOptions<T[C], any> },
-    transform: ListRowTransformer<R, T, A, S>,
-    rows: A,
-    options?: ContainerOptions<S, R, K>,
-  ) {
+  /**Builds the list from its configuration, the inputs come with set */
+  constructor(config: ListContainerConfig<T, R, S, K>) {
     super();
     this.#root = {
-      sub_rows: options?.sub_rows ?? (false as S),
+      sub_rows: config.sub_rows ?? (false as S),
       columns: new Map(),
       columns_visible: [],
-      transform,
-      observer: options?.observer,
+      transform: config.transform,
+      observer: config.observer,
       open_all: () => this.open_all(),
       close_all: () => this.close_all(),
       any_open: () => this.#open_rows().length > 0,
@@ -262,25 +288,25 @@ class Container<
       depth: -1,
       open: false,
       select_adjacent() {},
-      state: rows,
+      state: [],
     };
 
     this.#child_box = document.createElement("div");
     //Shows why a write of the selection or a move failed
     const warn =
-      options?.selection || options?.reorder || options?.sub_rows
+      config.selection || config.reorder || config.sub_rows
         ? new ListWarn(this)
         : undefined;
     this.#warn = warn;
-    if (options?.reorder) {
-      this.#root.reorder = new ListReorder(this, options.reorder, warn!);
+    if (config.reorder) {
+      this.#root.reorder = new ListReorder(this, config.reorder, warn!);
       this.#box.classList.add("drag");
     }
-    if (options?.selection) {
+    if (config.selection) {
       this.#selection = new ListSelection(
-        options.selection,
+        config.selection,
         this.#child_box,
-        Boolean(options.sub_rows),
+        Boolean(config.sub_rows),
       );
       this.#root.selection = this.#selection;
       if (this.#selection.column) this.#box.classList.add("check");
@@ -290,11 +316,11 @@ class Container<
     }
     //Columns in front of the key field column, the error and add rows start after them
     const lead =
-      Number(Boolean(options?.reorder)) +
+      Number(Boolean(config.reorder)) +
       Number(Boolean(this.#selection?.column));
     if (lead) this.#box.classList.add("lead-" + lead);
 
-    if (!options?.headless)
+    if (!config.headless)
       this.#header = this.#box.appendChild(
         new HeaderRow(this.#root, (width) => {
           this.#key_width = width;
@@ -302,16 +328,38 @@ class Container<
         }),
       );
     this.#box.appendChild(this.#child_box);
-    if (options?.sub_rows) this.#box.classList.add("sub-rows");
-    this.add_row = options?.add_row;
-
-    this.columns = columns;
-    this.rows = rows;
-    //Selection works without a bound state, in a state of its own nobody else can reach
-    if (this.#selection) this.bind({});
+    if (config.sub_rows) this.#box.classList.add("sub-rows");
+    //Without a selected input the selection is kept in a state of the list, under the key of the input so one given later replaces it
+    const selection = this.#selection;
+    if (selection) {
+      const own = state.ok_w<K[]>([]);
+      selection.target = own;
+      this.attach_state_to_symbol(CONTAINER.selected, own, (value) =>
+        selection.apply(value),
+      );
+    }
   }
 
-  set columns(columns: { [C in keyof T]: ListColumnOptions<T[C], any> }) {
+  set(options: ListContainerOptions<T, R, K>): this {
+    super.set(options);
+    //Columns first, the rows are built with them
+    this.set_input(CONTAINER.columns, options.columns, (columns) =>
+      this.#set_columns(columns.value as ListColumns<T>),
+    );
+    if (options.rows !== undefined) this.#parent.state = options.rows as A;
+    this.set_input(CONTAINER.rows, options.rows, (rows) =>
+      rows.ok
+        ? this.#update_rows(rows.value as R[])
+        : this.#update_rows([], rows.error.nice),
+    );
+    this.set_input(CONTAINER.add_row, options.add_row, (add_row) =>
+      this.#set_add_row(add_row.value),
+    );
+    if (options.selected !== undefined) this.#set_selected(options.selected);
+    return this;
+  }
+
+  #set_columns(columns: ListColumns<T>) {
     this.#root.columns.clear();
     const order = new Map<keyof T, number>();
     let index = 0;
@@ -343,6 +391,8 @@ class Container<
 
     for (let i = 0; i < this.#child_box.childElementCount; i++)
       (this.#child_box.children[i] as ListRow<R, T, A, S>).columns_changed();
+    this.#add_row?.columns_changed();
+    this.#error?.columns_changed();
   }
 
   /**Gives the auto width columns their current width, so resizing one column does not resize the others
@@ -428,20 +478,20 @@ class Container<
     this.#box.style.gridTemplateColumns = widths.join(" ");
   }
 
-  set add_row(options: ListAddRowOptions | undefined) {
-    if (!options && this.#add_row) {
-      this.#add_row.remove();
-      this.#box.classList.remove("addrow");
+  /**null removes the add row, options are passed on to it unchanged */
+  #set_add_row(options: ListAddRowOptions | null) {
+    if (!options) {
+      this.#add_row?.remove();
       this.#add_row = undefined;
-    } else if (options) {
-      if (!this.#add_row) {
-        this.#box.classList.add("addrow");
-        this.#add_row = this.#box.appendChild(
-          new ListAddRow<R, T, A, S>(this.#root, this.#parent),
-        );
-      }
-      this.#add_row.options = options;
-    }
+    } else if (this.#add_row) this.#add_row.set(options);
+    else
+      this.#add_row = this.#box.appendChild(
+        ListAddRow.create<
+          ListAddRow<R, T, A, S>,
+          [ListRoot<R, T, A, S>, ListRowParent<A>]
+        >(options, this.#root, this.#parent),
+      );
+    this.#box.classList.toggle("addrow", Boolean(options));
   }
 
   //      _____   ______          _______
@@ -461,62 +511,47 @@ class Container<
     return count;
   }
 
-  set rows(rows: R[] | State<R[]>) {
-    if (this.#state_sub) this.detach_state(this.#state_sub);
-    this.#state_sub = undefined;
-    this.#parent.state = rows as A;
-    if (state.is.state(rows))
-      this.#state_sub = this.attach_state(rows, (r) =>
-        this.#update_rows(r.ok ? r.value : [], r.ok ? undefined : r.error.nice),
-      );
-    else this.#update_rows(rows);
-  }
-
   #update_rows(rows: readonly R[], error?: string) {
     this.#error = list_rows_error_update(
       this.#child_box,
       this.#error,
       error,
-      this.#root.sub_rows,
+      this.#root,
       this.#parent,
     );
     list_rows_apply(this.#root, this.#parent, this.#child_box, rows);
   }
 
-  /**Binds the selection to an array state of keys, which can be shared with other lists and elements
-   * The list shows the keys that have a visible row, and only writes the state on user actions,
-   * with array write instructions, so it must be a state that applies them, like a local writable state
-   * Without a state the selection is kept in a state of the list that nobody else can reach
-   * Needs the selection option */
-  bind(opts: { selection?: StateREAW<K[], any, K[]> }): this {
+  /**A fixed value becomes a state of the list the user changes, a state is followed and written when writable */
+  #set_selected(selected: K[] | StateREA<K[], any, any>) {
     const selection = this.#selection;
     if (!selection) {
-      if (opts.selection) console.error("List has no selection option", this);
-      return this;
+      console.error("List has no selection configuration", this);
+      return;
     }
-    if (this.#selection_sub) this.detach_state(this.#selection_sub);
-    const target = opts.selection ?? state.ok_w<K[]>([]);
+    const target = state.is.state_of(selected)
+      ? selected
+      : state.ok_w<K[]>([...selected]);
     selection.target = target;
-    this.#selection_sub = this.attach_state(
-      target as StateREAW<K[]>,
-      (value: StateResult<K[]>) => selection.apply(value),
+    this.set_input(
+      CONTAINER.selected,
+      target as StateOrVal<unknown[]>,
+      (value) => selection.apply(value as StateResult<K[]>),
     );
-    return this;
   }
 }
 define_element(Container);
 
-export function container<
-  A extends ListType<any>,
-  T extends {},
-  S extends boolean = false,
-  R = ListTypeExtract<A>,
-  K = R,
->(
-  columns: { [C in keyof T]: ListColumnOptions<T[C], any> },
-  transform: ListRowTransformer<R, NoInfer<T>, A, S>,
-  rows: A,
-  options?: ContainerOptions<S, R, K>,
-) {
-  return new Container<A, T, S, R, K>(columns, transform, rows, options);
+export type { Container as ListContainer };
+
+/**Makes a list, the configuration is fixed for its life, the options are its inputs, which set changes later
+ * The columns are needed at creation, they decide the column keys and value types the transform gives values for */
+export function container<T extends {}, R, S extends boolean = false, K = R>(
+  config: ListContainerConfig<T, R, S, K>,
+  options: ListContainerOptions<T, R, K> & { columns: ListColumns<T> },
+): Container<T, R, S, K> {
+  return Container.create<
+    Container<T, R, S, K>,
+    [ListContainerConfig<T, R, S, K>]
+  >(options, config);
 }

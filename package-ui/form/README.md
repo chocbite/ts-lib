@@ -92,7 +92,6 @@ Prompts made with `prompts.form` of `@chocbite/ts-lib-ui/prompts` are a group in
 | `form.spacer`                 | none                 | `space`                                                                           |
 | `form.group`                  | object by id         | `elements` and `id` at creation, `column`, `row`, `border`, `embed`, `max_height` |
 | `form.group_collapser`        | none                 | `collapsed`, `opened_text`, `closed_text`                                         |
-| `form.list_field`             | none                 | wraps an element as a field of a list column                                      |
 
 Limits of 0, like `max_length: 0`, mean no limit. Every option of the elements is described on its key, an editor shows it on hover.
 

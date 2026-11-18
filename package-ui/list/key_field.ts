@@ -92,6 +92,18 @@ export class ListKeyField<A extends ListType<any>> extends Base {
     return this.#tail;
   }
 
+  /**Puts the button or error text of an add row, error row or invalid row after the tree lines
+   * Without value columns it is the tail, the key field then runs from the key column to the end of the row, so a list of only the key column works
+   * Otherwise it is a cell of its own right after the key field, which stays in its column and stays put when the list scrolls sideways*/
+  place_after(element: HTMLElement, value_columns: boolean) {
+    if (!value_columns) {
+      this.tail = element;
+      return;
+    }
+    if (this.#tail === element) this.tail = undefined;
+    this.after(element);
+  }
+
   /**Text after the icon, an empty string removes the text element */
   set text(value: string | undefined) {
     this.classList.toggle("has-text", Boolean(value));

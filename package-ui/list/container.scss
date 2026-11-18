@@ -24,10 +24,6 @@ list-container {
         background-color: var(--list-colors-background-row_even);
         //Above the rows scrolling under it
         z-index: 999;
-
-        &:first-child {
-          left: 0;
-        }
       }
 
       > list-headerfield {
@@ -155,6 +151,11 @@ list-container > div > list-headerrow > .key > div > span {
   }
 }
 
+//The fault icon of the list, above the sticky header cells it would be hidden under
+list-container > base-fault {
+  z-index: 1001;
+}
+
 //Hidden input showing write errors with the validation message of the browser, placed over a row by the list
 list-container > input.list-warn {
   all: unset;
@@ -192,7 +193,6 @@ list-container > div {
     left: calc(var(--list-drag-width) + var(--list-check-width));
   }
   //Sticky in both directions, above the column headers that scroll under them sideways
-  > list-headerrow > :first-child,
   > list-headerrow > .key,
   > list-headerrow > list-dragfield,
   > list-headerrow > list-checkfield {
@@ -218,14 +218,32 @@ list-container > div {
     }
   }
 
-  //The error and add rows start after the lead columns
+  //With sub rows the button of an add row and the text of an error row or invalid row start after the key column
+  //Without value columns they are in the key field instead, which runs to the end, see place_after of the key field
+  &.sub-rows {
+    list-addrow > span,
+    list-error {
+      grid-column: 2 / -1;
+    }
+  }
+
+  //The error and add rows start after the lead columns, their key field in the key column
   @for $lead from 1 through 2 {
     &.lead-#{$lead} {
-      //With sub rows the key field holds the button or error and runs to the end
+      list-addrow > list-keyfield,
+      list-rowserror > list-keyfield {
+        grid-column: $lead + 1;
+      }
       list-keyfield.tail,
       list-addrow > span,
       list-error {
         grid-column: #{$lead + 1} / -1;
+      }
+      &.sub-rows {
+        list-addrow > span,
+        list-error {
+          grid-column: #{$lead + 2} / -1;
+        }
       }
     }
   }

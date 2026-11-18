@@ -1,6 +1,11 @@
-import { Base, define_element } from "#base";
-import { some } from "@chocbite/ts-lib/result";
-import { state, type State } from "@chocbite/ts-lib/state";
+import {
+  Base,
+  define_element,
+  input_key,
+  type BaseOptions,
+  type InputOptions,
+} from "#base";
+import type { StateOrVal } from "@chocbite/ts-lib/state";
 import type { SVGFunc } from "#svg";
 import "./add_row.scss";
 import { ListKeyField } from "./key_field";
@@ -11,13 +16,19 @@ import type {
   ListType,
 } from "./types";
 
-export interface ListAddRowOptions {
-  text: string | State<string>;
-  disabled?: boolean | State<boolean>;
-  icon?: SVGFunc | State<SVGFunc>;
-  on_add: () => void;
-}
+/**Inputs of the add row*/
+const ADD_ROW = {
+  /**Text of the button, shows the error on errors*/
+  text: input_key<StateOrVal<string>>(),
+  /**Icon in front of the text, null for none, none on errors*/
+  icon: input_key<StateOrVal<SVGFunc | null>>(),
+  /**Called when the user clicks the button*/
+  on_add: input_key<() => void>(),
+};
+/**Options of an add row, access locks it like every element*/
+export type ListAddRowOptions = BaseOptions & InputOptions<typeof ADD_ROW>;
 
+/**Button below the rows of a parent, adding a row is up to the app*/
 export class ListAddRow<
   R,
   T extends {},
@@ -34,56 +45,56 @@ export class ListAddRow<
     return "list";
   }
 
-  #button: HTMLSpanElement;
-  #text: Text;
+  #button = document.createElement("span");
+  #text = this.#button.appendChild(document.createTextNode(""));
   #icon?: SVGSVGElement;
-  #parent: ListRowParent<A>;
+  readonly #parent: ListRowParent<A>;
+  readonly #root: ListRoot<R, T, A, S>;
+  #key_field?: ListKeyField<A>;
   readonly depth: number;
 
   constructor(root: ListRoot<R, T, A, S>, parent: ListRowParent<A>) {
     super();
     this.#parent = parent;
+    this.#root = root;
     this.depth = parent.depth + 1;
-    this.#button = document.createElement("span");
     this.#button.className = "add";
     this.#button.tabIndex = 0;
-    //With sub rows the button is in the key field after the tree lines, it runs from the key column to the end
-    if (root.sub_rows)
-      this.appendChild(new ListKeyField(this)).tail = this.#button;
-    else this.appendChild(this.#button);
-    this.#text = this.#button.appendChild(document.createTextNode(""));
+    if (root.sub_rows) {
+      this.#key_field = this.appendChild(new ListKeyField(this));
+      this.columns_changed();
+    } else this.appendChild(this.#button);
   }
 
-  set options(options: ListAddRowOptions) {
-    this.#button.onclick = options.on_add;
-
-    if (state.is.state(options.text))
-      this.attach_state_to_prop("text", options.text, (e) => some(e.nice));
-    else this.detach_state_from_prop("text").text = options.text;
-    if (state.is.state(options.disabled))
-      this.attach_state_to_prop("disabled", options.disabled, () =>
-        some(false),
-      );
-    else this.detach_state_from_prop("disabled").disabled = Boolean(
-      options.disabled,
+  /**With sub rows the button goes after the tree lines, in the key field only without value columns*/
+  columns_changed() {
+    this.#key_field?.place_after(
+      this.#button,
+      this.#root.columns_visible.length > 0,
     );
-    if (state.is.state(options.icon))
-      this.attach_state_to_prop("icon", options.icon, () => some(undefined));
-    else this.detach_state_from_prop("icon").icon = options.icon;
   }
 
-  set text(value: string) {
-    this.#text.data = value;
+  /**The fault icon goes on the button, the add row itself has no box*/
+  protected fault_anchor(): Element {
+    return this.#button;
   }
 
-  set icon(value: SVGFunc | undefined) {
-    this.#icon?.remove();
-    this.#icon = value ? this.#button.insertBefore(value(), this.#text) : undefined;
-  }
-
-  set disabled(value: boolean) {
-    if (value) this.inert = true;
-    else this.inert = false;
+  set(options: ListAddRowOptions): this {
+    super.set(options);
+    this.set_input(ADD_ROW.text, options.text, (text) => {
+      this.#text.data = text.ok ? text.value : text.error.nice;
+    });
+    this.set_input(ADD_ROW.icon, options.icon, (icon) => {
+      this.#icon?.remove();
+      const make = icon.ok ? icon.value : undefined;
+      this.#icon = make
+        ? this.#button.insertBefore(make(), this.#text)
+        : undefined;
+    });
+    this.set_input(ADD_ROW.on_add, options.on_add, (on_add) => {
+      this.#button.onclick = on_add.value;
+    });
+    return this;
   }
 
   set open(_value: boolean) {}

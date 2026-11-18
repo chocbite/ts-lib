@@ -31,7 +31,6 @@ describe("Form module exports", () => {
       form.text,
       form.text_input,
       form.text_multiline,
-      form.list_field,
     ];
     expect(factories.every((factory) => typeof factory === "function")).toBe(
       true,

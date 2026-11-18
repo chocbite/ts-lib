@@ -2,13 +2,14 @@ import { err, ok, NiceError } from "@chocbite/ts-lib/result";
 import { state, type State } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import list from ".";
+import type { ListType } from "./types";
 import type { ListTextField } from "./field";
 import { ListRow } from "./row";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
-type SubRow = ListRow<number, { col: string }, number[], true>;
+type SubRow = ListRow<number, { col: string }, ListType<number>, true>;
 
 const text_column = (title: string, field_gen: () => ListTextField) =>
   list.column({
@@ -33,14 +34,15 @@ function plain_list(
 ) {
   const field_gen = vi.fn(() => list.text_field());
   const container = list.container(
-    { col: text_column("Column", field_gen) },
-    (item: number) => {
-      const text = invalid.get(item);
-      return text === undefined
-        ? ok({ values: { col: item.toString() } })
-        : err(text);
+    {
+      transform: (item: number) => {
+        const text = invalid.get(item);
+        return text === undefined
+          ? ok({ values: { col: item.toString() } })
+          : err(text);
+      },
     },
-    rows,
+    { columns: { col: text_column("Column", field_gen) }, rows },
   );
   document.body.append(container);
   return { container, field_gen };
@@ -54,20 +56,21 @@ function sub_list(
 ) {
   const by_item = new Map<number, SubRow>();
   const container = list.container(
-    { col: list.column_string("Column") },
-    (item, row) => {
-      by_item.set(item, row);
-      const text = invalid.get(item);
-      if (text !== undefined) return err(text);
-      return ok({
-        openable: row.depth === 0,
-        sub_rows,
-        add_row: row.depth === 0 ? { text: "Add", on_add() {} } : undefined,
-        values: { col: item.toString() },
-      });
+    {
+      transform: (item, row) => {
+        by_item.set(item, row);
+        const text = invalid.get(item);
+        if (text !== undefined) return err(text);
+        return ok({
+          openable: row.depth === 0,
+          sub_rows,
+          add_row: row.depth === 0 ? { text: "Add", on_add() {} } : undefined,
+          values: { col: item.toString() },
+        });
+      },
+      sub_rows: true,
     },
-    rows,
-    { sub_rows: true },
+    { columns: { col: list.column_string("Column") }, rows },
   );
   document.body.append(container);
   return { container, row: (item: number) => by_item.get(item)! };
@@ -114,17 +117,19 @@ describe("List container state error", () => {
   it("removes the error when given an array instead of the state", async () => {
     const { container } = plain_list(state.err_w<number[]>(nice_err("No data")));
     await expect.poll(() => error_of(container)).toBe("No data");
-    container.rows = [1];
+    container.set({ rows: [1] });
     expect(error_of(container)).toBeUndefined();
     expect(container.amount_rows()).toBe(1);
   });
 
   it("keeps the add row", async () => {
     const container = list.container(
-      { col: list.column_string("Column") },
-      (item: number) => ok({ values: { col: item.toString() } }),
-      state.err_w<number[]>(nice_err("No data")),
-      { add_row: { text: "Add", on_add() {} } },
+      { transform: (item: number) => ok({ values: { col: item.toString() } }) },
+      {
+        columns: { col: list.column_string("Column") },
+        rows: state.err_w<number[]>(nice_err("No data")),
+        add_row: { text: "Add", on_add() {} },
+      },
     );
     document.body.append(container);
     await expect.poll(() => error_of(container)).toBe("No data");
@@ -164,11 +169,11 @@ describe("List invalid rows", () => {
     expect(field_gen).toHaveBeenCalledTimes(1);
 
     invalid.set(1, "Bad row");
-    container.rows = [1];
+    container.set({ rows: [1] });
     expect(container.querySelector("list-row")!.textContent).toBe("Bad row");
 
     invalid.clear();
-    container.rows = [1];
+    container.set({ rows: [1] });
     expect(container.querySelector("list-row")!.textContent).toBe("1");
     expect(error_of(container)).toBeUndefined();
     expect(field_gen).toHaveBeenCalledTimes(1);
@@ -178,7 +183,7 @@ describe("List invalid rows", () => {
     const invalid = new Map([[1, "First"]]);
     const { container } = plain_list([1], invalid);
     invalid.set(1, "Second");
-    container.rows = [1];
+    container.set({ rows: [1] });
     expect(error_of(container)).toBe("Second");
     expect(container.querySelectorAll("list-error").length).toBe(1);
   });
@@ -186,11 +191,11 @@ describe("List invalid rows", () => {
   it("keeps the text when the columns change, and uses the new columns on recovery", () => {
     const invalid = new Map([[1, "Bad row"]]);
     const { container, field_gen } = plain_list([1], invalid);
-    container.columns = { col: text_column("New", field_gen) };
+    container.set({ columns: { col: text_column("New", field_gen) } });
     expect(error_of(container)).toBe("Bad row");
 
     invalid.clear();
-    container.rows = [1];
+    container.set({ rows: [1] });
     expect(container.querySelector("list-row")!.textContent).toBe("1");
     expect(container.querySelectorAll("list-textfield").length).toBe(1);
   });
@@ -210,7 +215,7 @@ describe("List invalid rows", () => {
     expect(row(1).querySelector("list-addrow")).not.toBeNull();
 
     invalid.set(1, "Bad row");
-    container.rows = [1];
+    container.set({ rows: [1] });
     expect(row(1).open).toBe(false);
     expect(row(1).amount_rows()).toBe(0);
     expect(row(1).openable).toBe(false);
@@ -221,7 +226,7 @@ describe("List invalid rows", () => {
     const invalid = new Map([[1, "Bad row"]]);
     const { container, row } = sub_list([1], () => [10], invalid);
     invalid.clear();
-    container.rows = [1];
+    container.set({ rows: [1] });
     expect(row(1).openable).toBe(true);
     row(1).open = true;
     expect(row(1).amount_rows()).toBe(1);
@@ -279,10 +284,14 @@ describe("List sub row state error", () => {
 
   it("has a key field at the top level of a list with sub rows only", async () => {
     const with_sub_rows = list.container(
-      { col: list.column_string("Column") },
-      (item: number) => ok({ values: { col: item.toString() } }),
-      state.err_w<number[]>(nice_err("No data")),
-      { sub_rows: true },
+      {
+        transform: (item: number) => ok({ values: { col: item.toString() } }),
+        sub_rows: true,
+      },
+      {
+        columns: { col: list.column_string("Column") },
+        rows: state.err_w<number[]>(nice_err("No data")),
+      },
     );
     document.body.append(with_sub_rows);
     await expect.poll(() => error_of(with_sub_rows)).toBe("No data");
@@ -308,15 +317,17 @@ describe("List without value columns", () => {
   //Everything after the key field would be outside the grid and make a column of its own, the rows would flow into it
   function names_list(rows: State<string[]> | string[], add: boolean) {
     const container = list.container(
-      {},
-      (name: string) =>
-        name === "bad"
-          ? err("Invalid " + name)
-          : ok({ key_field: { text: name }, values: {} }),
-      rows,
       {
+        transform: (name: string) =>
+          name === "bad"
+            ? err("Invalid " + name)
+            : ok({ key_field: { text: name }, values: {} }),
         headless: true,
         sub_rows: true,
+      },
+      {
+        columns: {},
+        rows,
         add_row: add ? { text: "Add row", on_add: () => {} } : undefined,
       },
     );
@@ -372,18 +383,20 @@ describe("List without value columns", () => {
   it("shows the fields again when an invalid row becomes valid", () => {
     const rows = state.ok_w(["bad"]);
     const container = list.container(
-      { name: list.column_string("Name") },
-      (name: string) =>
-        name === "bad" ? err("Invalid") : ok({ values: { name } }),
-      rows,
-      { sub_rows: true },
+      {
+        transform: (name: string) =>
+          name === "bad" ? err("Invalid") : ok({ values: { name } }),
+        sub_rows: true,
+      },
+      { columns: { name: list.column_string("Name") }, rows },
     );
     document.body.append(container);
     const key = container.querySelector("list-row list-keyfield")!;
-    expect(key.classList.contains("tail")).toBe(true);
-    rows.set_ok(["good"]);
+    //With a value column the text is a cell of its own after the key field
     expect(key.classList.contains("tail")).toBe(false);
-    expect(key.querySelector("list-error")).toBeNull();
+    expect(key.nextElementSibling!.tagName).toBe("LIST-ERROR");
+    rows.set_ok(["good"]);
+    expect(container.querySelector("list-error")).toBeNull();
     expect(container.querySelector("list-row")!.textContent).toContain("good");
   });
 });

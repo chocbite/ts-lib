@@ -1,6 +1,7 @@
 import { state } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ListAddRow } from "./add_row";
+import { AccessTypes } from "#base";
+import { ListAddRow, type ListAddRowOptions } from "./add_row";
 import { ListKeyField } from "./key_field";
 import type { ListRoot, ListRowParent } from "./types";
 import { ok, NiceError } from "@chocbite/ts-lib/result";
@@ -30,8 +31,15 @@ function parent(depth: number): ListRowParent<number[]> {
   return { depth, open: false, select_adjacent() {}, state: [] };
 }
 
-function add_row(sub_rows = false, depth = -1) {
-  const row = new ListAddRow(root(sub_rows), parent(depth));
+function add_row(
+  sub_rows = false,
+  depth = -1,
+  options: ListAddRowOptions = {},
+) {
+  const row = ListAddRow.create<
+    ListAddRow<number, Values, number[], boolean>,
+    [ListRoot<number, Values, number[], boolean>, ListRowParent<number[]>]
+  >(options, root(sub_rows), parent(depth));
   document.body.append(row);
   return row;
 }
@@ -42,45 +50,45 @@ function button_of(row: HTMLElement): HTMLElement {
 
 describe("List add row", () => {
   it("shows the text and calls on_add when clicked", () => {
-    const row = add_row();
     const on_add = vi.fn();
-    row.options = { text: "Add", on_add };
+    const row = add_row(false, -1, { text: "Add", on_add });
     expect(button_of(row).textContent).toBe("Add");
     expect(button_of(row).tabIndex).toBe(0);
     button_of(row).click();
     expect(on_add).toHaveBeenCalledOnce();
   });
 
-  it("shows the icon before the text, from a fixed value or a state", () => {
+  it("shows the icon before the text, from a fixed value or a state, null removes it", () => {
     const icon = (name: string) => () => {
       const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       svg.dataset.icon = name;
       return svg;
     };
-    const row = add_row();
-    row.options = { text: "Add", icon: icon("plus"), on_add() {} };
+    const row = add_row(false, -1, { text: "Add", icon: icon("plus") });
     const button = button_of(row);
     expect(button.firstElementChild?.getAttribute("data-icon")).toBe("plus");
     expect(button.textContent).toBe("Add");
     const icon_state = state.ok_w(icon("first"));
-    row.options = { text: "Add", icon: icon_state, on_add() {} };
+    row.set({ icon: icon_state });
     expect(button.querySelectorAll("svg").length).toBe(1);
     expect(button.firstElementChild?.getAttribute("data-icon")).toBe("first");
     icon_state.set_ok(icon("second"));
     expect(button.querySelectorAll("svg").length).toBe(1);
     expect(button.firstElementChild?.getAttribute("data-icon")).toBe("second");
-    row.options = { text: "Changed", on_add() {} };
+    //Left out it stays
+    row.set({ text: "Changed" });
+    expect(button.firstElementChild?.getAttribute("data-icon")).toBe("second");
+    row.set({ icon: null });
     icon_state.set_ok(icon("third"));
     expect(button.querySelector("svg")).toBeNull();
     expect(button.textContent).toBe("Changed");
   });
 
-  it("replaces on_add when the options change", () => {
-    const row = add_row();
+  it("replaces on_add with set", () => {
     const first = vi.fn();
     const second = vi.fn();
-    row.options = { text: "Add", on_add: first };
-    row.options = { text: "Add", on_add: second };
+    const row = add_row(false, -1, { text: "Add", on_add: first });
+    row.set({ on_add: second });
     button_of(row).click();
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledOnce();
@@ -109,8 +117,7 @@ describe("List add row", () => {
 
   it("follows a text state and shows its error", () => {
     const text = state.from_w("One");
-    const row = add_row();
-    row.options = { text, on_add: () => {} };
+    const row = add_row(false, -1, { text });
     expect(button_of(row).textContent).toBe("One");
     text.set_ok("Two");
     expect(button_of(row).textContent).toBe("Two");
@@ -120,51 +127,27 @@ describe("List add row", () => {
 
   it("stops following a text state when given a fixed text", () => {
     const text = state.ok_w("One");
-    const row = add_row();
-    row.options = { text, on_add: () => {} };
-    row.options = { text: "Fixed", on_add: () => {} };
+    const row = add_row(false, -1, { text });
+    row.set({ text: "Fixed" });
     text.set_ok("Two");
     expect(button_of(row).textContent).toBe("Fixed");
   });
 
-  it("is inert when disabled", () => {
-    const row = add_row();
-    row.options = { text: "Add", disabled: true, on_add: () => {} };
+  it("is locked with read access and unlocked with write access", () => {
+    const row = add_row(false, -1, { text: "Add", access: AccessTypes.Read });
     expect(row.inert).toBe(true);
-  });
-
-  it("follows a disabled state and is enabled when it errors", () => {
-    const disabled = state.from_w(true);
-    const row = add_row();
-    row.options = { text: "Add", disabled, on_add: () => {} };
+    //Left out it stays
+    row.set({ text: "More" });
     expect(row.inert).toBe(true);
-    disabled.set_ok(false);
-    expect(row.inert).toBe(false);
-    disabled.set_ok(true);
-    disabled.set_err(nice_err("fail"));
+    row.set({ access: AccessTypes.Write });
     expect(row.inert).toBe(false);
   });
 
-  it("is enabled again when disabled is set back to false", () => {
-    const row = add_row();
-    row.options = { text: "Add", disabled: true, on_add: () => {} };
-    row.options = { text: "Add", disabled: false, on_add: () => {} };
-    expect(row.inert).toBe(false);
-  });
-
-  it("is enabled again when disabled is left out of new options", () => {
-    const row = add_row();
-    row.options = { text: "Add", disabled: true, on_add: () => {} };
-    row.options = { text: "Add", on_add: () => {} };
-    expect(row.inert).toBe(false);
-  });
-
-  it("stops following a disabled state when given a fixed value", () => {
-    const disabled = state.ok_w(false);
-    const row = add_row();
-    row.options = { text: "Add", disabled, on_add: () => {} };
-    row.options = { text: "Add", disabled: false, on_add: () => {} };
-    disabled.set_ok(true);
+  it("follows an access state", () => {
+    const access = state.ok_w<AccessTypes>(AccessTypes.Read);
+    const row = add_row(false, -1, { text: "Add", access });
+    expect(row.inert).toBe(true);
+    access.set_ok(AccessTypes.Write);
     expect(row.inert).toBe(false);
   });
 
@@ -174,4 +157,3 @@ describe("List add row", () => {
     expect(row.state).toBe(rows);
   });
 });
-

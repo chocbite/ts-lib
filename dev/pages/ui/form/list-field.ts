@@ -32,7 +32,7 @@ const MODES = [
 {
   const sec = section(
     "Form elements in list cells",
-    "form.list_field wraps a form element as a list field. Each row binds its elements to its own states, so the switch, lamp and stepper in a row stay in sync. Do the elements fit the row height, do hover and focus inside a row work, does scrolling keep the right values in the right rows",
+    "Form elements are list fields directly, the column gives each its value with set. They have no look for list cells yet. Each row binds its elements to its own states, so the switch, lamp and stepper in a row stay in sync. Do the elements fit the row height, do hover and focus inside a row work, does scrolling keep the right values in the right rows",
   );
   const rows = state.ok_w(array_from_length(200, machine));
   controls(sec, {
@@ -48,81 +48,76 @@ const MODES = [
   }).appendChild(
     list.container(
       {
-        name: list.column_string("Name"),
-        on: list.column({
-          title: "On",
-          fixed_width: "min",
-          field_gen: () => form.list_field(form.switch()),
-          field_apply: (field, v: Machine["on"]) =>
-            field.element.set({ value: v }),
-        }),
-        lamp: list.column({
-          title: "State",
-          init_width: 8,
-          field_gen: () =>
-            form.list_field(
+        transform: (m) =>
+          ok({
+            values: {
+              name: m.name,
+              on: m.on,
+              lamp: m.on,
+              speed: m.speed,
+              progress: m.speed,
+              mode: m.mode,
+              mode_dropdown: m.mode,
+              start: m.on,
+            },
+          }),
+      },
+      {
+        columns: {
+          name: list.column_string("Name"),
+          on: list.column({
+            title: "On",
+            fixed_width: "min",
+            field_gen: () => form.switch(),
+            field_apply: (field, v: Machine["on"]) => field.set({ value: v }),
+          }),
+          lamp: list.column({
+            title: "State",
+            init_width: 8,
+            field_gen: () =>
               form.lamp({
                 text: "Power",
                 colors: [FormColors.Red, FormColors.Green],
               }),
-            ),
-          field_apply: (field, v: Machine["on"]) =>
-            field.element.set({ value: v }),
-        }),
-        speed: list.column({
-          title: "Speed",
-          init_width: 12,
-          field_gen: () =>
-            form.list_field(form.stepper({ min: 0, max: 100, unit: "%" })),
-          field_apply: (field, v: Machine["speed"]) =>
-            field.element.set({ value: v }),
-        }),
-        progress: list.column({
-          title: "Load",
-          init_width: 10,
-          field_gen: () => form.list_field(form.progress({ unit: "%" })),
-          field_apply: (field, v: Machine["speed"]) =>
-            field.element.set({ value: v }),
-        }),
-        mode: list.column({
-          title: "Mode",
-          init_width: 14,
-          field_gen: () =>
-            form.list_field(form.toggle_button({ selections: MODES })),
-          field_apply: (field, v: Machine["mode"]) =>
-            field.element.set({ value: v }),
-        }),
-        mode_dropdown: list.column({
-          title: "Mode dropdown",
-          init_width: 10,
-          field_gen: () => form.list_field(form.dropdown({ selections: MODES })),
-          field_apply: (field, v: Machine["mode"]) =>
-            field.element.set({ value: v }),
-        }),
-        start: list.column({
-          title: "Start",
-          fixed_width: "min",
-          field_gen: () =>
-            form.list_field(
+            field_apply: (field, v: Machine["on"]) => field.set({ value: v }),
+          }),
+          speed: list.column({
+            title: "Speed",
+            init_width: 12,
+            field_gen: () => form.stepper({ min: 0, max: 100, unit: "%" }),
+            field_apply: (field, v: Machine["speed"]) =>
+              field.set({ value: v }),
+          }),
+          progress: list.column({
+            title: "Load",
+            init_width: 10,
+            field_gen: () => form.progress({ unit: "%" }),
+            field_apply: (field, v: Machine["speed"]) =>
+              field.set({ value: v }),
+          }),
+          mode: list.column({
+            title: "Mode",
+            init_width: 14,
+            field_gen: () => form.toggle_button({ selections: MODES }),
+            field_apply: (field, v: Machine["mode"]) => field.set({ value: v }),
+          }),
+          mode_dropdown: list.column({
+            title: "Mode dropdown",
+            init_width: 10,
+            field_gen: () => form.dropdown({ selections: MODES }),
+            field_apply: (field, v: Machine["mode"]) => field.set({ value: v }),
+          }),
+          start: list.column({
+            title: "Start",
+            fixed_width: "min",
+            field_gen: () =>
               form.button({ icon: material_play_arrow_rounded, text: "Start" }),
-            ),
-          field_apply: (field, v: Machine["on"]) =>
-            field.element.set({ on_click: () => v.set_ok(true) }),
-        }),
-      },
-      (m) => ok({
-        values: {
-          name: m.name,
-          on: m.on,
-          lamp: m.on,
-          speed: m.speed,
-          progress: m.speed,
-          mode: m.mode,
-          mode_dropdown: m.mode,
-          start: m.on,
+            field_apply: (field, v: Machine["on"]) =>
+              field.set({ on_click: () => v.set_ok(true) }),
+          }),
         },
-      }),
-      rows,
+        rows,
+      },
     ),
   );
 }

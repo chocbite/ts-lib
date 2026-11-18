@@ -46,15 +46,13 @@ function tree(
   } = {},
 ) {
   const container = list.container(
-    { name: list.column_string("Name") },
-    (data: Node) =>
-      ok({
-        openable: Boolean(data.children),
-        sub_rows: () => data.children ?? [],
-        values: { name: "n" + data.id },
-      }),
-    rows,
     {
+      transform: (data: Node) =>
+        ok({
+          openable: Boolean(data.children),
+          sub_rows: () => data.children ?? [],
+          values: { name: "n" + data.id },
+        }),
       sub_rows: true,
       reorder: {
         can_drop: options.can_drop,
@@ -65,6 +63,7 @@ function tree(
         ? { mode: "multi", key: (data) => data.id }
         : undefined,
     },
+    { columns: { name: list.column_string("Name") }, rows },
   );
   container.style.height = "30rem";
   document.body.append(container);
@@ -160,21 +159,25 @@ describe("List reorder handles", () => {
     ).toBe('""');
   });
 
-  it("keep the error and add rows after them, from the key column to the end", () => {
+  it("keep the error and add rows after them, the key field in the key column and the text in the value columns", () => {
     const rows = state.from_w<Node[]>([node(1)]);
     const container = tree(rows as unknown as Rows, { multi: true });
     rows.set_err(nice_err("broken"));
-    const key = container
-      .querySelector("list-rowserror > list-keyfield")!
-      .getBoundingClientRect();
-    const key_header = container
-      .querySelector("list-headerrow > .key")!
-      .getBoundingClientRect();
-    const last_header = container
-      .querySelector("list-headerrow > :last-child")!
-      .getBoundingClientRect();
+    const rect = (selector: string) =>
+      container.querySelector(selector)!.getBoundingClientRect();
+    const key = rect("list-rowserror > list-keyfield");
+    const key_header = rect("list-headerrow > .key");
     expect(key.left).toBeCloseTo(key_header.left, 0);
-    expect(key.right).toBeCloseTo(last_header.right, 0);
+    expect(key.right).toBeCloseTo(key_header.right, 0);
+    const text = rect("list-rowserror > list-error");
+    expect(text.left).toBeCloseTo(
+      rect("list-headerrow > list-headerfield:not(.key)").left,
+      0,
+    );
+    expect(text.right).toBeCloseTo(
+      rect("list-headerrow > :last-child").right,
+      0,
+    );
   });
 });
 
@@ -571,11 +574,15 @@ describe("List reorder between lists", () => {
     const group = list.drag_group<Node>();
     const make = () =>
       list.container(
-        { name: list.column_string("Name") },
-        (data: string) => ok({ values: { name: data } }),
-        state.ok_w(["a"]),
-        // @ts-expect-error a list of strings can not join a group of nodes
-        { reorder: { group } },
+        {
+          transform: (data: string) => ok({ values: { name: data } }),
+          // @ts-expect-error a list of strings can not join a group of nodes
+          reorder: { group },
+        },
+        {
+          columns: { name: list.column_string("Name") },
+          rows: state.ok_w(["a"]),
+        },
       );
     expect(make).toBeTypeOf("function");
   });

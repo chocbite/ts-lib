@@ -80,11 +80,11 @@ export abstract class Base extends HTMLElement {
     return "lib";
   }
 
-  #states: Map<StateSub<any>, [State<any>, boolean]> = new Map();
+  #states: Map<StateSub<any>, State<any>> = new Map();
 
   readonly is_connected: boolean = false;
 
-  /**Works when element is connected to observer, otherwise it is an alias for isConnected*/
+  /**With an intersection observer whether the observer sees the element, otherwise whether it is connected*/
   readonly is_visible: boolean = false;
 
   #access?: AccessTypes;
@@ -94,7 +94,10 @@ export abstract class Base extends HTMLElement {
 
   /**Runs when element is attached to document*/
   protected connectedCallback() {
-    for (const [f, [s, v]] of this.#states) if (!v) s.sub(f, true);
+    this.#was_connected = true;
+    //With an observer the states are subscribed when it reports the element visible
+    if (!this.#attached_int_observer)
+      for (const [f, s] of this.#states) s.sub(f, true);
     //Set after subscribing, so states attached by the subscribers are not subscribed twice,
     //but before visibility, so states attached from on_visible are subscribed
     //@ts-expect-error Change readonly, in same class, why is there no way to do this without ts-ignore?
@@ -107,9 +110,9 @@ export abstract class Base extends HTMLElement {
   protected disconnectedCallback() {
     //@ts-expect-error Change readonly, in same class
     this.is_connected = false;
-    for (const [f, [s, v]] of this.#states) if (!v) s.unsub(f);
     if (this.#attached_int_observer)
       this.#attached_int_observer.unobserve(this);
+    else for (const [f, s] of this.#states) s.unsub(f);
     this.internal_set_visible(false);
   }
 
@@ -139,8 +142,8 @@ export abstract class Base extends HTMLElement {
   /**Creates the element, applies the creation inputs with [CREATE] and then the rest with set
    * Factories call it, and called on a subclass it creates the subclass, so a user subclass is made with MyElement.create(options)
    * The options are those of [CREATE] and set together, both run after every constructor has finished
-   * The arguments after the options go to the constructor, only for required references that are not inputs, like a device a page shows,
-   * so the element can keep them in fields that are never unset. Abstract classes can not be created*/
+   * The arguments after the options go to the constructor, only for references and values that never change and are not inputs,
+   * like a device a page shows or the configuration a list is built from, so the element can keep them in fields that are never unset. Abstract classes can not be created*/
   static create<T extends Base, A extends unknown[]>(
     this: new (...args: A) => T,
     options: Parameters<T[typeof CREATE]>[0] & Parameters<T["set"]>[0] = {},
@@ -230,7 +233,7 @@ export abstract class Base extends HTMLElement {
    * the element keeps no reference of its own to the state*/
   protected input_state<S>(key: InputKey<S>): InputState<S> | undefined {
     const func = this.#props.get(key);
-    return (func && this.#states.get(func)?.[0]) as InputState<S> | undefined;
+    return (func && this.#states.get(func)) as InputState<S> | undefined;
   }
 
   /**Executes a function with the element as an argument and returns the element
@@ -261,35 +264,36 @@ export abstract class Base extends HTMLElement {
     return (this.#intersect_observer ??= new BaseIntersectObserver(options));
   }
 
-  /**Attaches the component to an observer, which is needed for the isVisible state and event to work and for the state system to work on visible*/
+  /**Whether the element has been in the document, after that its observer is fixed*/
+  #was_connected = false;
+
+  /**Gives the element an intersection observer, then all its states, also those of its inputs, are only subscribed while the observer sees it
+   * Without one the states are subscribed while the element is connected
+   * Given before the element is first connected, after that the observer is fixed, as the element never needs another one*/
   attach_to_intersect_observer(observer?: BaseIntersectObserver): this {
-    if (observer) {
-      if (this.is_connected) {
-        if (this.#attached_int_observer)
-          this.#attached_int_observer.unobserve(this);
-        observer.observe(this);
-      }
-      this.#attached_int_observer = observer;
-    } else if (this.#attached_int_observer) {
-      //Without an observer a connected element counts as visible
-      if (this.is_connected) {
-        this.#attached_int_observer.unobserve(this);
-        this.internal_set_visible(true);
-      }
-      this.#attached_int_observer = undefined;
-    }
+    if (this.#was_connected)
+      console.error(
+        "The intersection observer of an element is given before it is first connected",
+        this,
+      );
+    else this.#attached_int_observer = observer;
     return this;
   }
 
+  /**Whether the states of the element are subscribed now*/
+  #subscribed(): boolean {
+    return this.#attached_int_observer ? this.is_visible : this.is_connected;
+  }
+
   private internal_set_visible(is: boolean) {
-    if (this.is_visible !== is) {
-      //@ts-expect-error Change readonly, in same class
-      this.is_visible = is;
-      if (is) {
-        for (const [f, [s, v]] of this.#states) if (v) s.sub(f, true);
-      } else for (const [f, [s, v]] of this.#states) if (v) s.unsub(f);
-      this.on_visible(is);
-    }
+    if (this.is_visible === is) return;
+    //Like connecting, subscribed before the flag is set, so states attached by the subscribers are not subscribed twice
+    if (this.#attached_int_observer)
+      if (is) for (const [f, s] of this.#states) s.sub(f, true);
+      else for (const [f, s] of this.#states) s.unsub(f);
+    //@ts-expect-error Change readonly, in same class
+    this.is_visible = is;
+    this.on_visible(is);
   }
   /**Overrideable function called when the element becomes visible or hidden
    * If intersection observer is not attached it is based on connectedCallback, which is less accurate*/
@@ -326,19 +330,17 @@ export abstract class Base extends HTMLElement {
   //      \___ \   | | / /\ \ | |  |  __|
   //      ____) |  | |/ ____ \| |  | |____
   //     |_____/   |_/_/    \_\_|  |______|
-  /**Attaches a state to a function, so that the function is subscribed to the state when the component is connected
-   * @param visible when set true the function is only subscribed when the element is visible, this requires an observer to be attached to the element*/
+  /**Attaches a state to a function, so that the function is subscribed to the state while the element is connected,
+   * or while it is visible when it has an intersection observer*/
   attach_state<S extends State<any>>(
     state: S,
     func: StateInferSub<S>,
-    visible?: boolean,
   ): typeof func {
     if (this.#states.has(func))
       console.error("Function already registered with element", func, this);
     else {
-      this.#states.set(func, [state, Boolean(visible)]);
-      if (visible ? this.is_visible : this.is_connected)
-        state.sub(func as StateSub<any>, true);
+      this.#states.set(func, state);
+      if (this.#subscribed()) state.sub(func as StateSub<any>, true);
     }
     return func;
   }
@@ -347,23 +349,21 @@ export abstract class Base extends HTMLElement {
   detach_state(func: StateSub<any>): typeof func {
     const state = this.#states.get(func);
     if (state) {
-      if (state[1] ? this.is_visible : this.is_connected) state[0].unsub(func);
+      if (this.#subscribed()) state.unsub(func);
       this.#states.delete(func);
     } else console.error("Function not registered with element", func, this);
     return func;
   }
 
-  /**Attaches a state to a function, so that the function is subscribed to the state when the component is connected
-   * @param visible when set true the function is only subscribed when the element is visible, this requires an observer to be attached to the element*/
+  /**Attaches a state to a function, so that the function is subscribed to the state when the component is connected*/
   attach_state_to_symbol<S extends State<any>>(
     symbol: symbol,
     state: S,
     func: StateInferSub<S>,
-    visible?: boolean,
   ): this {
     this.detach_state_from_symbol(symbol).#props.set(
       symbol,
-      this.attach_state(state, func, visible),
+      this.attach_state(state, func),
     );
     return this;
   }
@@ -386,16 +386,14 @@ export abstract class Base extends HTMLElement {
   //     |_____/   |_/_/    \_\_|  |______| |_|    |_|  \_\\____/|_|
   /**Attaches a state to a property, so that the property is updated when the state changes
    * @param prop the property to attach the state to
-   * @param state the state to attach to the property
-   * @param visible when set true the property is only updated when the element is visible, this requires an observer to be attached to the element*/
+   * @param state the state to attach to the property*/
   attach_state_ROA_to_prop<K extends keyof this>(
     prop: K,
     state: StateROA<this[K], any, any>,
-    visible?: boolean,
   ): this {
     this.detach_state_from_prop(prop).#props.set(
       prop,
-      this.attach_state(state, (val) => (this[prop] = val.value), visible),
+      this.attach_state(state, (val) => (this[prop] = val.value)),
     );
     return this;
   }
@@ -403,24 +401,18 @@ export abstract class Base extends HTMLElement {
   /**Attaches a state to a property, so that the property is updated when the state changes
    * @param prop the property to attach the state to
    * @param state the state to attach to the property
-   * @param visible when set true the property is only updated when the element is visible, this requires an observer to be attached to the element
    * @param fallback the fallback value for the property when the state is not ok, if undefined the property is not updated when the state is not ok*/
   attach_state_ROA_to_prop_map<K extends keyof this, T = this[K]>(
     prop: K,
     state: StateROA<T, any, any>,
     map: (val: T) => Option<this[K]>,
-    visible?: boolean,
   ): this {
     this.detach_state_from_prop(prop).#props.set(
       prop,
-      this.attach_state(
-        state,
-        (val) => {
-          const o = map(val.value);
-          if (o.some) this[prop] = o.value;
-        },
-        visible,
-      ),
+      this.attach_state(state, (val) => {
+        const o = map(val.value);
+        if (o.some) this[prop] = o.value;
+      }),
     );
     return this;
   }
@@ -428,24 +420,18 @@ export abstract class Base extends HTMLElement {
   /**Attaches a state to a property, so that the property is updated when the state changes
    * @param prop the property to attach the state to
    * @param state the state to attach to the property
-   * @param map_err function called when state gives a ResultErr,
-   * @param visible when set true the property is only updated when the element is visible, this requires an observer to be attached to the element*/
+   * @param map_err function called when state gives a ResultErr,*/
   attach_state_to_prop<K extends keyof this>(
     prop: K,
     state: StateREA<this[K], any, any>,
     map_err: (error: NiceError) => Option<this[K]>,
-    visible?: boolean,
   ): this {
     this.detach_state_from_prop(prop).#props.set(
       prop,
-      this.attach_state(
-        state,
-        (v) => {
-          const o = v.ok ? some(v.value) : map_err(v.error);
-          if (o.some) this[prop] = o.value;
-        },
-        visible,
-      ),
+      this.attach_state(state, (v) => {
+        const o = v.ok ? some(v.value) : map_err(v.error);
+        if (o.some) this[prop] = o.value;
+      }),
     );
     return this;
   }
@@ -453,25 +439,19 @@ export abstract class Base extends HTMLElement {
    * @param prop the property to attach the state to
    * @param state the state to attach to the property
    * @param map_err function called when state gives a ResultErr,
-   * @param map function called when state gives a ResultOk,
-   * @param visible when set true the property is only updated when the element is visible, this requires an observer to be attached to the element*/
+   * @param map function called when state gives a ResultOk,*/
   attach_state_to_prop_map<K extends keyof this, T = this[K]>(
     prop: K,
     state: StateREA<T, any, any>,
     map_err: (error: NiceError) => Option<this[K]>,
     map: (val: T) => Option<this[K]>,
-    visible?: boolean,
   ): this {
     this.detach_state_from_prop(prop).#props.set(
       prop,
-      this.attach_state(
-        state,
-        (v) => {
-          const o = v.ok ? map(v.value) : map_err(v.error);
-          if (o.some) this[prop] = o.value;
-        },
-        visible,
-      ),
+      this.attach_state(state, (v) => {
+        const o = v.ok ? map(v.value) : map_err(v.error);
+        if (o.some) this[prop] = o.value;
+      }),
     );
     return this;
   }
@@ -494,19 +474,15 @@ export abstract class Base extends HTMLElement {
   //     |_____/   |_/_/    \_\_|  |______| /_/    \_\_|     |_|  |_|  \_\_____|____/ \____/   |_|  |______|
   /**Attaches a state to an element attribute, so that the attribute is updated when the state changes
    * @param qualified_name the qualified name of the attribute to attach the state to
-   * @param state the state to attach to the attribute
-   * @param visible when set true the attribute is only updated when the element is visible, this requires an observer to be attached to the element*/
+   * @param state the state to attach to the attribute*/
   attach_state_ROA_to_attribute(
     qualified_name: string,
     state: StateROA<string, any, any>,
-    visible?: boolean,
   ): this {
     this.detach_state_from_attribute(qualified_name).#attr.set(
       qualified_name,
-      this.attach_state(
-        state,
-        (val) => this.setAttribute(qualified_name, val.value),
-        visible,
+      this.attach_state(state, (val) =>
+        this.setAttribute(qualified_name, val.value),
       ),
     );
     return this;
@@ -515,24 +491,18 @@ export abstract class Base extends HTMLElement {
   /**Attaches a state to an element attribute, so that the attribute is updated when the state changes
    * @param qualified_name the qualified name of the attribute to attach the state to
    * @param state the state to attach to the attribute
-   * @param visible when set true the attribute is only updated when the element is visible, this requires an observer to be attached to the element
    * @param fallback the fallback value for the attribute when the state is not ok, if undefined the attribute is not updated when the state is not ok*/
   attach_state_ROA_to_attribute_map<U>(
     qualified_name: string,
     state: StateROA<U, any, any>,
     map: (val: U) => Option<string>,
-    visible?: boolean,
   ): this {
     this.detach_state_from_attribute(qualified_name).#attr.set(
       qualified_name,
-      this.attach_state(
-        state,
-        (val) => {
-          const o = map(val.value);
-          if (o.some) this.setAttribute(qualified_name, o.value);
-        },
-        visible,
-      ),
+      this.attach_state(state, (val) => {
+        const o = map(val.value);
+        if (o.some) this.setAttribute(qualified_name, o.value);
+      }),
     );
     return this;
   }
@@ -540,24 +510,18 @@ export abstract class Base extends HTMLElement {
   /**Attaches a state to an element attribute, so that the attribute is updated when the state changes
    * @param qualified_name the qualified name of the attribute to attach the state to
    * @param state the state to attach to the attribute
-   * @param map_err function called when state gives a ResultErr,
-   * @param visible when set true the attribute is only updated when the element is visible, this requires an observer to be attached to the element*/
+   * @param map_err function called when state gives a ResultErr,*/
   attach_state_to_attribute(
     qualified_name: string,
     state: StateREA<string, any, any>,
     map_err: (error: NiceError) => Option<string>,
-    visible?: boolean,
   ): this {
     this.detach_state_from_attribute(qualified_name).#attr.set(
       qualified_name,
-      this.attach_state(
-        state,
-        (v) => {
-          const o = v.ok ? some(v.value) : map_err(v.error);
-          if (o.some) this.setAttribute(qualified_name, o.value);
-        },
-        visible,
-      ),
+      this.attach_state(state, (v) => {
+        const o = v.ok ? some(v.value) : map_err(v.error);
+        if (o.some) this.setAttribute(qualified_name, o.value);
+      }),
     );
     return this;
   }
@@ -566,25 +530,19 @@ export abstract class Base extends HTMLElement {
    * @param qualified_name the qualified name of the attribute to attach the state to
    * @param state the state to attach to the attribute
    * @param map_err function called when state gives a ResultErr,
-   * @param map function called when state gives a ResultOk,
-   * @param visible when set true the attribute is only updated when the element is visible, this requires an observer to be attached to the element*/
+   * @param map function called when state gives a ResultOk,*/
   attach_state_to_attribute_map<U>(
     qualified_name: string,
     state: StateREA<U, any, any>,
     map_err: (error: NiceError) => Option<string>,
     map: (val: U) => Option<string>,
-    visible?: boolean,
   ): this {
     this.detach_state_from_attribute(qualified_name).#attr.set(
       qualified_name,
-      this.attach_state(
-        state,
-        (v) => {
-          const o = v.ok ? map(v.value) : map_err(v.error);
-          if (o.some) this.setAttribute(qualified_name, o.value);
-        },
-        visible,
-      ),
+      this.attach_state(state, (v) => {
+        const o = v.ok ? map(v.value) : map_err(v.error);
+        if (o.some) this.setAttribute(qualified_name, o.value);
+      }),
     );
     return this;
   }

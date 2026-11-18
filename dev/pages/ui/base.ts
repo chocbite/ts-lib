@@ -148,10 +148,10 @@ const toggle_ticking = () => {
       this.style.borderBottom = "1px solid #8884";
       this.style.background = "#c6282855";
       this.textContent = `row ${index}, never updated`;
+      //Subscribed only while visible, as the scroller gives each row its observer before it is connected
       this.attach_state(
         tick,
         (v) => (this.textContent = `row ${this.#index}, tick ${v.value}`),
-        true,
       );
     }
     protected on_visible(is: boolean): void {
