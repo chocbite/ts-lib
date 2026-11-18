@@ -5,6 +5,7 @@ import {
   type BaseOptions,
   type InputOptions,
 } from "#base";
+import { state_ui } from "#state_ui";
 import type { StateOrVal } from "@chocbite/ts-lib/state";
 import type { CanvasPage, CanvasWidget } from "./data";
 import { page_element, type PageElement } from "./page";
@@ -92,7 +93,19 @@ class Viewport extends Base {
     this.#container.addEventListener(WIDGET_ELEMENTS_EVENT, () =>
       this.#attach(),
     );
-    this.attach_to_resize_observer();
+    //Refits when the viewport changes size, a function can only be attached once per element, so one per state
+    this.attach_state(this.#size.width, () => this.#update_view());
+    this.attach_state(this.#size.height, () => this.#update_view());
+  }
+
+  readonly #size = state_ui.size(this);
+
+  /**Size of the viewport in px, from the observed size, measured when not observed yet*/
+  #measure(): { width: number; height: number } {
+    const width = this.#size.width.ok();
+    const height = this.#size.height.ok();
+    if (width === 0 || height === 0) return this.getBoundingClientRect();
+    return { width, height };
   }
 
   set(options: CanvasViewportOptions): this {
@@ -181,10 +194,6 @@ class Viewport extends Base {
     return this.#scale;
   }
 
-  protected on_resize(): void {
-    this.#update_view();
-  }
-
   protected connectedCallback(): void {
     super.connectedCallback();
     if (this.#edit) this.#listen_keys(true);
@@ -214,7 +223,7 @@ class Viewport extends Base {
     const width = this.#page.page_width;
     const height = this.#page.page_height;
     if (width <= 0 || height <= 0) return;
-    const rect = this.actual_size;
+    const rect = this.#measure();
     const fit = Math.min(rect.width / width, rect.height / height);
     this.#fit_x = (rect.width - width * fit) / 2;
     this.#fit_y = (rect.height - height * fit) / 2;
@@ -271,7 +280,7 @@ class Viewport extends Base {
       e.deltaMode === WheelEvent.DOM_DELTA_LINE
         ? WHEEL_LINE_HEIGHT
         : e.deltaMode === WheelEvent.DOM_DELTA_PAGE
-          ? this.actual_size.height
+          ? this.#measure().height
           : 1;
     const delta_x = e.deltaX * unit;
     const delta_y = e.deltaY * unit;
