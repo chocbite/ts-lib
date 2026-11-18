@@ -1,6 +1,6 @@
 # State UI
 
-Shows states of `@chocbite/ts-lib/state` in the document. Everything is on the `state_ui` object, named so it does not collide with `state` of `@chocbite/ts-lib/state`, which has array features of its own. Like `state`, short and long names point to the same thing: `state_ui.a` is `state_ui.array`.
+Connects states of `@chocbite/ts-lib/state` and the document: arrays applied to child nodes with `state_ui.a.apply`, and the width and height of an element as states with `state_ui.size`. Everything is on the `state_ui` object, named so it does not collide with `state` of `@chocbite/ts-lib/state`, which has array features of its own. Like `state`, short and long names point to the same thing: `state_ui.a` is `state_ui.array`.
 
 ```ts
 import state_ui from "@chocbite/ts-lib-ui/state_ui";

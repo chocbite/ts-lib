@@ -43,13 +43,6 @@ const BASE = {
 /**Options every element takes, the options type of an element includes them*/
 export type BaseOptions = InputOptions<typeof BASE>;
 
-const base_resize_observer = new ResizeObserver((e) => {
-  for (let i = 0; i < e.length; i++) {
-    //@ts-expect-error Call of private method, is private to prevent external usage
-    (<Base>e[i].target).internal_set_size_pos(e[i].contentRect);
-  }
-});
-
 /**Shared class for elements to extend
  * All none abstract elements must use the define_element function to declare itself
  *
@@ -294,49 +287,13 @@ export abstract class Base extends HTMLElement {
       this.is_visible = is;
       if (is) {
         for (const [f, [s, v]] of this.#states) if (v) s.sub(f, true);
-        if (this.#resize_observe) base_resize_observer.observe(this);
-      } else {
-        for (const [f, [s, v]] of this.#states) if (v) s.unsub(f);
-        if (this.#resize_observe) base_resize_observer.unobserve(this);
-      }
+      } else for (const [f, [s, v]] of this.#states) if (v) s.unsub(f);
       this.on_visible(is);
     }
   }
   /**Overrideable function called when the element becomes visible or hidden
    * If intersection observer is not attached it is based on connectedCallback, which is less accurate*/
   protected on_visible(_is: boolean) {}
-
-  #resize_observe = false;
-  #actual_size?: { width: number; height: number };
-  /**Returns actual size and position of the element
-   * if a resize observer is attached to the element, it will return the result of that, otherwise it will return the result of getBoundingClientRect()*/
-  get actual_size(): { width: number; height: number } {
-    return this.#actual_size ?? this.getBoundingClientRect();
-  }
-
-  /**Attaches the component to the global resize observer */
-  attach_to_resize_observer(): this {
-    if (this.is_visible) base_resize_observer.observe(this);
-    this.#resize_observe = true;
-    return this;
-  }
-
-  /**Dettaches the component from the global resize observer */
-  detach_from_resize_observer(): this {
-    if (this.is_visible) base_resize_observer.unobserve(this);
-    this.#resize_observe = false;
-    this.#actual_size = undefined;
-    return this;
-  }
-
-  private internal_set_size_pos(rect: DOMRectReadOnly) {
-    this.#actual_size = rect;
-    this.on_resize(rect);
-  }
-
-  /**Overrideable function called when the element is resized
-   * Only triggers when a resize observer is attached to the element, otherwise it will not trigger*/
-  protected on_resize(_rect: { width: number; height: number }) {}
 
   //               _____ _____ ______  _____ _____
   //         /\   / ____/ ____|  ____|/ ____/ ____|

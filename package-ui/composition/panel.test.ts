@@ -193,6 +193,22 @@ describe("Panel position", () => {
     }
   });
 
+  it("is placed again, inside the container, when the container gets smaller", async () => {
+    const container = panel_container();
+    const panel = panel_with({}, { x: 20, y: 5, width: 4, height: 8 });
+    expect(left_of(panel)).toBeCloseTo(20);
+    container.style.width = "10rem";
+    try {
+      //Resize observations come after the next layout
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      //Half the panel is kept inside the container
+      expect(left_of(panel)).toBeCloseTo(8);
+    } finally {
+      container.style.width = "";
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }
+  });
+
   it("measures itself at most once per axis when it is created, not once per input", () => {
     const measure = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
     try {

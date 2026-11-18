@@ -68,7 +68,14 @@ my_box({ label: "Name", access: AccessTypes.Read });
 
 ## States, visibility and cost
 
-States given as inputs are only subscribed while the element is in the document, so an element that is not shown costs nothing for its states, and is updated when it comes back. `attach_state(state, func)` does the same for states an element follows itself, and `detach_state(func)` stops it.
+States given as inputs are only subscribed while the element is in the document, so an element that is not shown costs nothing for its states, and is updated when it comes back. `attach_state(state, func)` does the same for states an element follows itself, and `detach_state(func)` stops it. `attach_state_to_symbol(symbol, state, func)` attaches under a key, replacing what was attached under it before, and `detach_state_from_symbol(symbol)` stops it.
+
+A function can only be attached once per element, by either method, as the function is what identifies the attachment. Attaching it again, to the same or another state, logs an error and does nothing. Give each state its own function, also when they do the same:
+
+```ts
+this.attach_state(size.width, () => this.#draw());
+this.attach_state(size.height, () => this.#draw());
+```
 
 To also unsubscribe its states while it is scrolled out of view, attach an element to the intersection observer of its scrolling parent, `child.attach_to_intersect_observer(parent.intersect_observer())`. `is_visible` and the `on_visible` hook follow it.
 
@@ -82,7 +89,7 @@ Every error of an input is a fault of the element. While it has faults, an eleme
 
 ## Size
 
-`attach_to_resize_observer()` makes the element follow its own size through one shared resize observer, `on_resize` is called with it and `actual_size` gives it without a layout.
+Elements follow sizes with `state_ui.size(element)` of [state_ui](../state_ui/README.md), width and height as states, attached with `attach_state` like any other state.
 
 ## Loop
 

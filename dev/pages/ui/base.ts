@@ -222,62 +222,6 @@ const toggle_ticking = () => {
   }
 }
 
-//     _____  ______  _____ _____ ____________
-//    |  __ \|  ____|/ ____|_   _|___  /  ____|
-//    | |__) | |__  | (___   | |    / /| |__
-//    |  _  /|  __|  \___ \  | |   / / |  __|
-//    | | \ \| |____ ____) |_| |_ / /__| |____
-//    |_|  \_\______|_____/|_____/_____|______|
-{
-  class DevResizable extends Base {
-    static element_name() {
-      return "resizable";
-    }
-    static element_name_space() {
-      return "dev";
-    }
-    #calls = 0;
-    constructor() {
-      super();
-      this.style.display = "block";
-      this.style.width = "12rem";
-      this.style.height = "4rem";
-      this.style.overflow = "auto";
-      this.style.resize = "both";
-      this.style.border = "1px solid #8888";
-      this.style.padding = "0.25rem";
-      this.style.boxSizing = "border-box";
-      this.textContent = "not observed, drag the corner";
-    }
-    protected on_resize(rect: { width: number; height: number }): void {
-      this.#calls++;
-      this.textContent = `${rect.width.toFixed(0)} x ${rect.height.toFixed(0)}, on_resize calls ${this.#calls}`;
-    }
-  }
-  define_element(DevResizable);
-
-  const sec = section(
-    "Resize observer",
-    "Drag the bottom right corners. Attached elements report their content size on every change, detached ones stop. Read actual_size shows the observed size, or getBoundingClientRect when detached",
-  );
-  const elements = array_from_length(3, () => new DevResizable());
-  controls(sec, {
-    Attach: () => elements.forEach((e) => e.attach_to_resize_observer()),
-    Detach: () =>
-      elements.forEach((e) => {
-        e.detach_from_resize_observer();
-        e.textContent = "detached";
-      }),
-    "Read actual_size": () =>
-      elements.forEach(
-        (e) =>
-          (e.textContent = `actual_size ${e.actual_size.width.toFixed(1)} x ${e.actual_size.height.toFixed(1)}`),
-      ),
-  });
-  const items = row(sec);
-  elements.forEach((e, i) => box(items, "element " + i).appendChild(e));
-}
-
 //                _____ _____ ______  _____ _____
 //          /\   / ____/ ____|  ____|/ ____/ ____|
 //         /  \ | |   | |    | |__  | (___| (___

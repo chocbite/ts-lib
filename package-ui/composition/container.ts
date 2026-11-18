@@ -1,5 +1,6 @@
 import { Base, define_element, input_key } from "#base";
 import { DOCUMENT_HANDLER } from "#document";
+import { state_ui } from "#state_ui";
 import { px_to_rem, SCALE } from "#theme";
 import type { StateOrValROS } from "@chocbite/ts-lib/state";
 import type { ContentBase } from "./content";
@@ -32,23 +33,31 @@ class PanelContainer extends Base implements PanelHost {
   #raised = 0;
   #active?: Panel;
 
+  readonly #size = state_ui.size(this);
+
   constructor() {
     super();
-    this.attach_to_resize_observer();
+    //Panels are placed again when the container changes size, a function can only be attached once per element, so one per state
+    this.attach_state(this.#size.width, () => this.#layout());
+    this.attach_state(this.#size.height, () => this.#layout());
     this.set_input(SCALE_KEY, SCALE, () => this.#layout());
   }
 
   /**Width in rem*/
   get width(): number {
-    return px_to_rem(this.actual_size.width);
+    return this.size().width;
   }
   /**Height in rem*/
   get height(): number {
-    return px_to_rem(this.actual_size.height);
+    return this.size().height;
   }
-  /**Width and height in rem, from one measurement*/
+  /**Width and height in rem, from the observed size, measured when not observed yet*/
   size(): { width: number; height: number } {
-    const { width, height } = this.actual_size;
+    let width = this.#size.width.ok();
+    let height = this.#size.height.ok();
+    //The container covers the page, 0 means the observer has not measured it yet
+    if (width === 0 || height === 0)
+      ({ width, height } = this.getBoundingClientRect());
     return { width: px_to_rem(width), height: px_to_rem(height) };
   }
   /**Panel the user worked in last*/
@@ -63,10 +72,6 @@ class PanelContainer extends Base implements PanelHost {
     this.#panels.add(panel);
     panel[PANEL_ADDED]();
     return panel;
-  }
-
-  protected on_resize(): void {
-    this.#layout();
   }
 
   #layout(): void {

@@ -164,15 +164,11 @@ class ProbeElement extends Base {
   label: string = "";
   visible_calls: [boolean, boolean][] = [];
   access_calls: AccessTypes[] = [];
-  resize_calls: { width: number; height: number }[] = [];
   protected on_visible(is: boolean): void {
     this.visible_calls.push([is, this.is_connected]);
   }
   protected on_access(access: AccessTypes): void {
     this.access_calls.push(access);
-  }
-  protected on_resize(rect: { width: number; height: number }): void {
-    this.resize_calls.push({ width: rect.width, height: rect.height });
   }
 }
 define_element(ProbeElement);
@@ -198,8 +194,6 @@ const hidden_observer = () => {
     deffered_hidden: 0,
   });
 };
-
-const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
 
 describe("Base attach_state", () => {
   afterEach(() => {
@@ -808,69 +802,6 @@ describe("Base access", () => {
     const list = ACCESSTYPESINFO as unknown as Record<string, { name: string }>;
     for (const type of Object.values(AccessTypes))
       expect(JSON.stringify(list)).toContain(type);
-  });
-});
-
-describe("Base resize observer", () => {
-  afterEach(() => {
-    document.body.replaceChildren();
-  });
-
-  it("reports the size of a visible element", async () => {
-    const element = new ProbeElement();
-    element.style.cssText = "display:block;width:40px;height:30px;";
-    document.body.appendChild(element);
-    element.attach_to_resize_observer();
-    await frame();
-    await frame();
-    expect(element.resize_calls.at(-1)).toEqual({ width: 40, height: 30 });
-    expect(element.actual_size.width).toBe(40);
-    element.style.width = "50px";
-    await frame();
-    await frame();
-    expect(element.resize_calls.at(-1)).toEqual({ width: 50, height: 30 });
-  });
-
-  it("starts observing when an element attached while disconnected connects", async () => {
-    const element = new ProbeElement().attach_to_resize_observer();
-    element.style.cssText = "display:block;width:20px;height:10px;";
-    await frame();
-    expect(element.resize_calls.length).toBe(0);
-    document.body.appendChild(element);
-    await frame();
-    await frame();
-    expect(element.resize_calls.at(-1)).toEqual({ width: 20, height: 10 });
-  });
-
-  it("stops reporting after detach and falls back to the bounding box", async () => {
-    const element = new ProbeElement();
-    element.style.cssText = "display:block;width:40px;height:30px;";
-    document.body.appendChild(element);
-    element.attach_to_resize_observer();
-    await frame();
-    await frame();
-    const calls = element.resize_calls.length;
-    element.detach_from_resize_observer();
-    element.style.width = "60px";
-    await frame();
-    await frame();
-    expect(element.resize_calls.length).toBe(calls);
-    expect(element.actual_size.width).toBe(60);
-  });
-
-  it("stops reporting while disconnected", async () => {
-    const element = new ProbeElement();
-    element.style.cssText = "display:block;width:40px;height:30px;";
-    document.body.appendChild(element);
-    element.attach_to_resize_observer();
-    await frame();
-    await frame();
-    element.remove();
-    const calls = element.resize_calls.length;
-    element.style.width = "60px";
-    await frame();
-    await frame();
-    expect(element.resize_calls.length).toBe(calls);
   });
 });
 
