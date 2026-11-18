@@ -392,6 +392,44 @@ describe("Panel hiding", () => {
 });
 
 describe("Panel title bar and modal", () => {
+  /**Whether the point of the page is covered by the backdrop of a modal panel, a panel itself is not a backdrop*/
+  const covered = (x: number, y: number) => {
+    const hit = document.elementFromPoint(x, y);
+    return (
+      !!hit?.closest("composition-panelcontainer") &&
+      !hit.closest("composition-panel")
+    );
+  };
+
+  it("darkens the whole page with a modal, wherever the panel is placed", () => {
+    panel_with({}, { modal: true, x: 20, y: 10, width: 10, height: 6 });
+    expect(covered(1, 1)).toBe(true);
+    expect(covered(innerWidth - 2, innerHeight - 2)).toBe(true);
+  });
+
+  it("the backdrop follows the panel, hidden, raised, to another layer and closed", () => {
+    const hidden = state.ok_w(false);
+    const layer = state.ok_w(0);
+    const modal = panel_with(
+      {},
+      { modal: true, hidden, layer, x: 20, y: 10, width: 10, height: 6 },
+    );
+    const other = panel_with({}, { x: 0, y: 0, width: 10, height: 6 });
+    //The other panel is in front, the backdrop of the modal one is behind it
+    expect(document.elementFromPoint(5, 5)?.closest("composition-panel")).toBe(
+      other,
+    );
+    modal.focus();
+    expect(covered(5, 5)).toBe(true);
+    hidden.set_ok(true);
+    expect(covered(1, 1)).toBe(false);
+    hidden.set_ok(false);
+    layer.set_ok(2);
+    expect(covered(innerWidth - 2, innerHeight - 2)).toBe(true);
+    modal.close();
+    expect(covered(1, 1)).toBe(false);
+  });
+
   it("hides the title bar", () => {
     const titlebar = state.ok_w(true);
     const panel = panel_with({}, { titlebar });

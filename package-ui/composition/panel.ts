@@ -133,6 +133,9 @@ class Panel extends Base {
   #close_button?: HTMLSpanElement;
   #content_box = this.appendChild(document.createElement("div"));
   #focus_catcher?: HTMLDivElement;
+  /**Darkens the page behind a modal panel, a sibling before the panel in its layer
+   * Not a child, the translate placing the panel would make it fixed to the panel instead of the page*/
+  #backdrop?: HTMLDivElement;
 
   #layer = 0;
   #anchor: CompAnchor = CompAnchor.TOP_LEFT;
@@ -156,7 +159,7 @@ class Panel extends Base {
     this.tabIndex = 0;
     this.addEventListener("focus", () => this.#content.focus());
     this.addEventListener("focusin", () => {
-      if (this.#shown) this.#host[HOST_RAISE](this);
+      if (this.#shown) this.#raise();
     });
     this.addEventListener("content_closed", (e) => {
       e.stopPropagation();
@@ -216,7 +219,10 @@ class Panel extends Base {
     super.set(options);
     this.set_input(PANEL.layer, options.layer, (layer) => {
       this.#layer = layer.ok ? layer.value : 0;
-      if (this.#shown) this.#host[HOST_LAYER](this, this.#layer);
+      if (this.#shown) {
+        this.#host[HOST_LAYER](this, this.#layer);
+        this.#place_backdrop();
+      }
     });
     this.set_input(PANEL.anchor, options.anchor, (anchor) => {
       this.#anchor = anchor.ok ? anchor.value : CompAnchor.TOP_LEFT;
@@ -278,6 +284,7 @@ class Panel extends Base {
     });
     if (this.#shown) this.#host[HOST_REMOVE](this);
     this.#shown = false;
+    this.#backdrop?.remove();
     this.remove();
     this.#content[CONTENT_CLOSED]();
     for (const resolve of this.#on_close.splice(0)) resolve();
@@ -287,7 +294,7 @@ class Panel extends Base {
   [PANEL_ADDED](): void {
     this.#shown = true;
     this.#host[HOST_LAYER](this, this.#layer);
-    this.#host[HOST_RAISE](this);
+    this.#raise();
     this.ownerDocument.addEventListener("pointerdown", this.#outside, {
       capture: true,
       passive: true,
@@ -433,6 +440,7 @@ class Panel extends Base {
 
   #show_hidden(): void {
     this.classList.toggle("hidden", this.#values.hidden);
+    this.#place_backdrop();
     //A hidden panel is not placed, it is placed when shown again
     this.#place();
   }
@@ -606,8 +614,32 @@ class Panel extends Base {
     }
   }
 
+  /**Puts the panel above the others of its layer, with its backdrop right under it*/
+  #raise(): void {
+    this.#host[HOST_RAISE](this);
+    this.#place_backdrop();
+  }
+
+  /**Keeps the backdrop right before the panel in its layer, at its height, shown while the panel is*/
+  #place_backdrop(): void {
+    const backdrop = this.#backdrop;
+    if (!backdrop) return;
+    if (!this.#shown) return backdrop.remove();
+    if (backdrop.nextSibling !== this) this.before(backdrop);
+    backdrop.style.zIndex = this.style.zIndex;
+    backdrop.hidden = this.#values.hidden;
+  }
+
   #set_modal(modal: boolean): void {
     this.classList.toggle("modal", modal);
+    if (modal && !this.#backdrop) {
+      this.#backdrop = document.createElement("div");
+      this.#backdrop.classList.add("backdrop");
+      this.#place_backdrop();
+    } else if (!modal && this.#backdrop) {
+      this.#backdrop.remove();
+      this.#backdrop = undefined;
+    }
     if (modal && !this.#focus_catcher) {
       //Tabbing past the end of the panel comes back to its content
       this.#focus_catcher = this.appendChild(document.createElement("div"));
