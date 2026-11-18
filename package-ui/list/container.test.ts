@@ -1,5 +1,5 @@
 import { AccessTypes, BaseIntersectObserver } from "#base";
-import ctm from "#context-menu";
+import ctm from "#context_menu";
 import { px_to_rem } from "#theme";
 import { none, ok, NiceError } from "@chocbite/ts-lib/result";
 import { state, type State } from "@chocbite/ts-lib/state";
@@ -476,7 +476,9 @@ describe("List container rows from arrays", () => {
         transform: (item: number) =>
           ok({
             context_menu:
-              item === 1 ? ctm.menu([ctm.line("Do", () => {})]) : undefined,
+              item === 1
+                ? ctm.menu([ctm.line({ text: "Do", on_click: () => {} })])
+                : undefined,
             values: { col: item.toString() },
           }),
       },

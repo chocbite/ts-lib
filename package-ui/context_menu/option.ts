@@ -1,46 +1,41 @@
-import { define_element } from "#base";
-import { ContextMenuLine, MenuLine } from "./line";
-import { ContextMenu } from "./menu";
+import { define_element, input_key, type InputOptions } from "#base";
+import type { StateOrVal } from "@chocbite/ts-lib/state";
+import { LabelLine, type ContextMenuLabelOptions } from "./line";
+import type { ContextMenu } from "./menu";
 import "./option.scss";
 
-export interface ContextMenuOption extends ContextMenuLine {}
+/**Inputs of an option*/
+const OPTION = {
+  /**Called when the line is clicked, or chosen with enter or space, the menu then closes*/
+  on_click: input_key<() => void>(),
+  /**Text at the right end, like the keyboard shortcut doing the same, an error shows none*/
+  shortcut: input_key<StateOrVal<string>>(),
+  /**Shows a checkmark, only shown, a click does not change it, an error shows none*/
+  checked: input_key<StateOrVal<boolean>>(),
+};
+export type ContextMenuOptionOptions = ContextMenuLabelOptions &
+  InputOptions<typeof OPTION>;
 
-export class MenuOption extends MenuLine implements ContextMenuOption {
-  readonly func: () => void;
-
+/**Line of a menu that does something when chosen*/
+class ContextMenuOption extends LabelLine {
   /**Returns the name used to define the element */
   static element_name() {
     return "option";
   }
 
-  constructor(
-    text: string,
-    func: () => void,
-    icon?: SVGSVGElement,
-    shortcut?: string,
-    checkmark?: boolean,
-  ) {
+  #shortcut = this.appendChild(document.createElement("div"));
+  #checkmark = this.appendChild(document.createElement("div"));
+  #on_click?: () => void;
+
+  constructor() {
     super();
-    this.func = func;
-    this.tabIndex = 0;
-    const icon_box = this.appendChild(document.createElement("div"));
-    icon_box.className = "icon";
-    if (icon) icon_box.appendChild(icon);
-    const text_box = this.appendChild(document.createElement("div"));
-    text_box.textContent = text;
-    text_box.className = "text";
-    const shortcut_box = this.appendChild(document.createElement("div"));
-    if (shortcut) shortcut_box.textContent = shortcut;
-    shortcut_box.className = "shortcut";
-    const check_mark_box = this.appendChild(document.createElement("div"));
-    if (checkmark) check_mark_box.textContent = "✓";
-    check_mark_box.className = "checkmark";
+    this.#shortcut.className = "shortcut";
+    this.#checkmark.className = "checkmark";
 
     this.onclick = (e) => {
       e.stopPropagation();
-      this.func();
       navigator.vibrate?.(25);
-      (this.parentElement as ContextMenu).close_up();
+      this.#choose();
     };
 
     this.onkeydown = (e) => {
@@ -52,8 +47,7 @@ export class MenuOption extends MenuLine implements ContextMenuOption {
           break;
         case "Enter":
         case "Space":
-          this.func();
-          (this.parentElement as ContextMenu).close_up();
+          this.#choose();
           break;
         case "ArrowLeft":
         case "Escape":
@@ -64,18 +58,33 @@ export class MenuOption extends MenuLine implements ContextMenuOption {
     };
   }
 
-  do_focus(): void {
-    this.focus();
+  set(options: ContextMenuOptionOptions): this {
+    super.set(options);
+    this.set_input(OPTION.on_click, options.on_click, (on_click) => {
+      this.#on_click = on_click.value;
+    });
+    this.set_input(OPTION.shortcut, options.shortcut, (shortcut) => {
+      this.#shortcut.textContent = shortcut.ok ? shortcut.value : "";
+    });
+    this.set_input(OPTION.checked, options.checked, (checked) => {
+      this.#checkmark.textContent = checked.ok && checked.value ? "✓" : "";
+    });
+    return this;
+  }
+
+  /**Runs the option and closes the menu*/
+  #choose() {
+    this.#on_click?.();
+    (this.parentElement as ContextMenu | null)?.close_up();
   }
 }
-define_element(MenuOption);
+define_element(ContextMenuOption);
 
+export type { ContextMenuOption };
+
+/**Creates a line of a menu that calls on_click when chosen, the menu then closes*/
 export function context_line(
-  text: string,
-  func: () => void,
-  icon?: SVGSVGElement,
-  shortcut?: string,
-  checkmark?: boolean,
+  options: ContextMenuOptionOptions = {},
 ): ContextMenuOption {
-  return new MenuOption(text, func, icon, shortcut, checkmark);
+  return ContextMenuOption.create(options);
 }

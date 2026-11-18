@@ -1,5 +1,5 @@
 import { Base, define_element } from "#base";
-import ctm, { ContextMenu, type ContextMenuLines } from "#context-menu";
+import ctm, { ContextMenu, type ContextMenuLines } from "#context_menu";
 import { NiceError, none, some, type Option } from "@chocbite/ts-lib/result";
 import { list_errors } from "./errors";
 import {
@@ -510,11 +510,13 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     if (this.openable)
       lines.push(
         this.open
-          ? ctm.line("Close", () => (this.open = false))
-          : ctm.line("Open", () => (this.open = true)),
+          ? ctm.line({ text: "Close", on_click: () => (this.open = false) })
+          : ctm.line({ text: "Open", on_click: () => (this.open = true) }),
       );
     if (this.#root.any_open())
-      lines.push(ctm.line("Close all", () => this.#root.close_all()));
+      lines.push(
+        ctm.line({ text: "Close all", on_click: () => this.#root.close_all() }),
+      );
     return lines;
   }
 
@@ -526,18 +528,24 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     if (!selection || key === undefined) return [];
     const lines: ContextMenuLines = [
       selection.is_selected(key)
-        ? ctm.line("Deselect", () => selection.deselect(key))
-        : ctm.line("Select", () => selection.select(key)),
+        ? ctm.line({
+            text: "Deselect",
+            on_click: () => selection.deselect(key),
+          })
+        : ctm.line({ text: "Select", on_click: () => selection.select(key) }),
     ];
     if (selection.multi)
       lines.push(
-        ctm.line(
-          "Select all",
-          () => selection.select_all(),
-          undefined,
-          "Ctrl+A",
-        ),
-        ctm.line("Deselect all", () => selection.clear(), undefined, "Esc"),
+        ctm.line({
+          text: "Select all",
+          on_click: () => selection.select_all(),
+          shortcut: "Ctrl+A",
+        }),
+        ctm.line({
+          text: "Deselect all",
+          on_click: () => selection.clear(),
+          shortcut: "Esc",
+        }),
       );
     return lines;
   }

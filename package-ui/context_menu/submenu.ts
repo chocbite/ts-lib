@@ -1,50 +1,42 @@
-import { define_element } from "#base";
+import { define_element, input_key, type InputOptions } from "#base";
 import { material_chevron_right_rounded } from "#icons";
-import { ContextMenuLine, MenuLine } from "./line";
-import { ContextMenu } from "./menu";
+import { LabelLine, type ContextMenuLabelOptions } from "./line";
+import type { ContextMenu } from "./menu";
 import "./submenu.scss";
 
-export interface ContextMenuSub extends ContextMenuLine {}
-
-type Mutable<T> = {
-  -readonly [P in keyof T]: T[P];
+/**Inputs of a submenu*/
+const SUB = {
+  /**Menu opened by the line, without a menu the line does nothing*/
+  menu: input_key<ContextMenu | undefined>(),
 };
-export class MenuSub extends MenuLine implements ContextMenuSub {
-  #menu: ContextMenu;
-  #is_open?: boolean;
-  #hover_time?: number;
-  #block_time?: number;
+export type ContextMenuSubOptions = ContextMenuLabelOptions &
+  InputOptions<typeof SUB>;
 
+/**Line of a menu that opens another menu beside it*/
+class ContextMenuSub extends LabelLine {
   /**Returns the name used to define the element */
   static element_name() {
     return "submenu";
   }
 
-  constructor(text: string, menu: ContextMenu, icon?: SVGSVGElement) {
+  #menu?: ContextMenu;
+  #is_open = false;
+  #hover_time?: number;
+  #block_time?: number;
+
+  constructor() {
     super();
-    this.#menu = menu;
-    this.tabIndex = 0;
-    const icon_box = this.appendChild(document.createElement("div"));
-    icon_box.className = "icon";
-    if (icon) icon_box.appendChild(icon);
-    const text_box = this.appendChild(document.createElement("div"));
-    text_box.textContent = text;
-    text_box.className = "text";
-    const shortcut_box = this.appendChild(document.createElement("div"));
-    shortcut_box.className = "shortcut";
-    const chevron_box = this.appendChild(document.createElement("div"));
-    chevron_box.appendChild(material_chevron_right_rounded());
-    chevron_box.className = "chevron";
+    this.appendChild(document.createElement("div")).className = "shortcut";
+    const chevron = this.appendChild(document.createElement("div"));
+    chevron.appendChild(material_chevron_right_rounded());
+    chevron.className = "chevron";
 
     this.onclick = (e) => {
       e.stopPropagation();
       if (!this.#block_time) {
         navigator.vibrate?.(25);
-        if (this.#is_open) {
-          this.close_down();
-        } else {
-          this.open();
-        }
+        if (this.#is_open) this.close_down();
+        else this.open();
       }
     };
 
@@ -72,7 +64,7 @@ export class MenuSub extends MenuLine implements ContextMenuSub {
         case "Enter":
         case "Space":
           this.open();
-          this.#menu.focus_next(false);
+          if (this.#is_open) this.#menu?.focus_next(false);
           break;
         case "ArrowLeft":
         case "Escape":
@@ -83,46 +75,56 @@ export class MenuSub extends MenuLine implements ContextMenuSub {
     };
   }
 
-  /**Opens the sub menu */
-  open() {
-    const sub = this.parentElement as Mutable<ContextMenu>;
-    if (sub) sub.close_down();
-    (this.parentElement as Mutable<ContextMenu>).submenu = this;
-    this.appendChild(this.#menu);
-    this.#menu.set_position(0, 0, this);
-    this.#is_open = true;
+  set(options: ContextMenuSubOptions): this {
+    super.set(options);
+    this.set_input(SUB.menu, options.menu, (menu) => {
+      //An open menu that is replaced is closed first
+      if (this.#is_open) this.close_down();
+      this.#menu = menu.value;
+    });
+    return this;
   }
 
-  do_focus(): void {
-    this.focus();
+  /**Opens the sub menu */
+  open() {
+    const menu = this.#menu;
+    const parent = this.parentElement as ContextMenu | null;
+    if (!menu || !parent) return;
+    parent.close_down();
+    parent.submenu_opened(this);
+    this.appendChild(menu);
+    menu.set_position(0, 0, this);
+    this.#is_open = true;
   }
 
   /**Closes menu by calling parent*/
   close() {
+    if (!this.#is_open) return;
     this.focus();
-    (this.parentElement as Mutable<ContextMenu>).submenu = undefined;
-    this.removeChild(this.#menu);
+    (this.parentElement as ContextMenu | null)?.submenu_opened(undefined);
+    this.#menu?.remove();
     this.#is_open = false;
   }
 
   /**Closes the context menu down the tree*/
   close_down() {
-    this.#menu.close_down();
+    this.#menu?.close_down();
     this.close();
   }
 
   /**Closes the context menu up the tree to the root*/
   close_up() {
     this.close();
-    (this.parentElement as ContextMenu).close_up();
+    (this.parentElement as ContextMenu | null)?.close_up();
   }
 }
-define_element(MenuSub);
+define_element(ContextMenuSub);
 
+export type { ContextMenuSub };
+
+/**Creates a line of a menu that opens the given menu beside it*/
 export function context_sub(
-  text: string,
-  menu: ContextMenu,
-  icon?: SVGSVGElement,
+  options: ContextMenuSubOptions = {},
 ): ContextMenuSub {
-  return new MenuSub(text, menu, icon);
+  return ContextMenuSub.create(options);
 }

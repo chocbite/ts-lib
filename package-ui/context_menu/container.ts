@@ -36,7 +36,6 @@ export class Container extends Base {
 
   /**Attaches a menu to the container */
   attach_menu(menu: ContextMenu) {
-    menu.container = this;
     const old = this.firstElementChild as ContextMenu | null;
     if (old) {
       //Closed before replacing, the browser closes it from a focusout while it is being removed otherwise,

@@ -1,4 +1,4 @@
-import ctm from "@chocbite/ts-lib-ui/context-menu";
+import ctm from "@chocbite/ts-lib-ui/context_menu";
 import {
   CompAnchor,
   comp,
@@ -120,13 +120,15 @@ const close_all = () => {
         "Right click here or on the title bar",
       ).set({
         context_menu: () => [
-          ctm.line(`Opened ${++opened} times`, () => {}),
-          ctm.line("Close", () => current?.content_close()),
+          ctm.line({ text: `Opened ${++opened} times`, on_click: () => {} }),
+          ctm.line({ text: "Close", on_click: () => current?.content_close() }),
         ],
       });
     },
     "Replace menu": () =>
-      current?.set({ context_menu: [ctm.line("Replaced menu", () => {})] }),
+      current?.set({
+        context_menu: [ctm.line({ text: "Replaced menu", on_click: () => {} })],
+      }),
     "Close all": close_all,
   });
 }
@@ -146,9 +148,11 @@ const close_all = () => {
   controls(sec, {
     "Open sized panel": () => {
       const c = comp.content({ title: "Content size", closable: true });
-      c.style.cssText = "display:block;width:100%;height:100%;position:relative;overflow:hidden";
+      c.style.cssText =
+        "display:block;width:100%;height:100%;position:relative;overflow:hidden";
       const label = c.appendChild(document.createElement("div"));
-      label.style.cssText = "position:absolute;left:0.5rem;top:0.25rem;font:12px monospace;z-index:1";
+      label.style.cssText =
+        "position:absolute;left:0.5rem;top:0.25rem;font:12px monospace;z-index:1";
       //The legacy drawing, laid out for 200 x 100 px and scaled as a whole
       const drawing = c.appendChild(document.createElement("div"));
       drawing.style.cssText =

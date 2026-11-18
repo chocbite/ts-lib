@@ -28,7 +28,7 @@ Each module is a folder `<folder>/<module>/` directly in the package folder, wit
 Every module is published as a subpath export, e.g. `@chocbite/ts-lib/state` and `@chocbite/ts-lib-ui/theme`. There is no root export.
 
 - ts-lib: `colors common depot event math parse result safe state string`
-- ts-lib-ui: `base canvas composition context-menu document dom form icons keyboard list prompts selection settings spinner state_ui svg theme`
+- ts-lib-ui: `base canvas composition context_menu document dom form icons keyboard list prompts selection settings spinner state_ui svg theme`
 
 ## Element pattern
 

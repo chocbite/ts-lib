@@ -1,5 +1,5 @@
 import { AccessTypes } from "@chocbite/ts-lib-ui/base";
-import ctm from "@chocbite/ts-lib-ui/context-menu";
+import ctm from "@chocbite/ts-lib-ui/context_menu";
 import {
   material_add_to_queue_rounded,
   material_folder_rounded,
@@ -306,19 +306,22 @@ const word = (i: number) => WORDS[i % WORDS.length];
             },
             values: { name: word(item) + " " + item, remove },
             context_menu: ctm.menu([
-              ctm.line("Remove", remove),
-              ctm.line("Insert above", () =>
-                rows_state.write(
-                  state.a.write.splice(
-                    list_row.index,
-                    0,
-                    rows.array.get.length,
+              ctm.line({ text: "Remove", on_click: remove }),
+              ctm.line({
+                text: "Insert above",
+                on_click: () =>
+                  rows_state.write(
+                    state.a.write.splice(
+                      list_row.index,
+                      0,
+                      rows.array.get.length,
+                    ),
                   ),
-                ),
-              ),
-              ctm.line("Empty", () =>
-                rows_state.write(state.a.write.fresh([])),
-              ),
+              }),
+              ctm.line({
+                text: "Empty",
+                on_click: () => rows_state.write(state.a.write.fresh([])),
+              }),
             ]),
           });
         },
@@ -408,7 +411,10 @@ const word = (i: number) => WORDS[i % WORDS.length];
     sub?: TreeNode[];
   }
   const tree = (): TreeNode[] => [
-    { name: "Documents", sub: [{ name: "Old", sub: [{ name: "2019.txt" }] }, { name: "notes.md" }] },
+    {
+      name: "Documents",
+      sub: [{ name: "Old", sub: [{ name: "2019.txt" }] }, { name: "notes.md" }],
+    },
     { name: "Pictures", sub: [{ name: "cat.png" }] },
     { name: "readme.md" },
   ];
@@ -442,9 +448,11 @@ const word = (i: number) => WORDS[i % WORDS.length];
     "Open all": () => headless.open_all(),
     "Close all": () => headless.close_all(),
   });
-  box(r, "endless", { width: "18rem", height: "20rem", display: "grid" }).appendChild(
-    tree_list([endless("x")], false),
-  );
+  box(r, "endless", {
+    width: "18rem",
+    height: "20rem",
+    display: "grid",
+  }).appendChild(tree_list([endless("x")], false));
 }
 
 //     _  __________     __  ______ _____ ______ _      _____
@@ -545,7 +553,9 @@ const word = (i: number) => WORDS[i % WORDS.length];
   const sub_rows = state.from_w([10, 12]);
   let show_invalid = true;
   const invalid_text = (item: number) =>
-    show_invalid && item % 3 === 1 ? `Row ${item} could not be read` : undefined;
+    show_invalid && item % 3 === 1
+      ? `Row ${item} could not be read`
+      : undefined;
 
   controls(sec, {
     "List error": () => failing.set_err(demo_error("Could not read the rows")),
@@ -554,7 +564,8 @@ const word = (i: number) => WORDS[i % WORDS.length];
       show_invalid = !show_invalid;
       invalid.set_ok([...invalid.ok()]);
     },
-    "Sub rows error": () => sub_rows.set_err(demo_error("Could not read the sub rows")),
+    "Sub rows error": () =>
+      sub_rows.set_err(demo_error("Could not read the sub rows")),
     "Sub rows recover": () => sub_rows.set_ok([10, 12]),
   });
 
@@ -702,7 +713,9 @@ function sel_list(
           openable: Boolean(item.sub),
           sub_rows: options.sub_rows ? () => item.sub ?? [] : undefined,
           selectable: item.id % 10 !== 2,
-          context_menu: ctm.menu([ctm.line("Line of " + item.id, () => {})]),
+          context_menu: ctm.menu([
+            ctm.line({ text: "Line of " + item.id, on_click: () => {} }),
+          ]),
           values: { name: word(item.id), id: item.id },
         }),
       sub_rows: options.sub_rows,
@@ -752,7 +765,10 @@ function sel_list(
   /**State that applies the write instructions itself, so it can check the result before taking it */
   const checked = (check: (keys: readonly number[]) => string | undefined) =>
     state.rosw<number[]>(ok([]), (value, owner, old) => {
-      const [keys, changes] = state.a.write_apply(value, old?.ok ? [...old.value] : []);
+      const [keys, changes] = state.a.write_apply(
+        value,
+        old?.ok ? [...old.value] : [],
+      );
       const problem = check(keys);
       if (problem) return Promise.resolve(err(demo_error("Rejected", problem)));
       state.a.read_set([keys, changes], owner.set_ok.bind(owner));
@@ -760,7 +776,12 @@ function sel_list(
     });
   const rows = state.ok_w(sel_tree(6, 0));
   for (const [label, selection] of [
-    ["delta is locked", checked((keys) => (keys.includes(3) ? "Delta can not be selected" : undefined))],
+    [
+      "delta is locked",
+      checked((keys) =>
+        keys.includes(3) ? "Delta can not be selected" : undefined,
+      ),
+    ],
     ["read only", checked(() => "The selection is read only")],
   ] as const) {
     const b = box(r, label, { width: "18rem" });
@@ -778,7 +799,9 @@ function sel_list(
   for (const mode of ["single", "multi"] as const) {
     const b = box(r, mode, { width: "22rem" });
     const selection = sel_state();
-    b.appendChild(sel_list(sel_tree(4, 2), mode, selection, { sub_rows: true }));
+    b.appendChild(
+      sel_list(sel_tree(4, 2), mode, selection, { sub_rows: true }),
+    );
     controls(b, {
       "Write 1, 11 and 4": () => void selection.write([1, 11, 4]),
       "Write none": () => void selection.write([]),
@@ -800,10 +823,7 @@ function sel_list(
     "Remove first": () => rows.set_ok(rows.ok().slice(1)),
     Reset: () => rows.set_ok(sel_tree(6, 0)),
   });
-  const other = (
-    title: string,
-    rows: State<SelItem[]>,
-  ) =>
+  const other = (title: string, rows: State<SelItem[]>) =>
     list.container(
       {
         transform: (item: SelItem) =>
@@ -831,10 +851,16 @@ function sel_list(
     sel_list(rows, "multi", shared),
   );
   box(r, "reversed, other columns", { width: "14rem" }).appendChild(
-    other("Upper", state.p.ros(rows, (r) => ok([...r.value].reverse()))),
+    other(
+      "Upper",
+      state.p.ros(rows, (r) => ok([...r.value].reverse())),
+    ),
   );
   box(r, "first three rows", { width: "14rem" }).appendChild(
-    other("Upper", state.p.ros(rows, (r) => ok(r.value.slice(0, 3)))),
+    other(
+      "Upper",
+      state.p.ros(rows, (r) => ok(r.value.slice(0, 3))),
+    ),
   );
   sel_show(sec, shared);
 }
@@ -947,7 +973,11 @@ function drag_list(
   );
   const r = row(sec);
   const rows = drag_tree();
-  const b = box(r, "folders", { width: "18rem", height: "20rem", display: "grid" });
+  const b = box(r, "folders", {
+    width: "18rem",
+    height: "20rem",
+    display: "grid",
+  });
   b.appendChild(drag_list(rows));
   drag_show(box(r, "state"), rows);
   controls(sec, { Reset: () => location.reload() });
@@ -960,7 +990,11 @@ function drag_list(
   );
   const r = row(sec);
   const rows = drag_tree();
-  const b = box(r, "multi", { width: "20rem", height: "20rem", display: "grid" });
+  const b = box(r, "multi", {
+    width: "20rem",
+    height: "20rem",
+    display: "grid",
+  });
   b.appendChild(drag_list(rows, { multi: true }));
   drag_show(box(r, "state"), rows);
 }
@@ -973,19 +1007,30 @@ function drag_list(
   const r = row(sec);
   const group = list.drag_group<DragNode>();
   const left = drag_tree();
-  const right = state.ok_w([drag_file("inbox.txt"), drag_folder("Archive", [])]);
-  box(r, "group A", { width: "14rem", height: "16rem", display: "grid" }).appendChild(
-    drag_list(left, { group }),
-  );
-  box(r, "group A", { width: "14rem", height: "16rem", display: "grid" }).appendChild(
-    drag_list(right, { group }),
-  );
-  box(r, "no group", { width: "14rem", height: "16rem", display: "grid" }).appendChild(
-    drag_list(drag_tree()),
-  );
-  box(r, "plain array", { width: "14rem", height: "16rem", display: "grid" }).appendChild(
-    drag_list([drag_file("fixed.txt"), drag_file("rows.txt")]),
-  );
+  const right = state.ok_w([
+    drag_file("inbox.txt"),
+    drag_folder("Archive", []),
+  ]);
+  box(r, "group A", {
+    width: "14rem",
+    height: "16rem",
+    display: "grid",
+  }).appendChild(drag_list(left, { group }));
+  box(r, "group A", {
+    width: "14rem",
+    height: "16rem",
+    display: "grid",
+  }).appendChild(drag_list(right, { group }));
+  box(r, "no group", {
+    width: "14rem",
+    height: "16rem",
+    display: "grid",
+  }).appendChild(drag_list(drag_tree()));
+  box(r, "plain array", {
+    width: "14rem",
+    height: "16rem",
+    display: "grid",
+  }).appendChild(drag_list([drag_file("fixed.txt"), drag_file("rows.txt")]));
 }
 
 {
@@ -995,13 +1040,14 @@ function drag_list(
   );
   const r = row(sec);
   const group = list.drag_group<DragNode>();
-  const left = state.ok_w([drag_file("a.txt"), drag_file("b.txt"), drag_file("c.txt")]);
+  const left = state.ok_w([
+    drag_file("a.txt"),
+    drag_file("b.txt"),
+    drag_file("c.txt"),
+  ]);
   const right = state.ok_w([drag_file("d.txt"), drag_file("e.txt")]);
   //The app logic, a row added to one list is removed from the other
-  const take_out = (
-    from: typeof left,
-    to: typeof left,
-  ) => {
+  const take_out = (from: typeof left, to: typeof left) => {
     to.sub(() => {
       const added = new Set(to.ok());
       const index = from.ok().findIndex((node) => added.has(node));
@@ -1010,12 +1056,16 @@ function drag_list(
   };
   take_out(left, right);
   take_out(right, left);
-  box(r, "left", { width: "14rem", height: "12rem", display: "grid" }).appendChild(
-    drag_list(left, { group, no_remove: true }),
-  );
-  box(r, "right", { width: "14rem", height: "12rem", display: "grid" }).appendChild(
-    drag_list(right, { group, no_remove: true }),
-  );
+  box(r, "left", {
+    width: "14rem",
+    height: "12rem",
+    display: "grid",
+  }).appendChild(drag_list(left, { group, no_remove: true }));
+  box(r, "right", {
+    width: "14rem",
+    height: "12rem",
+    display: "grid",
+  }).appendChild(drag_list(right, { group, no_remove: true }));
   drag_show(box(r, "left state"), left);
   drag_show(box(r, "right state"), right);
 }

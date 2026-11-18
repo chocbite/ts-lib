@@ -128,7 +128,7 @@ The keyboard works in the key field (lists with sub rows), or else in the radio 
 
 ### Row menu
 
-The list adds lines in front of the row's own `context_menu`, each group with a devider after it:
+The list adds lines in front of the row's own `context_menu`, each group with a divider after it:
 
 1. "Open" or "Close" for a row that can be opened, in lists with sub rows, with or without selection.
 2. "Select" or "Deselect" for a selectable row, and in multi mode "Select all" and "Deselect all".

@@ -2,6 +2,11 @@ import { DOCUMENT_HANDLER } from "#document";
 import { none, some } from "@chocbite/ts-lib/result";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ctm, { type ContextMenu } from ".";
+import { AccessTypes } from "#base";
+import { NiceError } from "@chocbite/ts-lib/result";
+import st from "@chocbite/ts-lib/state";
+import { material_close_rounded } from "#icons";
+import type { SVGFunc } from "#svg";
 
 /**Removes the vibrate function like browsers without the Vibration API, Safari for example*/
 const without_vibrate = (run: () => void) => {
@@ -21,7 +26,7 @@ describe("Context menu without the Vibration API", () => {
   it("an option runs and closes the menu", () => {
     without_vibrate(() => {
       const func = vi.fn();
-      const line = ctm.line("Do", func);
+      const line = ctm.line({ text: "Do", on_click: func });
       const menu = ctm.menu([line]);
       ctm.summon(menu);
       const close = vi.spyOn(menu, "close_up");
@@ -33,8 +38,10 @@ describe("Context menu without the Vibration API", () => {
 
   it("a submenu opens", () => {
     without_vibrate(() => {
-      const sub_menu: ContextMenu = ctm.menu([ctm.line("Inner", () => {})]);
-      const sub = ctm.sub("More", sub_menu);
+      const sub_menu: ContextMenu = ctm.menu([
+        ctm.line({ text: "Inner", on_click: () => {} }),
+      ]);
+      const sub = ctm.sub({ text: "More", menu: sub_menu });
       ctm.summon(ctm.menu([sub]));
       (sub as unknown as HTMLElement).click();
       expect(sub_menu.isConnected).toBe(true);
@@ -87,7 +94,7 @@ describe("Default context menu", () => {
   });
 
   it("a default menu opens on a right click anywhere", () => {
-    const menu = ctm.menu([ctm.line("Default", () => {})]);
+    const menu = ctm.menu([ctm.line({ text: "Default", on_click: () => {} })]);
     ctm.default(menu);
     try {
       expect(contextmenu(document.body).defaultPrevented).toBe(true);
@@ -98,8 +105,12 @@ describe("Default context menu", () => {
   });
 
   it("an element menu takes precedence over the default menu", () => {
-    const default_menu = ctm.menu([ctm.line("Default", () => {})]);
-    const element_menu = ctm.menu([ctm.line("Element", () => {})]);
+    const default_menu = ctm.menu([
+      ctm.line({ text: "Default", on_click: () => {} }),
+    ]);
+    const element_menu = ctm.menu([
+      ctm.line({ text: "Element", on_click: () => {} }),
+    ]);
     ctm.default(default_menu);
     const element = document.body.appendChild(document.createElement("div"));
     ctm.attach(element, element_menu);
@@ -119,14 +130,21 @@ describe("Default context menu", () => {
 //     |  __  |  __| | |    |  ___/|  __| |  _  / \___ \
 //     | |  | | |____| |____| |    | |____| | \ \ ____) |
 //     |_|  |_|______|______|_|    |______|_|  \_\_____/
-const container = () => document.documentElement.querySelector("contextmenu-container")!;
+const container = () =>
+  document.documentElement.querySelector("contextmenu-container")!;
 
-const as_element = (line: unknown) => line as HTMLElement;
+/**Lines are elements, kept for readability of the older tests*/
+const as_element = <T extends HTMLElement>(line: T) => line;
 
 const key = (code: string, init: KeyboardEventInit = {}) => {
   const target = document.activeElement ?? document.body;
   target.dispatchEvent(
-    new KeyboardEvent("keydown", { code, bubbles: true, cancelable: true, ...init }),
+    new KeyboardEvent("keydown", {
+      code,
+      bubbles: true,
+      cancelable: true,
+      ...init,
+    }),
   );
 };
 
@@ -149,7 +167,9 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 /**Menu of three options, A B and C, with spies*/
 const three = () => {
   const funcs = [vi.fn(), vi.fn(), vi.fn()];
-  const lines = ["A", "B", "C"].map((text, i) => ctm.line(text, funcs[i]));
+  const lines = ["A", "B", "C"].map((text, i) =>
+    ctm.line({ text, on_click: funcs[i] }),
+  );
   return { funcs, lines: lines.map(as_element), menu: ctm.menu(lines) };
 };
 
@@ -165,7 +185,7 @@ describe("Context menu summoning and positioning", () => {
 
   it("opens in the container at the given position and takes focus", () => {
     const { menu } = three();
-    ctm.summon(menu, undefined, 10, 20);
+    ctm.summon(menu, { x: 10, y: 20 });
     expect(menu.parentElement).toBe(container());
     expect(menu.style.left).toBe("10px");
     expect(menu.style.top).toBe("20px");
@@ -182,9 +202,10 @@ describe("Context menu summoning and positioning", () => {
 
   it("opens at the center of the element without position", () => {
     const element = document.body.appendChild(document.createElement("div"));
-    element.style.cssText = "position:fixed;left:40px;top:30px;width:20px;height:10px;";
+    element.style.cssText =
+      "position:fixed;left:40px;top:30px;width:20px;height:10px;";
     const { menu } = three();
-    ctm.summon(menu, element);
+    ctm.summon(menu, { element });
     expect(menu.style.left).toBe("50px");
     expect(menu.style.top).toBe("35px");
   });
@@ -193,21 +214,23 @@ describe("Context menu summoning and positioning", () => {
     const { menu } = three();
     const x = window.innerWidth - 5;
     const y = window.innerHeight - 5;
-    ctm.summon(menu, undefined, x, y);
+    ctm.summon(menu, { x, y });
     const box = menu.getBoundingClientRect();
     expect(box.right).toBeCloseTo(x, 0);
     expect(box.bottom).toBeCloseTo(y, 0);
   });
 
   it("stays inside the window when it fits neither side of the position", () => {
-    const lines = Array.from({ length: 6 }, (_, i) => ctm.line("Line " + i, () => {}));
+    const lines = Array.from({ length: 6 }, (_, i) =>
+      ctm.line({ text: "Line " + i, on_click: () => {} }),
+    );
     const menu = ctm.menu(lines);
-    ctm.summon(menu, undefined, 0, 0);
+    ctm.summon(menu, { x: 0, y: 0 });
     const height = menu.getBoundingClientRect().height;
     menu.close_up();
     //Too low to fit below and too high to fit above
     const y = Math.min(height - 1, window.innerHeight - height / 2);
-    ctm.summon(menu, undefined, 10, y);
+    ctm.summon(menu, { x: 10, y });
     const box = menu.getBoundingClientRect();
     expect(box.top).toBeGreaterThanOrEqual(0);
     expect(box.bottom).toBeLessThanOrEqual(window.innerHeight + 0.5);
@@ -215,22 +238,23 @@ describe("Context menu summoning and positioning", () => {
 
   it("dont_cover places the menu beside the element", () => {
     const element = document.body.appendChild(document.createElement("div"));
-    element.style.cssText = "position:fixed;left:50px;top:40px;width:40px;height:20px;";
+    element.style.cssText =
+      "position:fixed;left:50px;top:40px;width:40px;height:20px;";
     const { menu } = three();
-    ctm.summon(menu, element, undefined, undefined, true);
+    ctm.summon(menu, { element, dont_cover: true });
     const box = menu.getBoundingClientRect();
     expect(box.left).toBeCloseTo(90, 0);
   });
 
   it("dont_cover keeps the menu inside the window for a tall element", () => {
     const { menu } = three();
-    ctm.summon(menu, undefined, 0, 0);
+    ctm.summon(menu, { x: 0, y: 0 });
     const height = menu.getBoundingClientRect().height;
     menu.close_up();
     const element = document.body.appendChild(document.createElement("div"));
     //Starts above the menu height, ends near the bottom of the window
     element.style.cssText = `position:fixed;left:50px;top:${height / 2}px;width:40px;height:${window.innerHeight - height}px;`;
-    ctm.summon(menu, element, undefined, undefined, true);
+    ctm.summon(menu, { element, dont_cover: true });
     const box = menu.getBoundingClientRect();
     expect(box.top).toBeGreaterThanOrEqual(0);
     expect(box.bottom).toBeLessThanOrEqual(window.innerHeight + 0.5);
@@ -279,14 +303,14 @@ describe("Context menu summoning and positioning", () => {
   });
 
   it("skips undefined lines", () => {
-    const a = ctm.line("A", () => {});
+    const a = ctm.line({ text: "A", on_click: () => {} });
     const menu = ctm.menu([undefined, a, undefined]);
     ctm.summon(menu);
     expect([...menu.children]).toEqual([a]);
   });
 
   it("calls a line function on every open", () => {
-    const lines = vi.fn(() => [ctm.line("A", () => {})]);
+    const lines = vi.fn(() => [ctm.line({ text: "A", on_click: () => {} })]);
     const menu = ctm.menu(lines);
     ctm.summon(menu);
     menu.close_up();
@@ -297,9 +321,9 @@ describe("Context menu summoning and positioning", () => {
   it("shows a spinner until promised lines arrive", async () => {
     let resolve: (lines: ReturnType<typeof ctm.line>[]) => void = () => {};
     const menu = ctm.menu(new Promise((r) => (resolve = r)));
-    ctm.summon(menu, undefined, 10, 10);
+    ctm.summon(menu, { x: 10, y: 10 });
     expect(menu.querySelector("contextmenu-buffer")).not.toBeNull();
-    const a = ctm.line("A", () => {});
+    const a = ctm.line({ text: "A", on_click: () => {} });
     resolve([a]);
     await wait(0);
     expect(menu.querySelector("contextmenu-buffer")).toBeNull();
@@ -312,11 +336,11 @@ describe("Context menu summoning and positioning", () => {
     button.focus();
     let resolve: (lines: ReturnType<typeof ctm.line>[]) => void = () => {};
     const menu = ctm.menu(new Promise((r) => (resolve = r)));
-    ctm.summon(menu, undefined, 10, 10);
+    ctm.summon(menu, { x: 10, y: 10 });
     menu.style.left = "";
     menu.close_up();
     expect(document.activeElement).toBe(button);
-    const a = ctm.line("A", () => {});
+    const a = ctm.line({ text: "A", on_click: () => {} });
     resolve([a]);
     await wait(0);
     expect(menu.isConnected).toBe(false);
@@ -328,10 +352,10 @@ describe("Context menu summoning and positioning", () => {
   it("a promise menu replaced before its lines arrive leaves the new menu alone", async () => {
     let resolve: (lines: ReturnType<typeof ctm.line>[]) => void = () => {};
     const first = ctm.menu(new Promise((r) => (resolve = r)));
-    ctm.summon(first, undefined, 10, 10);
+    ctm.summon(first, { x: 10, y: 10 });
     const second = three().menu;
     ctm.summon(second);
-    resolve([ctm.line("A", () => {})]);
+    resolve([ctm.line({ text: "A", on_click: () => {} })]);
     await wait(0);
     expect(first.isConnected).toBe(false);
     expect([...container().children]).toEqual([second]);
@@ -341,13 +365,13 @@ describe("Context menu summoning and positioning", () => {
   it("lines of an earlier open do not replace the lines of a later open", async () => {
     const resolvers: ((lines: ReturnType<typeof ctm.line>[]) => void)[] = [];
     const menu = ctm.menu(() => new Promise((r) => resolvers.push(r)));
-    ctm.summon(menu, undefined, 10, 10);
+    ctm.summon(menu, { x: 10, y: 10 });
     menu.close_up();
-    ctm.summon(menu, undefined, 10, 10);
+    ctm.summon(menu, { x: 10, y: 10 });
     //One spinner, not one for every open
     expect(menu.querySelectorAll("contextmenu-buffer").length).toBe(1);
-    const old_line = ctm.line("Old", () => {});
-    const new_line = ctm.line("New", () => {});
+    const old_line = ctm.line({ text: "Old", on_click: () => {} });
+    const new_line = ctm.line({ text: "New", on_click: () => {} });
     resolvers[0]([old_line]);
     await wait(0);
     expect(menu.querySelector("contextmenu-buffer")).not.toBeNull();
@@ -359,7 +383,10 @@ describe("Context menu summoning and positioning", () => {
   it("a menu covering most of the window gets a close line at the top which closes it", () => {
     //Long lines make the menu as wide as allowed, many lines as high as allowed
     const lines = Array.from({ length: 80 }, (_, i) =>
-      ctm.line("Line " + i + " ".padEnd(300, "x"), () => {}),
+      ctm.line({
+        text: "Line " + i + " ".padEnd(300, "x"),
+        on_click: () => {},
+      }),
     );
     const menu = ctm.menu(lines);
     ctm.summon(menu);
@@ -383,7 +410,7 @@ describe("Context menu summoning and positioning", () => {
 
   it("summoning a menu while a submenu is open reports no error", () => {
     const inner = three();
-    const sub = as_element(ctm.sub("More", inner.menu));
+    const sub = as_element(ctm.sub({ text: "More", menu: inner.menu }));
     ctm.summon(ctm.menu([sub]));
     sub.click();
     const next = three().menu;
@@ -399,7 +426,7 @@ describe("Context menu summoning and positioning", () => {
 
   it("repositions when the window resizes", () => {
     const { menu } = three();
-    ctm.summon(menu, undefined, 10, 20);
+    ctm.summon(menu, { x: 10, y: 20 });
     menu.style.left = "300px";
     window.dispatchEvent(new Event("resize"));
     expect(menu.style.left).toBe("10px");
@@ -407,7 +434,7 @@ describe("Context menu summoning and positioning", () => {
 
   it("stops listening to window resizes once closed", () => {
     const { menu } = three();
-    ctm.summon(menu, undefined, 10, 20);
+    ctm.summon(menu, { x: 10, y: 20 });
     menu.close_up();
     const set_position = vi.spyOn(menu, "set_position");
     window.dispatchEvent(new Event("resize"));
@@ -420,7 +447,9 @@ describe("Context menu summoning and positioning", () => {
     const listener = vi.fn();
     document.addEventListener("pointerdown", listener);
     try {
-      lines[0].dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+      lines[0].dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true }),
+      );
       expect(listener).not.toHaveBeenCalled();
     } finally {
       document.removeEventListener("pointerdown", listener);
@@ -510,15 +539,6 @@ describe("Context menu attach", () => {
 
 describe("Context menu options", () => {
   afterEach(close_all);
-
-  it("shows text, shortcut, checkmark and icon", () => {
-    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    const line = as_element(ctm.line("Save", () => {}, icon, "Ctrl+S", true));
-    expect(line.querySelector(".text")!.textContent).toBe("Save");
-    expect(line.querySelector(".shortcut")!.textContent).toBe("Ctrl+S");
-    expect(line.querySelector(".checkmark")!.textContent).toBe("✓");
-    expect(line.querySelector(".icon > svg")).toBe(icon);
-  });
 
   it("enter and space run the option and close the menu", () => {
     for (const code of ["Enter", "Space"]) {
@@ -611,9 +631,9 @@ describe("Context menu keyboard navigation", () => {
   });
 
   it("skips dividers", () => {
-    const a = as_element(ctm.line("A", () => {}));
-    const b = as_element(ctm.line("B", () => {}));
-    const menu = ctm.menu([a, ctm.devider(), b]);
+    const a = as_element(ctm.line({ text: "A", on_click: () => {} }));
+    const b = as_element(ctm.line({ text: "B", on_click: () => {} }));
+    const menu = ctm.menu([a, ctm.divider(), b]);
     ctm.summon(menu);
     a.focus();
     key("ArrowDown");
@@ -623,27 +643,27 @@ describe("Context menu keyboard navigation", () => {
   });
 
   it("arrow down from the menu skips a divider at the top to the first option", () => {
-    const a = as_element(ctm.line("A", () => {}));
-    const b = as_element(ctm.line("B", () => {}));
-    const menu = ctm.menu([ctm.devider(), a, b]);
+    const a = as_element(ctm.line({ text: "A", on_click: () => {} }));
+    const b = as_element(ctm.line({ text: "B", on_click: () => {} }));
+    const menu = ctm.menu([ctm.divider(), a, b]);
     ctm.summon(menu);
     key("ArrowDown");
     expect(document.activeElement).toBe(a);
   });
 
   it("arrow up from the menu skips a divider at the bottom to the last option", () => {
-    const a = as_element(ctm.line("A", () => {}));
-    const b = as_element(ctm.line("B", () => {}));
-    const menu = ctm.menu([a, b, ctm.devider()]);
+    const a = as_element(ctm.line({ text: "A", on_click: () => {} }));
+    const b = as_element(ctm.line({ text: "B", on_click: () => {} }));
+    const menu = ctm.menu([a, b, ctm.divider()]);
     ctm.summon(menu);
     key("ArrowUp");
     expect(document.activeElement).toBe(b);
   });
 
   it("wraps past a divider at the end", () => {
-    const a = as_element(ctm.line("A", () => {}));
-    const b = as_element(ctm.line("B", () => {}));
-    const menu = ctm.menu([a, b, ctm.devider()]);
+    const a = as_element(ctm.line({ text: "A", on_click: () => {} }));
+    const b = as_element(ctm.line({ text: "B", on_click: () => {} }));
+    const menu = ctm.menu([a, b, ctm.divider()]);
     ctm.summon(menu);
     b.focus();
     key("ArrowDown");
@@ -651,7 +671,7 @@ describe("Context menu keyboard navigation", () => {
   });
 
   it("a menu of only dividers keeps focus on the menu", () => {
-    const menu = ctm.menu([ctm.devider(), ctm.devider(), ctm.devider()]);
+    const menu = ctm.menu([ctm.divider(), ctm.divider(), ctm.divider()]);
     ctm.summon(menu);
     const collected = collect_errors();
     try {
@@ -666,8 +686,8 @@ describe("Context menu keyboard navigation", () => {
   });
 
   it("an option between only dividers keeps focus when wrapping", () => {
-    const a = as_element(ctm.line("A", () => {}));
-    const menu = ctm.menu([ctm.devider(), a, ctm.devider(), ctm.devider()]);
+    const a = as_element(ctm.line({ text: "A", on_click: () => {} }));
+    const menu = ctm.menu([ctm.divider(), a, ctm.divider(), ctm.divider()]);
     ctm.summon(menu);
     const collected = collect_errors();
     try {
@@ -690,9 +710,9 @@ describe("Context menu submenus", () => {
   /**Menu with a line, a submenu of two lines and another line*/
   const nested = () => {
     const inner = three();
-    const sub = as_element(ctm.sub("More", inner.menu));
-    const before = as_element(ctm.line("Before", () => {}));
-    const after = as_element(ctm.line("After", () => {}));
+    const sub = as_element(ctm.sub({ text: "More", menu: inner.menu }));
+    const before = as_element(ctm.line({ text: "Before", on_click: () => {} }));
+    const after = as_element(ctm.line({ text: "After", on_click: () => {} }));
     const menu = ctm.menu([before, sub, after]);
     return { menu, sub, before, after, inner };
   };
@@ -758,8 +778,10 @@ describe("Context menu submenus", () => {
   it("opening another submenu closes the first and keeps the menu open", () => {
     const first = three();
     const second = three();
-    const sub_first = as_element(ctm.sub("First", first.menu));
-    const sub_second = as_element(ctm.sub("Second", second.menu));
+    const sub_first = as_element(ctm.sub({ text: "First", menu: first.menu }));
+    const sub_second = as_element(
+      ctm.sub({ text: "Second", menu: second.menu }),
+    );
     const menu = ctm.menu([sub_first, sub_second]);
     ctm.summon(menu);
     sub_first.click();
@@ -779,7 +801,9 @@ describe("Context menu submenus", () => {
   it("hovering the submenu line opens it after a delay", async () => {
     const { menu, sub, inner } = nested();
     ctm.summon(menu);
-    sub.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" }));
+    sub.dispatchEvent(
+      new PointerEvent("pointerenter", { pointerType: "mouse" }),
+    );
     await wait(100);
     expect(inner.menu.isConnected).toBe(false);
     await wait(300);
@@ -789,9 +813,13 @@ describe("Context menu submenus", () => {
   it("leaving the submenu line before the delay does not open it", async () => {
     const { menu, sub, inner } = nested();
     ctm.summon(menu);
-    sub.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" }));
+    sub.dispatchEvent(
+      new PointerEvent("pointerenter", { pointerType: "mouse" }),
+    );
     await wait(100);
-    sub.dispatchEvent(new PointerEvent("pointerleave", { pointerType: "mouse" }));
+    sub.dispatchEvent(
+      new PointerEvent("pointerleave", { pointerType: "mouse" }),
+    );
     await wait(350);
     expect(inner.menu.isConnected).toBe(false);
   });
@@ -799,7 +827,9 @@ describe("Context menu submenus", () => {
   it("touch does not open the submenu by hovering", async () => {
     const { menu, sub, inner } = nested();
     ctm.summon(menu);
-    sub.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "touch" }));
+    sub.dispatchEvent(
+      new PointerEvent("pointerenter", { pointerType: "touch" }),
+    );
     await wait(400);
     expect(inner.menu.isConnected).toBe(false);
   });
@@ -807,7 +837,9 @@ describe("Context menu submenus", () => {
   it("a click right after a hover open does not close the submenu again", async () => {
     const { menu, sub, inner } = nested();
     ctm.summon(menu);
-    sub.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" }));
+    sub.dispatchEvent(
+      new PointerEvent("pointerenter", { pointerType: "mouse" }),
+    );
     await wait(350);
     sub.click();
     expect(inner.menu.isConnected).toBe(true);
@@ -815,7 +847,7 @@ describe("Context menu submenus", () => {
 
   it("the submenu opens beside its line", () => {
     const { menu, sub, inner } = nested();
-    ctm.summon(menu, undefined, 10, 10);
+    ctm.summon(menu, { x: 10, y: 10 });
     sub.click();
     const line = sub.getBoundingClientRect();
     const box = inner.menu.getBoundingClientRect();
@@ -847,33 +879,36 @@ describe("Combined menus", () => {
     if (!menu) return undefined;
     ctm.summon(menu);
     return [
-      ...menu.querySelectorAll("contextmenu-option, contextmenu-devider"),
+      ...menu.querySelectorAll("contextmenu-option, contextmenu-divider"),
     ].map((line) =>
-      line.tagName === "CONTEXTMENU-DEVIDER" ? "|" : line.textContent,
+      line.tagName === "CONTEXTMENU-DIVIDER" ? "|" : line.textContent,
     );
   };
 
-  it("joins groups with a devider between them", () => {
+  it("joins groups with a divider between them", () => {
     expect(
       open(
         ctm.combine(
-          [ctm.line("A", () => {}), ctm.line("B", () => {})],
-          [ctm.line("C", () => {})],
-          () => [ctm.line("D", () => {})],
+          [
+            ctm.line({ text: "A", on_click: () => {} }),
+            ctm.line({ text: "B", on_click: () => {} }),
+          ],
+          [ctm.line({ text: "C", on_click: () => {} })],
+          () => [ctm.line({ text: "D", on_click: () => {} })],
         ),
       ),
     ).toEqual(["A", "B", "|", "C", "|", "D"]);
   });
 
-  it("leaves out empty and undefined groups and undefined lines, with their devider", () => {
+  it("leaves out empty and undefined groups and undefined lines, with their divider", () => {
     expect(
       open(
         ctm.combine(
           [],
           undefined,
-          [undefined, ctm.line("A", () => {})],
+          [undefined, ctm.line({ text: "A", on_click: () => {} })],
           () => [undefined],
-          [ctm.line("B", () => {})],
+          [ctm.line({ text: "B", on_click: () => {} })],
           [],
         ),
       ),
@@ -887,7 +922,9 @@ describe("Combined menus", () => {
 
   it("calls group functions and builds a new menu on every open", () => {
     let count = 0;
-    const factory = ctm.combine(() => [ctm.line("Open " + ++count, () => {})]);
+    const factory = ctm.combine(() => [
+      ctm.line({ text: "Open " + ++count, on_click: () => {} }),
+    ]);
     const first = factory().unwrap_or(undefined);
     expect(open(factory)).toEqual(["Open 2"]);
     expect(open(factory)).toEqual(["Open 3"]);
@@ -895,11 +932,12 @@ describe("Combined menus", () => {
   });
 
   it("takes the lines of menus, and of functions giving a menu or an option of one", () => {
-    const menu = ctm.menu([ctm.line("Menu", () => {})]);
+    const menu = ctm.menu([ctm.line({ text: "Menu", on_click: () => {} })]);
     const factory = ctm.combine(
       menu,
-      () => ctm.menu(() => [ctm.line("Function", () => {})]),
-      () => some(ctm.menu([ctm.line("Some", () => {})])),
+      () =>
+        ctm.menu(() => [ctm.line({ text: "Function", on_click: () => {} })]),
+      () => some(ctm.menu([ctm.line({ text: "Some", on_click: () => {} })])),
       () => none(),
     );
     expect(open(factory)).toEqual(["Menu", "|", "Function", "|", "Some"]);
@@ -918,13 +956,13 @@ describe("Combined menus", () => {
   it("waits for promised lines of a menu with a spinner", async () => {
     let resolve!: (lines: ReturnType<typeof ctm.line>[]) => void;
     const factory = ctm.combine(
-      [ctm.line("Now", () => {})],
+      [ctm.line({ text: "Now", on_click: () => {} })],
       ctm.menu(new Promise((r) => (resolve = r))),
     );
     const menu = factory().unwrap_or(undefined)!;
     ctm.summon(menu);
     expect(menu.querySelector("contextmenu-buffer")).not.toBeNull();
-    resolve([ctm.line("Later", () => {})]);
+    resolve([ctm.line({ text: "Later", on_click: () => {} })]);
     await expect
       .poll(() =>
         [...menu.querySelectorAll("contextmenu-option")].map(
@@ -937,7 +975,10 @@ describe("Combined menus", () => {
   it("works with attach", () => {
     const element = document.body.appendChild(document.createElement("div"));
     try {
-      ctm.attach(element, ctm.combine([ctm.line("A", () => {})]));
+      ctm.attach(
+        element,
+        ctm.combine([ctm.line({ text: "A", on_click: () => {} })]),
+      );
       element.dispatchEvent(
         new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
       );
@@ -955,5 +996,160 @@ describe("Context menu styles", () => {
   it("leave how the page scrolls alone, even when loaded late like with the fault prompt", () => {
     //Overflow on html moves scrolling from the window to a body that scrolls itself, jumping to the top
     expect(getComputedStyle(document.documentElement).overflow).toBe("visible");
+  });
+});
+
+describe("Context menu lines on the element pattern", () => {
+  afterEach(close_all);
+
+  const cells = (line: HTMLElement) => ({
+    text: line.querySelector(".text")!.textContent,
+    shortcut: line.querySelector(".shortcut")!.textContent,
+    checkmark: line.querySelector(".checkmark")!.textContent,
+    icon: line.querySelector(".icon > svg"),
+  });
+
+  it("takes text, shortcut, checked and icon as initial values", () => {
+    const line = ctm.line({
+      text: "Save",
+      shortcut: "Ctrl+S",
+      checked: true,
+      icon: material_close_rounded,
+    });
+    const shown = cells(line);
+    expect(shown.text).toBe("Save");
+    expect(shown.shortcut).toBe("Ctrl+S");
+    expect(shown.checkmark).toBe("✓");
+    expect(shown.icon).toBeInstanceOf(SVGSVGElement);
+  });
+
+  it("follows text, shortcut, checked and icon states while its menu is open", () => {
+    const text = st.ok_w("Save");
+    const shortcut = st.ok_w("Ctrl+S");
+    const checked = st.ok_w(false);
+    const icon = st.ok_w<SVGFunc | undefined>(undefined);
+    const line = ctm.line({ text, shortcut, checked, icon });
+    ctm.summon(ctm.menu([line]));
+    expect(cells(line)).toEqual({
+      text: "Save",
+      shortcut: "Ctrl+S",
+      checkmark: "",
+      icon: null,
+    });
+    text.set_ok("Store");
+    shortcut.set_ok("");
+    checked.set_ok(true);
+    icon.set_ok(material_close_rounded);
+    const shown = cells(line);
+    expect(shown.text).toBe("Store");
+    expect(shown.shortcut).toBe("");
+    expect(shown.checkmark).toBe("✓");
+    expect(shown.icon).toBeInstanceOf(SVGSVGElement);
+  });
+
+  it("an error shows its nice text and no checkmark, with a fault", () => {
+    const text = st.from_w("Save");
+    const checked = st.from_w(true);
+    const line = ctm.line({ text, checked });
+    ctm.summon(ctm.menu([line]));
+    text.set_err(new NiceError(Symbol("No name"), "Server down"));
+    checked.set_err(new NiceError(Symbol("No state"), "Server down"));
+    expect(cells(line).text).toBe("No name");
+    expect(cells(line).checkmark).toBe("");
+    expect(line.faults.length).toBe(2);
+  });
+
+  it("set again replaces the text and on_click", () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const line = ctm.line({ text: "First", on_click: first });
+    line.set({ text: "Second", on_click: second });
+    ctm.summon(ctm.menu([line]));
+    line.click();
+    expect(cells(line).text).toBe("Second");
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledOnce();
+  });
+
+  it("a click runs on_click and leaves a checked state alone", () => {
+    const checked = st.ok_w(false);
+    const on_click = vi.fn();
+    const line = ctm.line({ text: "Mute", checked, on_click });
+    ctm.summon(ctm.menu([line]));
+    line.click();
+    expect(on_click).toHaveBeenCalledOnce();
+    expect(checked.ok()).toBe(false);
+  });
+
+  it("read access greys the line out, it can not be clicked and the keyboard skips it", () => {
+    const on_click = vi.fn();
+    const a = ctm.line({ text: "A" });
+    const b = ctm.line({ text: "B", on_click, access: AccessTypes.Read });
+    const c = ctm.line({ text: "C" });
+    const menu = ctm.menu([a, b, c]);
+    ctm.summon(menu);
+    expect(b.isConnected).toBe(true);
+    expect(Number(getComputedStyle(b).opacity)).toBeLessThan(1);
+    expect(b.inert).toBe(true);
+    a.focus();
+    key("ArrowDown");
+    expect(document.activeElement).toBe(c);
+    key("ArrowUp");
+    expect(document.activeElement).toBe(a);
+  });
+
+  it("access as a state, none hides the line, write gives it back", () => {
+    const access = st.ok_w<AccessTypes>(AccessTypes.None);
+    const a = ctm.line({ text: "A" });
+    const b = ctm.line({ text: "B", access });
+    const c = ctm.line({ text: "C" });
+    ctm.summon(ctm.menu([a, b, c]));
+    expect(getComputedStyle(b).display).toBe("none");
+    a.focus();
+    key("ArrowDown");
+    expect(document.activeElement).toBe(c);
+    access.set_ok(AccessTypes.Write);
+    expect(getComputedStyle(b).display).not.toBe("none");
+    a.focus();
+    key("ArrowDown");
+    expect(document.activeElement).toBe(b);
+  });
+
+  it("a submenu takes text, icon and menu as inputs", () => {
+    const text = st.ok_w("More");
+    const inner = three().menu;
+    const sub = ctm.sub({ text, icon: material_close_rounded, menu: inner });
+    ctm.summon(ctm.menu([sub]));
+    expect(sub.querySelector(".text")!.textContent).toBe("More");
+    expect(sub.querySelector(".icon > svg")).toBeInstanceOf(SVGSVGElement);
+    text.set_ok("Less");
+    expect(sub.querySelector(".text")!.textContent).toBe("Less");
+    sub.click();
+    expect(inner.isConnected).toBe(true);
+  });
+
+  it("a submenu without a menu does not open", () => {
+    const { errors, stop } = collect_errors();
+    const sub = ctm.sub({ text: "Empty" });
+    const menu = ctm.menu([sub]);
+    ctm.summon(menu);
+    sub.click();
+    sub.focus();
+    key("ArrowRight");
+    stop();
+    expect(errors).toEqual([]);
+    expect(menu.submenu).toBeUndefined();
+  });
+
+  it("a submenu given another menu while open closes the old one", () => {
+    const old_menu = three().menu;
+    const new_menu = three().menu;
+    const sub = ctm.sub({ text: "More", menu: old_menu });
+    ctm.summon(ctm.menu([sub]));
+    sub.click();
+    sub.set({ menu: new_menu });
+    expect(old_menu.isConnected).toBe(false);
+    sub.click();
+    expect(new_menu.isConnected).toBe(true);
   });
 });

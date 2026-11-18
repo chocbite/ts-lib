@@ -2,15 +2,25 @@ import { Base, define_element } from "#base";
 import { material_close_rounded } from "#icons";
 import { Buffer } from "./buffer";
 import { Container } from "./container";
-import { ContextMenuLine, MenuLine } from "./line";
+import type { ContextMenuLine } from "./line";
 import "./menu.scss";
-import { MenuOption } from "./option";
+import { context_line, type ContextMenuOption } from "./option";
 import "./shared";
-import { MenuSub } from "./submenu";
+import type { ContextMenuSub } from "./submenu";
 
 export type ContextMenuLines = ContextMenuLine[];
 
-export class ContextMenu extends Base {
+/**Lines of a menu, undefined lines are skipped
+ * An array, a promise of one, or a function giving either, called every time the menu opens*/
+export type ContextMenuLinesInput =
+  | (ContextMenuLine | undefined)[]
+  | Promise<(ContextMenuLine | undefined)[]>
+  | (() =>
+      | (ContextMenuLine | undefined)[]
+      | Promise<(ContextMenuLine | undefined)[]>);
+
+/**Menu of lines, opened with ctm.attach or ctm.summon*/
+class ContextMenu extends Base {
   /**Returns the name used to define the element */
   static element_name() {
     return "menu";
@@ -20,9 +30,8 @@ export class ContextMenu extends Base {
     return "contextmenu";
   }
 
-  container: Container | undefined;
-  readonly submenu: MenuSub | undefined;
-  #closer: MenuOption | undefined;
+  #submenu: ContextMenuSub | undefined;
+  #closer: ContextMenuOption | undefined;
   #x: number | undefined;
   #y: number | undefined;
   #element: Element | undefined;
@@ -40,25 +49,9 @@ export class ContextMenu extends Base {
     this.set_position(this.#x, this.#y, this.#element);
   };
 
-  #lines:
-    | (
-        | (ContextMenuLine | undefined)[]
-        | Promise<(ContextMenuLine | undefined)[]>
-      )
-    | (() =>
-        | (ContextMenuLine | undefined)[]
-        | Promise<(ContextMenuLine | undefined)[]>);
+  #lines: ContextMenuLinesInput;
 
-  constructor(
-    lines:
-      | (
-          | (ContextMenuLine | undefined)[]
-          | Promise<(ContextMenuLine | undefined)[]>
-        )
-      | (() =>
-          | (ContextMenuLine | undefined)[]
-          | Promise<(ContextMenuLine | undefined)[]>),
-  ) {
+  constructor(lines: ContextMenuLinesInput) {
     super();
     this.#lines = lines;
     this.tabIndex = 0;
@@ -69,7 +62,7 @@ export class ContextMenu extends Base {
       if (e.code === "Tab" || e.code === "ArrowUp" || e.code === "ArrowDown")
         this.focus_next(e.shiftKey || e.code === "ArrowUp");
       else if (e.code === "ArrowLeft") {
-        const parent = this.parentElement as MenuSub | Container;
+        const parent = this.parentElement as ContextMenuSub | Container;
         if (!(parent instanceof Container)) {
           parent.focus();
           parent.close_down();
@@ -91,12 +84,12 @@ export class ContextMenu extends Base {
         if (this.#loading !== buffer) return;
         this.#loading = undefined;
         buffer.remove();
-        this.lines = line;
+        this.#set_lines(line);
         this.set_position(this.#x, this.#y, this.#element);
       });
     } else {
       this.#loading = undefined;
-      this.lines = lines;
+      this.#set_lines(lines);
     }
     this.addEventListener("focusout", this.#focus_out_handler, {
       capture: true,
@@ -126,13 +119,13 @@ export class ContextMenu extends Base {
     return typeof this.#lines === "function" ? this.#lines() : this.#lines;
   }
 
-  /**Sets the lines of the context menu */
-  set lines(lines: (ContextMenuLine | undefined)[]) {
+  /**Shows the lines, after the close line of a big menu*/
+  #set_lines(lines: (ContextMenuLine | undefined)[]) {
     this.replaceChildren();
     if (this.#closer) this.appendChild(this.#closer);
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      if (line) this.appendChild(line as MenuLine);
+      if (line) this.appendChild(line);
     }
   }
 
@@ -140,25 +133,33 @@ export class ContextMenu extends Base {
    * @param direction false is first child, true is last child */
   focus_next(direction: boolean) {
     //The direction is passed on, so a divider skips to the line after it, toward the middle
-    if (direction) (this.lastChild as MenuLine)?.do_focus(true);
-    else (this.firstChild as MenuLine)?.do_focus(false);
+    if (direction) (this.lastChild as ContextMenuLine | null)?.do_focus(true);
+    else (this.firstChild as ContextMenuLine | null)?.do_focus(false);
   }
 
-  set closer(closer: boolean) {
+  /**The open submenu line of this menu*/
+  get submenu(): ContextMenuSub | undefined {
+    return this.#submenu;
+  }
+
+  /**Called by a submenu line of this menu when it opens or closes its menu*/
+  submenu_opened(submenu: ContextMenuSub | undefined) {
+    this.#submenu = submenu;
+  }
+
+  /**Adds or removes the close line at the top, for menus too big to click beside*/
+  #set_closer(closer: boolean) {
     if (closer && !this.#closer) {
       this.classList.add("closer");
-      this.#closer = new MenuOption(
-        "Close",
-        () => {},
-        material_close_rounded(),
-      );
+      this.#closer = context_line({
+        text: "Close",
+        icon: material_close_rounded,
+      });
       this.#closer.onclick = (e) => {
         e.stopPropagation();
-        if (this.parentElement instanceof MenuSub) {
-          this.parentElement.close_down();
-        } else {
-          this.close_up();
-        }
+        const parent = this.parentElement as ContextMenuSub | Container;
+        if (parent instanceof Container) this.close_up();
+        else parent.close_down();
       };
       this.prepend(this.#closer);
     } else if (!closer && this.#closer) {
@@ -168,23 +169,10 @@ export class ContextMenu extends Base {
     }
   }
 
-  /**Sets the context menu to fullscreen mode in x directino */
-  set fullscreenx(full: boolean) {
-    if (full) this.classList.add("fullscreen-x");
-    else this.classList.remove("fullscreen-x");
-  }
-
-  /**Sets the context menu to fullscreen mode in y direction */
-  set fullscreeny(full: boolean) {
-    if (full) this.classList.add("fullscreen-y");
-    else this.classList.remove("fullscreen-y");
-  }
-
   /**Closes the context menu down the tree*/
   close_down() {
-    if (this.submenu) this.submenu.close_down();
-    //@ts-expect-error Writing to readonly property, from inside class itself
-    this.submenu = undefined;
+    this.#submenu?.close_down();
+    this.#submenu = undefined;
   }
 
   /**Closes the context menu up the tree to the root*/
@@ -208,7 +196,7 @@ export class ContextMenu extends Base {
     const box_area = box.width * box.height;
     const window = this.ownerDocument.defaultView!;
     const html_area = window.innerWidth * window.innerHeight;
-    this.closer = box_area > html_area * 0.5;
+    this.#set_closer(box_area > html_area * 0.5);
     let top = NaN;
     let bottom = NaN;
     let left = NaN;
@@ -241,8 +229,8 @@ export class ContextMenu extends Base {
         else left = window.innerWidth - box.width;
       } else left = x;
     }
-    this.fullscreenx = box.width === window.innerWidth;
-    this.fullscreeny = box.height >= window.innerHeight;
+    this.classList.toggle("fullscreen-x", box.width === window.innerWidth);
+    this.classList.toggle("fullscreen-y", box.height >= window.innerHeight);
 
     this.style.top = top === top ? top + "px" : "";
     this.style.bottom = bottom === bottom ? bottom + "px" : "";
@@ -253,14 +241,10 @@ export class ContextMenu extends Base {
 }
 define_element(ContextMenu);
 
-export function context_menu(
-  lines:
-    | (
-        | (ContextMenuLine | undefined)[]
-        | Promise<(ContextMenuLine | undefined)[]>
-      )
-    | (() => (ContextMenuLine | undefined)[])
-    | (() => Promise<(ContextMenuLine | undefined)[]>),
-): ContextMenu {
-  return new ContextMenu(lines);
+//A value inside the module for instanceof, the index exports it only as a type
+export { ContextMenu };
+
+/**Creates a menu of the given lines, see ContextMenuLinesInput*/
+export function context_menu(lines: ContextMenuLinesInput): ContextMenu {
+  return ContextMenu.create({}, lines);
 }

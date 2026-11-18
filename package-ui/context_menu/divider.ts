@@ -1,13 +1,12 @@
 import { define_element } from "#base";
-import "./devider.scss";
-import { ContextMenuLine, MenuLine } from "./line";
+import "./divider.scss";
+import { ContextMenuLine } from "./line";
 
-export interface ContextMenuDevider extends ContextMenuLine {}
-
-export class Devider extends MenuLine implements ContextMenuDevider {
+/**Line between groups of lines*/
+class ContextMenuDivider extends ContextMenuLine {
   /**Returns the name used to define the element */
   static element_name() {
-    return "devider";
+    return "divider";
   }
 
   get skips_focus() {
@@ -18,8 +17,11 @@ export class Devider extends MenuLine implements ContextMenuDevider {
     this.focus_next(dir);
   }
 }
-define_element(Devider);
+define_element(ContextMenuDivider);
 
-export function context_devider(): ContextMenuDevider {
-  return new Devider();
+export type { ContextMenuDivider };
+
+/**Creates a line between groups of lines*/
+export function context_divider(): ContextMenuDivider {
+  return ContextMenuDivider.create();
 }

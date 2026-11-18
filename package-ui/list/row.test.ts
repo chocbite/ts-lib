@@ -1,4 +1,4 @@
-import type { ContextMenu } from "#context-menu";
+import type { ContextMenu } from "#context_menu";
 import type { SVGFunc } from "#svg";
 import { none, ok, type Option, NiceError } from "@chocbite/ts-lib/result";
 import { state, type State } from "@chocbite/ts-lib/state";

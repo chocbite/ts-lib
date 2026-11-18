@@ -1,4 +1,4 @@
-# @chocbite/ts-lib-ui/context-menu
+# @chocbite/ts-lib-ui/context_menu
 
 Context menus that open on a right click, or a press and hold on touch screens, with lines, submenus and menus built when they open.
 
@@ -7,19 +7,21 @@ Context menus that open on a right click, or a press and hold on touch screens, 
 Attach a context menu to an element. Its css is part of `style.css` of ts-lib-ui.
 
 ```ts
-import ctm from "@chocbite/ts-lib-ui/context-menu";
+import ctm from "@chocbite/ts-lib-ui/context_menu";
 
 ctm.attach(
-  document.getElementById("editor")!,
+  editor,
   ctm.menu([
-    ctm.line("Cut", () => document.execCommand("cut")),
-    ctm.line("Copy", () => document.execCommand("copy")),
-    ctm.line("Paste", () => document.execCommand("paste")),
+    ctm.line({ text: "Cut", on_click: () => cut() }),
+    ctm.line({ text: "Copy", on_click: () => copy() }),
+    ctm.line({ text: "Paste", on_click: () => paste() }),
   ]),
 );
 ```
 
 Right-click (or long-press) the element to open the menu.
+
+Lines and submenus follow the element pattern of ts-lib-ui, see [PATTERN.md](../PATTERN.md): their factories take options, every option is an initial value or a state, and `set(options)` changes options later. States are followed while the menu is open, so a menu that is kept, instead of built on every open, shows their current values. Every line takes `access` like any element: read greys the line out and the keyboard skips it, none hides it.
 
 ## API
 
@@ -30,69 +32,75 @@ Creates a menu panel. `lines` can be a static array, a lazy factory, or a Promis
 ```ts
 // Static array
 const menu = ctm.menu([
-  ctm.line("Option A", () => console.log("A")),
-  ctm.line("Option B", () => console.log("B")),
+  ctm.line({ text: "Option A", on_click: () => console.log("A") }),
+  ctm.line({ text: "Option B", on_click: () => console.log("B") }),
 ]);
 
 // Factory — evaluated on every open
 const menu = ctm.menu(() => [
-  ctm.line("Timestamp", () => console.log(Date.now())),
+  ctm.line({ text: "Timestamp", on_click: () => console.log(Date.now()) }),
 ]);
 
 // Async factory — shows a spinner until the Promise resolves
 const menu = ctm.menu(async () => {
   const items = await fetchMenuItems();
-  return items.map((item) => ctm.line(item.label, item.action));
+  return items.map((item) => ctm.line({ text: item.label, on_click: item.action }));
 });
 ```
 
 ---
 
-### `ctm.line(text, func, icon?, shortcut?, checkmark?)`
+### `ctm.line(options)`
 
-Creates a clickable menu item.
+Creates a menu line that does something when chosen.
+
+- **`text`**: text of the line, an error shows its nice text.
+- **`on_click`**: called when the line is clicked, or chosen with enter or space. The menu then closes.
+- **`icon`**: an icon function in front of the text, like `material_delete_rounded`.
+- **`shortcut`**: text at the right end, like the keyboard shortcut doing the same.
+- **`checked`**: shows a checkmark. It is only shown, a click does not change it, write the state in `on_click` for a line that toggles.
 
 ```ts
 import { material_delete_rounded } from "@chocbite/ts-lib-ui/icons";
 
-ctm.line("Delete", () => deleteFile());
-ctm.line("Delete", () => deleteFile(), material_delete_rounded());
-ctm.line("Save", () => save(), undefined, "Ctrl+S");
-ctm.line("Mute", () => toggleMute(), undefined, undefined, isMuted);
+ctm.line({ text: "Delete", on_click: () => delete_file(), icon: material_delete_rounded });
+ctm.line({ text: "Save", on_click: () => save(), shortcut: "Ctrl+S" });
+ctm.line({ text: "Mute", checked: muted, on_click: () => muted.write(!muted.ok()) });
+ctm.line({ text: "Paste", on_click: () => paste(), access: can_paste }); // AccessTypes state
 ```
 
 ---
 
-### `ctm.sub(text, menu, icon?)`
+### `ctm.sub(options)`
 
-Creates a submenu trigger. Hover (300 ms) or keyboard (→ / Enter / Space) opens the nested menu.
+Creates a line that opens another menu beside it. Hover (300 ms) or keyboard (→ / Enter / Space) opens the nested menu. Takes `text`, `icon` and `access` like a line, and the `menu` it opens.
 
 ```ts
-const colorMenu = ctm.menu([
-  ctm.line("Red", () => setColor("red")),
-  ctm.line("Green", () => setColor("green")),
-  ctm.line("Blue", () => setColor("blue")),
+const color_menu = ctm.menu([
+  ctm.line({ text: "Red", on_click: () => set_color("red") }),
+  ctm.line({ text: "Green", on_click: () => set_color("green") }),
+  ctm.line({ text: "Blue", on_click: () => set_color("blue") }),
 ]);
 
 const menu = ctm.menu([
-  ctm.line("Copy", () => copy()),
-  ctm.sub("Color", colorMenu),
-  ctm.line("Delete", () => remove()),
+  ctm.line({ text: "Copy", on_click: () => copy() }),
+  ctm.sub({ text: "Color", menu: color_menu }),
+  ctm.line({ text: "Delete", on_click: () => remove() }),
 ]);
 ```
 
 ---
 
-### `ctm.devider()`
+### `ctm.divider()`
 
 Inserts a horizontal separator.
 
 ```ts
 const menu = ctm.menu([
-  ctm.line("Cut", () => cut()),
-  ctm.line("Copy", () => copy()),
-  ctm.devider(),
-  ctm.line("Delete", () => remove()),
+  ctm.line({ text: "Cut", on_click: () => cut() }),
+  ctm.line({ text: "Copy", on_click: () => copy() }),
+  ctm.divider(),
+  ctm.line({ text: "Delete", on_click: () => remove() }),
 ]);
 ```
 
@@ -100,26 +108,26 @@ const menu = ctm.menu([
 
 ### `ctm.combine(...groups)`
 
-Combines groups of lines and menus into one menu, with a devider between the groups. It returns a menu factory for `ctm.attach`, or anything else taking one, like the `context_menu` row option of the list.
+Combines groups of lines and menus into one menu, with a divider between the groups. It returns a menu factory for `ctm.attach`, or anything else taking one, like the `context_menu` row option of the list.
 
 - A group is an array of lines, a menu, a function giving lines, a menu or an option of a menu (what `ctm.attach` takes), or `undefined` for no group.
 - Functions are called and the menu is built every time it opens, so lines can show the state at that moment.
 - A menu gives its lines, so two finished menus can be joined, like extra lines in front of a menu that came from somewhere else.
-- Empty groups are left out with their devider, `undefined` lines are skipped like in `ctm.menu`.
+- Empty groups are left out with their divider, `undefined` lines are skipped like in `ctm.menu`.
 - When all groups are empty there is no menu.
 
 ```ts
 ctm.attach(
   el,
   ctm.combine(
-    [ctm.line("Cut", () => cut()), ctm.line("Copy", () => copy())],
-    () => (canDelete() ? [ctm.line("Delete", () => remove())] : []),
-    isAdmin ? [ctm.line("Admin Panel", () => openAdmin())] : undefined,
+    [ctm.line({ text: "Cut", on_click: () => cut() }), ctm.line({ text: "Copy", on_click: () => copy() })],
+    () => (canDelete() ? [ctm.line({ text: "Delete", on_click: () => remove() })] : []),
+    isAdmin ? [ctm.line({ text: "Admin Panel", on_click: () => openAdmin() })] : undefined,
   ),
 );
 
 // Lines in front of a finished menu, or of a menu factory given by someone else
-ctm.attach(el, ctm.combine([ctm.line("Select", () => select())], other_menu));
+ctm.attach(el, ctm.combine([ctm.line({ text: "Select", on_click: () => select() })], other_menu));
 ```
 
 Lines are elements that live in one menu at a time. The combined menu takes the lines of a menu group while it is open, the menu takes them back when it opens on its own. An array group is fine because only one menu is open at a time, but give a function when the same lines should also be used in another menu that can be open at the same time.
@@ -142,8 +150,8 @@ import { some, none } from "@chocbite/ts-lib/result";
 ctm.attach(el, () =>
   some(
     ctm.menu([
-      ctm.line("Edit", () => edit(el)),
-      ctm.line("Delete", () => remove(el)),
+      ctm.line({ text: "Edit", on_click: () => edit(el) }),
+      ctm.line({ text: "Delete", on_click: () => remove(el) }),
     ]),
   ),
 );
@@ -167,19 +175,23 @@ ctm.detach(el);
 
 ---
 
-### `ctm.summon(menu, element?, x?, y?, dont_cover?)`
+### `ctm.summon(menu, options?)`
 
 Opens a menu programmatically — no right-click needed.
 
+- **`element`**: the element the menu belongs to, it opens in the document of the element, without it in the main document.
+- **`x`**, **`y`**: the position. Without both, the menu opens at the middle of the element, or the top left corner without an element.
+- **`dont_cover`**: places the menu beside the element instead of covering it.
+
 ```ts
 // At specific coordinates, in main document
-ctm.summon(menu, undefined, event.clientX, event.clientY);
+ctm.summon(menu, { x: event.clientX, y: event.clientY });
 
-// Centered on an element, in same document as buttonEl
-ctm.summon(menu, buttonEl);
+// Centered on an element, in same document as button
+ctm.summon(menu, { element: button });
 
-// Positioned beside an element, in same document as buttonEl, without covering it
-ctm.summon(menu, buttonEl, undefined, undefined, true);
+// Positioned beside an element, in same document as button, without covering it
+ctm.summon(menu, { element: button, dont_cover: true });
 ```
 
 ---
@@ -193,8 +205,8 @@ It applies to every registered document, also documents registered later.
 // Apply a global fallback
 ctm.default(
   ctm.menu([
-    ctm.line("View source", () => window.open("view-source:" + location.href)),
-    ctm.line("Inspect", () => console.log("inspect")),
+    ctm.line({ text: "View source", on_click: () => window.open("view-source:" + location.href) }),
+    ctm.line({ text: "Inspect", on_click: () => console.log("inspect") }),
   ]),
 );
 
@@ -223,9 +235,9 @@ if (!ctm.has(el)) {
 
 ```ts
 ctm.menu(() => [
-  ctm.line("Edit", () => edit()),
-  canDelete ? ctm.line("Delete", () => remove()) : undefined,
-  isAdmin ? ctm.line("Admin Panel", () => openAdmin()) : undefined,
+  ctm.line({ text: "Edit", on_click: () => edit() }),
+  canDelete ? ctm.line({ text: "Delete", on_click: () => remove() }) : undefined,
+  isAdmin ? ctm.line({ text: "Admin Panel", on_click: () => openAdmin() }) : undefined,
 ]);
 ```
 

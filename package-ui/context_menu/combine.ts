@@ -1,5 +1,5 @@
 import result, { none, some, type Option } from "@chocbite/ts-lib/result";
-import { context_devider } from "./devider";
+import { context_divider } from "./divider";
 import type { ContextMenuLine } from "./line";
 import { context_menu, ContextMenu } from "./menu";
 
@@ -22,20 +22,20 @@ function group_lines(group: ContextMenuGroup): Lines | Promise<Lines> {
   return value ?? [];
 }
 
-/**Joins groups with a devider between those with lines */
+/**Joins groups with a divider between those with lines */
 function join(groups: Lines[]): ContextMenuLine[] {
   const lines: ContextMenuLine[] = [];
   for (const group of groups) {
     const group_lines = group.filter((line) => line !== undefined);
     if (group_lines.length === 0) continue;
-    if (lines.length) lines.push(context_devider());
+    if (lines.length) lines.push(context_divider());
     lines.push(...group_lines);
   }
   return lines;
 }
 
-/**Combines groups of lines and menus into one menu with a devider between groups, built every time the menu opens
- * Empty groups are left out with their devider, and when all groups are empty there is no menu
+/**Combines groups of lines and menus into one menu with a divider between groups, built every time the menu opens
+ * Empty groups are left out with their divider, and when all groups are empty there is no menu
  * A group with promised lines makes the combined menu wait for all groups, showing a spinner, it then always opens
  * Give the result to ctm.attach, or anything else taking a menu factory
  * @param groups groups in menu order, see ContextMenuGroup*/

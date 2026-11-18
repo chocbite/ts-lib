@@ -1,4 +1,4 @@
-import ctm from "#context-menu";
+import ctm from "#context_menu";
 import { theme_init } from "#theme";
 import { err, ok, some, type Option, NiceError } from "@chocbite/ts-lib/result";
 import {
@@ -65,9 +65,12 @@ function create(
               sub_rows: sub_rows ? () => data.sub ?? [] : undefined,
               selectable: data.selectable,
               context_menu: data.menu_fn
-                ? () => some(ctm.menu([ctm.line("Own", () => {})]))
+                ? () =>
+                    some(
+                      ctm.menu([ctm.line({ text: "Own", on_click: () => {} })]),
+                    )
                 : data.menu
-                  ? ctm.menu([ctm.line("Line", () => {})])
+                  ? ctm.menu([ctm.line({ text: "Line", on_click: () => {} })])
                   : undefined,
               values: { name: data.name },
             }),
@@ -836,7 +839,7 @@ describe("List selection in the row menu", () => {
       "Own",
     ]);
     expect(
-      document.documentElement.querySelector("contextmenu-devider"),
+      document.documentElement.querySelector("contextmenu-divider"),
     ).not.toBeNull();
     choose("Deselect");
     expect(ids(container)).toEqual([1]);
@@ -885,7 +888,7 @@ describe("List selection in the row menu", () => {
   });
 
   it("a list without selection uses the row menu as it is", () => {
-    const menu = ctm.menu([ctm.line("Plain", () => {})]);
+    const menu = ctm.menu([ctm.line({ text: "Plain", on_click: () => {} })]);
     const container = list.container(
       {
         transform: (data: string) =>

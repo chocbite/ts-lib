@@ -5,7 +5,7 @@ import {
   type BaseIntersectObserver,
   type BaseOptions,
 } from "#base";
-import ctm from "#context-menu";
+import ctm from "#context_menu";
 import { px_to_rem } from "#theme";
 import {
   state,
@@ -160,8 +160,8 @@ class HeaderRow<
       ctm.attach(
         key,
         ctm.menu([
-          ctm.line("Open all", () => root.open_all()),
-          ctm.line("Close all", () => root.close_all()),
+          ctm.line({ text: "Open all", on_click: () => root.open_all() }),
+          ctm.line({ text: "Close all", on_click: () => root.close_all() }),
         ]),
       );
       key.sizable(true, key_sizer);
@@ -178,13 +178,16 @@ class HeaderRow<
       ctm.attach(
         check,
         ctm.menu([
-          ctm.line(
-            "Select all",
-            () => selection.select_all(),
-            undefined,
-            "Ctrl+A",
-          ),
-          ctm.line("Deselect all", () => selection.clear(), undefined, "Esc"),
+          ctm.line({
+            text: "Select all",
+            on_click: () => selection.select_all(),
+            shortcut: "Ctrl+A",
+          }),
+          ctm.line({
+            text: "Deselect all",
+            on_click: () => selection.clear(),
+            shortcut: "Esc",
+          }),
         ]),
       );
       selection.on_change = () => {
