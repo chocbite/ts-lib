@@ -1,3 +1,4 @@
+import { state_ui } from "#state_ui";
 import { CREATE, define_element, input_key, type InputOptions } from "#base";
 import ctm from "#context-menu";
 import state from "@chocbite/ts-lib/state";
@@ -131,5 +132,19 @@ describe("Content subclass", () => {
     expect(note.textContent).toBe("hello");
     expect(note.content_title).toBe("Note");
     expect(note.content_closable).toBe(true);
+  });
+});
+
+describe("Content size", () => {
+  it("gives its own size as states, like a canvas scaled to fit its panel", async () => {
+    const element = attach(content());
+    element.style.cssText = "display:block;width:140px;height:60px";
+    const { width, height } = element.content_size();
+    width.sub(() => {});
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
+    expect(width.ok()).toBe(140);
+    expect(height.ok()).toBe(60);
+    expect(element.content_size()).toBe(state_ui.size(element));
   });
 });

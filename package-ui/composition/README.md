@@ -53,7 +53,7 @@ report.append(report_table);
 
 | Option         | Given         | Description                                                                                                                         |
 | -------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `title`        | at creation   | Title the container shows. An error shows its nice text as the title.                                                                          |
+| `title`        | at creation   | Title the container shows. An error shows its nice text as the title.                                                               |
 | `icon`         | at creation   | Icon in front of the title, `undefined` for none. An error shows no icon.                                                           |
 | `closable`     | at creation   | Whether the container shows a close button.                                                                                         |
 | `min_width`    | at creation   | Smallest width in rem the container gives the content.                                                                              |
@@ -65,7 +65,14 @@ report.append(report_table);
 
 ### Own content
 
-Extend `ContentBase` and create it with `create`, which takes the content options together with your own. Inputs your content hands out to others go in `[CREATE]`, everything else in `set`, see [PATTERN.md](../PATTERN.md). To follow its own size, content attaches to the resize observer of `Base` and overrides `on_resize`.
+Extend `ContentBase` and create it with `create`, which takes the content options together with your own. Inputs your content hands out to others go in `[CREATE]`, everything else in `set`, see [PATTERN.md](../PATTERN.md). To follow its own size, the space its container gives it, content calls `this.content_size()`, which gives `width` and `height` as read only states in px, see [state_ui.size](../state_ui/README.md):
+
+```ts
+const { width, height } = this.content_size();
+const scale = () => this.#scale(width.ok(), height.ok());
+width.sub(scale, true);
+height.sub(scale);
+```
 
 ```ts
 class Note extends ContentBase {
@@ -101,19 +108,19 @@ const panel = comp.panel(report, { x, y, width: 30 });
 
 `comp.panel(content, options)` opens the panel in the main document, `comp.panel_container(element).panel(content, options)` in the document of the element, like a second window registered with `DOCUMENT_HANDLER`.
 
-| Option       | Description                                                                                                                       |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `x`, `y`     | Position in rem from the top left of the page, of the anchor point of the panel.                                                  |
-| `anchor`     | Point of the panel x and y place, `CompAnchor`: the corners or `center`. `top_left` by default.                                   |
-| `width`      | Width in rem, not given the panel fits its content. Never smaller than the `min_width` of the content.                            |
-| `height`     | Height in rem, like width.                                                                                                        |
-| `sizeable`   | Whether the user can size the panel, true by default.                                                                             |
-| `hidden`     | Whether the panel is hidden.                                                                                                      |
-| `auto_hide`  | Hides the panel when the user presses outside it.                                                                                 |
-| `auto_close` | Closes the panel when the user presses outside it.                                                                                |
-| `modal`      | Darkens the page behind the panel and keeps the focus in it.                                                                      |
-| `titlebar`   | Whether the title bar is shown, true by default. Without it the panel can not be moved by the user.                               |
-| `layer`      | Panels in a higher layer are always above those in a lower one. Within a layer the panel the user worked in last is at the front. |
+| Option       | Description                                                                                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `x`, `y`     | Position in rem from the top left of the page, of the anchor point of the panel.                                                                             |
+| `anchor`     | Point of the panel x and y place, `CompAnchor`: the corners or `center`. `top_left` by default. The point stays in place when the size of the panel changes. |
+| `width`      | Width in rem, not given the panel fits its content. Never smaller than the `min_width` of the content.                                                       |
+| `height`     | Height in rem, like width.                                                                                                                                   |
+| `sizeable`   | Whether the user can size the panel, true by default.                                                                                                        |
+| `hidden`     | Whether the panel is hidden.                                                                                                                                 |
+| `auto_hide`  | Hides the panel when the user presses outside it.                                                                                                            |
+| `auto_close` | Closes the panel when the user presses outside it.                                                                                                           |
+| `modal`      | Darkens the page behind the panel and keeps the focus in it.                                                                                                 |
+| `titlebar`   | Whether the title bar is shown, true by default. Without it the panel can not be moved by the user.                                                          |
+| `layer`      | Panels in a higher layer are always above those in a lower one. Within a layer the panel the user worked in last is at the front.                            |
 
 `x`, `y`, `width`, `height` and `hidden` are changed by the user, by moving, sizing and auto hiding the panel. A fixed value is where the panel starts, and the panel keeps the user's changes itself. A writable state is written by the panel. A read only state can not be changed, so `x: state.ok(4)` moves only up and down. A panel without a position starts centered.
 
@@ -134,10 +141,7 @@ const settings = comp.attach_customization_panel_to_element(
   CompAnchor.TOP_RIGHT,
 );
 settings.content.set({
-  main: [
-    form.text({ text: "Units" }),
-    form.toggle_button({ value: units }),
-  ],
+  main: [form.text({ text: "Units" }), form.toggle_button({ value: units })],
 });
 ```
 

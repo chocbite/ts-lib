@@ -8,6 +8,7 @@ import {
   type BaseOptions,
 } from "#base";
 import ctm, { type ContextMenuGroup } from "#context-menu";
+import { state_ui, type StateUISize } from "#state_ui";
 import type { SVGFunc } from "#svg";
 import type { StateOrVal } from "@chocbite/ts-lib/state";
 import "./content.scss";
@@ -51,7 +52,7 @@ export function content_context_lines(content: ContentBase) {
  *
  * Library users extend it for their own content, and create it with MyContent.create(options),
  * the title, icon, closable and minimum size are given at creation, as the container follows them
- * To follow its own size, content attaches to the resize observer of Base and overrides on_resize*/
+ * To follow its own size, content uses content_size, width and height as states*/
 export abstract class ContentBase extends Base {
   static element_name() {
     return "@abstract@";
@@ -101,6 +102,11 @@ export abstract class ContentBase extends Base {
   /**Context menu of the content, read by the container every time its menu opens*/
   get content_context_menu(): ContextMenuGroup {
     return this.#context_menu;
+  }
+  /**Width and height of the content as read only states in px, the space it has in its container, like a panel.
+   * Observed only while something is subscribed, see state_ui.size*/
+  content_size(): StateUISize {
+    return state_ui.size(this);
   }
 
   [CREATE](options: ContentCreateOptions): void {

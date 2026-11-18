@@ -10,7 +10,7 @@ import {
   HOST_REMOVE,
   Panel,
   PANEL_ADDED,
-  PANEL_LAYOUT,
+  PANEL_PLACE,
   type PanelHost,
   type PanelOptions,
 } from "./panel";
@@ -46,6 +46,11 @@ class PanelContainer extends Base implements PanelHost {
   get height(): number {
     return px_to_rem(this.actual_size.height);
   }
+  /**Width and height in rem, from one measurement*/
+  size(): { width: number; height: number } {
+    const { width, height } = this.actual_size;
+    return { width: px_to_rem(width), height: px_to_rem(height) };
+  }
   /**Panel the user worked in last*/
   get active_panel(): Panel | undefined {
     return this.#active;
@@ -54,9 +59,9 @@ class PanelContainer extends Base implements PanelHost {
   /**Creates a panel showing the content in this container
    * The title, icon, close button and minimum size come from the content, see content*/
   panel(content: ContentBase, options: PanelOptions = {}): Panel {
-    const panel = Panel.create({ ...options, content });
+    const panel = Panel.create(options, content, this);
     this.#panels.add(panel);
-    panel[PANEL_ADDED](this);
+    panel[PANEL_ADDED]();
     return panel;
   }
 
@@ -65,7 +70,7 @@ class PanelContainer extends Base implements PanelHost {
   }
 
   #layout(): void {
-    for (const panel of this.#panels) panel[PANEL_LAYOUT]();
+    for (const panel of this.#panels) panel[PANEL_PLACE]();
   }
 
   [HOST_LAYER](panel: Panel, layer: number): void {

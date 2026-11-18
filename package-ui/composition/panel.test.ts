@@ -1,11 +1,16 @@
 import { NiceError } from "@chocbite/ts-lib/result";
 import { material_save_rounded } from "#icons";
-import { SCALE, theme_init } from "#theme";
+import { px_to_rem, SCALE, theme_init } from "#theme";
 import state from "@chocbite/ts-lib/state";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { panel_container } from "./container";
 import { content, type ContentCreateOptions } from "./content";
-import type { Panel, PanelOptions } from "./panel";
+import {
+  TITLEBAR_HEIGHT,
+  TITLEBAR_HEIGHT_TOUCH,
+  type Panel,
+  type PanelOptions,
+} from "./panel";
 import { CompAnchor } from "./shared";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
@@ -23,8 +28,9 @@ const panel_with = (
 const title_of = (panel: Panel) => panel.querySelector(".title")!;
 const titlebar_of = (panel: Panel) => panel.children[1] as HTMLElement;
 const sizer_of = (panel: Panel) => panel.children[0];
-const left_of = (panel: Panel) => parseFloat(panel.style.left);
-const top_of = (panel: Panel) => parseFloat(panel.style.top);
+//Where the panel is shown, its top left corner in rem from the top left of the page, where the container is
+const left_of = (panel: Panel) => px_to_rem(panel.getBoundingClientRect().left);
+const top_of = (panel: Panel) => px_to_rem(panel.getBoundingClientRect().top);
 const press = (panel: Panel, key: string) =>
   titlebar_of(panel).dispatchEvent(
     new KeyboardEvent("keydown", { key, bubbles: true }),
@@ -139,14 +145,114 @@ describe("Panel layers", () => {
 describe("Panel position", () => {
   it("places the anchor of the panel at x and y, zero included", () => {
     const panel = panel_with({}, { x: 0, y: 0, width: 10, height: 6 });
-    expect(left_of(panel)).toBe(0);
-    expect(top_of(panel)).toBe(0);
+    expect(left_of(panel)).toBeCloseTo(0);
+    expect(top_of(panel)).toBeCloseTo(0);
     const right = panel_with(
       {},
       { x: 30, y: 20, width: 10, height: 6, anchor: CompAnchor.BOT_RIGHT },
     );
     expect(left_of(right)).toBeCloseTo(20);
     expect(top_of(right)).toBeCloseTo(14);
+  });
+
+  it("keeps its anchor in place when its content changes its size, right away, the browser keeps it", () => {
+    const panel = panel_with(
+      {},
+      { x: 20, y: 15, anchor: CompAnchor.BOT_RIGHT },
+    );
+    const grow = panel.content.appendChild(document.createElement("div"));
+
+    grow.style.cssText = "width:15rem;height:9rem";
+
+    const rect = panel.getBoundingClientRect();
+    expect(px_to_rem(rect.right)).toBeCloseTo(20);
+    expect(px_to_rem(rect.bottom)).toBeCloseTo(15);
+  });
+
+  it("keeps a centered panel centered when its content changes its size, right away", () => {
+    const panel = panel_with();
+    const grow = panel.content.appendChild(document.createElement("div"));
+
+    grow.style.cssText = "width:15rem;height:9rem";
+
+    const rect = panel.getBoundingClientRect();
+    const container = panel_container().getBoundingClientRect();
+    expect(rect.left + rect.width / 2).toBeCloseTo(container.width / 2, 0);
+    expect(rect.top + rect.height / 2).toBeCloseTo(container.height / 2, 0);
+  });
+
+  it("does not observe its own size, the container observes its size", () => {
+    const observe = vi.spyOn(ResizeObserver.prototype, "observe");
+    try {
+      const panel = panel_with({}, { x: 5, y: 5 });
+      expect(observe.mock.calls.some(([target]) => target === panel)).toBe(
+        false,
+      );
+    } finally {
+      observe.mockRestore();
+    }
+  });
+
+  it("measures itself at most once per axis when it is created, not once per input", () => {
+    const measure = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
+    try {
+      panel_with(
+        {},
+        { x: 5, y: 5, width: 10, height: 6, anchor: CompAnchor.CENTER },
+      );
+      expect(measure.mock.calls.length).toBeLessThanOrEqual(2);
+    } finally {
+      measure.mockRestore();
+    }
+  });
+
+  it("does not measure itself when width and height give its size", () => {
+    //Above the minimum and the title bar, which only measuring tells, so the height is known
+    const options = {
+      x: 20,
+      y: 15,
+      width: 10,
+      height: 8,
+      anchor: CompAnchor.BOT_RIGHT,
+    };
+    panel_container().size(); //The container measures itself once, that is not the panel
+    const measure = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect");
+    let panel: Panel;
+    try {
+      panel = panel_with({}, options);
+      panel.set({ x: 18 });
+      expect(
+        measure.mock.contexts.filter((element) => element === panel),
+      ).toEqual([]);
+    } finally {
+      measure.mockRestore();
+    }
+    const rect = panel.getBoundingClientRect();
+    expect(px_to_rem(rect.right)).toBeCloseTo(18);
+    expect(px_to_rem(rect.bottom)).toBeCloseTo(15);
+  });
+
+  it("has the title bar heights its size calculation uses, with and without touch mode", () => {
+    const panel = panel_with();
+    const height = () =>
+      px_to_rem(titlebar_of(panel).getBoundingClientRect().height);
+    expect(height()).toBeCloseTo(TITLEBAR_HEIGHT);
+    document.documentElement.classList.add("touch");
+    try {
+      expect(height()).toBeCloseTo(TITLEBAR_HEIGHT_TOUCH);
+    } finally {
+      document.documentElement.classList.remove("touch");
+    }
+  });
+
+  it("places by its minimum width when the width is below it", () => {
+    const panel = panel_with(
+      { min_width: 8 },
+      { x: 20, y: 15, width: 5, height: 6, anchor: CompAnchor.BOT_RIGHT },
+    );
+    const rect = panel.getBoundingClientRect();
+    expect(px_to_rem(rect.width)).toBeCloseTo(8);
+    expect(px_to_rem(rect.right)).toBeCloseTo(20);
   });
 
   it("is centered when no position is given", () => {
@@ -159,7 +265,7 @@ describe("Panel position", () => {
   it("follows a state, and shows a position outside the container clamped without changing it", () => {
     const x = state.ok_w(5);
     const panel = panel_with({}, { x, y: 5, width: 10, height: 6 });
-    expect(left_of(panel)).toBe(5);
+    expect(left_of(panel)).toBeCloseTo(5);
     x.set_ok(100000);
     expect(left_of(panel)).toBeLessThan(panel_container().width);
     expect(x.ok()).toBe(100000);
@@ -173,7 +279,7 @@ describe("Panel position", () => {
     press(panel, "ArrowDown");
     expect(x.ok()).toBe(6);
     expect(y.ok()).toBe(6);
-    expect(left_of(panel)).toBe(6);
+    expect(left_of(panel)).toBeCloseTo(6);
   });
 
   it("does not move along an axis with a read only state", () => {
@@ -181,14 +287,14 @@ describe("Panel position", () => {
     const panel = panel_with({}, { x: state.ok(5), y, width: 10, height: 6 });
     press(panel, "ArrowRight");
     press(panel, "ArrowDown");
-    expect(left_of(panel)).toBe(5);
+    expect(left_of(panel)).toBeCloseTo(5);
     expect(y.ok()).toBe(6);
   });
 
   it("starts at a fixed position and moves from there by itself", () => {
     const panel = panel_with({}, { x: 5, y: 5, width: 10, height: 6 });
     press(panel, "ArrowRight");
-    expect(left_of(panel)).toBe(6);
+    expect(left_of(panel)).toBeCloseTo(6);
   });
 
   it("moves by itself when no position is given", () => {
@@ -216,9 +322,13 @@ describe("Panel sizing", () => {
   it("has sizers where the size can be changed", () => {
     expect(sizer_of(panel_with()).className).toBe("x y");
     const width = state.ok_w(10);
-    expect(sizer_of(panel_with({}, { width, height: state.ok(6) })).className).toBe("x");
+    expect(
+      sizer_of(panel_with({}, { width, height: state.ok(6) })).className,
+    ).toBe("x");
     //A fixed size is where the panel starts, the user sizes it from there
-    expect(sizer_of(panel_with({}, { width: 10, height: 6 })).className).toBe("x y");
+    expect(sizer_of(panel_with({}, { width: 10, height: 6 })).className).toBe(
+      "x y",
+    );
   });
 
   it("has no sizers when not sizeable", () => {

@@ -67,20 +67,31 @@ const MIN_SIZE = 4;
 /**How much of the panel is kept inside the container, at the top in rem, at the sides as part of its width*/
 const KEEP_TOP = 2;
 const KEEP_SIDE = 0.5;
+/**Height of the title bar in rem, and in touch mode, the only place they are given,
+ * panel.scss uses them through the variables set below, the size calculation of the panel reads them here.
+ * Exported for the tests, not from the module*/
+export const TITLEBAR_HEIGHT = 1.6;
+export const TITLEBAR_HEIGHT_TOUCH = 2.6;
+document.documentElement.style.setProperty(
+  "--composition-titlebar-height",
+  TITLEBAR_HEIGHT + "rem",
+);
+document.documentElement.style.setProperty(
+  "--composition-titlebar-height-touch",
+  TITLEBAR_HEIGHT_TOUCH + "rem",
+);
 
 //Internal to this module, between the panel and its container
 export const PANEL_ADDED = Symbol("panel_added");
-export const PANEL_LAYOUT = Symbol("panel_layout");
+export const PANEL_PLACE = Symbol("panel_place");
 export const HOST_LAYER = Symbol("host_layer");
 export const HOST_RAISE = Symbol("host_raise");
 export const HOST_REMOVE = Symbol("host_remove");
 
 /**The container of a panel, as the panel sees it*/
 export interface PanelHost {
-  /**Width in rem*/
-  readonly width: number;
-  /**Height in rem*/
-  readonly height: number;
+  /**Width and height in rem, from one measurement*/
+  size(): { width: number; height: number };
   /**Moves the panel into the given layer*/
   [HOST_LAYER](panel: Panel, layer: number): void;
   /**Puts the panel above the others in its layer*/
@@ -110,8 +121,10 @@ class Panel extends Base {
     return "composition";
   }
 
-  #host?: PanelHost;
-  #content!: ContentBase;
+  readonly #host: PanelHost;
+  readonly #content: ContentBase;
+  /**Whether the container shows the panel, until then it is not in the document and can not be placed*/
+  #shown = false;
 
   #sizer = this.appendChild(document.createElement("div"));
   #titlebar = this.appendChild(document.createElement("div"));
@@ -130,18 +143,21 @@ class Panel extends Base {
   #min_height = 0;
   /**Values of the changeable inputs, the panel owns them until they are given*/
   #values: ChangeableValues = { hidden: false };
-  /**Position shown last, in rem, the start of moving and sizing*/
-  #left = 0;
-  #top = 0;
   #moving = false;
   #on_close: (() => void)[] = [];
 
-  constructor() {
+  /**@param content what the panel shows
+   * @param host the container showing the panel*/
+  constructor(content: ContentBase, host: PanelHost) {
     super();
+    this.#content = content;
+    this.#host = host;
+    this.#content_box.appendChild(content);
     this.tabIndex = 0;
-    this.attach_to_resize_observer();
     this.addEventListener("focus", () => this.#content.focus());
-    this.addEventListener("focusin", () => this.#host?.[HOST_RAISE](this));
+    this.addEventListener("focusin", () => {
+      if (this.#shown) this.#host[HOST_RAISE](this);
+    });
     this.addEventListener("content_closed", (e) => {
       e.stopPropagation();
       this.close();
@@ -165,31 +181,33 @@ class Panel extends Base {
           "\ue25d";
       handle.onpointerdown = (e) => this.#size_start(e, handle, side);
     }
+    this.#show_sizers();
   }
 
-  [CREATE](options: { content: ContentBase }): void {
+  [CREATE](options: object): void {
     super[CREATE](options);
-    const content = (this.#content = options.content);
-    this.#content_box.appendChild(content);
+    const content = this.#content;
     this.set_input(PANEL_CONTENT.icon, content.content_icon, (icon) =>
       this.#set_icon(icon.ok ? icon.value : undefined),
     );
     this.set_input(PANEL_CONTENT.title, content.content_title, (title) => {
-      this.#title.textContent = title.ok ? title.value : "⚠ " + title.error.nice;
+      this.#title.textContent = title.ok
+        ? title.value
+        : "⚠ " + title.error.nice;
     });
     this.set_input(PANEL_CONTENT.closable, content.content_closable, (c) =>
       this.#set_closable(c.ok && c.value),
     );
     this.set_input(PANEL_CONTENT.min_width, content.content_min_width, (w) => {
       this.#min_width = w.ok ? w.value : 0;
-      this.#layout();
+      this.style.minWidth = Math.max(MIN_SIZE, this.#min_width) + "rem";
     });
     this.set_input(
       PANEL_CONTENT.min_height,
       content.content_min_height,
       (h) => {
         this.#min_height = h.ok ? h.value : 0;
-        this.#layout();
+        this.style.minHeight = `calc(${Math.max(MIN_SIZE, this.#min_height)}rem + var(--titlebar-height))`;
       },
     );
   }
@@ -198,26 +216,35 @@ class Panel extends Base {
     super.set(options);
     this.set_input(PANEL.layer, options.layer, (layer) => {
       this.#layer = layer.ok ? layer.value : 0;
-      this.#host?.[HOST_LAYER](this, this.#layer);
+      if (this.#shown) this.#host[HOST_LAYER](this, this.#layer);
     });
     this.set_input(PANEL.anchor, options.anchor, (anchor) => {
       this.#anchor = anchor.ok ? anchor.value : CompAnchor.TOP_LEFT;
-      this.#layout();
+      this.#place();
     });
-    for (const name of ["x", "y", "width", "height"] as const) {
+    for (const name of ["x", "y"] as const) {
       this.set_input(PANEL[name], options[name], (value) => {
         this.#values[name] = value.value;
-        this.#layout();
+        this.#place();
       });
     }
+    this.set_input(PANEL.width, options.width, (width) => {
+      this.#values.width = width.value;
+      this.#show_width();
+      this.#show_sizers();
+    });
+    this.set_input(PANEL.height, options.height, (height) => {
+      this.#values.height = height.value;
+      this.#show_height();
+      this.#show_sizers();
+    });
     this.set_input(PANEL.hidden, options.hidden, (hidden) => {
       this.#values.hidden = hidden.value;
-      this.classList.toggle("hidden", hidden.value);
-      this.#layout();
+      this.#show_hidden();
     });
     this.set_input(PANEL.sizeable, options.sizeable, (sizeable) => {
       this.#sizeable = sizeable.ok && sizeable.value;
-      this.#layout();
+      this.#show_sizers();
     });
     this.set_input(PANEL.auto_hide, options.auto_hide, (auto_hide) => {
       this.#auto_hide = auto_hide.ok && auto_hide.value;
@@ -228,10 +255,9 @@ class Panel extends Base {
     this.set_input(PANEL.modal, options.modal, (modal) =>
       this.#set_modal(modal.ok && modal.value),
     );
-    this.set_input(PANEL.titlebar, options.titlebar, (titlebar) => {
-      this.classList.toggle("no-titlebar", !(titlebar.ok && titlebar.value));
-      this.#layout();
-    });
+    this.set_input(PANEL.titlebar, options.titlebar, (titlebar) =>
+      this.classList.toggle("no-titlebar", !(titlebar.ok && titlebar.value)),
+    );
     return this;
   }
 
@@ -250,32 +276,28 @@ class Panel extends Base {
     this.ownerDocument.removeEventListener("pointerdown", this.#outside, {
       capture: true,
     });
-    this.#host?.[HOST_REMOVE](this);
-    this.#host = undefined;
+    if (this.#shown) this.#host[HOST_REMOVE](this);
+    this.#shown = false;
     this.remove();
     this.#content[CONTENT_CLOSED]();
     for (const resolve of this.#on_close.splice(0)) resolve();
   }
 
-  /**Called by the container that shows the panel, once, after creating it*/
-  [PANEL_ADDED](host: PanelHost): void {
-    this.#host = host;
-    host[HOST_LAYER](this, this.#layer);
-    host[HOST_RAISE](this);
+  /**Called by the container once, after creating the panel, puts it in the document and places it*/
+  [PANEL_ADDED](): void {
+    this.#shown = true;
+    this.#host[HOST_LAYER](this, this.#layer);
+    this.#host[HOST_RAISE](this);
     this.ownerDocument.addEventListener("pointerdown", this.#outside, {
       capture: true,
       passive: true,
     });
-    this.#layout();
+    this.#place();
   }
 
-  /**Called by the container when its size changes*/
-  [PANEL_LAYOUT](): void {
-    this.#layout();
-  }
-
-  protected on_resize(): void {
-    this.#layout();
+  /**Called by the container when its size changes, the panel is kept inside it*/
+  [PANEL_PLACE](): void {
+    this.#place();
   }
 
   //       _____ _    _          _   _  _____ ______
@@ -305,8 +327,10 @@ class Panel extends Base {
       if (state.writable) void state.write?.(value);
     } else {
       this.#values[name] = value;
-      if (name === "hidden") this.classList.toggle("hidden", value === true);
-      this.#layout();
+      if (name === "x" || name === "y") this.#place();
+      else if (name === "width") this.#show_width();
+      else if (name === "height") this.#show_height();
+      else this.#show_hidden();
     }
   }
 
@@ -323,50 +347,105 @@ class Panel extends Base {
   //     | |      / /\ \\   /| |  | | |  | |  | |
   //     | |____ / ____ \| | | |__| | |__| |  | |
   //     |______/_/    \_\_|  \____/ \____/   |_|
-  /**Left edge shown for the given one, keeping part of the panel inside the container*/
-  #clamp_left(left: number, width: number): number {
-    const keep = width * KEEP_SIDE;
-    return clamp(left, -keep, this.#host!.width - keep);
-  }
-  /**Top edge shown for the given one, keeping the title bar inside the container*/
-  #clamp_top(top: number): number {
-    return clamp(top, 0, Math.max(0, this.#host!.height - KEEP_TOP));
-  }
-
-  /**Applies size and position, the position is only clamped for showing, the inputs keep their values*/
-  #layout(): void {
-    if (!this.#host || !this.isConnected) return;
-    const { width, height } = this.#values;
-    this.style.width = width === undefined ? "" : width + "rem";
-    this.style.height = height === undefined ? "" : height + "rem";
-    this.style.minWidth = Math.max(MIN_SIZE, this.#min_width) + "rem";
-    this.style.minHeight = `calc(${Math.max(MIN_SIZE, this.#min_height)}rem + var(--titlebar-height))`;
-    this.#sizer.classList.toggle(
-      "x",
-      this.#sizeable && this.#can_change("width"),
-    );
-    this.#sizer.classList.toggle(
-      "y",
-      this.#sizeable && this.#can_change("height"),
-    );
-    this.classList.toggle("size-x", this.#sizer.classList.contains("x"));
-    this.classList.toggle("size-y", this.#sizer.classList.contains("y"));
-    if (this.#values.hidden) return;
-
-    const rect = this.getBoundingClientRect();
-    const w = px_to_rem(rect.width);
-    const h = px_to_rem(rect.height);
+  /**Places the anchor point of the panel at x and y, the browser keeps it there when the size of the panel changes,
+   * left and top place the anchor point and the translate moves the panel by its own size.
+   * Without a position the panel is centered. The position is clamped for showing, so part of the panel stays
+   * inside the container, the inputs keep their values*/
+  #place(): void {
+    if (!this.#shown || this.#values.hidden) return;
     const [ax, ay] = anchor_fraction(this.#anchor);
     const { x, y } = this.#values;
-    this.#left = this.#clamp_left(
-      x === undefined ? (this.#host.width - w) / 2 : x - w * ax,
-      w,
-    );
-    this.#top = this.#clamp_top(
-      y === undefined ? (this.#host.height - h) / 2 : y - h * ay,
-    );
-    this.style.left = this.#left + "rem";
-    this.style.top = this.#top + "rem";
+    if (x !== undefined || y !== undefined) {
+      //Clamping needs the size of the panel, from width and height when they give it, else one measurement for both axes
+      const host = this.#host.size();
+      let w = this.#known_width(host.width);
+      let h = this.#known_height(host.height);
+      if (w === undefined || h === undefined) {
+        const rect = this.getBoundingClientRect();
+        w = px_to_rem(rect.width);
+        h = px_to_rem(rect.height);
+      }
+      const corner = this.#clamp_corner(
+        (x ?? 0) - w * ax,
+        (y ?? 0) - h * ay,
+        w,
+        host,
+      );
+      if (x !== undefined) this.style.left = corner.left + w * ax + "rem";
+      if (y !== undefined) this.style.top = corner.top + h * ay + "rem";
+    }
+    if (x === undefined) this.style.left = "50%";
+    if (y === undefined) this.style.top = "50%";
+    this.style.transform = `translate(${-(x === undefined ? 0.5 : ax) * 100}%, ${-(y === undefined ? 0.5 : ay) * 100}%)`;
+  }
+
+  /**Width shown for the width input, as the styles give it, the minimum wins over the container*/
+  #known_width(host_width: number): number | undefined {
+    const { width } = this.#values;
+    if (width === undefined) return undefined;
+    return Math.max(MIN_SIZE, this.#min_width, Math.min(width, host_width));
+  }
+
+  /**Height shown for the height input, unknown near the minimum, as that adds the title bar whose height the styles decide*/
+  #known_height(host_height: number): number | undefined {
+    const { height } = this.#values;
+    if (height === undefined) return undefined;
+    const shown = Math.min(height, host_height);
+    return shown >= Math.max(MIN_SIZE, this.#min_height) + TITLEBAR_HEIGHT_TOUCH
+      ? shown
+      : undefined;
+  }
+
+  /**Top left corner clamped so part of the panel stays inside the container,
+   * half its width at the sides and the title bar at the bottom, the top edge never above the container*/
+  #clamp_corner(
+    left: number,
+    top: number,
+    w: number,
+    host = this.#host.size(),
+  ): { left: number; top: number } {
+    const keep = w * KEEP_SIDE;
+    return {
+      left: clamp(left, -keep, host.width - keep),
+      top: clamp(top, 0, Math.max(0, host.height - KEEP_TOP)),
+    };
+  }
+
+  #show_width(): void {
+    const { width } = this.#values;
+    this.style.width = width === undefined ? "" : width + "rem";
+  }
+
+  #show_height(): void {
+    const { height } = this.#values;
+    this.style.height = height === undefined ? "" : height + "rem";
+  }
+
+  /**The sides the user can size, where sizeable allows it and the size is not a read only state*/
+  #show_sizers(): void {
+    const x = this.#sizeable && this.#can_change("width");
+    const y = this.#sizeable && this.#can_change("height");
+    this.#sizer.classList.toggle("x", x);
+    this.#sizer.classList.toggle("y", y);
+    this.classList.toggle("size-x", x);
+    this.classList.toggle("size-y", y);
+  }
+
+  #show_hidden(): void {
+    this.classList.toggle("hidden", this.#values.hidden);
+    //A hidden panel is not placed, it is placed when shown again
+    this.#place();
+  }
+
+  /**Top left corner of the panel as shown, in rem, the container fills the page from its top left*/
+  #corner(): { left: number; top: number; width: number; height: number } {
+    const rect = this.getBoundingClientRect();
+    return {
+      left: px_to_rem(rect.left),
+      top: px_to_rem(rect.top),
+      width: px_to_rem(rect.width),
+      height: px_to_rem(rect.height),
+    };
   }
 
   //      __  __  ______      _______ _   _  _____
@@ -376,14 +455,11 @@ class Panel extends Base {
   //     | |  | | |__| | \  /   _| |_| |\  | |__| |
   //     |_|  |_|\____/   \/   |_____|_| \_|\_____|
   /**Moves the panel so its top left corner is at the given position, clamped, on the axes the user can change*/
-  #move_to(left: number, top: number): void {
-    const rect = this.getBoundingClientRect();
-    const w = px_to_rem(rect.width);
-    const h = px_to_rem(rect.height);
+  #move_to(left: number, top: number, w: number, h: number): void {
     const [ax, ay] = anchor_fraction(this.#anchor);
-    if (this.#can_change("x"))
-      this.#change("x", this.#clamp_left(left, w) + w * ax);
-    if (this.#can_change("y")) this.#change("y", this.#clamp_top(top) + h * ay);
+    const corner = this.#clamp_corner(left, top, w);
+    if (this.#can_change("x")) this.#change("x", corner.left + w * ax);
+    if (this.#can_change("y")) this.#change("y", corner.top + h * ay);
   }
 
   #move_start(e: PointerEvent): void {
@@ -393,12 +469,13 @@ class Panel extends Base {
     titlebar.setPointerCapture(e.pointerId);
     titlebar.classList.add("moving");
     this.#moving = true;
-    const left = this.#left;
-    const top = this.#top;
+    const start = this.#corner();
     titlebar.onpointermove = (ev) =>
       this.#move_to(
-        left + px_to_rem(ev.clientX - e.clientX),
-        top + px_to_rem(ev.clientY - e.clientY),
+        start.left + px_to_rem(ev.clientX - e.clientX),
+        start.top + px_to_rem(ev.clientY - e.clientY),
+        start.width,
+        start.height,
       );
     titlebar.onpointerup = (ev) => {
       titlebar.releasePointerCapture(ev.pointerId);
@@ -421,7 +498,8 @@ class Panel extends Base {
     if (dx === undefined || dy === undefined) return;
     e.preventDefault();
     e.stopPropagation();
-    this.#move_to(this.#left + dx, this.#top + dy);
+    const at = this.#corner();
+    this.#move_to(at.left + dx, at.top + dy, at.width, at.height);
   }
 
   //       _____ _____ ___________ _   _  _____
@@ -434,14 +512,9 @@ class Panel extends Base {
   #size_start(e: PointerEvent, handle: HTMLDivElement, side: string): void {
     if (e.button !== 0) return;
     e.stopPropagation();
-    const host = this.#host;
-    if (!host) return;
+    const host = this.#host.size();
     handle.setPointerCapture(e.pointerId);
-    const rect = this.getBoundingClientRect();
-    const w0 = px_to_rem(rect.width);
-    const h0 = px_to_rem(rect.height);
-    const left0 = this.#left;
-    const top0 = this.#top;
+    const { left: left0, top: top0, width: w0, height: h0 } = this.#corner();
     const [ax, ay] = anchor_fraction(this.#anchor);
     const min_w = Math.max(MIN_SIZE, this.#min_width);
     const min_h =
