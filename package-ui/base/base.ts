@@ -56,7 +56,7 @@ const base_resize_observer = new ResizeObserver((e) => {
  * Elements are only created in code, with new or a factory function, HTML is not supported,
  * constructors add children and attributes, which document.createElement and the HTML parser do not allow
  *
- * New elements, and elements being reworked, follow the element pattern in package-ui/PATTERN.md:
+ * New elements, and elements being reworked, follow the element pattern in PATTERN.md of ts-lib-ui:
  * The class is only exported as a type, a factory function taking optional options creates it with create
  * The constructor takes only required references, never inputs, it builds the children and sets the defaults
  * The inputs are an object of keys made with input_key, the options type is InputOptions of it
@@ -121,7 +121,7 @@ export abstract class Base extends HTMLElement {
   }
 
   /**Sets any attribute on the base element, to either a fixed value or a state value
-   * Older style, new elements take their inputs with set and set_input, see package-ui/PATTERN.md*/
+   * Older style, new elements take their inputs with set and set_input, see PATTERN.md of ts-lib-ui*/
   opts(opts: WithStateROA<DataProps<this>>): this {
     for (const key in opts) {
       const opt = opts[key] as this[typeof key] | StateROA<this[typeof key]>;

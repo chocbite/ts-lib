@@ -17,3 +17,4 @@ export * from "./purple";
 export * from "./red";
 export * from "./teal";
 export * from "./yellow";
+export type { ColorStruct } from "./shared";

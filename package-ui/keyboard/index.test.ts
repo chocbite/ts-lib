@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { keyboard_create, keyboard_open, KeyboardType } from "./index";
+import {
+  keyboard_create,
+  keyboard_open,
+  KeyboardSpecialKeys,
+  KeyboardType,
+  type KeyboardConfig,
+  type KeyboardKeyConfig,
+  type KeyboardLayerConfig,
+  type KeyboardLayers,
+} from "./index";
 
 function appendInput(type = "text"): HTMLInputElement {
   const input = document.body.appendChild(document.createElement("input"));
@@ -34,5 +43,21 @@ describe("public API", () => {
 
     expect(document.querySelector("onscreen-keyboard-keyboard-color")).not.toBeNull();
     close();
+  });
+});
+
+describe("public types", () => {
+  it("exports the types of layouts and the special keys, so apps can name them", () => {
+    const pin: KeyboardConfig = {
+      default: {
+        keys: [[{ text: "⌫", key: KeyboardSpecialKeys.Backspace }, { text: "0" }]],
+      },
+    };
+    const layer: KeyboardLayerConfig = pin.default;
+    const key: KeyboardKeyConfig = { text: "1" };
+    const layers: KeyboardLayers = { shift: layer };
+    expect(KeyboardSpecialKeys.Enter).toBe("enter");
+    expect(keyboard_create({ ...pin, layers })).toBeDefined();
+    expect(key.text).toBe("1");
   });
 });

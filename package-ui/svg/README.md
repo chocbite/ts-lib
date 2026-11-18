@@ -1,6 +1,6 @@
 # @chocbite/ts-lib-ui/svg
 
-A TypeScript library for programmatic SVG generation with a fluent, chainable API.
+Builds svg elements in code with chainable attributes, and `SVGFunc`, the type of icons in ts-lib-ui.
 
 ## Quick Start
 
@@ -13,6 +13,22 @@ canvas.appendChild(
   svg.circle(100, 100, 40).fill("red").stroke("black").stroke_width(2).elem
 );
 document.body.appendChild(canvas);
+```
+
+## Icons, `SVGFunc`
+
+`SVGFunc` is a function giving a new `<svg>` element, `() => SVGSVGElement`. Elements taking an icon take an `SVGFunc`, so they make a copy whenever they need one, the icons of `@chocbite/ts-lib-ui/icons` are `SVGFunc`s, and so is any function of your own giving an `<svg>`.
+
+Importing ts-lib-ui also types the icons of enum states in `@chocbite/ts-lib/state` and of depot nodes in `@chocbite/ts-lib/depot` as `SVGFunc`, ts-lib itself has no browser types to give them.
+
+```ts
+import { svg, type SVGFunc } from "@chocbite/ts-lib-ui/svg";
+
+const dot: SVGFunc = () => {
+  const icon = svg.svg(10, 10).elem;
+  icon.appendChild(svg.circle(5, 5, 4).fill("red").elem);
+  return icon;
+};
 ```
 
 ## API
@@ -129,6 +145,14 @@ g.appendChild(svg.circle(0, 0, 20).fill("red").elem);
 g.appendChild(svg.circle(40, 0, 20).fill("blue").elem);
 ```
 
+#### `svg.attr(element)`
+
+Wraps an existing svg element in the chainable attributes, to change it like a new one.
+
+```ts
+svg.attr(existing_circle).fill("green").stroke_width(3);
+```
+
 #### `svg.create(tagName)`
 
 Creates an arbitrary SVG element by tag name (e.g. `"defs"`, `"clipPath"`).
@@ -220,6 +244,3 @@ canvas.appendChild(g);
 document.body.appendChild(canvas);
 ```
 
-## License
-
-MIT

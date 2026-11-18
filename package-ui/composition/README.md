@@ -65,7 +65,7 @@ report.append(report_table);
 
 ### Own content
 
-Extend `ContentBase` and create it with `create`, which takes the content options together with your own. Inputs your content hands out to others go in `[CREATE]`, everything else in `set`, see `PATTERN.md` of ts-lib-ui. To follow its own size, content attaches to the resize observer of `Base` and overrides `on_resize`.
+Extend `ContentBase` and create it with `create`, which takes the content options together with your own. Inputs your content hands out to others go in `[CREATE]`, everything else in `set`, see [PATTERN.md](../PATTERN.md). To follow its own size, content attaches to the resize observer of `Base` and overrides `on_resize`.
 
 ```ts
 class Note extends ContentBase {

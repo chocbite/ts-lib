@@ -14,7 +14,7 @@ import {
 
 ## Writing an element
 
-Elements follow the element pattern, see `PATTERN.md` of ts-lib-ui for the rules and a complete example. In short: the inputs are keys made with `input_key`, `set(options)` applies them with `set_input`, and a factory creates the element with `create`.
+Elements follow the element pattern, see [PATTERN.md](../PATTERN.md) for the rules and a complete example. In short: the inputs are keys made with `input_key`, `set(options)` applies them with `set_input`, and a factory creates the element with `create`.
 
 ```ts
 const BOX = {

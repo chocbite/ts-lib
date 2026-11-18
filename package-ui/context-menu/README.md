@@ -1,10 +1,10 @@
 # @chocbite/ts-lib-ui/context-menu
 
-Framework-agnostic TypeScript library for right-click / touch-and-hold context menus built on native Web Components.
+Context menus that open on a right click, or a press and hold on touch screens, with lines, submenus and menus built when they open.
 
 ## Basic Usage
 
-Import the library and attach a context menu to an element. The CSS is auto-injected on import.
+Attach a context menu to an element. Its css is part of `style.css` of ts-lib-ui.
 
 ```ts
 import ctm from "@chocbite/ts-lib-ui/context-menu";
@@ -231,8 +231,4 @@ ctm.menu(() => [
 
 ## Theming
 
-Theming via `#theme`.
-
-## License
-
-MIT
+The colors are theme variables of `@chocbite/ts-lib-ui/theme`, in the group `contextmenu`: `background`, `text`, `hover`, `hoverText` and `border`.

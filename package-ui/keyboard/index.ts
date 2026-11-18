@@ -17,7 +17,13 @@ import { EMAIL_KEYBOARD, TEXT_KEYBOARD } from "./text";
 import { KeyboardConfig, KeyboardType } from "./types";
 
 export { VIRTUAL_KEYBOARD } from "./settings";
-export { KeyboardType } from "./types";
+export { KeyboardSpecialKeys, KeyboardType } from "./types";
+export type {
+  KeyboardConfig,
+  KeyboardKeyConfig,
+  KeyboardLayerConfig,
+  KeyboardLayers,
+} from "./types";
 
 const KEYBOARDS: Partial<Record<KeyboardType, KeyboardBase>> = {
   [KeyboardType.Text]: TEXT_KEYBOARD,

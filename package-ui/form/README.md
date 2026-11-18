@@ -6,7 +6,7 @@ Form elements: buttons, switches, number and text inputs, selectors, and groups 
 import form from "@chocbite/ts-lib-ui/form";
 ```
 
-Every element follows the element pattern of ts-lib-ui: `form.switch(options)` creates it, every option is a fixed value or a state, and `set(options)` changes options later. Options every element takes, like `access`, are in `PATTERN.md` of ts-lib-ui.
+Every element follows the element pattern of ts-lib-ui: `form.switch(options)` creates it, every option is a fixed value or a state, and `set(options)` changes options later. Options every element takes, like `access`, are in [PATTERN.md](../PATTERN.md).
 
 ## The value
 

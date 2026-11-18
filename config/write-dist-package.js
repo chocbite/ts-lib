@@ -1,5 +1,5 @@
-//Writes package.json and README.md into the dist folder of each package, which is published.
-//dist/AGENTS.md and dist/SOURCE.md are written by the build, see write-dist-agent-docs.js.
+//Writes package.json into the dist folder of each package, which is published.
+//The docs (README.md, PATTERN.md, the module READMEs), AGENTS.md and SOURCE.md are written by the build, see write-dist-agent-docs.js.
 //Only consumer facing fields are kept, so scripts, devDependencies, imports
 //and the development export condition never end up in the published package.
 //Only run by the release script after tests pass, a plain build leaves dist
@@ -7,7 +7,7 @@
 //The version only exists in the root package.json, every package gets it here,
 //dependencies between the packages become a range of that version.
 //Usage, from the repo root: node config/write-dist-package.js <package folder>...
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const KEEP = [
@@ -77,6 +77,4 @@ for (const folder of folders) {
     join(dist_folder, "package.json"),
     JSON.stringify(dist, null, 2) + "\n",
   );
-  const readme = join(folder, "README.md");
-  if (existsSync(readme)) copyFileSync(readme, join(dist_folder, "README.md"));
 }

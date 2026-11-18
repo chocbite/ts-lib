@@ -1,19 +1,27 @@
-//Writes AGENTS.md and SOURCE.md into the dist folder of each package, so agents working in a consumer
-//project have the docs and source of the installed version in node_modules,
-//as two files instead of the whole source tree.
-//AGENTS.md: version, how to report problems, the package README, the element pattern of the package if it has one,
-//and every module README.
+//Writes the docs, AGENTS.md and SOURCE.md into the dist folder of each package, so agents working in a consumer
+//project have the docs and source of the installed version in node_modules, instead of the whole source tree.
+//Docs: the package README.md, PATTERN.md if the package has one, and every module README.md,
+//as files in the same layout as in the package folder, so the links between them work. A broken link fails the build.
+//AGENTS.md: version, where the docs are, one line per module, and how to report problems.
+//It refers to the docs, it does not hold them.
 //SOURCE.md: all source files of the package, each under a header with its repo path.
 //Run by the build script, so the files can be inspected without releasing.
 //Usage, from the repo root: node config/write-dist-agent-docs.js <package folder>...
 import { execSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join, posix } from "node:path";
 
 const SOURCE_EXTENSIONS = [".ts", ".scss"];
 
 //Module folders that are not built, the same as NOT_BUILT in config/tsdown.config.ts
-//Their README is not a module section, their source is still in SOURCE.md
+//Their README is copied but not listed as a module, their source is still in SOURCE.md
 const NOT_BUILT = new Set(["pattern_example"]);
 
 //How elements of a package are written, PATTERN.md in the package folder with its example module
@@ -62,16 +70,35 @@ const fenced = (language, content) => {
   return `${f}${language}\n${content.trimEnd()}\n${f}`;
 };
 
-//Pushes markdown headings down by levels, so a README fits under a section heading
-const demote = (markdown, levels) => {
+//Markdown without its code, fenced blocks and inline code, where text looking like a link is not one
+const without_code = (markdown) => {
   let in_code = false;
   return markdown
     .split("\n")
-    .map((line) => {
-      if (/^(```|~~~)/.test(line)) in_code = !in_code;
-      return !in_code && /^#+ /.test(line) ? "#".repeat(levels) + line : line;
+    .filter((line) => {
+      if (/^\s*(```|~~~)/.test(line)) {
+        in_code = !in_code;
+        return false;
+      }
+      return !in_code;
     })
-    .join("\n");
+    .join("\n")
+    .replace(/`+[^`]*`+/g, "");
+};
+
+//Relative link targets of a markdown file, without their anchors
+const relative_links = (markdown) =>
+  [...without_code(markdown).matchAll(/\]\(([^)\s]+)\)/g)]
+    .map((match) => match[1].split("#")[0])
+    .filter((target) => target && !/^[a-z]+:/i.test(target));
+
+//The first sentence of a README after its title, a summary for the list of modules
+const summary = (markdown) => {
+  const paragraph = markdown
+    .split(/\n\s*\n/)
+    .map((part) => part.trim())
+    .find((part) => part && !part.startsWith("#") && !part.startsWith("```"));
+  return paragraph ? paragraph.replace(/\s+/g, " ").split(/(?<=\.)\s/)[0] : "";
 };
 
 const read_json = (path) => JSON.parse(readFileSync(path, "utf8"));
@@ -104,47 +131,71 @@ for (const [i, folder] of folders.entries()) {
     (repository ? `${repository} at ` : "") +
     `commit ${commit}${dirty ? ", with uncommitted changes" : ""}.`;
 
-  //AGENTS.md
-  const module_readmes = list_files(folder).filter(
-    (path) =>
-      /^[^/]+\/[^/]+\/README\.md$/.test(path) &&
-      !NOT_BUILT.has(path.split("/")[1]),
-  );
-  const pattern = existsSync(join(folder, PATTERN))
+  //Docs, copied in the layout of the package folder, so the links between them work
+  const doc_paths = [
+    "README.md",
+    ...(existsSync(join(folder, PATTERN)) ? [PATTERN] : []),
+    ...list_files(folder)
+      .map((path) => path.slice(folder.length + 1))
+      .filter((path) => /^[^/]+\/README\.md$/.test(path)),
+  ];
+  for (const path of doc_paths) {
+    mkdirSync(dirname(join(dist, path)), { recursive: true });
+    copyFileSync(join(folder, path), join(dist, path));
+  }
+  //A link to a file that is not a doc of the package is broken in node_modules
+  for (const path of doc_paths)
+    for (const target of relative_links(
+      readFileSync(join(folder, path), "utf8"),
+    )) {
+      const resolved = posix.normalize(posix.join(posix.dirname(path), target));
+      if (!doc_paths.includes(resolved))
+        throw new Error(
+          `${folder}/${path} links to ${target}, which is not a doc of the package, the link would be broken in node_modules`,
+        );
+    }
+
+  //AGENTS.md, refers to the docs
+  const modules = doc_paths
+    .filter(
+      (path) =>
+        /^[^/]+\/README\.md$/.test(path) && !NOT_BUILT.has(path.split("/")[0]),
+    )
+    .map((path) => {
+      const module = path.split("/")[0];
+      const about = summary(readFileSync(join(folder, path), "utf8"));
+      return `- \`${pkg.name}/${module}\`, \`${path}\`${about ? ": " + about : ""}`;
+    });
+  const pattern = doc_paths.includes(PATTERN)
     ? [
         "## Writing your own elements",
-        `Elements of this package, and elements you write on its \`Base\`, follow the pattern below. ` +
+        `Elements of this package, and elements you write on its \`Base\`, follow the element pattern in \`${PATTERN}\` next to this file. ` +
           `Read it before writing an element. ` +
           `It names files by their repo path, find them in \`SOURCE.md\` under \`## <path>\`. ` +
-          `The complete example it refers to is \`${folder}/${PATTERN_EXAMPLE}/\` in \`SOURCE.md\`, ` +
+          `Its complete example is described in \`${PATTERN_EXAMPLE}/README.md\`, its source is \`${folder}/${PATTERN_EXAMPLE}/\` in \`SOURCE.md\`, ` +
           `it is not exported from the package, copy from it instead of importing it. ` +
           `Paths under \`dev/\` are dev pages of the library repo and not part of the package.`,
-        demote(readFileSync(join(folder, PATTERN), "utf8").trim(), 2),
-        ...(existsSync(join(folder, PATTERN_EXAMPLE, "README.md"))
-          ? [
-              demote(
-                readFileSync(
-                  join(folder, PATTERN_EXAMPLE, "README.md"),
-                  "utf8",
-                ).trim(),
-                2,
-              ),
-            ]
-          : []),
       ]
     : [];
   const agents = [
     `# ${pkg.name}, notes for agents`,
     header,
-    "Read the sections for the modules you use before using them. " +
-      "The full source of this version is in `SOURCE.md` next to this file, every file under a `## <repo path>` heading, " +
+    "The docs of this version are files next to this one. Read `README.md` for the package, " +
+      "and the README of each module you use before using it. Every module is a subpath export, like `" +
+      pkg.name +
+      "/<module>`.",
+    ...internal_deps.map(
+      (dep) =>
+        `This package builds on \`${dep}\`, its docs and source are in \`node_modules/${dep}/\`, start with its \`AGENTS.md\`.`,
+    ),
+    "## Modules",
+    modules.join("\n"),
+    ...pattern,
+    "## Source",
+    "The full source of this version is in `SOURCE.md` next to this file, every file under a `## <repo path>` heading, " +
       "e.g. search it for `## " +
       folder +
       "/<module>/` to find a module.",
-    ...internal_deps.map(
-      (dep) =>
-        `This package builds on \`${dep}\`, its notes and source are in \`node_modules/${dep}/AGENTS.md\` and \`SOURCE.md\`.`,
-    ),
     "## Reporting problems with this library",
     "This library is developed alongside the projects that use it, problems found while using it should be fixed in the library. " +
       "If something is wrong, missing, undocumented or awkward to use:",
@@ -153,12 +204,6 @@ for (const [i, folder] of folders.entries()) {
       "- Tell the user, with the package name and version, the repo path and function or class from `SOURCE.md`, " +
         "what you expected, what happened, and what you did instead.",
     ].join("\n"),
-    demote(readFileSync(join(folder, "README.md"), "utf8").trim(), 1),
-    ...pattern,
-    ...module_readmes.map((path) => {
-      const module = path.split("/")[1];
-      return `## Module ${pkg.name}/${module}\n\n${demote(readFileSync(path, "utf8").trim(), 2)}`;
-    }),
   ];
   writeFileSync(join(dist, "AGENTS.md"), agents.join("\n\n") + "\n");
 
@@ -171,7 +216,7 @@ for (const [i, folder] of folders.entries()) {
     `# ${pkg.name} source`,
     header,
     "Every source file of the package, tests excluded, under a heading with its path in the repo. " +
-      "Usage notes are in `AGENTS.md` next to this file.",
+      "The docs are in `AGENTS.md` and the README files next to this file.",
     ...sources.map((path) => {
       const code = readFileSync(path, "utf8");
       const omitted = OMITTED[path.slice(folder.length + 1)];
