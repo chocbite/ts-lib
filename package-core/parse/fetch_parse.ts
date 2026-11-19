@@ -18,6 +18,7 @@ import {
   type StateREA,
   type StateREAW,
   type StateResult,
+  type StateROSW,
 } from "#state";
 import { fetch_parse_errors } from "./fetch_errors";
 import { make_parser, type Parsed } from "./parse";
@@ -38,8 +39,16 @@ type FetchPrimitiveSpec =
   | FetchTypeString
   | `?${FetchTypeString}`
   | `${FetchTypeString}w`
-  | `?${FetchTypeString}w`;
+  | `?${FetchTypeString}w`
+  | FetchWriteOnlySpec;
+/**A member that is only written, the server does not send it*/
+type FetchWriteOnlySpec = `${FetchTypeString}wo`;
 type Parser = (input: unknown) => unknown;
+
+/**Options of a write only member with a default, the fourth entry of ["?", "nwo", () => default, options].
+ * - reset: read the default again when a write finishes, whether it succeeded or failed,
+ *   otherwise the last value written successfully is read*/
+export type FetchWriteOnlyOptions = { readonly reset?: boolean };
 
 export type ArrayWriteEncoder<T = any> = (value: T, index: number) => unknown;
 
@@ -65,6 +74,7 @@ export type FetchSchema =
   | Parser
   | readonly ["?", FetchSchema]
   | readonly ["?", FetchSchema, () => unknown]
+  | readonly ["?", FetchWriteOnlySpec, () => unknown, FetchWriteOnlyOptions]
   | readonly ["{}", FetchSchema]
   | readonly [number, FetchSchema]
   | readonly [0, FetchSchema, ArrayWriteEncoder | FetchArrayOptions]
@@ -136,6 +146,17 @@ type OptionalKeys<S> = {
   [K in keyof S]-?: undefined extends ResolveSchema<S[K]> ? K : never;
 }[keyof S];
 
+/**Write type of a write only spec, never for any other spec*/
+type WriteOnlyType<S> = S extends `${infer Type extends FetchTypeString}wo`
+  ? ResolveString<Type>
+  : S extends readonly ["?", infer Item, ...unknown[]]
+    ? WriteOnlyType<Item>
+    : never;
+/**Keys of write only members, the server does not send them so they are not in the value*/
+type WriteOnlyKeys<S> = {
+  [K in keyof S]-?: [WriteOnlyType<S[K]>] extends [never] ? never : K;
+}[keyof S];
+
 /**Value type of an object schema, keys that may be missing are optional.
  * An index signature, like the generic FetchSchema constraint, keeps the lazy mapped type,
  * flattening it would resolve FetchSchema inside itself forever*/
@@ -143,11 +164,12 @@ type ResolveObject<S> = string extends keyof S
   ? { -readonly [K in keyof S]: ResolveSchema<S[K]> }
   : Prettify<
       {
-        -readonly [K in Exclude<keyof S, OptionalKeys<S>>]: ResolveSchema<
-          S[K]
-        >;
+        -readonly [K in Exclude<
+          keyof S,
+          OptionalKeys<S> | WriteOnlyKeys<S>
+        >]: ResolveSchema<S[K]>;
       } & {
-        -readonly [K in OptionalKeys<S>]?: ResolveSchema<S[K]>;
+        -readonly [K in Exclude<OptionalKeys<S>, WriteOnlyKeys<S>>]?: ResolveSchema<S[K]>;
       }
     >;
 
@@ -161,8 +183,11 @@ type FetchContainer<
   Value,
   State extends StateREA<Value> = StateREA<Value>,
 > = { readonly [FETCH_PARSE]: State };
+//A write only item is refused, so the node of a string item is always a StateREA
 type FetchArrayItem<S, Value> = S extends string
-  ? FetchContainer<Value, FetchNode<S, Value>>
+  ? FetchNode<S, Value> extends infer Node extends StateREA<Value>
+    ? FetchContainer<Value, Node>
+    : never
   : FetchNode<S, Value>;
 type FetchDynamicArrayItem<S, Value> = S extends string
   ? FetchNode<S, Value>
@@ -175,7 +200,11 @@ type FetchRepeat<
 type FetchNode<S, Value> = IsWholeSchema<S> extends true
   ? StateREA<Value>
   : FetchNodeEach<S, Value>;
-type FetchNodeEach<S, Value> = S extends string
+type FetchNodeEach<S, Value> = S extends FetchWriteOnlySpec
+  ? StateROSW<undefined, Option<{}>, WriteOnlyType<S>>
+  : S extends readonly ["?", FetchWriteOnlySpec, () => unknown, ...unknown[]]
+    ? StateROSW<WriteOnlyType<S>, Option<{}>, WriteOnlyType<S>>
+  : S extends string
   ? Writable<S> extends true
     ? StateREAW<Value, Option<{}>, Value>
     : StateREA<Value, Option<{}>, Value>
@@ -388,16 +417,49 @@ function array_options(
   return { write: write ?? "single", encode, key };
 }
 
+/**True for a write only spec, "nwo" or ["?", "nwo", ...]*/
+function is_write_only(schema: unknown): boolean {
+  if (typeof schema === "string") return schema.endsWith("wo");
+  return Array.isArray(schema) && schema[0] === "?" && is_write_only(schema[1]);
+}
+
+/**Throws for a write only member where it can not be. It must be a member of an object,
+ * and outside write "all" arrays, which send the whole array built from the received value*/
+function check_write_only(schema: unknown, in_object = false, in_all = false): void {
+  if (typeof schema === "string") {
+    if (!schema.endsWith("wo")) return;
+    if (schema.startsWith("?"))
+      throw new Error(`The write only member "${schema}" can not have a "?" prefix, use ["?", spec, () => default] for a default`);
+    if (!in_object)
+      throw new Error(`The write only member "${schema}" must be a member of an object`);
+    if (in_all)
+      throw new Error(`The write only member "${schema}" can not be inside a write "all" array`);
+    return;
+  }
+  if (Array.isArray(schema)) {
+    if (schema[0] === "?") return check_write_only(schema[1], in_object, in_all);
+    const options = array_options(schema);
+    if (options)
+      return check_write_only(schema[1], false, in_all || options.write === "all");
+    if (schema[0] === "{}" || typeof schema[0] === "number")
+      return check_write_only(schema[1], false, in_all);
+    for (const entry of schema) check_write_only(entry, false, in_all);
+    return;
+  }
+  if (schema && typeof schema === "object")
+    for (const value of Object.values(schema)) check_write_only(value, true, in_all);
+}
+
 function strip_writable(schema: unknown): unknown {
   if (typeof schema === "string")
     return schema.endsWith("w") ? schema.slice(0, -1) : schema;
   if (!Array.isArray(schema)) {
     if (schema && typeof schema === "object") {
+      //Write only members are not received, the parser does not look at them
       return Object.fromEntries(
-        Object.entries(schema).map(([key, value]) => [
-          key,
-          strip_writable(value),
-        ]),
+        Object.entries(schema)
+          .filter(([, value]) => !is_write_only(value))
+          .map(([key, value]) => [key, strip_writable(value)]),
       );
     }
     return schema;
@@ -407,7 +469,7 @@ function strip_writable(schema: unknown): unknown {
 }
 
 function has_writable(schema: unknown): boolean {
-  if (typeof schema === "string") return schema.endsWith("w");
+  if (typeof schema === "string") return schema.endsWith("w") || schema.endsWith("wo");
   const options = array_options(schema);
   if (options)
     return options.write === "all" || has_writable((schema as unknown[])[1]);
@@ -616,6 +678,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
   schema: S,
   options?: FetchParserOptions,
 ): FetchParsed<S> {
+  check_write_only(schema);
   if (has_writable(schema) && !options?.write) {
     throw new Error(
       "A write function is required when the schema contains writable values",
@@ -903,6 +966,31 @@ export function make_fetch_parser<const S extends FetchSchema>(
         source.limit(to_payload(value)).then((limited) => limited.map(() => value)),
     });
 
+  /**State of a write only member, a local state, so reading it never fetches.
+   * A write is sent like the write of a writable member and is read at once.
+   * When the last write finishes the state reads the last value written successfully, or with reset the default.
+   * Without a default it always reads undefined*/
+  const write_only = (
+    path: readonly PathPart[],
+    encoder: ArrayWriteEncoder<unknown> | undefined,
+    default_value?: () => unknown,
+    reset = false,
+  ) => {
+    let kept = default_value?.();
+    //Only the last write decides what is read when it finishes
+    let last_write = 0;
+    return state.rosw<unknown, unknown>(ok(kept), (value, owner) => {
+      const write = ++last_write;
+      if (default_value) owner.set_ok(value);
+      return root.write(payload_for(path, value, encoder)).then((result) => {
+        if (result.ok && !reset) kept = value;
+        if (default_value && write === last_write)
+          owner.set_ok(reset ? default_value() : kept);
+        return result;
+      });
+    });
+  };
+
   /**Builds the states for a part of the schema.
    * @param optional_at index in the path of the outermost optional member, a member missing from there on reads as undefined*/
   const node = (
@@ -912,6 +1000,17 @@ export function make_fetch_parser<const S extends FetchSchema>(
     all_path?: PathPart[],
     optional_at?: number,
   ): unknown => {
+    if (is_write_only(part_schema)) {
+      if (typeof part_schema === "string") return write_only(path, encoder);
+      const [, , default_value, write_options] = part_schema as [
+        "?",
+        string,
+        (() => unknown)?,
+        FetchWriteOnlyOptions?,
+      ];
+      return write_only(path, encoder, default_value, write_options?.reset);
+    }
+
     if (typeof part_schema === "string") {
       const optional =
         optional_at ?? (part_schema.startsWith("?") ? path.length - 1 : undefined);

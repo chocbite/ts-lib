@@ -179,6 +179,7 @@ The fetch parser makes these kinds, in `parse.fetch.errors`:
 | ----------------------- | ------------------------------------------------------------------------------------------------ |
 | `"n"`, `"?s"`, …        | A read-only state of the member.                                                                 |
 | `"nw"`, `"?sw"`, …      | A writable state of the member, see [Writing](#writing).                                         |
+| `"nwo"`, `["?", "nwo", () => v]` | A write-only state, the server doesn't send the member, see [Write-only members](#write-only-members). |
 | `{ key: spec }`         | An object with a node per key.                                                                   |
 | `["{}", spec]`          | An object that gives a node for any key you read.                                                |
 | `[3, spec]`             | A real array of 3 nodes, and the whole array under `FETCH_PARSE`, see the note on primitive items below. |
@@ -206,6 +207,31 @@ A type string ending in `w` makes the member writable. A schema with writable me
   - A `"all"` array is built on the array already waiting, so two writes in it both get through.
 
   The default is 0, every write is sent at once.
+
+### Write-only members
+
+A type string ending in `wo` is a member the server takes in writes but doesn't send, like a command, a PIN or a setting it doesn't report back.
+
+```ts
+const device = make_fetch_parser(() => "/api/device", 1000, {
+  name: "sw",
+  restart: "bwo", // reads undefined, writes boolean
+  boost: ["?", "nwo", () => 0], // reads 0, then the last value written
+  pin: ["?", "swo", () => "", { reset: true }], // reads "", back to "" after every write
+}, { write });
+
+device.restart.write(true); // write({ restart: true })
+```
+
+- **Parsing leaves the member out.** A response without it parses, and if the server sends it anyway it's ignored. It isn't in the value of its object either: `device[FETCH_PARSE]` reads `{ name }`.
+- **A write is sent like the write of a writable member**, a partial object at its path, with `write_debounce`, `array_start`, `encode` and keyed items as described above.
+- **The state is local and never fetches.** Subscribing to it doesn't start polling.
+- **What it reads:**
+  - **Without a default** it always reads `undefined`.
+  - **With a default,** `["?", "nwo", () => v]`, it reads the default. A written value is read at once, so an input shows what you sent, also while `write_debounce` collects it. When the write finishes, the state reads the last value written successfully, so a failed write goes back to the one before it.
+  - **With `{ reset: true }`** as the fourth entry, the state reads the default again when a write finishes, whether it succeeded or failed. This suits PINs and commands.
+- **When writes overlap,** only the last one decides what the state reads when it finishes.
+- **Only as a member of an object,** also inside the items of a dynamic array. It can't be in a tuple, a fixed array, a record or an `"all"` array, which sends the whole array built from the received value. It can't have a `?` prefix either. `make_fetch_parser` throws for these.
 
 ### Dynamic arrays
 

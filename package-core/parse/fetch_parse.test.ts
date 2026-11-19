@@ -1554,3 +1554,185 @@ describe("make_fetch_parser timeout", () => {
     }
   });
 });
+
+describe("make_fetch_parser write only members", () => {
+  /**A parser whose fetch gives body, and its fetch and write mocks, write answers with the results given in order, then ok*/
+  const parser_from = <const S extends FetchSchema>(
+    schema: S,
+    body: unknown = {},
+    ...results: Result<unknown, NiceError>[]
+  ) => {
+    const fetch = vi.fn<FetchFunction>(async () => ok(JSON.stringify(body)));
+    const send = vi.fn<FetchWrite>(async () => results.shift() ?? ok(undefined));
+    const parsed = make_fetch_parser(() => "/x", 60_000, schema, { write: send, fetch });
+    return { parsed, send, fetch };
+  };
+  /**A write whose answers the test gives, answer answers the latest write*/
+  const held_write = () => {
+    let answer: (result: Result<unknown, NiceError>) => void = () => {};
+    const send = vi.fn<FetchWrite>(
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    return { send, answer: () => answer };
+  };
+
+  it("types the member by its write type, reading undefined without a default and the type with one", () => {
+    const { parsed } = parser_from({
+      id: "n",
+      reboot: "bwo",
+      setpoint: ["?", "nwo", () => 0],
+      password: ["?", "swo", () => "", { reset: true }],
+    });
+    expectTypeOf(parsed.reboot.ok()).toEqualTypeOf<undefined>();
+    expectTypeOf<Parameters<typeof parsed.reboot.write>[0]>().toEqualTypeOf<boolean>();
+    expectTypeOf(parsed.setpoint.ok()).toEqualTypeOf<number>();
+    expectTypeOf<Parameters<typeof parsed.setpoint.write>[0]>().toEqualTypeOf<number>();
+    expectTypeOf(parsed.password.ok()).toEqualTypeOf<string>();
+    //The server does not send them, so they are not in the value of their container
+    expectTypeOf<StateRV<(typeof parsed)[typeof FETCH_PARSE]>>().toEqualTypeOf<{ id: number }>();
+  });
+
+  it("parses a response without the member, and ignores it when the server sends it anyway", async () => {
+    const without = parser_from({ id: "n", command: "nwo" }, { id: 1 });
+    expect(await without.parsed[FETCH_PARSE]).toEqual(ok({ id: 1 }));
+    const with_it = parser_from({ id: "n", command: "nwo" }, { id: 1, command: "not a number" });
+    expect((await with_it.parsed.id).ok).toBe(true);
+  });
+
+  it("sends a partial object like a writable member, without reading", async () => {
+    const { parsed, send, fetch } = parser_from({ settings: { reboot: "bwo" } });
+    expect(await parsed.settings.reboot.write(true)).toEqual(ok(undefined));
+    expect(send).toHaveBeenCalledWith({ settings: { reboot: true } });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not poll while subscribed", async () => {
+    const { parsed, fetch } = parser_from({ command: "nwo" });
+    const unsubscribe = parsed.command.sub(() => {});
+    await sleep(5);
+    expect(fetch).not.toHaveBeenCalled();
+    parsed.command.unsub(unsubscribe);
+  });
+
+  it("reads undefined, also after a write, without a default", async () => {
+    const { parsed } = parser_from({ command: "nwo" });
+    expect(parsed.command.get()).toEqual(ok(undefined));
+    await parsed.command.write(5);
+    expect(parsed.command.get()).toEqual(ok(undefined));
+  });
+
+  it("reads the default, then the written value at once, and keeps it when the write succeeds", async () => {
+    const { send, answer } = held_write();
+    const parsed = make_fetch_parser(() => "/x", 60_000, { setpoint: ["?", "nwo", () => 20] }, { write: send });
+    expect(parsed.setpoint.ok()).toBe(20);
+    const writing = parsed.setpoint.write(25);
+    expect(parsed.setpoint.ok()).toBe(25);
+    await sleep(0);
+    answer()(ok(undefined));
+    expect((await writing).ok).toBe(true);
+    expect(parsed.setpoint.ok()).toBe(25);
+  });
+
+  it("goes back to the last value written successfully when a write fails", async () => {
+    const failed = err_nice(TEST_ERROR, "Rejected");
+    const { parsed } = parser_from({ setpoint: ["?", "nwo", () => 20] }, {}, ok(undefined), failed);
+    await parsed.setpoint.write(25);
+    expect(await parsed.setpoint.write(30)).toBe(failed);
+    expect(parsed.setpoint.ok()).toBe(25);
+  });
+
+  it("settles on the last write when writes overlap", async () => {
+    const { send, answer } = held_write();
+    const parsed = make_fetch_parser(() => "/x", 60_000, { setpoint: ["?", "nwo", () => 20] }, { write: send });
+    const first = parsed.setpoint.write(25);
+    await sleep(0);
+    const answer_first = answer();
+    const second = parsed.setpoint.write(30);
+    await sleep(0);
+    answer()(err_nice(TEST_ERROR, "Rejected"));
+    await second;
+    //The first write is still running, so the last value written successfully is the default
+    expect(parsed.setpoint.ok()).toBe(20);
+    answer_first(ok(undefined));
+    await first;
+    //Only the last write settles what is read
+    expect(parsed.setpoint.ok()).toBe(20);
+  });
+
+  it("goes back to the default after every write with reset, whether it succeeded or failed", async () => {
+    const { send, answer } = held_write();
+    const parsed = make_fetch_parser(
+      () => "/x",
+      60_000,
+      { password: ["?", "swo", () => "", { reset: true }] },
+      { write: send },
+    );
+    const writing = parsed.password.write("secret");
+    expect(parsed.password.ok()).toBe("secret");
+    await sleep(0);
+    answer()(ok(undefined));
+    await writing;
+    expect(parsed.password.ok()).toBe("");
+    const failing = parsed.password.write("wrong");
+    await sleep(0);
+    answer()(err_nice(TEST_ERROR, "Rejected"));
+    await failing;
+    expect(parsed.password.ok()).toBe("");
+  });
+
+  it("writes inside the items of a dynamic array, found by key and shifted by array_start", async () => {
+    const send = vi.fn<FetchWrite>(async () => ok(undefined));
+    const parsed = make_fetch_parser(
+      () => "/x",
+      60_000,
+      { pumps: [0, { id: "n", start: "bwo" }, { key: "id" }] },
+      {
+        write: send,
+        array_start: 1,
+        fetch: async () => ok(JSON.stringify({ pumps: [{ id: 7 }, { id: 9 }] })),
+      },
+    );
+    await parsed.pumps;
+    expect((await parsed.pumps[1]!.start.write(true)).ok).toBe(true);
+    expect(send).toHaveBeenCalledWith({ pumps: { 2: { start: true } } });
+  });
+
+  it("is merged with other writes by write_debounce", async () => {
+    vi.useFakeTimers();
+    try {
+      const send = vi.fn<FetchWrite>(async () => ok(undefined));
+      const parsed = make_fetch_parser(
+        () => "/x",
+        60_000,
+        { name: "sw", reboot: "bwo" },
+        { write: send, write_debounce: 50 },
+      );
+      void parsed.name.write("A");
+      void parsed.reboot.write(true);
+      await vi.advanceTimersByTimeAsync(50);
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledWith({ name: "A", reboot: true });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("needs the write option", () => {
+    expect(() => make_fetch_parser(() => "/x", 1_000, { reboot: "bwo" })).toThrow(
+      "A write function is required",
+    );
+  });
+
+  it("throws when the member is not a member of an object, or is inside a write all array", () => {
+    const write = async () => ok(undefined);
+    const made = (schema: FetchSchema) => () => make_fetch_parser(() => "/x", 1_000, schema, { write });
+    expect(made({ point: ["n", "nwo"] })).toThrow("write only");
+    expect(made({ list: [0, "nwo"] })).toThrow("write only");
+    expect(made({ fixed: [2, "nwo"] })).toThrow("write only");
+    expect(made({ record: ["{}", "nwo"] })).toThrow("write only");
+    expect(made({ items: [0, { cmd: "nwo" }, { write: "all" }] })).toThrow("write only");
+    expect(made({ outer: [0, { inner: { cmd: "nwo" } }, { write: "all" }] })).toThrow("write only");
+    //An optional prefix means nothing for a member that is never received
+    expect(made({ cmd: "?nwo" as "nwo" })).toThrow("write only");
+  });
+});

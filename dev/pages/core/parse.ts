@@ -258,6 +258,14 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
         device.tags[tag.index] = tag.tag;
         delete patch["tags"];
       }
+      //Write only members are acted on and never stored, so a GET does not send them
+      if ("pin" in patch && patch["pin"] !== "1234") {
+        write_log(`PATCH ${String(init.body)} rejected`, "#d33");
+        return respond(400, "Wrong PIN, it is 1234");
+      }
+      delete patch["pin"];
+      delete patch["restart"];
+      delete patch["boost"];
       merge(device, patch);
       write_log(`PATCH ${String(init.body)}`, "#e83");
       return respond(200, "");
@@ -317,6 +325,9 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
       pumps: [0, { id: "n", name: "sw", running: "bw", speed: "nw" }],
       zones: [2, { name: "s", setpoint: "nw" }],
       tags: [0, "sw", { encode: (tag: string, index: number) => ({ index, tag }) }],
+      restart: "bwo",
+      boost: ["?", "nwo", () => 0],
+      pin: ["?", "swo", () => "", { reset: true }],
     },
     { write: patch_device, fetch: api_fetch, retry_rate: RETRY_MS, write_debounce: WRITE_DEBOUNCE_MS },
   );
@@ -364,6 +375,18 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
   const mode = box(writable, "mode: nw, toggle and dropdown", WIDTH);
   mode.appendChild(form.toggle_button({ selections: MODES }).set({ value: parsed.mode }));
   mode.appendChild(form.dropdown({ selections: MODES }).set({ value: parsed.mode }));
+
+  //Write only members, the server never sends them, watch the log: no GET is needed to show them
+  const write_only = row(sec);
+  write_only.style.marginTop = "0.75rem";
+  const restart = box(write_only, "restart: bwo, no default, always reads undefined", WIDTH);
+  const restart_button = form.button({ text: "Restart" });
+  restart_button.addEventListener("click", () => void parsed.restart.write(true));
+  restart.appendChild(restart_button);
+  const boost = box(write_only, "boost: [\"?\", \"nwo\", () => 0], keeps the last value written", WIDTH);
+  boost.appendChild(form.number_input({ min: 0, max: 60, unit: "min" }).set({ value: parsed.boost }));
+  const pin = box(write_only, "pin: reset, back to empty after each write, 1234 is accepted", WIDTH);
+  pin.appendChild(form.password().set({ value: parsed.pin }));
 
   const read_only = row(sec);
   read_only.style.marginTop = "0.75rem";
