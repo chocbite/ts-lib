@@ -68,6 +68,8 @@ Available on every state type:
 | `in_use()`                       | Returns the state if it has any subscribers, `undefined` otherwise.                                                           |
 | `has(fn)`                        | Returns the state if `fn` is a current subscriber.                                                                            |
 | `amount()`                       | Returns the subscriber count.                                                                                                 |
+| `proxy(fn)`                      | A read only proxy, `fn` gets the result and gives a result. The proxy can fail, and is sync when the state is, see [Proxy States](#proxy-states). |
+| `proxy_map(fn)`                  | A read only proxy, `fn` gets the plain value and an error is passed on as it is. The proxy is of the same kind as the state.  |
 
 ### Narrowed Methods
 
@@ -281,7 +283,7 @@ A state made from other states is a proxy or a collected state:
 - **From one state, use a proxy**, `state.p`. It changes the value of that state, and can pass writes back to it, see [Proxy States](#proxy-states).
 - **From several states, use a collected state**, `state.c`. It combines their values into one, see [Collected States](#collected-states).
 
-Both follow their states only while they have subscribers themselves, so a derived state nobody uses costs nothing. The states of `make_fetch_parser` of `@chocbite/ts-lib/parse` are async states that can fail, so values combined from several members are `state.c.rea_ok`, one member changed is `state.p.rea`.
+Both follow their states only while they have subscribers themselves, so a derived state nobody uses costs nothing. The states of `make_fetch_parser` of `@chocbite/ts-lib/parse` are async states that can fail, so values combined from several members are `state.c.rea_map`, one member changed is `member.proxy_map(...)`.
 
 ## Collected States
 
@@ -299,7 +301,7 @@ const full_name = state.c.ros(
 // full_name.ok() === "Alice Smith"
 ```
 
-Available variants: `state.c.ros`, `state.c.roa`, `state.c.res`, `state.c.rea`, the ok forms `res_ok` and `rea_ok` below, and the writable forms below.
+Available variants: `state.c.ros`, `state.c.roa`, `state.c.res`, `state.c.rea`, the map forms `res_map` and `rea_map` below, and the writable forms below.
 
 ### Errors of the states
 
@@ -317,12 +319,12 @@ const temperature_text = state.c.rea(
 );
 ```
 
-That is what the ok forms do for you, and is the way to write most transforms:
+That is what the map forms do for you, and is the way to write most transforms:
 
-**Ok forms, `res_ok` and `rea_ok`,** give the transform the plain values and make an ok result of what it returns. The first error of the states is passed on as it is, without calling the transform. `set_getter` of such a state still takes the results.
+**Map forms, `res_map` and `rea_map`,** give the transform the plain values and make an ok result of what it returns. The first error of the states is passed on as it is, without calling the transform. `set_getter` of such a state still takes the results.
 
 ```typescript
-const temperature_text = state.c.rea_ok(
+const temperature_text = state.c.rea_map(
   ([temperature, unit]) => `${temperature} ${unit}`,
   device.temperature,
   device.unit,
@@ -341,7 +343,7 @@ const settings = state.c.rea(
 
 ### Writable collected states
 
-**Writable forms, `rosw`, `roaw`, `resw`, `reaw`, `resw_ok` and `reaw_ok`,** take a `StateCollectedWrite` before the states. Each function gets the written value and the collected states:
+**Writable forms, `rosw`, `roaw`, `resw`, `reaw`, `resw_map` and `reaw_map`,** take a `StateCollectedWrite` before the states. Each function gets the written value and the collected states:
 
 - `write(value, states)` sends the value on, usually by writing parts of it to the collected states, and gives the result of that.
 - `check(value, states)` tells if a value can be written, `limit(value, states)` gives the closest value that can. Both are optional, and give the value as it is when left out.
@@ -362,7 +364,33 @@ const span = state.c.resw(
 
 ## Proxy States
 
-Changes the value of one state, for several states use a [collected state](#collected-states). The read transform gets the result of the state, so with `res` and `rea` an error is passed on by returning it, `(val) => val.err ? val : ok(val.value * 2)`, or with `val.map((v) => v * 2)`, which passes an error on by itself. Without a transform the proxy gives the value of the state as it is. With write transforms it can also pass writes back to the state:
+Changes the value of one state, for several states use a [collected state](#collected-states).
+
+**Most proxies are made with the methods every state has:**
+
+```typescript
+// The function gets the plain value, an error of the state is passed on as it is
+const fahrenheit = device.temperature.proxy_map((celsius) => celsius * 1.8 + 32);
+
+// The function gets the result and gives a result, to handle or make errors
+const checked = device.temperature.proxy((result) =>
+  result.ok && result.value > 90 ? err_nice(TOO_HOT, `${result.value} °C is too hot`) : result,
+);
+```
+
+- **`proxy_map(fn)`** gives a proxy of the same kind as the state: an ok state stays ok, a sync state stays sync.
+- **`proxy(fn)`** gives a proxy that can fail, as `fn` can return an error. It is sync when the state is sync.
+- **Both are read only.** For a writable proxy use the factories below.
+
+**The factories, `state.p`,** choose the kind themselves. `rea_map`, `res_map`, `reaw_map` and `resw_map` take a function of the plain value like `proxy_map`, and the writable ones take an optional `StateProxyWrite`, see below:
+
+```typescript
+const speed_text = state.p.reaw_map(device.speed, (speed) => `${speed}`, {
+  write: (text: string, source) => source.write(Number(text)),
+});
+```
+
+The read transform gets the result of the state, so with `res` and `rea` an error is passed on by returning it, `(val) => val.err ? val : ok(val.value * 2)`, or with `val.map((v) => v * 2)`, which passes an error on by itself. Without a transform the proxy gives the value of the state as it is. With write transforms it can also pass writes back to the state:
 
 ```typescript
 const source = state.ok_w(5);

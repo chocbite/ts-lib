@@ -165,42 +165,51 @@ export interface StateBase<
   check?(value: WT): PromiseLike<StateResult<WT>>;
 }
 
-interface REA<RT, REL extends Option<StateRelated>, WT> extends StateBase<
-  StateResult<RT>,
-  REL,
-  WT
-> {
+/**proxy and proxy_map of a state, read only proxies.
+ * proxy: transform gets the result and gives a result, the proxy can fail, it is sync when the state is.
+ * proxy_map: map gets the plain value, an error of the state is passed on as it is, the proxy is of the same kind as the state*/
+interface ProxyMethods<RRT, RT, PROXY, MAP> {
+  /**A read only proxy of the state, transform gets the result and gives a result, the proxy can fail, it is sync when the state is*/
+  proxy<T>(transform: (value: RRT) => StateResult<T>): PROXY extends "sync" ? StateRES<T> : StateREA<T>;
+  /**A read only proxy of the state, map gets the plain value and an error of the state is passed on as it is,
+   * the proxy is of the same kind as the state*/
+  proxy_map<T>(map: (value: RT) => T): MAP extends "REA"
+    ? StateREA<T>
+    : MAP extends "ROA"
+      ? StateROA<T>
+      : MAP extends "RES"
+        ? StateRES<T>
+        : StateROS<T>;
+}
+
+interface REA<RT, REL extends Option<StateRelated>, WT>
+  extends StateBase<StateResult<RT>, REL, WT>,
+    ProxyMethods<StateResult<RT>, RT, "async", "REA"> {
   readonly rsync: false;
   readonly rok: false;
   readonly writable: false;
 }
 
-interface ROA<RT, REL extends Option<StateRelated>, WT> extends StateBase<
-  ResultOk<RT>,
-  REL,
-  WT
-> {
+interface ROA<RT, REL extends Option<StateRelated>, WT>
+  extends StateBase<ResultOk<RT>, REL, WT>,
+    ProxyMethods<ResultOk<RT>, RT, "async", "ROA"> {
   readonly rsync: false;
   readonly rok: true;
   readonly writable: false;
 }
 
-interface RES<RT, REL extends Option<StateRelated>, WT> extends StateBase<
-  StateResult<RT>,
-  REL,
-  WT
-> {
+interface RES<RT, REL extends Option<StateRelated>, WT>
+  extends StateBase<StateResult<RT>, REL, WT>,
+    ProxyMethods<StateResult<RT>, RT, "sync", "RES"> {
   readonly rsync: true;
   get(): StateResult<RT>;
   readonly rok: false;
   readonly writable: false;
 }
 
-interface ROS<RT, REL extends Option<StateRelated>, WT> extends StateBase<
-  ResultOk<RT>,
-  REL,
-  WT
-> {
+interface ROS<RT, REL extends Option<StateRelated>, WT>
+  extends StateBase<ResultOk<RT>, REL, WT>,
+    ProxyMethods<ResultOk<RT>, RT, "sync", "ROS"> {
   readonly rsync: true;
   get(): ResultOk<RT>;
   readonly rok: true;
@@ -208,11 +217,9 @@ interface ROS<RT, REL extends Option<StateRelated>, WT> extends StateBase<
   readonly writable: false;
 }
 
-interface REAW<RT, REL extends Option<StateRelated>, WT> extends StateBase<
-  StateResult<RT>,
-  REL,
-  WT
-> {
+interface REAW<RT, REL extends Option<StateRelated>, WT>
+  extends StateBase<StateResult<RT>, REL, WT>,
+    ProxyMethods<StateResult<RT>, RT, "async", "REA"> {
   readonly rsync: false;
   readonly rok: false;
   readonly writable: true;
@@ -221,11 +228,9 @@ interface REAW<RT, REL extends Option<StateRelated>, WT> extends StateBase<
   check(value: WT): PromiseLike<StateResult<WT>>;
 }
 
-interface ROAW<RT, REL extends Option<StateRelated>, WT> extends StateBase<
-  ResultOk<RT>,
-  REL,
-  WT
-> {
+interface ROAW<RT, REL extends Option<StateRelated>, WT>
+  extends StateBase<ResultOk<RT>, REL, WT>,
+    ProxyMethods<ResultOk<RT>, RT, "async", "ROA"> {
   readonly rsync: false;
   readonly rok: true;
   readonly writable: true;
@@ -234,11 +239,9 @@ interface ROAW<RT, REL extends Option<StateRelated>, WT> extends StateBase<
   check(value: WT): PromiseLike<StateResult<WT>>;
 }
 
-interface RESW<RT, REL extends Option<StateRelated>, WT> extends StateBase<
-  StateResult<RT>,
-  REL,
-  WT
-> {
+interface RESW<RT, REL extends Option<StateRelated>, WT>
+  extends StateBase<StateResult<RT>, REL, WT>,
+    ProxyMethods<StateResult<RT>, RT, "sync", "RES"> {
   readonly rsync: true;
   get(): StateResult<RT>;
   readonly rok: false;
@@ -248,11 +251,9 @@ interface RESW<RT, REL extends Option<StateRelated>, WT> extends StateBase<
   check(value: WT): PromiseLike<StateResult<WT>>;
 }
 
-interface ROSW<RT, REL extends Option<StateRelated>, WT> extends StateBase<
-  ResultOk<RT>,
-  REL,
-  WT
-> {
+interface ROSW<RT, REL extends Option<StateRelated>, WT>
+  extends StateBase<ResultOk<RT>, REL, WT>,
+    ProxyMethods<ResultOk<RT>, RT, "sync", "ROS"> {
   readonly rsync: true;
   get(): ResultOk<RT>;
   readonly rok: true;

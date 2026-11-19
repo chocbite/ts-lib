@@ -582,11 +582,11 @@ describe("Collected states", function () {
 });
 
 describe("Collected states with ok values", () => {
-  it("gives res_ok the plain values and makes an ok result of what it returns", () => {
+  it("gives res_map the plain values and makes an ok result of what it returns", () => {
     const speed = st.res(ok(4));
     const name = st.res(ok("pump"));
 
-    const label = st.c.res_ok(([s, n]) => `${n}: ${s}`, speed, name);
+    const label = st.c.res_map(([s, n]) => `${n}: ${s}`, speed, name);
 
     expect(label.get()).toEqual(ok("pump: 4"));
     expectTypeOf(label).toMatchTypeOf<StateRES<string>>();
@@ -595,7 +595,7 @@ describe("Collected states with ok values", () => {
   it("passes the first error on unchanged without calling the transform", () => {
     const first = err_nice(TEST_ERROR, "first");
     let calls = 0;
-    const label = st.c.res_ok(
+    const label = st.c.res_map(
       ([a, b, c]) => {
         calls++;
         return a + b + c;
@@ -609,8 +609,8 @@ describe("Collected states with ok values", () => {
     expect(calls).toBe(0);
   });
 
-  it("gives rea_ok the plain values of async states", async () => {
-    const total = st.c.rea_ok(([a, b]) => a * b, st.rea(() => sleep(1, ok(3))), st.res(ok(5)));
+  it("gives rea_map the plain values of async states", async () => {
+    const total = st.c.rea_map(([a, b]) => a * b, st.rea(() => sleep(1, ok(3))), st.res(ok(5)));
 
     expect(await total).toEqual(ok(15));
     expectTypeOf(total).toMatchTypeOf<StateREA<number>>();
@@ -618,7 +618,7 @@ describe("Collected states with ok values", () => {
 
   it("follows changes of the states like the other collected states", async () => {
     const a = st.resw(ok(1));
-    const sum = st.c.res_ok(([v]) => v * 10, a);
+    const sum = st.c.res_map(([v]) => v * 10, a);
     const seen: unknown[] = [];
     sum.sub((value) => seen.push(value.ok && value.value));
 
@@ -714,19 +714,19 @@ describe("Writable collected states", () => {
     const rosw = st.c.rosw((values) => ok(values[0].value * 2), write, a);
     const roaw = st.c.roaw((values) => ok(values[0].value * 3), write, a);
     const reaw = st.c.reaw((values) => values[0], write, st.rea(() => sleep(1, ok(4))));
-    const resw_ok = st.c.resw_ok(([v]) => v + 1, write, a);
-    const reaw_ok = st.c.reaw_ok(([v]) => v + 2, write, st.rea(() => sleep(1, ok(4))));
+    const resw_map = st.c.resw_map(([v]) => v + 1, write, a);
+    const reaw_map = st.c.reaw_map(([v]) => v + 2, write, st.rea(() => sleep(1, ok(4))));
 
     expect(rosw.ok()).toBe(4);
     expect((await roaw).value).toBe(6);
     expect(await reaw).toEqual(ok(4));
-    expect(resw_ok.get()).toEqual(ok(3));
-    expect(await reaw_ok).toEqual(ok(6));
-    for (const s of [rosw, roaw, reaw, resw_ok, reaw_ok]) expect(s.writable).toBe(true);
+    expect(resw_map.get()).toEqual(ok(3));
+    expect(await reaw_map).toEqual(ok(6));
+    for (const s of [rosw, roaw, reaw, resw_map, reaw_map]) expect(s.writable).toBe(true);
     expectTypeOf(rosw).toMatchTypeOf<StateROSW<number, any, number>>();
     expectTypeOf(roaw).toMatchTypeOf<StateROAW<number, any, number>>();
     expectTypeOf(reaw).toMatchTypeOf<StateREAW<number, any, number>>();
-    expectTypeOf(reaw_ok).toMatchTypeOf<StateREAW<number, any, number>>();
+    expectTypeOf(reaw_map).toMatchTypeOf<StateREAW<number, any, number>>();
   });
 
   it("gives a read only view that can not write", async () => {

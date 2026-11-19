@@ -8,10 +8,11 @@ import {
   ResultOk,
 } from "#result";
 import { not_writable, state_errors } from "./errors";
-import { STATE_WRITE_DISABLED, StateBase } from "./base";
+import { set_proxy_maker, STATE_WRITE_DISABLED, StateBase } from "./base";
 import {
   StateResult as SR,
   StateInferResult,
+  StateInferType,
   StateRES,
   StateRESW,
   StateROS,
@@ -652,6 +653,122 @@ function resw_from<S extends StateRESW<RIN, any, WIN>, RIN, WIN, ROUT, WOUT>(
 }
 
 //##################################################################################################################################################
+//      __  __          _____
+//     |  \/  |   /\   |  __ \
+//     | \  / |  /  \  | |__) |
+//     | |\/| | / /\ \ |  ___/
+//     | |  | |/ ____ \| |
+//     |_|  |_/_/    \_\_|
+/**A read transform of the result made from a function of the plain value, an error is passed on as it is*/
+const mapped =
+  <S extends State<any>, ROUT>(map: (value: StateInferType<S>) => ROUT) =>
+  (result: StateInferResult<S>): SR<ROUT> =>
+    (result as SR<StateInferType<S>>).map(map);
+
+/**Like rea, the function gets the plain value and gives a plain value, an error of the state is passed on as it is.
+ * @param state - state to proxy.
+ * @param map - Function to transform the value of the state*/
+function rea_map<S extends StateREA<any, any, any>, ROUT>(
+  state: S,
+  map: (value: StateInferType<S>) => ROUT,
+) {
+  return rea_from<S, StateInferType<S>, ROUT>(state, mapped<S, ROUT>(map));
+}
+
+/**Like res, the function gets the plain value and gives a plain value, an error of the state is passed on as it is.
+ * @param state - state to proxy.
+ * @param map - Function to transform the value of the state*/
+function res_map<S extends StateRES<any, any, any>, ROUT>(
+  state: S,
+  map: (value: StateInferType<S>) => ROUT,
+) {
+  return res_from<S, StateInferType<S>, ROUT>(state, mapped<S, ROUT>(map));
+}
+
+/**Like reaw, the function gets the plain value and gives a plain value, an error of the state is passed on as it is.
+ * Without write the proxy has the write type of the source, with write it can have one of its own, see StateProxyWrite.
+ * @param state - state to proxy.
+ * @param map - Function to transform the value of the state
+ * @param write - Writes, checks and limits a value, given the source state*/
+function reaw_map<
+  S extends StateREAW<any, any, any>,
+  ROUT,
+  WIN = S extends State<any, any, infer WT> ? WT : any,
+>(
+  state: S,
+  map: (value: StateInferType<S>) => ROUT,
+): StateProxyREAW<S, StateInferType<S>, WIN, ROUT, WIN>;
+function reaw_map<
+  S extends StateREAW<any, any, any>,
+  ROUT,
+  WOUT,
+  WIN = S extends State<any, any, infer WT> ? WT : any,
+>(
+  state: S,
+  map: (value: StateInferType<S>) => ROUT,
+  write: StateProxyWrite<S, WOUT>,
+): StateProxyREAW<S, StateInferType<S>, WIN, ROUT, WOUT>;
+function reaw_map<S extends StateREAW<any, any, any>, ROUT, WOUT>(
+  state: S,
+  map: (value: StateInferType<S>) => ROUT,
+  write?: StateProxyWrite<S, WOUT>,
+) {
+  return new RXXX<S, StateInferType<S>, unknown, ROUT, WOUT, SR<ROUT>>(
+    false,
+    true,
+    state,
+    mapped<S, ROUT>(map),
+    write,
+  ) as unknown as StateProxyREAW<S, StateInferType<S>, any, ROUT, WOUT>;
+}
+
+/**Like resw, the function gets the plain value and gives a plain value, an error of the state is passed on as it is.
+ * Without write the proxy has the write type of the source, with write it can have one of its own, see StateProxyWrite.
+ * @param state - state to proxy.
+ * @param map - Function to transform the value of the state
+ * @param write - Writes, checks and limits a value, given the source state*/
+function resw_map<
+  S extends StateRESW<any, any, any>,
+  ROUT,
+  WIN = S extends State<any, any, infer WT> ? WT : any,
+>(
+  state: S,
+  map: (value: StateInferType<S>) => ROUT,
+): StateProxyRESW<S, StateInferType<S>, WIN, ROUT, WIN>;
+function resw_map<
+  S extends StateRESW<any, any, any>,
+  ROUT,
+  WOUT,
+  WIN = S extends State<any, any, infer WT> ? WT : any,
+>(
+  state: S,
+  map: (value: StateInferType<S>) => ROUT,
+  write: StateProxyWrite<S, WOUT>,
+): StateProxyRESW<S, StateInferType<S>, WIN, ROUT, WOUT>;
+function resw_map<S extends StateRESW<any, any, any>, ROUT, WOUT>(
+  state: S,
+  map: (value: StateInferType<S>) => ROUT,
+  write?: StateProxyWrite<S, WOUT>,
+) {
+  return new RXXX<S, StateInferType<S>, unknown, ROUT, WOUT, SR<ROUT>>(
+    false,
+    true,
+    state,
+    mapped<S, ROUT>(map),
+    write,
+  ) as unknown as StateProxyRESW<S, StateInferType<S>, any, ROUT, WOUT>;
+}
+
+//The proxy and proxy_map methods of every state make their proxies here, base.ts can not import this file,
+//as the proxy class extends StateBase, which does not exist yet while base.ts loads
+set_proxy_maker((base, map_ok, transform) => {
+  const state = base as State<unknown, any, unknown>;
+  return map_ok
+    ? new RXXX(state.rok, false, state, mapped(transform))
+    : new RXXX(false, false, state, transform as (value: SR<unknown>) => SR<unknown>);
+});
+
+//##################################################################################################################################################
 //      ________   _______   ____  _____ _______ _____
 //     |  ____\ \ / /  __ \ / __ \|  __ \__   __/ ____|
 //     | |__   \ V /| |__) | |  | | |__) | | | | (___
@@ -677,4 +794,12 @@ export const PROXY = {
   res: res_from,
   /**Creates a writable sync errorable proxy state which mirrors another state */
   resw: resw_from,
+  /**Like rea, with a function of the plain value, an error is passed on as it is */
+  rea_map,
+  /**Like res, with a function of the plain value, an error is passed on as it is */
+  res_map,
+  /**Like reaw, with a function of the plain value, an error is passed on as it is */
+  reaw_map,
+  /**Like resw, with a function of the plain value, an error is passed on as it is */
+  resw_map,
 };

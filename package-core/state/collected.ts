@@ -43,7 +43,7 @@ export type StateCollectedTransValUnk<IN extends State<any>[]> = {
       : unknown;
 };
 
-/**The plain values of the collected states, for the transform of the ok forms like res_ok*/
+/**The plain values of the collected states, for the transform of the map forms like res_map*/
 export type StateCollectedOkVal<IN extends State<any>[]> = {
   [I in keyof IN]: RIOK<SIR<IN[I]>>;
 };
@@ -486,7 +486,7 @@ export const COLLECTED = {
   /**Like res, the transform gets the plain values and gives a plain value, the first error of the states is passed on as it is.
    * @param transform - Function to translate the values of the collected states.
    * @param states - The states to collect.*/
-  res_ok<RT, IN extends StateRES<any>[], WT = any>(
+  res_map<RT, IN extends StateRES<any>[], WT = any>(
     transform: (values: StateCollectedOkVal<IN>) => RT,
     ...states: IN
   ) {
@@ -495,7 +495,7 @@ export const COLLECTED = {
   /**Like rea, the transform gets the plain values and gives a plain value, the first error of the states is passed on as it is.
    * @param transform - Function to translate the values of the collected states.
    * @param states - The states to collect.*/
-  rea_ok<RT, IN extends State<any>[], WT = any>(
+  rea_map<RT, IN extends State<any>[], WT = any>(
     transform: (values: StateCollectedOkVal<IN>) => RT,
     ...states: IN
   ) {
@@ -557,7 +557,7 @@ export const COLLECTED = {
    * @param transform - Function to translate the values of the collected states.
    * @param write - Writes, checks and limits a value, given the collected states.
    * @param states - The states to collect.*/
-  resw_ok<RT, IN extends StateRES<any>[], WT = RT>(
+  resw_map<RT, IN extends StateRES<any>[], WT = RT>(
     transform: (values: StateCollectedOkVal<IN>) => RT,
     write: StateCollectedWrite<IN, WT>,
     ...states: IN
@@ -568,7 +568,7 @@ export const COLLECTED = {
    * @param transform - Function to translate the values of the collected states.
    * @param write - Writes, checks and limits a value, given the collected states.
    * @param states - The states to collect.*/
-  reaw_ok<RT, IN extends State<any>[], WT = RT>(
+  reaw_map<RT, IN extends State<any>[], WT = RT>(
     transform: (values: StateCollectedOkVal<IN>) => RT,
     write: StateCollectedWrite<IN, WT>,
     ...states: IN

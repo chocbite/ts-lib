@@ -4,6 +4,10 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   state as st,
   StateResult,
+  type StateREA,
+  type StateRES,
+  type StateROA,
+  type StateROS,
   type StateROSW,
   type StateProxyWrite,
 } from "..";
@@ -503,5 +507,121 @@ describe("Proxy flags", { timeout: 100 }, function () {
     const proxy = st.p.rosw(st.ok_w(1));
     const result = await proxy.write(5);
     expect(proxy.writable).toBe(result.ok);
+  });
+});
+
+describe("Proxy map forms", { timeout: 100 }, function () {
+  const failed = () => err_nice(TEST_KIND, "Source failed");
+
+  it("gives res_map the plain value and makes an ok result of what it returns", function () {
+    const source = st.res<number>(ok(4));
+    const doubled = st.p.res_map(source, (value) => value * 2);
+    expect(doubled.get()).toEqual(ok(8));
+    expectTypeOf(doubled.get()).toEqualTypeOf<StateResult<number>>();
+  });
+
+  it("passes the error of the source on as it is, without calling the function", function () {
+    const error = failed();
+    const source = st.res<number>(error);
+    let calls = 0;
+    const doubled = st.p.res_map(source, (value) => {
+      calls++;
+      return value * 2;
+    });
+    expect(doubled.get()).toBe(error);
+    expect(calls).toBe(0);
+  });
+
+  it("gives rea_map the plain value of an async state", async function () {
+    const source = st.rea(() => sleep(1, ok(3)));
+    const text = st.p.rea_map(source, (value) => `${value} items`);
+    expect(await text).toEqual(ok("3 items"));
+  });
+
+  it("writes through resw_map and reaw_map to the source, or through the write form", async function () {
+    const sync = st.resw<number>(ok(1), true);
+    const shown = st.p.resw_map(sync, (value) => value + 1);
+    await shown.write(5);
+    expect(sync.get()).toEqual(ok(5));
+    expect(shown.get()).toEqual(ok(6));
+
+    const async_source = st.reaw<number>(() => sleep(1, ok(1)), true);
+    const text = st.p.reaw_map(async_source, (value) => String(value), {
+      write: (value: string, source) => source.write(Number(value)),
+    });
+    expect((await text.write("7")).ok).toBe(true);
+    expect(await text).toEqual(ok("7"));
+  });
+});
+
+describe("Proxy methods of states", { timeout: 100 }, function () {
+  it("proxy gives the result and makes a sync state that can fail from a sync state", function () {
+    const source = st.ros(ok(5));
+    const checked = source.proxy((result) =>
+      result.value > 3 ? err_nice(TEST_KIND, "Too big") : ok(result.value),
+    );
+    expect(checked.rsync).toBe(true);
+    expect(checked.rok).toBe(false);
+    expect(checked.get().err).toBe(true);
+    expectTypeOf(checked).toEqualTypeOf<StateRES<number>>();
+  });
+
+  it("proxy makes an async state from an async state", async function () {
+    const source = st.rea(() => sleep(1, ok(2)));
+    const proxied = source.proxy((result) => result.map((value) => value * 3));
+    expect(proxied.rsync).toBe(false);
+    expect(await proxied).toEqual(ok(6));
+    expectTypeOf(proxied).toEqualTypeOf<StateREA<number>>();
+  });
+
+  it("proxy_map keeps a sync ok state ok", function () {
+    const source = st.ros(ok(2));
+    const label = source.proxy_map((value) => `#${value}`);
+    expect(label.rok).toBe(true);
+    expect(label.ok()).toBe("#2");
+    expectTypeOf(label).toEqualTypeOf<StateROS<string>>();
+  });
+
+  it("proxy_map keeps an async ok state ok", async function () {
+    const source = st.roa(() => sleep(1, ok(2)));
+    const label = source.proxy_map((value) => value + 1);
+    expect(label.rok).toBe(true);
+    expect(label.rsync).toBe(false);
+    expect(await label).toEqual(ok(3));
+    expectTypeOf(label).toEqualTypeOf<StateROA<number>>();
+  });
+
+  it("proxy_map passes the error of a state that can fail on as it is", function () {
+    const error = err_nice(TEST_KIND, "Source failed");
+    const source = st.res<number>(error);
+    const doubled = source.proxy_map((value) => value * 2);
+    expect(doubled.get()).toBe(error);
+    expectTypeOf(doubled).toEqualTypeOf<StateRES<number>>();
+  });
+
+  it("follows the source while subscribed", function () {
+    const source = st.rosw(ok(1), true);
+    const doubled = source.proxy_map((value) => value * 2);
+    const seen: unknown[] = [];
+    doubled.sub((result) => seen.push(result));
+    source.set_ok(4);
+    expect(seen).toEqual([ok(8)]);
+  });
+
+  it("can be called on the union types of states, like a parameter of type StateREA", async function () {
+    const label = (temperature: StateREA<number>) => temperature.proxy_map((value) => `${value} °C`);
+    const checked = (temperature: StateRES<number>) =>
+      temperature.proxy((result) => (result.ok ? ok(result.value > 0) : ok(false)));
+    expect(await label(st.res(ok(20)))).toEqual(ok("20 °C"));
+    expect(checked(st.ros(ok(-1))).get()).toEqual(ok(false));
+    expectTypeOf(label).returns.toEqualTypeOf<StateREA<string>>();
+    expectTypeOf(checked).returns.toEqualTypeOf<StateRES<boolean>>();
+  });
+
+  it("is on writable states, read only views and every proxy", function () {
+    const source = st.rosw(ok(1), true);
+    expect(source.read_only.proxy_map((value) => value + 1).ok()).toBe(2);
+    expect(source.proxy_map((value) => value + 1).proxy_map((value) => value * 10).ok()).toBe(20);
+    expect(st.c.ros(([a, b]) => ok(a.value + b.value), st.ok(1), st.ok(2)).proxy_map((v) => -v).ok()).toBe(-3);
   });
 });

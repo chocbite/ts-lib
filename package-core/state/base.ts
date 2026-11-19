@@ -20,6 +20,22 @@ import {
   type StateSub,
 } from "./types";
 
+/**Makes the proxies of the proxy and proxy_map methods.
+ * map_ok true: transform gets the plain value and an error is passed on, the proxy is ok when the state is.
+ * map_ok false: transform gets the result and gives a result, the proxy can fail*/
+type ProxyMaker = (
+  state: Base<any, any, any>,
+  map_ok: boolean,
+  transform: (value: any) => any,
+) => unknown;
+let proxy_maker: ProxyMaker = () => {
+  throw new Error("The proxy module is not loaded, import states from the state module");
+};
+/**Given by proxy.ts when it loads, this file can not import it, as its proxy class extends StateBase*/
+export function set_proxy_maker(maker: ProxyMaker): void {
+  proxy_maker = maker;
+}
+
 export abstract class StateBase<
   RRT extends SR<any>,
   WT,
@@ -37,6 +53,16 @@ export abstract class StateBase<
 
   async to_json(): Promise<string> {
     return result_to_json(await this, "state");
+  }
+
+  /**A read only proxy of the state, transform gets the result and gives a result.
+   * any as a class can not know its kind, the state types give the proxy its type, and subclasses fit them unchanged*/
+  proxy(transform: (value: RRT) => SR<unknown>): any {
+    return proxy_maker(this, false, transform);
+  }
+  /**A read only proxy of the state, map gets the plain value and an error is passed on as it is, see the state types for its type*/
+  proxy_map(map: (value: ResultInferOk<RRT>) => unknown): any {
+    return proxy_maker(this, true, map);
   }
 
   abstract readonly rsync: boolean;
@@ -177,6 +203,12 @@ export class StateReadOnly<
   }
   to_json(): Promise<string> {
     return this.#state.to_json();
+  }
+  proxy(transform: (value: RRT) => SR<unknown>): any {
+    return proxy_maker(this, false, transform);
+  }
+  proxy_map(map: (value: ResultInferOk<RRT>) => unknown): any {
+    return proxy_maker(this, true, map);
   }
   get rsync(): boolean {
     return this.#state.rsync;
