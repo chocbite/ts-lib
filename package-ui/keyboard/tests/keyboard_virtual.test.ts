@@ -1,8 +1,8 @@
 import { DOCUMENT_HANDLER } from "#document";
 import { afterEach, describe, expect, it } from "vitest";
-import { keyboard_open, KeyboardType, VIRTUAL_KEYBOARD } from "./index";
-import type { KeyboardBase } from "./base";
-import type { Keyboard_Keys } from "./keyboard_keys";
+import { keyboard_open, KeyboardType, VIRTUAL_KEYBOARD } from "../index";
+import type { KeyboardBase } from "../base";
+import type { Keyboard_Keys } from "../keyboard_keys";
 
 const STORAGE_KEY = "@chocbite/ts-lib-keyboard/virtual_keyboard";
 

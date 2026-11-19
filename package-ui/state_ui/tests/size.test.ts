@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { state_ui } from ".";
+import { state_ui } from "..";
 
 /**Waits for the browser to lay out and deliver resize observations, which comes before the next paint*/
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));

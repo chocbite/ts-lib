@@ -2,8 +2,8 @@ import { material_close_rounded } from "#icons";
 import { ok } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it } from "vitest";
-import { form_dropdown } from "./drop_down/drop_down";
-import { form_toggle_button } from "./toggle_button/toggle_button";
+import { form_dropdown } from "../selectors/drop_down/drop_down";
+import { form_toggle_button } from "../selectors/toggle_button/toggle_button";
 
 const wait = (ms: number = 10) =>
   new Promise((resolve) => setTimeout(resolve, ms));

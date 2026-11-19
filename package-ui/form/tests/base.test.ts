@@ -2,12 +2,12 @@ import { err, ok, NiceError } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { AccessTypes } from "#base";
-import { FormColors } from "./base";
-import { form_errors } from "./errors";
-import { form_lamp } from "./boolean/lamp/lamp";
-import { form_switch } from "./boolean/switch/switch";
-import { form_stepper } from "./number/stepper/stepper";
-import { form_text_input } from "./text/input/text_input";
+import { FormColors } from "../base";
+import { form_errors } from "../errors";
+import { form_lamp } from "../boolean/lamp/lamp";
+import { form_switch } from "../boolean/switch/switch";
+import { form_stepper } from "../number/stepper/stepper";
+import { form_text_input } from "../text/input/text_input";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);

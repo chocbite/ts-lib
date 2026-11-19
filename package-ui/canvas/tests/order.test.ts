@@ -1,7 +1,7 @@
 import state, { type StateROSW } from "@chocbite/ts-lib/state";
 import { describe, expect, it } from "vitest";
-import { canvas, type CanvasPage, type CanvasWidget } from ".";
-import { order_moves, type WidgetOrder } from "./order";
+import { canvas, type CanvasPage, type CanvasWidget } from "..";
+import { order_moves, type WidgetOrder } from "../order";
 
 //Distinct paths, so toEqual tells the widgets apart
 const widget = (name: string): CanvasWidget => ({

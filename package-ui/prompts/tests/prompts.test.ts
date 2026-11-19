@@ -2,7 +2,7 @@ import form from "#form";
 import { none, ok, some, type Option } from "@chocbite/ts-lib/result";
 import state from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
-import { prompts, type PromptFormValues } from ".";
+import { prompts, type PromptFormValues } from "..";
 
 /**The prompt open now*/
 const current = () => {

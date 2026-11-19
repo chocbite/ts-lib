@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { number_step_start_decimal } from ".";
+import { number_step_start_decimal } from "..";
 
 describe("number_step_start_decimal", function () {
   it("Snaps to the nearest step", function () {

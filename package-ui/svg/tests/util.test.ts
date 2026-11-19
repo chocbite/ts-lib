@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { SVGAnchorPoint } from "./anchorPoint";
-import { angle_to_anchor_point } from "./angleToAnchorPoint";
+import { SVGAnchorPoint } from "../util/anchorPoint";
+import { angle_to_anchor_point } from "../util/angleToAnchorPoint";
 
 describe("SVGAnchorPoint", () => {
   it("has all expected anchor point values", () => {

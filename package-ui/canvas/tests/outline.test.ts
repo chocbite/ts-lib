@@ -1,8 +1,8 @@
 import { define_element } from "#base";
 import state, { type StateROSW } from "@chocbite/ts-lib/state";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
-import { canvas, type CanvasPage, type CanvasWidget } from ".";
-import { WidgetBase } from "./widget";
+import { canvas, type CanvasPage, type CanvasWidget } from "..";
+import { WidgetBase } from "../widget";
 
 class OutlineWidget extends WidgetBase {
   static element_name() {

@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
-import { settings_init, settings_set_name_transform } from ".";
+import { settings_init, settings_set_name_transform } from "..";
 
 //Every test file runs in its own browser context, so no settings group exists yet in this file,
 //the transform must be set before the first group, which is what an app does in a module imported first

@@ -3,7 +3,7 @@ import {
   array_from_length,
   array_from_range,
   array_from_range_inclusive,
-} from "./array";
+} from "../array";
 
 describe("array_from_range", () => {
   it("should create an array of a specific length with the correct values", () => {

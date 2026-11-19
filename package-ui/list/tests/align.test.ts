@@ -1,8 +1,8 @@
 import form from "#form";
 import { ok } from "@chocbite/ts-lib/result";
 import { afterEach, describe, expect, it } from "vitest";
-import list from ".";
-import type { ListColumnAlign } from "./types";
+import list from "..";
+import type { ListColumnAlign } from "../types";
 
 const justify = (element: Element) => getComputedStyle(element).justifyContent;
 const text_align = (element: Element) => getComputedStyle(element).textAlign;

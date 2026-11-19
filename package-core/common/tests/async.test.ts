@@ -14,7 +14,7 @@ import {
   sleep_lazy,
   sync_reject,
   sync_resolve,
-} from "./async";
+} from "../async";
 
 describe("is_promise_like", () => {
   it("returns true for a native Promise", () => {

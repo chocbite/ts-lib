@@ -3,8 +3,8 @@ import {
   material_10k_rounded,
   material_dark_mode_rounded,
   material_light_mode_rounded,
-} from ".";
-import { generate_function } from "./shared";
+} from "..";
+import { generate_function } from "../shared";
 
 const SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 -960 960 960" width="24"><path d="M0 0h10v10H0z"/></svg>';

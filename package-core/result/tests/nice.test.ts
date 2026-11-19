@@ -8,7 +8,7 @@ import {
   result,
   type Result,
   type ResultNice,
-} from "./index";
+} from "../index";
 
 const CONNECTION_LOST = Symbol("Connection lost");
 const SERVER_ERROR = Symbol("Server error");

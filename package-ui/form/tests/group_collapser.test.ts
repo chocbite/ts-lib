@@ -6,8 +6,8 @@ import { ANIMATION_LEVEL, ANIMATION_SPEED, AnimationLevels } from "#theme";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { form_text_input } from "../text/input/text_input";
-import { form_group } from "./group";
-import { form_group_collapser } from "./group_collapser";
+import { form_group } from "../group/group";
+import { form_group_collapser } from "../group/group_collapser";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

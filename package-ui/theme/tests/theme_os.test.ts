@@ -26,12 +26,12 @@ const applied_thumb_color = () =>
 
 describe("Theme with the operating system dark mode", () => {
   it("applies nothing before theme_init", async () => {
-    await import(".");
+    await import("..");
     expect(applied_thumb_color()).toBe("");
   });
 
   it("follows the operating system with the default System theme, without storing it", async () => {
-    const { theme_init, THEME, Themes } = await import(".");
+    const { theme_init, THEME, Themes } = await import("..");
     theme_init({ system: true });
     expect(THEME.ok()).toBe(Themes.System);
     expect(applied_thumb_color()).toBe(GREY["400"]);
@@ -43,7 +43,7 @@ describe("Theme with the operating system dark mode", () => {
   });
 
   it("shows the theme the operating system uses in the System choice", async () => {
-    const { THEME, Themes } = await import(".");
+    const { THEME, Themes } = await import("..");
     const system_choice = async () =>
       (await THEME.related().unwrap().list).unwrap()[Themes.System];
     await os_dark_mode(true);
@@ -53,7 +53,7 @@ describe("Theme with the operating system dark mode", () => {
   });
 
   it("keeps the theme the user chose when the operating system changes", async () => {
-    const { THEME, Themes } = await import(".");
+    const { THEME, Themes } = await import("..");
     expect((await THEME.write(Themes.Dark)).ok).toBe(true);
     await os_dark_mode(false);
     expect(applied_thumb_color()).toBe(GREY["800"]);
@@ -61,7 +61,7 @@ describe("Theme with the operating system dark mode", () => {
   });
 
   it("can only be started once", async () => {
-    const { theme_init } = await import(".");
+    const { theme_init } = await import("..");
     expect(() => theme_init()).toThrow("already");
   });
 });

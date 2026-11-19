@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import state from "@chocbite/ts-lib/state";
-import type { CanvasWidget } from "./data";
-import { group_bounds, GroupRotation, transform_group } from "./group";
-import type { WidgetGeometry } from "./widget";
+import type { CanvasWidget } from "../data";
+import { group_bounds, GroupRotation, transform_group } from "../group";
+import type { WidgetGeometry } from "../widget";
 
 const g = (
   x: number,

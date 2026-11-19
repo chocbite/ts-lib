@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { md5 } from "./md5";
+import { md5 } from "../md5";
 
 describe("MD5", function () {
   it("abc", function () {

@@ -16,8 +16,8 @@ import {
   type FetchParsed,
   type FetchSchema,
   type FetchWrite,
-} from "./fetch_parse";
-import parse from "./index";
+} from "../fetch_parse";
+import parse from "../index";
 
 const errors = parse.fetch.errors;
 /**Kind of the errors tests make themselves*/

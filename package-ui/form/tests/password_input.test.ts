@@ -1,6 +1,6 @@
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { form_password } from "./password_input";
+import { form_password } from "../special/password/password_input";
 
 const wait = (ms: number = 10) =>
   new Promise((resolve) => setTimeout(resolve, ms));

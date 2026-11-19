@@ -7,18 +7,18 @@ import {
   WIDGETS,
   type CanvasPage,
   type CanvasWidget,
-} from "./data";
-import { reorder_widget as canvas_reorder } from "./order";
-import { WidgetSlot } from "./slot";
-import { Transformer } from "./transformer";
-import { canvas_viewport, type Viewport } from "./viewport";
+} from "../data";
+import { reorder_widget as canvas_reorder } from "../order";
+import { WidgetSlot } from "../slot";
+import { Transformer } from "../transformer";
+import { canvas_viewport, type Viewport } from "../viewport";
 import {
   WIDGET_CHANGE,
   WIDGET_GEOMETRY,
   WIDGET_TRANSFORM_EVENT,
   WidgetBase,
   type WidgetBaseOptions,
-} from "./widget";
+} from "../widget";
 
 class TestWidget extends WidgetBase {
   static element_name() {

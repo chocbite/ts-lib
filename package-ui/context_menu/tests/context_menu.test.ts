@@ -1,7 +1,7 @@
 import { DOCUMENT_HANDLER } from "#document";
 import { none, some } from "@chocbite/ts-lib/result";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import ctm, { type ContextMenu } from ".";
+import ctm, { type ContextMenu } from "..";
 import { AccessTypes } from "#base";
 import { NiceError } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";

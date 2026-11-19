@@ -1,10 +1,10 @@
 import { ok } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { form_number_input } from "./number_input/number_input";
-import { form_progress } from "./progress/progress";
-import { form_slider } from "./slider/slider";
-import { form_stepper } from "./stepper/stepper";
+import { form_number_input } from "../number/number_input/number_input";
+import { form_progress } from "../number/progress/progress";
+import { form_slider } from "../number/slider/slider";
+import { form_stepper } from "../number/stepper/stepper";
 
 /**Icon function giving an svg marked with the given name*/
 const custom_icon = (name: string) => () => {

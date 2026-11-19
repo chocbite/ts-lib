@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { IPAddress } from "./ip"; // Adjust the path as needed
+import { IPAddress } from "../ip"; // Adjust the path as needed
 
 describe("IPAddress Class", () => {
   describe("IPv4 Handling", () => {

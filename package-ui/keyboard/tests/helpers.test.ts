@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { input_keyboard_type, keyboard_type } from "./helpers";
-import { KeyboardType } from "./types";
+import { input_keyboard_type, keyboard_type } from "../helpers";
+import { KeyboardType } from "../types";
 
 function input(type: string): HTMLInputElement {
   const element = document.createElement("input");

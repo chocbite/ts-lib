@@ -35,7 +35,7 @@ import {
   type ExampleBox,
   type ExampleEditor,
   type ExampleGroup,
-} from ".";
+} from "..";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);

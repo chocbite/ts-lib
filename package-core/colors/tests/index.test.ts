@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { BLUE, GREY, type ColorStruct } from ".";
+import { BLUE, GREY, type ColorStruct } from "..";
 
 describe("colors", () => {
   it("exports the type of a palette, so apps can take one as a parameter", () => {

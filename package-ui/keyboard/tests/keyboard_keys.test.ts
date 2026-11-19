@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { Keyboard_Keys } from "./keyboard_keys";
+import { Keyboard_Keys } from "../keyboard_keys";
 import {
   NUMBER_INTEGER_KEYBOARD,
   NUMBER_RATIONAL_KEYBOARD,
   PHONE_KEYBOARD,
-} from "./number";
-import { EMAIL_KEYBOARD, TEXT_KEYBOARD } from "./text";
-import { KeyboardSpecialKeys } from "./types";
+} from "../number";
+import { EMAIL_KEYBOARD, TEXT_KEYBOARD } from "../text";
+import { KeyboardSpecialKeys } from "../types";
 
 function keyboard(): Keyboard_Keys {
   return new Keyboard_Keys({

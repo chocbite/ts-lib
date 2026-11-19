@@ -3,15 +3,15 @@ import { material_save_rounded } from "#icons";
 import { px_to_rem, SCALE, theme_init } from "#theme";
 import state from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { panel_container } from "./container";
-import { content, type ContentCreateOptions } from "./content";
+import { panel_container } from "../container";
+import { content, type ContentCreateOptions } from "../content";
 import {
   TITLEBAR_HEIGHT,
   TITLEBAR_HEIGHT_TOUCH,
   type Panel,
   type PanelOptions,
-} from "./panel";
-import { CompAnchor } from "./shared";
+} from "../panel";
+import { CompAnchor } from "../shared";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);

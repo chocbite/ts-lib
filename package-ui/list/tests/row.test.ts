@@ -3,12 +3,12 @@ import type { SVGFunc } from "#svg";
 import { none, ok, type Option, NiceError } from "@chocbite/ts-lib/result";
 import { state, type State } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import list from ".";
-import type { ListType } from "./types";
-import { ListAddRow, type ListAddRowOptions } from "./add_row";
-import { ListField } from "./field";
-import { ListKeyField } from "./key_field";
-import { ListRow } from "./row";
+import list from "..";
+import type { ListType } from "../types";
+import { ListAddRow, type ListAddRowOptions } from "../add_row";
+import { ListField } from "../field";
+import { ListKeyField } from "../key_field";
+import { ListRow } from "../row";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);

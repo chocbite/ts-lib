@@ -8,7 +8,7 @@ import {
   type CanvasPage,
   type CanvasWidget,
   type WidgetBaseOptions,
-} from ".";
+} from "..";
 
 class EditorWidget extends WidgetBase {
   static element_name() {

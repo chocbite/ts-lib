@@ -1,7 +1,7 @@
 import { none, some } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it } from "vitest";
-import { settings_init, type SettingsGroup } from ".";
+import { settings_init, type SettingsGroup } from "..";
 
 describe("Settings register types", function () {
   it("Only accepts JSON compatible states without a transform", function () {

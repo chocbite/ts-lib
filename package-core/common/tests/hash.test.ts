@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Hash, sha1 } from "./hash";
+import { Hash, sha1 } from "../hash";
 
 describe("sha1", () => {
   it.each([

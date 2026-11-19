@@ -2,7 +2,7 @@ import { theme_init } from "#theme";
 import { ok } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { form_text_multiline } from "./text_multi_line";
+import { form_text_multiline } from "../text/multi_line/text_multi_line";
 
 const wait = (ms: number = 10) =>
   new Promise((resolve) => setTimeout(resolve, ms));

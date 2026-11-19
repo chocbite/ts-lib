@@ -2,7 +2,7 @@ import { DOCUMENT_HANDLER } from "#document";
 import { material_close_rounded, material_home_rounded } from "#icons";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { form_dropdown } from "./drop_down";
+import { form_dropdown } from "../selectors/drop_down/drop_down";
 
 const wait = (ms: number = 10) =>
   new Promise((resolve) => setTimeout(resolve, ms));

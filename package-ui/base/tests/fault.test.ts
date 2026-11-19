@@ -1,7 +1,7 @@
 import { NiceError } from "@chocbite/ts-lib/result";
 import state, { type StateOrVal } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Base, define_element, input_key, type BaseOptions, type InputOptions } from ".";
+import { Base, define_element, input_key, type BaseOptions, type InputOptions } from "..";
 
 const BOX = {
   label: input_key<StateOrVal<string>>(),

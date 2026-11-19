@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import type { SettingsGroup } from ".";
+import type { SettingsGroup } from "..";
 
 const VERSIONS_KEY = "settings/packageVersions";
 const VALUE_KEY = "@test/migrate/value";
@@ -25,7 +25,7 @@ describe("Settings version change", () => {
   //A package initialises its settings once, a second init sees the version already updated
   let group: SettingsGroup;
   beforeAll(async () => {
-    const { settings_init } = await import(".");
+    const { settings_init } = await import("..");
     group = settings_init("@test/migrate", "1.0.0", "Migrate", "");
   });
 

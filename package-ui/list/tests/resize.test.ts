@@ -2,7 +2,7 @@ import { INPUT_MODE, InputModes, px_to_rem, theme_init } from "#theme";
 import { NiceError, ok } from "@chocbite/ts-lib/result";
 import { state } from "@chocbite/ts-lib/state";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import list from ".";
+import list from "..";
 
 //The input mode is applied by the theme
 theme_init();

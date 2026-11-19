@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { array_diff, array_diff_by, array_diff_deep, object_key_diff } from ".";
+import { array_diff, array_diff_by, array_diff_deep, object_key_diff } from "..";
 
 describe("Diffing", async () => {
   it("Array Diff", async () => {

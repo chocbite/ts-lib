@@ -6,7 +6,7 @@ describe("Theme engine", () => {
   it("rem_to_px uses the stored scale from the start", async () => {
     localStorage.setItem("@chocbite/ts-lib-theme/scale", "150");
     try {
-      const { rem_to_px, px_to_rem } = await import("./engine");
+      const { rem_to_px, px_to_rem } = await import("../engine");
       expect(rem_to_px(1)).toBe(24);
       expect(px_to_rem(24)).toBe(1);
     } finally {
@@ -15,9 +15,9 @@ describe("Theme engine", () => {
   });
 
   it("applies a changed animation speed", async () => {
-    const { theme_init } = await import("./init");
+    const { theme_init } = await import("../init");
     theme_init();
-    const { ANIMATION_SPEED } = await import("./settings");
+    const { ANIMATION_SPEED } = await import("../settings");
     expect((await ANIMATION_SPEED.write(500)).ok).toBe(true);
     expect(
       document.documentElement.style.getPropertyValue("--animation-speed"),
@@ -25,8 +25,8 @@ describe("Theme engine", () => {
   });
 
   it("types the scrollbar colors as colors", async () => {
-    await import("./builtIn");
-    const { BOTTOM_GROUPS } = await import("./shared");
+    await import("../builtIn");
+    const { BOTTOM_GROUPS } = await import("../shared");
     const thumb =
       BOTTOM_GROUPS["common"]["sub_groups"]["scrollbar"]["sub_groups"]["thumb"];
     const types = Object.values(thumb["variables"]).map((v) => v.type);
@@ -56,7 +56,7 @@ describe("Theme applied to the document", () => {
   });
 
   it("applies the scale as root font size and to rem_to_px", async () => {
-    const { SCALE, rem_to_px, px_to_rem } = await import(".");
+    const { SCALE, rem_to_px, px_to_rem } = await import("..");
     expect(root_style().fontSize).toBe(SCALE.ok() * 0.16 + "px");
     expect((await SCALE.write(200)).ok).toBe(true);
     expect(root_style().fontSize).toBe("32px");
@@ -70,7 +70,7 @@ describe("Theme applied to the document", () => {
   });
 
   it("rejects scales and animation speeds outside their range", async () => {
-    const { SCALE, ANIMATION_SPEED } = await import(".");
+    const { SCALE, ANIMATION_SPEED } = await import("..");
     const scale = SCALE.ok();
     expect((await SCALE.write(1000)).ok).toBe(false);
     expect((await SCALE.write(10)).ok).toBe(false);
@@ -81,7 +81,7 @@ describe("Theme applied to the document", () => {
   });
 
   it("applies the scrollbar size", async () => {
-    const { SCROLLBAR_MODE, ScrollbarModes } = await import(".");
+    const { SCROLLBAR_MODE, ScrollbarModes } = await import("..");
     expect(root_var("--scrollbar")).toBe("0.6rem");
     await SCROLLBAR_MODE.write(ScrollbarModes.Wide);
     expect(root_var("--scrollbar")).toBe("2.6rem");
@@ -92,7 +92,7 @@ describe("Theme applied to the document", () => {
   });
 
   it("applies the input mode as class and variables, only one at a time", async () => {
-    const { INPUT_MODE, InputModes } = await import(".");
+    const { INPUT_MODE, InputModes } = await import("..");
     const initial = INPUT_MODE.ok();
     expect(document.documentElement.classList.contains(initial)).toBe(true);
     for (const mode of [InputModes.Pen, InputModes.Touch, InputModes.Mouse]) {
@@ -108,7 +108,7 @@ describe("Theme applied to the document", () => {
   });
 
   it("applies the animation level as classes", async () => {
-    const { ANIMATION_LEVEL, AnimationLevels } = await import(".");
+    const { ANIMATION_LEVEL, AnimationLevels } = await import("..");
     const classes = () =>
       ["anim-all", "anim-some"].filter((c) =>
         document.documentElement.classList.contains(c),
@@ -124,7 +124,7 @@ describe("Theme applied to the document", () => {
   });
 
   it("switches the theme variables between light and dark", async () => {
-    const { THEME, Themes } = await import(".");
+    const { THEME, Themes } = await import("..");
     const { GREY } = await import("@chocbite/ts-lib/colors");
     expect(THEME.ok()).toBe(Themes.Light);
     expect(root_var("--common-scrollbar-thumb-color")).toBe(GREY["400"]);
@@ -135,14 +135,14 @@ describe("Theme applied to the document", () => {
   });
 
   it("does not accept the System theme when system is off", async () => {
-    const { THEME, Themes } = await import(".");
+    const { THEME, Themes } = await import("..");
     expect((await THEME.write(Themes.System)).ok).toBe(false);
     expect(THEME.ok()).toBe(Themes.Light);
   });
 
   it("applies everything to documents registered later, and stops for removed ones", async () => {
     const { DOCUMENT_HANDLER } = await import("#document");
-    const { SCROLLBAR_MODE, ScrollbarModes, SCALE } = await import(".");
+    const { SCROLLBAR_MODE, ScrollbarModes, SCALE } = await import("..");
     const doc = document.implementation.createHTMLDocument("theme");
     DOCUMENT_HANDLER.register_document(doc);
     try {
@@ -169,7 +169,7 @@ describe("Theme variables", () => {
   });
 
   it("applies a variable made after theme_init right away, and on theme changes", async () => {
-    const { theme_init_variable_root, THEME, Themes } = await import(".");
+    const { theme_init_variable_root, THEME, Themes } = await import("..");
     const root = theme_init_variable_root("testvars", "Test", "Test variables");
     expect(root.name).toBe("Test");
     expect(root.description).toBe("Test variables");
@@ -192,7 +192,7 @@ describe("Theme variables", () => {
   });
 
   it("does not allow dashes in names and ids", async () => {
-    const { theme_init_variable_root } = await import(".");
+    const { theme_init_variable_root } = await import("..");
     expect(() => theme_init_variable_root("with-dash", "", "")).toThrow("Dash");
     const root = theme_init_variable_root("dashes", "", "");
     expect(() => root.make_sub_group("a-b", "", "")).toThrow("Dash");
@@ -202,7 +202,7 @@ describe("Theme variables", () => {
   });
 
   it("throws for variables and sub groups registered twice", async () => {
-    const { theme_init_variable_root } = await import(".");
+    const { theme_init_variable_root } = await import("..");
     const root = theme_init_variable_root("twice", "", "");
     root.make_variable("v", "", "", "1", "2", "String", undefined);
     expect(() =>
@@ -213,7 +213,7 @@ describe("Theme variables", () => {
   });
 
   it("throws for a root group name used twice", async () => {
-    const { theme_init_variable_root } = await import(".");
+    const { theme_init_variable_root } = await import("..");
     const root = theme_init_variable_root("rootonce", "First", "");
     root.make_variable("v", "", "", "1", "2", "String", undefined);
     expect(() => theme_init_variable_root("rootonce", "Second", "")).toThrow(

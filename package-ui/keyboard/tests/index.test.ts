@@ -8,7 +8,7 @@ import {
   type KeyboardKeyConfig,
   type KeyboardLayerConfig,
   type KeyboardLayers,
-} from "./index";
+} from "../index";
 
 function appendInput(type = "text"): HTMLInputElement {
   const input = document.body.appendChild(document.createElement("input"));

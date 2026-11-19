@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bounding_width_and_height_of_rotated_rectangle } from "./boundingWidthAndHeightOfRotatedRectangle";
+import { bounding_width_and_height_of_rotated_rectangle } from "../trigonometry/transforms/boundingWidthAndHeightOfRotatedRectangle";
 
 describe("Bounding Width And Hight Of Rotated Rectangle", function () {
   it("Width 100 Height 100 turned 45 Degree", function () {

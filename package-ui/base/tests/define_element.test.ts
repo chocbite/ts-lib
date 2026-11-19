@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Base } from "./base";
+import { Base } from "../base";
 import {
   base_element_name,
   define_element,
   ELEMENT_LIST,
   set_base_element_global_namespace,
   validate_element_name,
-} from "./define_element";
+} from "../define_element";
 
 describe("define_element", () => {
   it("reports a name used twice clearly, whatever the browser's error message", () => {

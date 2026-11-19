@@ -3,7 +3,7 @@ import {
   string_byte_length,
   string_byte_limit,
   time_and_timezone_to_string,
-} from "./index";
+} from "../index";
 
 describe("Byte Length", function () {
   it("asdf is 4 bytes", function () {

@@ -4,7 +4,7 @@ import st, {
   type StateArrayReadTypes,
 } from "@chocbite/ts-lib/state";
 import { describe, expect, it, vi } from "vitest";
-import state_ui, { state_ui as named } from ".";
+import state_ui, { state_ui as named } from "..";
 
 const apply_array = state_ui.a.apply;
 

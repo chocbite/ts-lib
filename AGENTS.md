@@ -25,6 +25,7 @@ Bundling is fine, but unused icons must still be tree-shakeable by the consumer'
 ## Layout
 
 Each module is a folder `<folder>/<module>/` directly in the package folder, with an `index.ts` and its own `README.md`. A package folder holds only its modules, `package.json` and `README.md`, and in `package-ui` also `PATTERN.md`.
+The tests of a module are in its `tests/` folder, `<module>/tests/<name>.test.ts`, one flat folder also for the sources in sub folders, with helpers only the tests use next to them. They import the files of their own module with `../`, like `../number/slider/slider`, which is fine as it stays inside the module. `tests/` folders are never built or put in `SOURCE.md`.
 Every module is published as a subpath export, e.g. `@chocbite/ts-lib/state` and `@chocbite/ts-lib-ui/theme`. There is no root export.
 
 - ts-lib: `colors common depot event math parse result safe state string`

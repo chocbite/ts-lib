@@ -2,15 +2,15 @@ import { define_element, input_key, type InputOptions } from "#base";
 import depot from "@chocbite/ts-lib/depot";
 import state, { type StateOrVal, type StateROSW } from "@chocbite/ts-lib/state";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
-import { canvas, type CanvasWidget } from ".";
-import { CanvasLink } from "./link";
-import type { WidgetSlot } from "./slot";
+import { canvas, type CanvasWidget } from "..";
+import { CanvasLink } from "../link";
+import type { WidgetSlot } from "../slot";
 import {
   WIDGET_CHANGE,
   WIDGET_GEOMETRY,
   WidgetBase,
   type WidgetBaseOptions,
-} from "./widget";
+} from "../widget";
 
 const MENU_WIDGET = {
   text: input_key<StateOrVal<string>>(),

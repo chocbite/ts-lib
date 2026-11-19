@@ -7,8 +7,8 @@ import { form_errors } from "../errors";
 import { form_switch } from "../boolean/switch/switch";
 import { form_lamp } from "../boolean/lamp/lamp";
 import { form_stepper } from "../number/stepper/stepper";
-import { form_group } from "./group";
-import { FormGroupBorderStyle } from "./group_base";
+import { form_group } from "../group/group";
+import { FormGroupBorderStyle } from "../group/group_base";
 
 const wait = (ms: number = 10) =>
   new Promise((resolve) => setTimeout(resolve, ms));

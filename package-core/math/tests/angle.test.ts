@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { degrees_to_radians, radians_to_degrees } from "./angle";
+import { degrees_to_radians, radians_to_degrees } from "../trigonometry/angle";
 
 describe("Degrees To Radians", function () {
   it("0 Degree", function () {

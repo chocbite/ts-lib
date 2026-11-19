@@ -1,6 +1,6 @@
 import { NiceError } from "@chocbite/ts-lib/result";
 import { afterEach, describe, expect, it } from "vitest";
-import { prompts } from ".";
+import { prompts } from "..";
 
 /**The prompt open now*/
 const current = () => {

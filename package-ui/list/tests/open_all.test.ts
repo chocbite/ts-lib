@@ -1,8 +1,8 @@
 import { theme_init } from "#theme";
 import { ok } from "@chocbite/ts-lib/result";
 import { afterEach, describe, expect, it } from "vitest";
-import list from ".";
-import type { ListRow } from "./row";
+import list from "..";
+import type { ListRow } from "../row";
 
 //Glyphs come from theme variables
 theme_init();

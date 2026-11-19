@@ -1,7 +1,7 @@
 import { NiceError } from "@chocbite/ts-lib/result";
 import state from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { topbar, topbar_button, topbar_label } from "./topbar";
+import { topbar, topbar_button, topbar_label } from "../topbar";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);

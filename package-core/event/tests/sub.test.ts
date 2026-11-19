@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ESub, EventHandlerSub } from "./sub";
+import { ESub, EventHandlerSub } from "../sub";
 
 describe("Init", { timeout: 50 }, function () {
   it("Create Simple Event Handler", function () {

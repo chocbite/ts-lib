@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { keyboard_open, KeyboardType } from "./index";
+import { keyboard_open, KeyboardType } from "../index";
 
 describe("Keyboard page shift", () => {
   afterEach(() => {

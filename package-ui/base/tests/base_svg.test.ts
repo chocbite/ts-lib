@@ -1,7 +1,7 @@
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it } from "vitest";
-import { BaseSVG } from "./base_svg";
-import { define_element } from "./define_element";
+import { BaseSVG } from "../base_svg";
+import { define_element } from "../define_element";
 
 class TestSVG extends BaseSVG {
   static element_name() {

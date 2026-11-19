@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { Keyboard_Color } from "./keyboard_color";
+import { Keyboard_Color } from "../keyboard_color";
 
 function appendInput(type: string, value: string): HTMLInputElement {
   const input = document.body.appendChild(document.createElement("input"));

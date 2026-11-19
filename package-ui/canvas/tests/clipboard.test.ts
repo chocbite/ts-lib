@@ -1,8 +1,8 @@
 import state, { type StateROSW } from "@chocbite/ts-lib/state";
 import { describe, expect, it } from "vitest";
-import type { CanvasLink, CanvasPage, CanvasWidget } from ".";
-import { canvas } from ".";
-import { copy_widgets, has_copied, paste_widgets } from "./clipboard";
+import type { CanvasLink, CanvasPage, CanvasWidget } from "..";
+import { canvas } from "..";
+import { copy_widgets, has_copied, paste_widgets } from "../clipboard";
 
 const widget = (x: number, y: number, extra: object = {}): CanvasWidget => ({
   widget: "/widgets/clipboardtest/box",

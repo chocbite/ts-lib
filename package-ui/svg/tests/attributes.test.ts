@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { SVGAttributes } from "./attributes";
-import { NAME_SPACE } from "./shared";
+import { SVGAttributes } from "../attributes";
+import { NAME_SPACE } from "../shared";
 
 function createSVGElement(): SVGAttributes<SVGRectElement> {
   const elem = document.createElementNS(NAME_SPACE, "rect");

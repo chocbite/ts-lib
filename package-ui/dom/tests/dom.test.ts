@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { node_clone } from ".";
+import { node_clone } from "..";
 
 afterEach(() => {
   document.body.replaceChildren();

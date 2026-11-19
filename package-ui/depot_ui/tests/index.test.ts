@@ -2,7 +2,7 @@ import depot, { type DepotGroup, type DepotType } from "@chocbite/ts-lib/depot";
 import { ok, NiceError } from "@chocbite/ts-lib/result";
 import state, { type StateROSW } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it } from "vitest";
-import depot_ui, { DepotTree } from ".";
+import depot_ui, { DepotTree } from "..";
 
 /**Closes the panels of open selectors*/
 const close_panels = () => {

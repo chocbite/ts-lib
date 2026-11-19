@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { degrees_to_radians } from "../angle";
-import { point_on_circle } from "./point_on_circle";
+import { degrees_to_radians } from "../trigonometry/angle";
+import { point_on_circle } from "../trigonometry/circle/point_on_circle";
 
 describe("Point on circle", function () {
   it("x5 y5 radius 3 angle 0", function () {

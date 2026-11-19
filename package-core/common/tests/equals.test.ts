@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { any_equals_deep, object_equals_deep } from "./equals";
+import { any_equals_deep, object_equals_deep } from "../equals";
 
 describe("Any Equals", async () => {
   it("Object Equals Deep", async () => {

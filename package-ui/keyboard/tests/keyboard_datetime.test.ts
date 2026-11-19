@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Keyboard_DateTime } from "./keyboard_datetime";
+import { Keyboard_DateTime } from "../keyboard_datetime";
 
 function appendInput(type: string, value: string): HTMLInputElement {
   const input = document.body.appendChild(document.createElement("input"));

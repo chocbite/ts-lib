@@ -7,12 +7,12 @@ import st, {
   type StateROSW,
 } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
-import { ACCESSTYPESINFO, AccessTypes } from "./access";
-import { Base, type BaseOptions } from "./base";
-import { define_element } from "./define_element";
-import { CREATE, input_key, type InputOf, type InputOptions } from "./input";
-import "./index.scss";
-import { BaseIntersectObserver } from "./intersect_observer";
+import { ACCESSTYPESINFO, AccessTypes } from "../access";
+import { Base, type BaseOptions } from "../base";
+import { define_element } from "../define_element";
+import { CREATE, input_key, type InputOf, type InputOptions } from "../input";
+import "../index.scss";
+import { BaseIntersectObserver } from "../intersect_observer";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);

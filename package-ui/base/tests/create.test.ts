@@ -1,6 +1,6 @@
 import state, { type StateOrVal } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it } from "vitest";
-import { Base, CREATE, define_element, input_key, type BaseOptions, type InputOptions } from ".";
+import { Base, CREATE, define_element, input_key, type BaseOptions, type InputOptions } from "..";
 
 /**Something outside the UI an element needs from its start, like a device it shows*/
 interface Device {

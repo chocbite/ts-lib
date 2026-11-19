@@ -11,7 +11,7 @@ describe("Theme settings from storage", () => {
     localStorage.setItem(key("animation_speed"), JSON.stringify(-5));
     try {
       const { SCALE, THEME, Themes, ANIMATION_SPEED } = await import(
-        "./settings"
+        "../settings"
       );
       expect(SCALE.ok()).toBe(100);
       expect(Object.values(Themes)).toContain(THEME.ok());

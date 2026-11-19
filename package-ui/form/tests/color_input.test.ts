@@ -1,6 +1,6 @@
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { form_color } from "./color_input";
+import { form_color } from "../special/color/color_input";
 
 const wait = (ms: number = 10) =>
   new Promise((resolve) => setTimeout(resolve, ms));

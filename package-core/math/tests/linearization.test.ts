@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { linearise } from "./linearization";
+import { linearise } from "../conversion/linearization";
 
 describe("Linearisation", function () {
   it("Less than four values produce NaN", function () {

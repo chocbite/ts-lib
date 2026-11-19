@@ -2,7 +2,7 @@ import { ok } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import { theme_init } from "#theme";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { form_slider } from "./slider";
+import { form_slider } from "../number/slider/slider";
 
 theme_init();
 

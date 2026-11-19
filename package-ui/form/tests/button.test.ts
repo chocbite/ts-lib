@@ -1,8 +1,8 @@
 import { NiceError, ok } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FormColors } from "../../base";
-import { form_button } from "./button";
+import { FormColors } from "../base";
+import { form_button } from "../boolean/button/button";
 
 const wait = (ms: number = 10) =>
   new Promise((resolve) => setTimeout(resolve, ms));

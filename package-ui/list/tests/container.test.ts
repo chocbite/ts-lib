@@ -4,12 +4,12 @@ import { px_to_rem } from "#theme";
 import { none, ok, NiceError } from "@chocbite/ts-lib/result";
 import { state, type State } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
-import list from ".";
-import { ListAddRow, type ListAddRowOptions } from "./add_row";
-import type { ListContainerConfig } from "./container";
-import { ListField } from "./field";
-import { ListKeyField } from "./key_field";
-import { ListRow } from "./row";
+import list from "..";
+import { ListAddRow, type ListAddRowOptions } from "../add_row";
+import type { ListContainerConfig } from "../container";
+import { ListField } from "../field";
+import { ListKeyField } from "../key_field";
+import { ListRow } from "../row";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);

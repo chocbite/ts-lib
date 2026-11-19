@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { make_parser, type Parsed } from "./parse";
+import { make_parser, type Parsed } from "../parse";
 import { ok } from "#result";
 
 describe("make_parser", () => {

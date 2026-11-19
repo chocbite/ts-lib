@@ -8,9 +8,9 @@ import {
   type StateROSW,
 } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import list from ".";
-import type { ListRow } from "./row";
-import type { ListSelectionOptions } from "./selection";
+import list from "..";
+import type { ListRow } from "../row";
+import type { ListSelectionOptions } from "../selection";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);

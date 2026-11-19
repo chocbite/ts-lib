@@ -1,16 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { circle, circle_arc } from "./circle";
-import { ellipse, ellipse_arc } from "./ellipse";
-import { group } from "./group";
-import { line } from "./line";
-import { path, path_line } from "./path";
+import { circle, circle_arc } from "../primitives/circle";
+import { ellipse, ellipse_arc } from "../primitives/ellipse";
+import { group } from "../primitives/group";
+import { line } from "../primitives/line";
+import { path, path_line } from "../primitives/path";
 import {
   rectangle_from_center,
   rectangle_from_corner,
-} from "./rectangle";
-import { svg } from "./svg";
-import { text, multi_line_text } from "./text";
-import { isosceles_triangle } from "./triangle";
+} from "../primitives/rectangle";
+import { svg } from "../primitives/svg";
+import { text, multi_line_text } from "../primitives/text";
+import { isosceles_triangle } from "../primitives/triangle";
 import { SVGAnchorPoint } from "../util/anchorPoint";
 
 describe("circle", () => {

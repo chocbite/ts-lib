@@ -8,7 +8,7 @@ import {
   content_context_lines,
   ContentBase,
   type ContentCreateOptions,
-} from "./content";
+} from "../content";
 
 const attach = <T extends HTMLElement>(element: T): T =>
   document.body.appendChild(element);

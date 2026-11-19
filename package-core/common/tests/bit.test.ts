@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { get_bit, get_bits, set_bit, set_bits, toggle_bit } from "./bit";
+import { get_bit, get_bits, set_bit, set_bits, toggle_bit } from "../bit";
 
 describe("get_bit", () => {
   it("returns true for a set bit", () => {

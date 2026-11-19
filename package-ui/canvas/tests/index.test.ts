@@ -8,7 +8,7 @@ import {
   type CanvasWidget,
   type WidgetBaseOptions,
   type WidgetDefinition,
-} from ".";
+} from "..";
 
 describe("Canvas module", () => {
   afterEach(() => {

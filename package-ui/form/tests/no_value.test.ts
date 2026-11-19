@@ -1,7 +1,7 @@
 import state from "@chocbite/ts-lib/state";
 import { theme_init } from "#theme";
 import { afterEach, describe, expect, it } from "vitest";
-import form from ".";
+import form from "..";
 
 //Sizes come from theme variables
 theme_init();

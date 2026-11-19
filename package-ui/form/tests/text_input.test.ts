@@ -1,7 +1,7 @@
 import { NiceError, ok } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { form_text_input } from "./text_input";
+import { form_text_input } from "../text/input/text_input";
 
 /**A test error whose nice text is its message*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);

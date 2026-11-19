@@ -1,8 +1,8 @@
 import { none, ok, type Option, NiceError } from "@chocbite/ts-lib/result";
 import { state } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ListKeyField, type ListKeyFieldOptions } from "./key_field";
-import type { ListRowParent } from "./types";
+import { ListKeyField, type ListKeyFieldOptions } from "../key_field";
+import type { ListRowParent } from "../types";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);

@@ -7,7 +7,7 @@ import form, {
   FormElement,
   FormValue,
   FormValueWrite,
-} from ".";
+} from "..";
 
 describe("Form module exports", () => {
   it("exports a factory for every form element", () => {

@@ -7,7 +7,7 @@ import state, {
 } from "#state";
 import { NiceError } from "#result";
 import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
-import depot, { type DepotChild, type DepotEntry, type DepotNode } from ".";
+import depot, { type DepotChild, type DepotEntry, type DepotNode } from "..";
 
 afterEach(() => {
   for (const type of [...depot.types.ok()])

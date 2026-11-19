@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { throttle } from "./throttle"; // Adjust path as needed
+import { throttle } from "../throttle"; // Adjust path as needed
 
 describe("throttle", () => {
   beforeEach(() => {

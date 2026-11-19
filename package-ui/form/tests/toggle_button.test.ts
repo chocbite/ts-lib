@@ -2,7 +2,7 @@ import { material_close_rounded } from "#icons";
 import { NiceError } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { form_toggle_button } from "./toggle_button";
+import { form_toggle_button } from "../selectors/toggle_button/toggle_button";
 
 const wait = (ms: number = 10) =>
   new Promise((resolve) => setTimeout(resolve, ms));

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 //The module is imported dynamically, so the import itself can be observed
-type SVGModule = typeof import("./index");
+type SVGModule = typeof import("../index");
 
 describe("svg module", () => {
   it("logs nothing when imported", async () => {
@@ -9,7 +9,7 @@ describe("svg module", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     try {
-      await import("./index");
+      await import("../index");
       expect(error).not.toHaveBeenCalled();
       expect(warn).not.toHaveBeenCalled();
       expect(log).not.toHaveBeenCalled();
@@ -19,7 +19,7 @@ describe("svg module", () => {
   });
 
   it("exposes every primitive and utility", async () => {
-    const { svg } = await import("./index");
+    const { svg } = await import("../index");
     expect(svg.svg(10, 10).elem.tagName).toBe("svg");
     expect(svg.circle(0, 0, 1).elem.tagName).toBe("circle");
     expect(svg.circle_arc(0, 0, 1, 0, 90).elem.tagName).toBe("path");
@@ -39,21 +39,21 @@ describe("svg module", () => {
   });
 
   it("create makes elements in the svg namespace", async () => {
-    const { svg } = await import("./index");
+    const { svg } = await import("../index");
     const elem = svg.create("g").elem;
     expect(elem.namespaceURI).toBe("http://www.w3.org/2000/svg");
     expect(elem).toBeInstanceOf(SVGGElement);
   });
 
   it("create makes elements not in the primitive list, like defs", async () => {
-    const { svg } = await import("./index");
+    const { svg } = await import("../index");
     //Cast, the tag name list of create is checked in the type test below
     const elem = svg.create("defs" as "g").elem;
     expect(elem).toBeInstanceOf(SVGDefsElement);
   });
 
   it("attr wraps an existing element, keeping it", async () => {
-    const { svg } = await import("./index");
+    const { svg } = await import("../index");
     const existing = svg.create("rect").elem;
     const wrapped = svg.attr(existing).fill("red").translate(1, 2);
     expect(wrapped.elem).toBe(existing);

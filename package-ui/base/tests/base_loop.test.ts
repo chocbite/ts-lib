@@ -5,7 +5,7 @@ import st, {
 } from "@chocbite/ts-lib/state";
 import { NiceError } from "@chocbite/ts-lib/result";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { base_loop } from "./base_loop";
+import { base_loop } from "../base_loop";
 
 const make_loop = (destructor?: (element: HTMLSpanElement) => void) =>
   base_loop(

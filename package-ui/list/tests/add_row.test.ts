@@ -1,9 +1,9 @@
 import { state } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccessTypes } from "#base";
-import { ListAddRow, type ListAddRowOptions } from "./add_row";
-import { ListKeyField } from "./key_field";
-import type { ListRoot, ListRowParent } from "./types";
+import { ListAddRow, type ListAddRowOptions } from "../add_row";
+import { ListKeyField } from "../key_field";
+import type { ListRoot, ListRowParent } from "../types";
 import { ok, NiceError } from "@chocbite/ts-lib/result";
 
 /**A test error whose nice text is its message, so shown texts read as before*/

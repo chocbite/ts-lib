@@ -4,7 +4,7 @@ import {
   set_cursor_end,
   set_cursor_position,
   set_selection_all,
-} from "./selection";
+} from "../selection";
 
 const text = "Hello, world!";
 

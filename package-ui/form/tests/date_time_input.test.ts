@@ -5,7 +5,7 @@ import {
   FormDateTimeMode,
   FormDateTimePrecision,
   FormDateTimeType,
-} from "./date_time_input";
+} from "../special/date_time/date_time_input";
 
 const wait = (ms: number = 10) =>
   new Promise((resolve) => setTimeout(resolve, ms));

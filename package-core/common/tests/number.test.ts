@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { number_limit_decimals } from "./number";
+import { number_limit_decimals } from "../number";
 
 describe("number_limit_decimals", () => {
   it("rounds to the requested number of decimal places", () => {

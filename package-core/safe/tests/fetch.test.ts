@@ -1,7 +1,7 @@
 import { NiceError, type Result } from "#result";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
-import { fetch_status_safe, fetch_text_safe, FetchStatusError, type FetchResponse } from "./fetch";
-import safe from "./index";
+import { fetch_status_safe, fetch_text_safe, FetchStatusError, type FetchResponse } from "../fetch";
+import safe from "../index";
 
 const errors = safe.fetch.errors;
 

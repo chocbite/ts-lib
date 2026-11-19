@@ -1,6 +1,6 @@
 import { GREY } from "@chocbite/ts-lib/colors";
 import { afterEach, describe, expect, it } from "vitest";
-import { spinner as make_spinner } from ".";
+import { spinner as make_spinner } from "..";
 import { theme_init } from "#theme";
 
 /**The color as the browser computes it, for comparing with computed styles*/

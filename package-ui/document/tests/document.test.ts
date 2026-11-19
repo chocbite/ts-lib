@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { DOCUMENT_HANDLER as docs } from "./document";
+import { DOCUMENT_HANDLER as docs } from "../document";
 
 describe("Document", async () => {
   it("Initial Values", () => {

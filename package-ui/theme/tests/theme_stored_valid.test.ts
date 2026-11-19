@@ -31,7 +31,7 @@ describe("Theme settings from storage, valid values", () => {
         ANIMATION_LEVEL,
         ANIMATION_SPEED,
         rem_to_px,
-      } = await import(".");
+      } = await import("..");
       expect(THEME.ok()).toBe(Themes.Dark);
       expect(SCALE.ok()).toBe(125);
       expect(SCROLLBAR_MODE.ok()).toBe("wide");

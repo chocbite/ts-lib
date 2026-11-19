@@ -3,10 +3,10 @@ import st from "@chocbite/ts-lib/state";
 import { theme_init } from "#theme";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { FormColors } from "../base";
-import { form_button } from "./button/button";
-import { form_lamp } from "./lamp/lamp";
+import { form_button } from "../boolean/button/button";
+import { form_lamp } from "../boolean/lamp/lamp";
 import type { SVGFunc } from "#svg";
-import { form_switch } from "./switch/switch";
+import { form_switch } from "../boolean/switch/switch";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);

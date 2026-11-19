@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import list, { ListField } from ".";
-import { ListNodeField, ListNumberField, ListTextField } from "./field";
+import list, { ListField } from "..";
+import { ListNodeField, ListNumberField, ListTextField } from "../field";
 import { ok } from "@chocbite/ts-lib/result";
 import { state, type StateOrVal } from "@chocbite/ts-lib/state";
 import {
