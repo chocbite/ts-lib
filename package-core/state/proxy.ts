@@ -761,11 +761,15 @@ function resw_map<S extends StateRESW<any, any, any>, ROUT, WOUT>(
 
 //The proxy and proxy_map methods of every state make their proxies here, base.ts can not import this file,
 //as the proxy class extends StateBase, which does not exist yet while base.ts loads
-set_proxy_maker((base, map_ok, transform) => {
+set_proxy_maker((base, map_ok, transform, writable, write) => {
   const state = base as State<unknown, any, unknown>;
-  return map_ok
-    ? new RXXX(state.rok, false, state, mapped(transform))
-    : new RXXX(false, false, state, transform as (value: SR<unknown>) => SR<unknown>);
+  return new RXXX(
+    map_ok && state.rok,
+    writable,
+    state,
+    map_ok ? mapped(transform) : (transform as (value: SR<unknown>) => SR<unknown>),
+    write as StateProxyWrite<State<unknown, any, unknown>, unknown> | undefined,
+  );
 });
 
 //##################################################################################################################################################

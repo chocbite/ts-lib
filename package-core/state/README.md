@@ -82,6 +82,7 @@ These methods are only guaranteed on certain state types. TypeScript will error 
 | `write(value)` | Writable (`writable: true`)  | Request a value change, rejected if `check` fails. |
 | `limit(value)` | Writable                     | Clamp a value to the valid range via the helper.   |
 | `check(value)` | Writable                     | Validate a value without applying it.              |
+| `proxy_w(fn, write?)`, `proxy_w_map(fn, write?)` | Writable | Writable versions of `proxy` and `proxy_map`, see [Proxy States](#proxy-states). |
 
 ### Per-Type Narrowing
 
@@ -380,9 +381,15 @@ const checked = device.temperature.proxy((result) =>
 
 - **`proxy_map(fn)`** gives a proxy of the same kind as the state: an ok state stays ok, a sync state stays sync.
 - **`proxy(fn)`** gives a proxy that can fail, as `fn` can return an error. It is sync when the state is sync.
-- **Both are read only.** For a writable proxy use the factories below.
+- **Both are read only.** Writable states also have **`proxy_w(fn, write?)`** and **`proxy_w_map(fn, write?)`**, the same with writes going to the state. Without `write` they keep the write type of the state, writes, `check` and `limit` go to it as they are. With a `StateProxyWrite`, see below, the proxy can have a write type of its own, and needs it for that:
 
-**The factories, `state.p`,** choose the kind themselves. `rea_map`, `res_map`, `reaw_map` and `resw_map` take a function of the plain value like `proxy_map`, and the writable ones take an optional `StateProxyWrite`, see below:
+```typescript
+const speed_text = device.speed.proxy_w_map((speed) => `${speed}`, {
+  write: (text: string, source) => source.write(Number(text)),
+});
+```
+
+**The factories, `state.p`,** do the same, with the kind chosen by you. `rea_map`, `res_map`, `reaw_map` and `resw_map` take a function of the plain value like `proxy_map`, and the writable ones take an optional `StateProxyWrite`, see below:
 
 ```typescript
 const speed_text = state.p.reaw_map(device.speed, (speed) => `${speed}`, {
