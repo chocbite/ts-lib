@@ -1,5 +1,5 @@
 import { sleep } from "#common";
-import { ok, ResultOk, err_nice } from "#result";
+import { ok, ResultOk, err_nice, type Option } from "#result";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   state as st,
@@ -8,6 +8,9 @@ import {
   type StateRES,
   type StateROA,
   type StateROS,
+  type StateREAW,
+  type StateRESW,
+  type StateROAW,
   type StateROSW,
   type StateProxyWrite,
 } from "..";
@@ -623,5 +626,92 @@ describe("Proxy methods of states", { timeout: 100 }, function () {
     expect(source.read_only.proxy_map((value) => value + 1).ok()).toBe(2);
     expect(source.proxy_map((value) => value + 1).proxy_map((value) => value * 10).ok()).toBe(20);
     expect(st.c.ros(([a, b]) => ok(a.value + b.value), st.ok(1), st.ok(2)).proxy_map((v) => -v).ok()).toBe(-3);
+  });
+});
+
+describe("Writable proxy methods of states", { timeout: 100 }, function () {
+  it("proxy_w gives the result, makes a writable sync state that can fail, and writes to the source", async function () {
+    const source = st.rosw(ok(5), true);
+    const checked = source.proxy_w((result) =>
+      result.value > 9 ? err_nice(TEST_KIND, "Too big") : ok(result.value),
+    );
+    expect(checked.rsync).toBe(true);
+    expect(checked.rok).toBe(false);
+    expect(checked.writable).toBe(true);
+    expect((await checked.write(12)).ok).toBe(true);
+    expect(source.ok()).toBe(12);
+    expect(checked.get().err).toBe(true);
+    expectTypeOf(checked).toEqualTypeOf<StateRESW<number, Option<{}>, number>>();
+  });
+
+  it("proxy_w makes an async writable state from an async one", async function () {
+    const source = st.reaw<number>(() => sleep(1, ok(2)), true);
+    const proxied = source.proxy_w((result) => result.map((value) => value * 3));
+    expect(proxied.rsync).toBe(false);
+    expect(await proxied).toEqual(ok(6));
+    expectTypeOf(proxied).toEqualTypeOf<StateREAW<number, Option<{}>, number>>();
+  });
+
+  it("proxy_w_map keeps the kind of the state and its write type", async function () {
+    const source = st.rosw(ok(2), true);
+    const doubled = source.proxy_w_map((value) => value * 2);
+    expect(doubled.rok).toBe(true);
+    expect(doubled.ok()).toBe(4);
+    await doubled.write(7);
+    expect(source.ok()).toBe(7);
+    expectTypeOf(doubled).toEqualTypeOf<StateROSW<number, Option<{}>, number>>();
+    const async_ok = st.roaw<number>(() => sleep(1, ok(1)), true).proxy_w_map((value) => value + 1);
+    expect(async_ok.rok).toBe(true);
+    expect(await async_ok).toEqual(ok(2));
+    expectTypeOf(async_ok).toEqualTypeOf<StateROAW<number, Option<{}>, number>>();
+  });
+
+  it("passes the error of a state that can fail on as it is with proxy_w_map", function () {
+    const error = err_nice(TEST_KIND, "Source failed");
+    const source = st.resw<number>(error, true);
+    const doubled = source.proxy_w_map((value) => value * 2);
+    expect(doubled.get()).toBe(error);
+    expectTypeOf(doubled).toEqualTypeOf<StateRESW<number, Option<{}>, number>>();
+  });
+
+  it("takes a write form, which gives the proxy a write type of its own", async function () {
+    const source = st.rosw(ok(1), true);
+    const text = source.proxy_w_map((value) => String(value), {
+      write: (value: string, state) => state.write(Number(value)),
+      check: async (value) => (isNaN(Number(value)) ? err_nice(TEST_KIND, "Not a number") : ok(value)),
+    });
+    expect((await text.write("8")).ok).toBe(true);
+    expect(source.ok()).toBe(8);
+    expect(text.ok()).toBe("8");
+    expect((await text.check("x")).err).toBe(true);
+    expectTypeOf(text).toEqualTypeOf<StateROSW<string, Option<{}>, string>>();
+    const checked = source.proxy_w((result) => ok(result.value > 0), {
+      write: (value: boolean, state) => state.write(value ? 1 : 0),
+    });
+    await checked.write(false);
+    expect(source.ok()).toBe(0);
+    expectTypeOf(checked).toEqualTypeOf<StateRESW<boolean, Option<{}>, boolean>>();
+  });
+
+  it("needs the write form for another write type, and is only on writable states", function () {
+    const compile_only = () => {
+      const source = st.rosw(ok(1), true);
+      // @ts-expect-error a write type of its own needs the write form
+      const text: StateROSW<string, Option<{}>, string> = source.proxy_w_map((value) => String(value));
+      return text;
+    };
+    expect(compile_only).toBeTypeOf("function");
+    //Read only states have no writable proxies
+    expectTypeOf(st.ros(ok(1))).not.toHaveProperty("proxy_w_map");
+    expectTypeOf(st.res(ok(1))).not.toHaveProperty("proxy_w");
+  });
+
+  it("goes through the write gate of the source", async function () {
+    const source = st.rosw(ok(1), true);
+    source.set_write_enabled(st.ok(false));
+    const doubled = source.proxy_w_map((value) => value * 2);
+    const written = await doubled.write(3);
+    expect(!written.ok && written.error.kind).toBe(st.errors.WRITE_DISABLED);
+    expect(source.ok()).toBe(1);
   });
 });

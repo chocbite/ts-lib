@@ -20,13 +20,16 @@ import {
   type StateSub,
 } from "./types";
 
-/**Makes the proxies of the proxy and proxy_map methods.
+/**Makes the proxies of the proxy, proxy_map, proxy_w and proxy_w_map methods.
  * map_ok true: transform gets the plain value and an error is passed on, the proxy is ok when the state is.
- * map_ok false: transform gets the result and gives a result, the proxy can fail*/
+ * map_ok false: transform gets the result and gives a result, the proxy can fail.
+ * writable: writes go to the state, through write when given, see StateProxyWrite*/
 type ProxyMaker = (
   state: Base<any, any, any>,
   map_ok: boolean,
   transform: (value: any) => any,
+  writable: boolean,
+  write?: unknown,
 ) => unknown;
 let proxy_maker: ProxyMaker = () => {
   throw new Error("The proxy module is not loaded, import states from the state module");
@@ -58,11 +61,20 @@ export abstract class StateBase<
   /**A read only proxy of the state, transform gets the result and gives a result.
    * any as a class can not know its kind, the state types give the proxy its type, and subclasses fit them unchanged*/
   proxy(transform: (value: RRT) => SR<unknown>): any {
-    return proxy_maker(this, false, transform);
+    return proxy_maker(this, false, transform, false);
   }
   /**A read only proxy of the state, map gets the plain value and an error is passed on as it is, see the state types for its type*/
   proxy_map(map: (value: ResultInferOk<RRT>) => unknown): any {
-    return proxy_maker(this, true, map);
+    return proxy_maker(this, true, map, false);
+  }
+  /**A writable proxy of the state, like proxy, writes go to the state, through write when given, see StateProxyWrite.
+   * The state types only give it to writable states*/
+  proxy_w(transform: (value: RRT) => SR<unknown>, write?: unknown): any {
+    return proxy_maker(this, false, transform, true, write);
+  }
+  /**A writable proxy of the state, like proxy_map, writes go to the state, through write when given, see StateProxyWrite*/
+  proxy_w_map(map: (value: ResultInferOk<RRT>) => unknown, write?: unknown): any {
+    return proxy_maker(this, true, map, true, write);
   }
 
   abstract readonly rsync: boolean;
@@ -205,10 +217,10 @@ export class StateReadOnly<
     return this.#state.to_json();
   }
   proxy(transform: (value: RRT) => SR<unknown>): any {
-    return proxy_maker(this, false, transform);
+    return proxy_maker(this, false, transform, false);
   }
   proxy_map(map: (value: ResultInferOk<RRT>) => unknown): any {
-    return proxy_maker(this, true, map);
+    return proxy_maker(this, true, map, false);
   }
   get rsync(): boolean {
     return this.#state.rsync;

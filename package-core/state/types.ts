@@ -10,6 +10,7 @@ import type {
   StateArrayWriteInstruction,
 } from "./helpers/array";
 import type { StateObjectRead, StateObjectWrite } from "./helpers/object";
+import type { StateProxyWrite } from "./proxy";
 
 export const STATE_VIEWER_OVERRIDE_KEY = Symbol("STATE_VIEWER_OVERRIDE_KEY");
 
@@ -182,6 +183,33 @@ interface ProxyMethods<RRT, RT, PROXY, MAP> {
         : StateROS<T>;
 }
 
+/**proxy_w and proxy_w_map of a writable state, writable proxies.
+ * Without write, writes, check and limit go to the state as they are, and the proxy has the write type of the state.
+ * With write, see StateProxyWrite, the proxy can have a write type of its own, which needs write, W is only inferred from it.
+ * One signature each, not overloads, so they can be called on the union types like StateREAW*/
+interface WriteProxyMethods<RRT, RT, WT, PROXY, MAP> {
+  /**A writable proxy of the state, transform gets the result and gives a result, the proxy can fail, it is sync when the state is.
+   * Writes go to the state as they are, or through write, see StateProxyWrite*/
+  proxy_w<T, W = WT>(
+    transform: (value: RRT) => StateResult<T>,
+    write?: StateProxyWrite<StateREAW<RT, any, WT>, W>,
+  ): WritableProxy<PROXY extends "sync" ? "RES" : "REA", T, NoInfer<W>>;
+  /**A writable proxy of the state, map gets the plain value and an error of the state is passed on as it is,
+   * the proxy is of the same kind as the state. Writes go to the state as they are, or through write, see StateProxyWrite*/
+  proxy_w_map<T, W = WT>(
+    map: (value: RT) => T,
+    write?: StateProxyWrite<StateREAW<RT, any, WT>, W>,
+  ): WritableProxy<MAP, T, NoInfer<W>>;
+}
+/**The writable state type of a kind*/
+type WritableProxy<KIND, T, W> = KIND extends "REA"
+  ? StateREAW<T, Option<{}>, W>
+  : KIND extends "ROA"
+    ? StateROAW<T, Option<{}>, W>
+    : KIND extends "RES"
+      ? StateRESW<T, Option<{}>, W>
+      : StateROSW<T, Option<{}>, W>;
+
 interface REA<RT, REL extends Option<StateRelated>, WT>
   extends StateBase<StateResult<RT>, REL, WT>,
     ProxyMethods<StateResult<RT>, RT, "async", "REA"> {
@@ -219,7 +247,8 @@ interface ROS<RT, REL extends Option<StateRelated>, WT>
 
 interface REAW<RT, REL extends Option<StateRelated>, WT>
   extends StateBase<StateResult<RT>, REL, WT>,
-    ProxyMethods<StateResult<RT>, RT, "async", "REA"> {
+    ProxyMethods<StateResult<RT>, RT, "async", "REA">,
+    WriteProxyMethods<StateResult<RT>, RT, WT, "async", "REA"> {
   readonly rsync: false;
   readonly rok: false;
   readonly writable: true;
@@ -230,7 +259,8 @@ interface REAW<RT, REL extends Option<StateRelated>, WT>
 
 interface ROAW<RT, REL extends Option<StateRelated>, WT>
   extends StateBase<ResultOk<RT>, REL, WT>,
-    ProxyMethods<ResultOk<RT>, RT, "async", "ROA"> {
+    ProxyMethods<ResultOk<RT>, RT, "async", "ROA">,
+    WriteProxyMethods<ResultOk<RT>, RT, WT, "async", "ROA"> {
   readonly rsync: false;
   readonly rok: true;
   readonly writable: true;
@@ -241,7 +271,8 @@ interface ROAW<RT, REL extends Option<StateRelated>, WT>
 
 interface RESW<RT, REL extends Option<StateRelated>, WT>
   extends StateBase<StateResult<RT>, REL, WT>,
-    ProxyMethods<StateResult<RT>, RT, "sync", "RES"> {
+    ProxyMethods<StateResult<RT>, RT, "sync", "RES">,
+    WriteProxyMethods<StateResult<RT>, RT, WT, "sync", "RES"> {
   readonly rsync: true;
   get(): StateResult<RT>;
   readonly rok: false;
@@ -253,7 +284,8 @@ interface RESW<RT, REL extends Option<StateRelated>, WT>
 
 interface ROSW<RT, REL extends Option<StateRelated>, WT>
   extends StateBase<ResultOk<RT>, REL, WT>,
-    ProxyMethods<ResultOk<RT>, RT, "sync", "ROS"> {
+    ProxyMethods<ResultOk<RT>, RT, "sync", "ROS">,
+    WriteProxyMethods<ResultOk<RT>, RT, WT, "sync", "ROS"> {
   readonly rsync: true;
   get(): ResultOk<RT>;
   readonly rok: true;
