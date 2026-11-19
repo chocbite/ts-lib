@@ -532,17 +532,17 @@ state.is.res(obj); // Is RES?
 // ... and so on for all eight types
 ```
 
-## Fixed Value or State
+## Initial Value or State
 
-`StateOrVal<T>` is either a fixed value or a state giving the value. It is meant for inputs, like element options, where a user can give a constant or bind a state. A fixed value never changes, so anything that changes must be a state.
+`StateOrVal<T>` is either an initial value or a state giving the value. It is meant for inputs, like element options, where a user can give a value to start from or bind a state. An initial value is applied once and not followed, a state is followed, so a value changed from outside must be a state. A receiver that changes the value itself, like an element the user changes, starts from an initial value and keeps its changes.
 
-There is one variant per state type, `StateOrValROS<T>`, `StateOrValROSW<T>` and so on, each is `T | StateXXX<T>`. A writable variant lets the receiver write to the state when one is given, a fixed value can never be written.
+There is one variant per state type, `StateOrValROS<T>`, `StateOrValROSW<T>` and so on, each is `T | StateXXX<T>`. A writable variant lets the receiver write to the state when one is given, an initial value has nothing to write to.
 
 The value type must not itself be a state, as it could not be told apart from the state.
 
 ```typescript
 function show(text: StateOrValRES<string>) {
-  // Narrows to the exact state type, the else branch is the fixed value
+  // Narrows to the exact state type, the else branch is the initial value
   if (state.is.state_of(text)) text.sub((result) => console.log(result), true);
   else console.log(text);
 }
@@ -551,7 +551,7 @@ function edit(value: StateOrValROSW<number>) {
   if (state.is.state_of(value)) value.write(5); // StateROSW<number>
 }
 
-// Returns the state, or the fixed value wrapped in a read only ok state,
+// Returns the state, or the initial value wrapped in a read only ok state,
 // for when a state is needed, like to pass on or hand out
 const scale = state.as_state(options.scale ?? 1); // StateOrValROSW<number> gives StateROS<number>
 ```

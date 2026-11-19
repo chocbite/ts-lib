@@ -123,7 +123,7 @@ export type ExampleOverrideBoxOptions = ExampleBoxOptions &
   InputOptions<typeof OVERRIDE_BOX>;
 
 /**Subclass overriding a method used by an input, the override reads a private field of the subclass
- * This works with fixed values too, as set runs after the field has been initialized*/
+ * This works with initial values too, as set runs after the field has been initialized*/
 class ExampleOverrideBox extends ExampleBox {
   static element_name() {
     return "overridebox";
@@ -238,10 +238,10 @@ class ExampleWatcher extends ExampleBase {
         this.textContent = "no group";
       } else
         this.set_input(WATCHER_ITEMS, group.value.items, (items) => {
-          //A fixed list never changes
-          const fixed = !state.is.state_of(group.value?.items);
+          //An initial list is not followed, it stays until the group is set again
+          const initial = !state.is.state_of(group.value?.items);
           this.textContent = items.ok
-            ? `${items.value.length} items${fixed ? ", fixed" : ""}`
+            ? `${items.value.length} items${initial ? ", initial list" : ""}`
             : "⚠ " + items.error.nice;
         });
     });
@@ -259,7 +259,7 @@ define_element(ExampleWatcher);
 /**Inputs of the slider*/
 const SLIDER = {
   /**Value the slider shows and the user changes
-   * A fixed value is kept by the slider, a writable state is written, a read only state disables the slider*/
+   * An initial value is kept by the slider, a writable state is written, a read only state disables the slider*/
   value: input_key<StateOrValROS<number>>(),
   /**Lowest value*/
   min: input_key<StateOrVal<number>>(),
@@ -362,7 +362,7 @@ export interface ExampleEditorOptions extends BaseOptions {
 /**The scale is handed out, so it is given at creation
  * The slider changes the scale, so the scale takes the type of the slider value*/
 export interface ExampleEditorCreateOptions extends ExampleEditorOptions {
-  /**Scale of the view, a fixed scale is kept by the editor and changed with the slider, a read only state disables the slider*/
+  /**Scale of the view, an initial scale is kept by the editor and changed with the slider, a read only state disables the slider*/
   scale?: InputOf<typeof SLIDER.value>;
 }
 
@@ -394,8 +394,8 @@ class ExampleEditor extends ExampleBase {
       "display:inline-flex;flex-direction:column;gap:4px;align-items:flex-start";
   }
 
-  /**The scale as a state, also when a fixed scale was given, so anything can subscribe to it
-   * A fixed scale becomes a writable state the editor keeps, so the slider can change it and the view follows
+  /**The scale as a state, also when an initial scale was given, so anything can subscribe to it
+   * An initial scale becomes a writable state the editor keeps, so the slider can change it and the view follows
    * Given at creation and never replaced*/
   get scale(): StateROS<number> {
     return this.#scale;
@@ -406,7 +406,7 @@ class ExampleEditor extends ExampleBase {
     super[CREATE](options);
     const scale = options.scale;
     if (scale === undefined) return;
-    //The view and label follow the scale, so a fixed scale the slider changes needs a state of its own
+    //The view and label follow the scale, so an initial scale the slider changes needs a state of its own
     this.#scale = typeof scale === "number" ? state.ok_w(scale) : scale;
     this.#view.set({ scale: this.#scale });
     this.#slider.set({ value: this.#scale });

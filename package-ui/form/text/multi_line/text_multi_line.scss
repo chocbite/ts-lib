@@ -2,51 +2,37 @@
 
 form-textmultiline {
   @include base.base;
+  @include base.field;
   display: block;
-  border: base.$border;
-  box-shadow: base.$shadow_in;
-  border-radius: base.$size_cornerRadius;
-  background-color: base.$color_background;
   position: relative;
-  box-sizing: border-box;
   user-select: none;
   -webkit-user-select: none;
   outline: none;
-
-  &:focus-within {
-    box-shadow: base.$shadow_in_focus_out;
-  }
 
   > textarea {
     all: unset;
     @include base.value-font;
     display: block;
-    padding-inline: 0.2rem;
-    padding-top: 0.2rem;
+    padding-inline: base.$field_padding;
+    padding-block: 0.2rem;
+    line-height: 1.2;
     box-sizing: border-box;
     outline: none;
     width: 100%;
-    min-height: calc(base.$size_height - 0.2rem);
-    height: calc(base.$size_height - 0.2rem);
+    min-height: calc(#{base.$size_height} - #{base.$border_thickness * 2});
+    height: calc(#{base.$size_height} - #{base.$border_thickness * 2});
     border-radius: base.$size_cornerRadius;
 
     .touch & {
       min-height: base.$size_touchHeight;
     }
 
-    @media (pointer: fine) {
-      &:hover {
-        box-shadow: base.$shadow_in;
-        background-color: base.$color_background_hover;
-      }
-    }
   }
 
   > div {
     touch-action: none;
-    height: calc(base.$size_height / 2);
-    border-radius: base.$size_cornerRadius;
-    border-top: base.$color_border solid base.$border_thickness;
+    height: 0.7rem;
+    border-radius: 0 0 base.$size_cornerRadius base.$size_cornerRadius;
     display: flex;
     cursor: ns-resize;
     align-items: center;
@@ -63,9 +49,9 @@ form-textmultiline {
     }
 
     > svg {
-      fill: base.$color_text;
+      fill: base.$color_text_unselected;
       width: auto;
-      height: 1.6rem;
+      height: 1.4rem;
 
       .touch & {
         height: 2.6rem;

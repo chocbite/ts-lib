@@ -20,7 +20,7 @@ const FULL = { width: "48rem" };
 {
   const sec = section(
     "Layout",
-    "Items at the left, in the middle and at the right, each side given as a fixed array. Left must be at the left. Is the bar height right, and does the middle stay centered when the sides differ in width",
+    "Items at the left, in the middle and at the right, each side given as an initial array. Left must be at the left. Is the bar height right, and does the middle stay centered when the sides differ in width",
   );
   const r = row(sec);
   box(r, "Three sides", FULL).appendChild(

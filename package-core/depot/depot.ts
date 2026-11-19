@@ -178,7 +178,7 @@ class Group<T> extends Node {
   }
 
   /**Adds an entry to this group, throws if the id exists in this group
-   * @param content the content, a fixed value never changes, use a state for content that changes*/
+   * @param content the content, a value that is not a state is wrapped in one and never changes, use a state for content that changes*/
   add<C extends T>(
     id: string,
     name: string,
@@ -278,7 +278,7 @@ class Type<T> extends Group<T> {
 //     |______|_| \_|  |_|  |_|  \_\ |_|
 
 class Entry<T> extends Node {
-  /**State of the content, the state given to add, or a state of the fixed value*/
+  /**State of the content, the state given to add, or a state of the value given*/
   readonly value: StateREA<T>;
 
   constructor(

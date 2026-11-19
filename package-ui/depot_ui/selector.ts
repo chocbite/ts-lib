@@ -95,10 +95,9 @@ class DepotSelector extends ContentBase {
         field_apply: (field, child: DepotChild<unknown>) =>
           (field.child = child),
       });
-    const rows = list
-      .container(
-        columns,
-        (child) =>
+    const rows = list.container(
+      {
+        transform: (child) =>
           ok({
             key_field: { icon: child.icon, text: child.name },
             values: { description: child.description, value: child },
@@ -108,10 +107,11 @@ class DepotSelector extends ContentBase {
               child.kind === "entry" ? undefined : () => tree.rows(child),
             selectable: child.kind === "entry",
           }),
-        tree.rows(),
-        { sub_rows: true, selection: { mode } },
-      )
-      .bind({ selection: this.#selection });
+        sub_rows: true,
+        selection: { mode },
+      },
+      { columns, rows: tree.rows(), selected: this.#selection },
+    );
     //A double click on an entry in single mode picks it right away
     if (mode === "single")
       rows.ondblclick = () => {

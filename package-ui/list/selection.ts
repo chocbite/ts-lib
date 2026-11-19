@@ -1,6 +1,7 @@
 import { Base, define_element } from "#base";
-import type { NiceError, Result } from "@chocbite/ts-lib/result";
-import { state, type StateREAW } from "@chocbite/ts-lib/state";
+import { NiceError, type Result } from "@chocbite/ts-lib/result";
+import { state, type StateREA } from "@chocbite/ts-lib/state";
+import { list_errors } from "./errors";
 import "./selection.scss";
 
 export interface ListSelectionOptions<R, K = R> {
@@ -34,8 +35,8 @@ export class ListSelection<K> {
   on_change?: () => void;
   /**Called when the state rejects a write, with the row the user acted on */
   on_error?: (row: ListSelectionRow | undefined, error: NiceError) => void;
-  /**State user actions are written to */
-  target?: StateREAW<K[], any, K[]>;
+  /**State user actions are written to, a read only state refuses them with an error */
+  target?: StateREA<K[], any, any>;
 
   /**Element holding all rows of the list, sub rows included, in display order */
   #box: Element;
@@ -155,9 +156,20 @@ export class ListSelection<K> {
 
   /**Writes the state, a rejected write is reported at the row of the key the user acted on */
   #write(value: K[], key?: K) {
-    const write = this.target?.write(value);
-    if (!write) return;
     const row = key === undefined ? undefined : this.#rows.get(key);
+    const target = this.target;
+    if (!target) return;
+    if (!target.writable) {
+      this.on_error?.(
+        row,
+        new NiceError(
+          list_errors.SELECTION_READ_ONLY,
+          "The selection can not be changed",
+        ),
+      );
+      return;
+    }
+    const write = target.write(value);
     void write.then((result) => {
       if (result.err) this.on_error?.(row, result.error);
     });

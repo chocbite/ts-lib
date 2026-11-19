@@ -105,7 +105,7 @@ const WIDTH = { width: "14rem" };
 {
   const sec = section(
     "Switch bound to states, errors and access",
-    "All switches share one state given as value. Set error puts it in error, the switch shows the fault icon, click it for the details. The rejecting one writes to a state that refuses every write. A fixed value is the switch's own, it toggles without writing anything. A read only state is only shown, clicking it warns",
+    "All switches share one state given as value. Set error puts it in error, the switch shows the fault icon, click it for the details. The rejecting one writes to a state that refuses every write. An initial value is the switch's own, it toggles without writing anything. A read only state is only shown, clicking it warns",
   );
   const shared = state.from_w(false);
   const access = state.ok_w<AccessTypes>("w");
@@ -138,20 +138,20 @@ const WIDTH = { width: "14rem" };
   box(r, "state rejects writes", WIDTH).appendChild(
     form.switch({ value: rejecting }),
   );
-  const fixed = spaced_row(sec);
-  box(fixed, "fixed value, its own", WIDTH).appendChild(
+  const initial = spaced_row(sec);
+  box(initial, "initial value, its own", WIDTH).appendChild(
     form.switch({ value: true }),
   );
-  box(fixed, "read only state", WIDTH).appendChild(
+  box(initial, "read only state", WIDTH).appendChild(
     form.switch({ value: shared.read_only }),
   );
-  box(fixed, "access read, on", WIDTH).appendChild(
+  box(initial, "access read, on", WIDTH).appendChild(
     form.switch({ value: true, access: "r" }),
   );
-  box(fixed, "access read, off", WIDTH).appendChild(
+  box(initial, "access read, off", WIDTH).appendChild(
     form.switch({ value: false, access: "r" }),
   );
-  box(fixed, "description (hover)", WIDTH).appendChild(
+  box(initial, "description (hover)", WIDTH).appendChild(
     form.switch({ description: "Turns the radio on and off" }),
   );
 }

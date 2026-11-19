@@ -195,7 +195,7 @@ define_element(FormTextInput);
 export type { FormTextInput };
 
 /**Creates a single line text input
- * A fixed value is where it starts, a writable state is written when the user changes the text, a read only state is only shown*/
+ * An initial value is where it starts, a writable state is written when the user changes the text, a read only state is only shown*/
 export function form_text_input<ID extends string | undefined = undefined>(
   options: FormTextInputCreateOptions<ID> = {},
 ): FormTextInput<ID> {

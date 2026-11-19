@@ -76,7 +76,7 @@ export interface CanvasPage {
 }
 
 /**A widget for a page, the options are checked against the definition
- * A fixed value or link is made a writable state, so every viewport shares it and it can be changed, a state is used as it is*/
+ * An initial value or link is made a writable state, so every viewport shares it and it can be changed, a state is used as it is*/
 export function canvas_widget<O extends WidgetBaseOptions>(
   definition: DepotEntry<WidgetDefinition<O>>,
   options: NoInfer<WidgetOptionsInput<O>>,

@@ -1,4 +1,5 @@
-import ctm from "@chocbite/ts-lib-ui/context-menu";
+import { AccessTypes } from "@chocbite/ts-lib-ui/base";
+import ctm from "@chocbite/ts-lib-ui/context_menu";
 import {
   material_add_to_queue_rounded,
   material_folder_rounded,
@@ -33,22 +34,28 @@ const word = (i: number) => WORDS[i % WORDS.length];
   sec.appendChild(
     list.container(
       {
-        name: list.column_string("Name"),
-        number: list.column({
-          title: "Number",
-          field_apply: (field, v: number) => (field.text = v.toString()),
-          field_gen: () => list.text_field(),
-        }),
-        squared: list.column({
-          title: "Squared",
-          field_apply: (field, v: number) => (field.text = (v * v).toString()),
-          field_gen: () => list.text_field(),
-        }),
+        transform: (item) =>
+          ok({
+            values: { name: word(item), number: item, squared: item },
+          }),
       },
-      (item) => ok({
-        values: { name: word(item), number: item, squared: item },
-      }),
-      rows,
+      {
+        columns: {
+          name: list.column_string("Name"),
+          number: list.column({
+            title: "Number",
+            field_apply: (field, v: number) => (field.text = v.toString()),
+            field_gen: () => list.text_field(),
+          }),
+          squared: list.column({
+            title: "Squared",
+            field_apply: (field, v: number) =>
+              (field.text = (v * v).toString()),
+            field_gen: () => list.text_field(),
+          }),
+        },
+        rows,
+      },
     ),
   );
 }
@@ -69,10 +76,12 @@ const word = (i: number) => WORDS[i % WORDS.length];
   for (const width of ["8rem", "16rem", "32rem"])
     box(sizes, width, { width }).appendChild(
       list.container(
-        { name: list.column_string("Name") },
-        (item) => ok({ values: { name: word(item) + " " + item } }),
-        rows,
-        { headless: true },
+        {
+          transform: (item) =>
+            ok({ values: { name: word(item) + " " + item } }),
+          headless: true,
+        },
+        { columns: { name: list.column_string("Name") }, rows },
       ),
     );
 }
@@ -91,25 +100,29 @@ const word = (i: number) => WORDS[i % WORDS.length];
   sec.appendChild(
     list.container(
       {
-        a: list.column({
-          init_width: 8,
-          title: "A column with a very long title that does not fit",
-          field_apply: (field, v: string) => (field.text = v),
-          field_gen: () => list.text_field(),
-        }),
-        b: list.column({
-          fixed_width: "min",
-          title: "Fixed min",
-          field_apply: (field, v: string) => (field.text = v),
-          field_gen: () => list.text_field(),
-        }),
-        c: list.column_string("Auto"),
+        transform: (item) => {
+          const text = array_from_length(item + 1, (i) => word(i)).join(" ");
+          return ok({ values: { a: text, b: word(item), c: text } });
+        },
       },
-      (item) => {
-        const text = array_from_length(item + 1, (i) => word(i)).join(" ");
-        return ok({ values: { a: text, b: word(item), c: text } });
+      {
+        columns: {
+          a: list.column({
+            init_width: 8,
+            title: "A column with a very long title that does not fit",
+            field_apply: (field, v: string) => (field.text = v),
+            field_gen: () => list.text_field(),
+          }),
+          b: list.column({
+            fixed_width: "min",
+            title: "Fixed min",
+            field_apply: (field, v: string) => (field.text = v),
+            field_gen: () => list.text_field(),
+          }),
+          c: list.column_string("Auto"),
+        },
+        rows: array_from_length(6, (i) => i * 2),
       },
-      array_from_length(6, (i) => i * 2),
     ),
   );
 }
@@ -128,47 +141,57 @@ const word = (i: number) => WORDS[i % WORDS.length];
   sec.appendChild(
     list.container(
       {
-        left: list.column_string("Left", { align: "left" }),
-        center: list.column_string("Center", { align: "center" }),
-        right: list.column_string("Right", { align: "right" }),
-        number: list.column({
-          title: "Number",
-          align: "right",
-          field_apply: (field, v: number) => (field.number = v),
-          field_gen: () => list.number_field(),
-        }),
-        node: list.column({
-          title: "Node",
-          align: "right",
-          field_apply: (field, v: string) => (field.node.textContent = v),
-          field_gen: () => list.node_field(document.createElement("button")),
-        }),
+        transform: (item) =>
+          ok({
+            values: {
+              left: word(item),
+              center: word(item),
+              right: word(item),
+              number: item * 1234,
+              node: "Press",
+            },
+          }),
       },
-      (item) =>
-        ok({
-          values: {
-            left: word(item),
-            center: word(item),
-            right: word(item),
-            number: item * 1234,
-            node: "Press",
-          },
-        }),
-      array_from_length(4, (i) => i),
+      {
+        columns: {
+          left: list.column_string("Left", { align: "left" }),
+          center: list.column_string("Center", { align: "center" }),
+          right: list.column_string("Right", { align: "right" }),
+          number: list.column({
+            title: "Number",
+            align: "right",
+            field_apply: (field, v: number) => (field.number = v),
+            field_gen: () => list.number_field(),
+          }),
+          node: list.column({
+            title: "Node",
+            align: "right",
+            field_apply: (field, v: string) => (field.node.textContent = v),
+            field_gen: () => list.node_field(document.createElement("button")),
+          }),
+        },
+        rows: array_from_length(4, (i) => i),
+      },
     ),
   );
   box(sec, "24rem wide", { width: "24rem" }).appendChild(
     list.container(
       {
-        left: list.column_string("Left", { align: "left" }),
-        center: list.column_string("Center"),
-        right: list.column_string("Right", { align: "right" }),
+        transform: (item) => {
+          const text = array_from_length(item * 4 + 1, (i) => word(i)).join(
+            " ",
+          );
+          return ok({ values: { left: text, center: text, right: text } });
+        },
       },
-      (item) => {
-        const text = array_from_length(item * 4 + 1, (i) => word(i)).join(" ");
-        return ok({ values: { left: text, center: text, right: text } });
+      {
+        columns: {
+          left: list.column_string("Left", { align: "left" }),
+          center: list.column_string("Center"),
+          right: list.column_string("Right", { align: "right" }),
+        },
+        rows: array_from_length(3, (i) => i),
       },
-      array_from_length(3, (i) => i),
     ),
   );
 }
@@ -192,30 +215,45 @@ const word = (i: number) => WORDS[i % WORDS.length];
       field_gen: () => list.text_field(),
     });
   const container = list.container(
-    { a: text_column("A", 3), b: text_column("B", 1), c: text_column("C") },
-    (item: number) => ok({
-      values: { a: "a" + item, b: "b" + item, c: "c" + item },
-    }),
-    array_from_length(3, (i) => i),
-  );
-  controls(sec, {
-    "Order 3, 1, unset": () =>
-      (container.columns = {
+    {
+      transform: (item: number) =>
+        ok({
+          values: { a: "a" + item, b: "b" + item, c: "c" + item },
+        }),
+    },
+    {
+      columns: {
         a: text_column("A", 3),
         b: text_column("B", 1),
         c: text_column("C"),
+      },
+      rows: array_from_length(3, (i) => i),
+    },
+  );
+  controls(sec, {
+    "Order 3, 1, unset": () =>
+      container.set({
+        columns: {
+          a: text_column("A", 3),
+          b: text_column("B", 1),
+          c: text_column("C"),
+        },
       }),
     "Object order": () =>
-      (container.columns = {
-        a: text_column("A"),
-        b: text_column("B"),
-        c: text_column("C"),
+      container.set({
+        columns: {
+          a: text_column("A"),
+          b: text_column("B"),
+          c: text_column("C"),
+        },
       }),
     Reversed: () =>
-      (container.columns = {
-        a: text_column("A", 3),
-        b: text_column("B", 2),
-        c: text_column("C", 1),
+      container.set({
+        columns: {
+          a: text_column("A", 3),
+          b: text_column("B", 2),
+          c: text_column("C", 1),
+        },
       }),
   });
   sec.appendChild(container);
@@ -236,64 +274,76 @@ const word = (i: number) => WORDS[i % WORDS.length];
   sec.appendChild(
     list.container(
       {
-        name: list.column_string("Name"),
-        remove: list.column({
-          fixed_width: "min",
-          title: "Remove",
-          field_apply: (field, remove: () => void) => {
-            field.node.onclick = remove;
-          },
-          field_gen: () => {
-            const button = document.createElement("button");
-            button.textContent = "Remove";
-            return list.node_field(button);
-          },
-        }),
-      },
-      (item, list_row, rows_any) => {
-        //Top and sub rows on this page are all writable states
-        const rows_state = rows_any as typeof rows;
-        const sub_rows = state.rosw(
-          state.a.help(ok(array_from_length(2, (i) => item * 10 + i))),
-          true,
-        );
-        const remove = () =>
-          rows_state.write(state.a.write.splice(list_row.index, 1));
-        return ok({
-          openable: item % 3 !== 2,
-          key_field: {
-            icon: item % 2 ? material_folder_rounded : undefined,
-            text:
-              item === 4
-                ? "Long key text that wraps in a narrow key column"
-                : item % 4 === 0
-                  ? "#" + item
-                  : undefined,
-          },
-          sub_rows: () => sub_rows,
-          add_row: {
-            text: "Add sub row",
-            icon: material_add_to_queue_rounded,
-            disabled: state.p.ros(sub_rows.related().value.length, (len) =>
-              ok(len.value >= 4),
-            ).state,
-            on_add: () => sub_rows.write(state.a.write.push(item * 10 + 9)),
-          },
-          values: { name: word(item) + " " + item, remove },
-          context_menu: ctm.menu([
-            ctm.line("Remove", remove),
-            ctm.line("Insert above", () =>
-              rows_state.write(
-                state.a.write.splice(list_row.index, 0, rows.array.get.length),
-              ),
-            ),
-            ctm.line("Empty", () => rows_state.write(state.a.write.fresh([]))),
-          ]),
-        });
-      },
-      rows,
-      {
+        transform: (item, list_row, rows_any) => {
+          //Top and sub rows on this page are all writable states
+          const rows_state = rows_any as typeof rows;
+          const sub_rows = state.rosw(
+            state.a.help(ok(array_from_length(2, (i) => item * 10 + i))),
+            true,
+          );
+          const remove = () =>
+            rows_state.write(state.a.write.splice(list_row.index, 1));
+          return ok({
+            openable: item % 3 !== 2,
+            key_field: {
+              icon: item % 2 ? material_folder_rounded : undefined,
+              text:
+                item === 4
+                  ? "Long key text that wraps in a narrow key column"
+                  : item % 4 === 0
+                    ? "#" + item
+                    : undefined,
+            },
+            sub_rows: () => sub_rows,
+            add_row: {
+              text: "Add sub row",
+              icon: material_add_to_queue_rounded,
+              //Locked at four sub rows
+              access: state.p.ros(sub_rows.related().value.length, (len) =>
+                ok(len.value >= 4 ? AccessTypes.Read : AccessTypes.Write),
+              ).state,
+              on_add: () => sub_rows.write(state.a.write.push(item * 10 + 9)),
+            },
+            values: { name: word(item) + " " + item, remove },
+            context_menu: ctm.menu([
+              ctm.line({ text: "Remove", on_click: remove }),
+              ctm.line({
+                text: "Insert above",
+                on_click: () =>
+                  rows_state.write(
+                    state.a.write.splice(
+                      list_row.index,
+                      0,
+                      rows.array.get.length,
+                    ),
+                  ),
+              }),
+              ctm.line({
+                text: "Empty",
+                on_click: () => rows_state.write(state.a.write.fresh([])),
+              }),
+            ]),
+          });
+        },
         sub_rows: true,
+      },
+      {
+        columns: {
+          name: list.column_string("Name"),
+          remove: list.column({
+            fixed_width: "min",
+            title: "Remove",
+            field_apply: (field, remove: () => void) => {
+              field.node.onclick = remove;
+            },
+            field_gen: () => {
+              const button = document.createElement("button");
+              button.textContent = "Remove";
+              return list.node_field(button);
+            },
+          }),
+        },
+        rows,
         add_row: {
           text: "Add row",
           on_add: () => rows.array.push(rows.array.get.length),
@@ -315,29 +365,32 @@ const word = (i: number) => WORDS[i % WORDS.length];
     const b = box(sec, "key column only", { width: "16rem" });
     b.appendChild(
       list.container(
-        {},
-        (name: string) =>
-          name === "invalid"
-            ? err("This row is invalid")
-            : ok({
-                key_field: { text: name },
-                openable: name === "Beta",
-                sub_rows: () => names(name),
-                add_row:
-                  name === "Beta"
-                    ? { text: "Add sub row", on_add: () => {} }
-                    : undefined,
-                values: {},
-              }),
-        rows,
         {
+          transform: (name: string) =>
+            name === "invalid"
+              ? err("This row is invalid")
+              : ok({
+                  key_field: { text: name },
+                  openable: name === "Beta",
+                  sub_rows: () => names(name),
+                  add_row:
+                    name === "Beta"
+                      ? { text: "Add sub row", on_add: () => {} }
+                      : undefined,
+                  values: {},
+                }),
           headless: true,
           sub_rows: true,
+        },
+        {
+          columns: {},
+          rows,
           add_row: {
             text: "Add row",
             on_add: () => {
               count++;
-              if (count > 2) rows.set_err(demo_error("The rows failed to load"));
+              if (count > 2)
+                rows.set_err(demo_error("The rows failed to load"));
               else void rows.write(state.a.write.push("New " + count));
             },
           },
@@ -358,7 +411,10 @@ const word = (i: number) => WORDS[i % WORDS.length];
     sub?: TreeNode[];
   }
   const tree = (): TreeNode[] => [
-    { name: "Documents", sub: [{ name: "Old", sub: [{ name: "2019.txt" }] }, { name: "notes.md" }] },
+    {
+      name: "Documents",
+      sub: [{ name: "Old", sub: [{ name: "2019.txt" }] }, { name: "notes.md" }],
+    },
     { name: "Pictures", sub: [{ name: "cat.png" }] },
     { name: "readme.md" },
   ];
@@ -370,11 +426,18 @@ const word = (i: number) => WORDS[i % WORDS.length];
   });
   const tree_list = (rows: TreeNode[], headless: boolean) =>
     list.container(
-      {},
-      (data: TreeNode) =>
-        ok({ openable: Boolean(data.sub), key_field: { text: data.name }, sub_rows: () => data.sub ?? [], values: {} }),
-      rows,
-      { sub_rows: true, headless },
+      {
+        transform: (data: TreeNode) =>
+          ok({
+            openable: Boolean(data.sub),
+            key_field: { text: data.name },
+            sub_rows: () => data.sub ?? [],
+            values: {},
+          }),
+        sub_rows: true,
+        headless,
+      },
+      { columns: {}, rows },
     );
   const r = row(sec);
   box(r, "header", { width: "14rem" }).appendChild(tree_list(tree(), false));
@@ -385,9 +448,11 @@ const word = (i: number) => WORDS[i % WORDS.length];
     "Open all": () => headless.open_all(),
     "Close all": () => headless.close_all(),
   });
-  box(r, "endless", { width: "18rem", height: "20rem", display: "grid" }).appendChild(
-    tree_list([endless("x")], false),
-  );
+  box(r, "endless", {
+    width: "18rem",
+    height: "20rem",
+    display: "grid",
+  }).appendChild(tree_list([endless("x")], false));
 }
 
 //     _  __________     __  ______ _____ ______ _      _____
@@ -432,29 +497,33 @@ const word = (i: number) => WORDS[i % WORDS.length];
   sec.appendChild(
     list.container(
       {
-        name: list.column({
-          title: "Name",
-          field_gen: () => list.node_field(document.createElement("div")),
-          field_apply: (field, item: KeyItem) => {
-            field.node.textContent = item.name;
-            field.node.style.height = item.tall ? "4rem" : "";
-            field.node.style.alignContent = "center";
-          },
-        }),
+        transform: (item: KeyItem) =>
+          ok({
+            openable: !item.name.startsWith("Sub"),
+            opened: !item.name.startsWith("Sub"),
+            key_field: field(item),
+            sub_rows: () => [
+              { name: "Sub with icon and text", icon: true, text: "Sub" },
+              { name: "Sub with text", text: "Sub" },
+            ],
+            values: { name: item },
+          }),
+        sub_rows: true,
       },
-      (item: KeyItem) =>
-        ok({
-          openable: !item.name.startsWith("Sub"),
-          opened: !item.name.startsWith("Sub"),
-          key_field: field(item),
-          sub_rows: () => [
-            { name: "Sub with icon and text", icon: true, text: "Sub" },
-            { name: "Sub with text", text: "Sub" },
-          ],
-          values: { name: item },
-        }),
-      [...items, state_item],
-      { sub_rows: true },
+      {
+        columns: {
+          name: list.column({
+            title: "Name",
+            field_gen: () => list.node_field(document.createElement("div")),
+            field_apply: (field, item: KeyItem) => {
+              field.node.textContent = item.name;
+              field.node.style.height = item.tall ? "4rem" : "";
+              field.node.style.alignContent = "center";
+            },
+          }),
+        },
+        rows: [...items, state_item],
+      },
     ),
   );
   controls(sec, {
@@ -484,7 +553,9 @@ const word = (i: number) => WORDS[i % WORDS.length];
   const sub_rows = state.from_w([10, 12]);
   let show_invalid = true;
   const invalid_text = (item: number) =>
-    show_invalid && item % 3 === 1 ? `Row ${item} could not be read` : undefined;
+    show_invalid && item % 3 === 1
+      ? `Row ${item} could not be read`
+      : undefined;
 
   controls(sec, {
     "List error": () => failing.set_err(demo_error("Could not read the rows")),
@@ -493,44 +564,67 @@ const word = (i: number) => WORDS[i % WORDS.length];
       show_invalid = !show_invalid;
       invalid.set_ok([...invalid.ok()]);
     },
-    "Sub rows error": () => sub_rows.set_err(demo_error("Could not read the sub rows")),
+    "Sub rows error": () =>
+      sub_rows.set_err(demo_error("Could not read the sub rows")),
     "Sub rows recover": () => sub_rows.set_ok([10, 12]),
   });
 
   sec.appendChild(
     list.container(
-      { name: list.column_string("Name"), id: list.column_string("Id") },
-      (item) => ok({ values: { name: word(item), id: item.toString() } }),
-      failing,
-      { add_row: { text: "Add row (does nothing here)", on_add: () => {} } },
+      {
+        transform: (item) =>
+          ok({ values: { name: word(item), id: item.toString() } }),
+      },
+      {
+        columns: {
+          name: list.column_string("Name"),
+          id: list.column_string("Id"),
+        },
+        rows: failing,
+        add_row: { text: "Add row (does nothing here)", on_add: () => {} },
+      },
     ),
   );
   sec.appendChild(
     list.container(
-      { name: list.column_string("Name"), id: list.column_string("Id") },
-      (item) => {
-        const text = invalid_text(item);
-        if (text !== undefined) return err(text);
-        return ok({ values: { name: word(item), id: item.toString() } });
+      {
+        transform: (item) => {
+          const text = invalid_text(item);
+          if (text !== undefined) return err(text);
+          return ok({ values: { name: word(item), id: item.toString() } });
+        },
       },
-      invalid,
+      {
+        columns: {
+          name: list.column_string("Name"),
+          id: list.column_string("Id"),
+        },
+        rows: invalid,
+      },
     ),
   );
   sec.appendChild(
     list.container(
-      { name: list.column_string("Name"), id: list.column_string("Id") },
-      (item, list_row) => {
-        const text = invalid_text(item);
-        if (text !== undefined) return err(text);
-        return ok({
-          openable: list_row.depth === 0,
-          opened: item === 0,
-          sub_rows: () => sub_rows,
-          values: { name: word(item), id: item.toString() },
-        });
+      {
+        transform: (item, list_row) => {
+          const text = invalid_text(item);
+          if (text !== undefined) return err(text);
+          return ok({
+            openable: list_row.depth === 0,
+            opened: item === 0,
+            sub_rows: () => sub_rows,
+            values: { name: word(item), id: item.toString() },
+          });
+        },
+        sub_rows: true,
       },
-      invalid,
-      { sub_rows: true },
+      {
+        columns: {
+          name: list.column_string("Name"),
+          id: list.column_string("Id"),
+        },
+        rows: invalid,
+      },
     ),
   );
 }
@@ -554,15 +648,19 @@ const word = (i: number) => WORDS[i % WORDS.length];
   box(sec, "10000 rows", { height: "20rem", display: "grid" }).appendChild(
     list.container(
       {
-        name: list.column_string("Name"),
-        number: list.column({
-          title: "Number",
-          field_apply: (field, v: number) => (field.text = v.toString()),
-          field_gen: () => list.text_field(),
-        }),
+        transform: (item) => ok({ values: { name: word(item), number: item } }),
       },
-      (item) => ok({ values: { name: word(item), number: item } }),
-      rows,
+      {
+        columns: {
+          name: list.column_string("Name"),
+          number: list.column({
+            title: "Number",
+            field_apply: (field, v: number) => (field.text = v.toString()),
+            field_gen: () => list.text_field(),
+          }),
+        },
+        rows,
+      },
     ),
   );
 }
@@ -590,7 +688,7 @@ function sel_tree(amount: number, depth: number, base = 0): SelItem[] {
   });
 }
 
-/**Selection state of the app, given to lists with bind */
+/**Selection state of the app, given to lists as their selected input */
 type SelState = StateROSW<number[], Option<{}>, number[]>;
 const sel_state = (keys: number[] = []): SelState => state.ok_w(keys);
 
@@ -608,9 +706,23 @@ function sel_list(
   selection: SelState,
   options: { sub_rows?: boolean } = {},
 ) {
-  return list
-    .container(
-      {
+  return list.container(
+    {
+      transform: (item: SelItem) =>
+        ok({
+          openable: Boolean(item.sub),
+          sub_rows: options.sub_rows ? () => item.sub ?? [] : undefined,
+          selectable: item.id % 10 !== 2,
+          context_menu: ctm.menu([
+            ctm.line({ text: "Line of " + item.id, on_click: () => {} }),
+          ]),
+          values: { name: word(item.id), id: item.id },
+        }),
+      sub_rows: options.sub_rows,
+      selection: { mode, key: (item) => item.id },
+    },
+    {
+      columns: {
         name: list.column_string("Name"),
         id: list.column({
           title: "Id",
@@ -618,21 +730,10 @@ function sel_list(
           field_gen: () => list.text_field(),
         }),
       },
-      (item: SelItem) =>
-        ok({
-          openable: Boolean(item.sub),
-          sub_rows: options.sub_rows ? () => item.sub ?? [] : undefined,
-          selectable: item.id % 10 !== 2,
-          context_menu: ctm.menu([ctm.line("Line of " + item.id, () => {})]),
-          values: { name: word(item.id), id: item.id },
-        }),
       rows,
-      {
-        sub_rows: options.sub_rows,
-        selection: { mode, key: (item) => item.id },
-      },
-    )
-    .bind({ selection });
+      selected: selection,
+    },
+  );
 }
 
 {
@@ -664,7 +765,10 @@ function sel_list(
   /**State that applies the write instructions itself, so it can check the result before taking it */
   const checked = (check: (keys: readonly number[]) => string | undefined) =>
     state.rosw<number[]>(ok([]), (value, owner, old) => {
-      const [keys, changes] = state.a.write_apply(value, old?.ok ? [...old.value] : []);
+      const [keys, changes] = state.a.write_apply(
+        value,
+        old?.ok ? [...old.value] : [],
+      );
       const problem = check(keys);
       if (problem) return Promise.resolve(err(demo_error("Rejected", problem)));
       state.a.read_set([keys, changes], owner.set_ok.bind(owner));
@@ -672,7 +776,12 @@ function sel_list(
     });
   const rows = state.ok_w(sel_tree(6, 0));
   for (const [label, selection] of [
-    ["delta is locked", checked((keys) => (keys.includes(3) ? "Delta can not be selected" : undefined))],
+    [
+      "delta is locked",
+      checked((keys) =>
+        keys.includes(3) ? "Delta can not be selected" : undefined,
+      ),
+    ],
     ["read only", checked(() => "The selection is read only")],
   ] as const) {
     const b = box(r, label, { width: "18rem" });
@@ -690,7 +799,9 @@ function sel_list(
   for (const mode of ["single", "multi"] as const) {
     const b = box(r, mode, { width: "22rem" });
     const selection = sel_state();
-    b.appendChild(sel_list(sel_tree(4, 2), mode, selection, { sub_rows: true }));
+    b.appendChild(
+      sel_list(sel_tree(4, 2), mode, selection, { sub_rows: true }),
+    );
     controls(b, {
       "Write 1, 11 and 4": () => void selection.write([1, 11, 4]),
       "Write none": () => void selection.write([]),
@@ -712,13 +823,18 @@ function sel_list(
     "Remove first": () => rows.set_ok(rows.ok().slice(1)),
     Reset: () => rows.set_ok(sel_tree(6, 0)),
   });
-  const other = (
-    title: string,
-    rows: State<SelItem[]>,
-  ) =>
-    list
-      .container(
-        {
+  const other = (title: string, rows: State<SelItem[]>) =>
+    list.container(
+      {
+        transform: (item: SelItem) =>
+          ok({
+            selectable: item.id % 10 !== 2,
+            values: { id: item.id, upper: word(item.id).toUpperCase() },
+          }),
+        selection: { mode: "multi", key: (item) => item.id },
+      },
+      {
+        columns: {
           id: list.column({
             title: "Id",
             field_apply: (field, v: number) => (field.text = v.toString()),
@@ -726,24 +842,25 @@ function sel_list(
           }),
           upper: list.column_string(title),
         },
-        (item: SelItem) =>
-          ok({
-            selectable: item.id % 10 !== 2,
-            values: { id: item.id, upper: word(item.id).toUpperCase() },
-          }),
         rows,
-        { selection: { mode: "multi", key: (item) => item.id } },
-      )
-      .bind({ selection: shared });
+        selected: shared,
+      },
+    );
   const r = row(sec);
   box(r, "names", { width: "14rem" }).appendChild(
     sel_list(rows, "multi", shared),
   );
   box(r, "reversed, other columns", { width: "14rem" }).appendChild(
-    other("Upper", state.p.ros(rows, (r) => ok([...r.value].reverse()))),
+    other(
+      "Upper",
+      state.p.ros(rows, (r) => ok([...r.value].reverse())),
+    ),
   );
   box(r, "first three rows", { width: "14rem" }).appendChild(
-    other("Upper", state.p.ros(rows, (r) => ok(r.value.slice(0, 3)))),
+    other(
+      "Upper",
+      state.p.ros(rows, (r) => ok(r.value.slice(0, 3))),
+    ),
   );
   sel_show(sec, shared);
 }
@@ -823,15 +940,13 @@ function drag_list(
   } = {},
 ) {
   return list.container(
-    { name: list.column_string("Name", { align: "left" }) },
-    (node: DragNode) =>
-      ok({
-        openable: Boolean(node.children),
-        sub_rows: () => node.children ?? [],
-        values: { name: node.name },
-      }),
-    rows,
     {
+      transform: (node: DragNode) =>
+        ok({
+          openable: Boolean(node.children),
+          sub_rows: () => node.children ?? [],
+          values: { name: node.name },
+        }),
       sub_rows: true,
       reorder: {
         group: options.group,
@@ -844,6 +959,10 @@ function drag_list(
         ? { mode: "multi", key: (node) => node.name }
         : undefined,
     },
+    {
+      columns: { name: list.column_string("Name", { align: "left" }) },
+      rows,
+    },
   );
 }
 
@@ -854,7 +973,11 @@ function drag_list(
   );
   const r = row(sec);
   const rows = drag_tree();
-  const b = box(r, "folders", { width: "18rem", height: "20rem", display: "grid" });
+  const b = box(r, "folders", {
+    width: "18rem",
+    height: "20rem",
+    display: "grid",
+  });
   b.appendChild(drag_list(rows));
   drag_show(box(r, "state"), rows);
   controls(sec, { Reset: () => location.reload() });
@@ -867,7 +990,11 @@ function drag_list(
   );
   const r = row(sec);
   const rows = drag_tree();
-  const b = box(r, "multi", { width: "20rem", height: "20rem", display: "grid" });
+  const b = box(r, "multi", {
+    width: "20rem",
+    height: "20rem",
+    display: "grid",
+  });
   b.appendChild(drag_list(rows, { multi: true }));
   drag_show(box(r, "state"), rows);
 }
@@ -880,19 +1007,30 @@ function drag_list(
   const r = row(sec);
   const group = list.drag_group<DragNode>();
   const left = drag_tree();
-  const right = state.ok_w([drag_file("inbox.txt"), drag_folder("Archive", [])]);
-  box(r, "group A", { width: "14rem", height: "16rem", display: "grid" }).appendChild(
-    drag_list(left, { group }),
-  );
-  box(r, "group A", { width: "14rem", height: "16rem", display: "grid" }).appendChild(
-    drag_list(right, { group }),
-  );
-  box(r, "no group", { width: "14rem", height: "16rem", display: "grid" }).appendChild(
-    drag_list(drag_tree()),
-  );
-  box(r, "plain array", { width: "14rem", height: "16rem", display: "grid" }).appendChild(
-    drag_list([drag_file("fixed.txt"), drag_file("rows.txt")]),
-  );
+  const right = state.ok_w([
+    drag_file("inbox.txt"),
+    drag_folder("Archive", []),
+  ]);
+  box(r, "group A", {
+    width: "14rem",
+    height: "16rem",
+    display: "grid",
+  }).appendChild(drag_list(left, { group }));
+  box(r, "group A", {
+    width: "14rem",
+    height: "16rem",
+    display: "grid",
+  }).appendChild(drag_list(right, { group }));
+  box(r, "no group", {
+    width: "14rem",
+    height: "16rem",
+    display: "grid",
+  }).appendChild(drag_list(drag_tree()));
+  box(r, "plain array", {
+    width: "14rem",
+    height: "16rem",
+    display: "grid",
+  }).appendChild(drag_list([drag_file("fixed.txt"), drag_file("rows.txt")]));
 }
 
 {
@@ -902,13 +1040,14 @@ function drag_list(
   );
   const r = row(sec);
   const group = list.drag_group<DragNode>();
-  const left = state.ok_w([drag_file("a.txt"), drag_file("b.txt"), drag_file("c.txt")]);
+  const left = state.ok_w([
+    drag_file("a.txt"),
+    drag_file("b.txt"),
+    drag_file("c.txt"),
+  ]);
   const right = state.ok_w([drag_file("d.txt"), drag_file("e.txt")]);
   //The app logic, a row added to one list is removed from the other
-  const take_out = (
-    from: typeof left,
-    to: typeof left,
-  ) => {
+  const take_out = (from: typeof left, to: typeof left) => {
     to.sub(() => {
       const added = new Set(to.ok());
       const index = from.ok().findIndex((node) => added.has(node));
@@ -917,12 +1056,16 @@ function drag_list(
   };
   take_out(left, right);
   take_out(right, left);
-  box(r, "left", { width: "14rem", height: "12rem", display: "grid" }).appendChild(
-    drag_list(left, { group, no_remove: true }),
-  );
-  box(r, "right", { width: "14rem", height: "12rem", display: "grid" }).appendChild(
-    drag_list(right, { group, no_remove: true }),
-  );
+  box(r, "left", {
+    width: "14rem",
+    height: "12rem",
+    display: "grid",
+  }).appendChild(drag_list(left, { group, no_remove: true }));
+  box(r, "right", {
+    width: "14rem",
+    height: "12rem",
+    display: "grid",
+  }).appendChild(drag_list(right, { group, no_remove: true }));
   drag_show(box(r, "left state"), left);
   drag_show(box(r, "right state"), right);
 }

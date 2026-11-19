@@ -1,15 +1,7 @@
+@use "./tray";
+
 onscreen-keyboard-keyboard-color {
-  z-index: 4294967296;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  background-color: var(--keyboard-colors-background);
-  box-shadow: 0 0px 10px var(--keyboard-colors-border);
-  border-radius: 0.6rem 0.6rem 0rem 0rem;
-  color: var(--keyboard-colors-keytext);
-  user-select: none;
-  pointer-events: all;
+  @include tray.tray;
 
   > .keyboard-color-content {
     width: min(32rem, 100%);
@@ -23,8 +15,7 @@ onscreen-keyboard-keyboard-color {
       > .keyboard-color-square {
         position: relative;
         aspect-ratio: 2 / 1;
-        border: 1px solid var(--keyboard-colors-border);
-        border-radius: 0.5rem;
+        border-radius: tray.$radius;
         background:
           linear-gradient(to top, #000, transparent),
           linear-gradient(to right, #fff, var(--keyboard-color-hue));
@@ -50,7 +41,8 @@ onscreen-keyboard-keyboard-color {
           display: grid;
           grid-template-rows: 1rem 1fr;
           justify-items: center;
-          font-size: 0.7rem;
+          font-size: 0.75rem;
+          opacity: 0.8;
         }
         input {
           width: 100%;
@@ -58,7 +50,7 @@ onscreen-keyboard-keyboard-color {
           margin: 0;
           writing-mode: vertical-lr;
           direction: rtl;
-          accent-color: var(--keyboard-colors-keytext);
+          accent-color: var(--keyboard-colors-accent);
         }
       }
     }
@@ -70,17 +62,24 @@ onscreen-keyboard-keyboard-color {
       margin-top: 0.8rem;
       > .keyboard-color-preview {
         aspect-ratio: 1;
-        border: 1px solid var(--keyboard-colors-border);
-        border-radius: 0.4rem;
+        border-radius: tray.$radius;
+        box-shadow: inset 0 0 0 1px var(--keyboard-colors-border);
       }
       > input[type="text"] {
         width: 100%;
+        box-sizing: border-box;
         border: 1px solid var(--keyboard-colors-border);
-        border-radius: 0.4rem;
-        background: transparent;
+        border-radius: tray.$radius;
+        background: var(--keyboard-colors-key);
         color: inherit;
         font: inherit;
-        padding: 0.35rem;
+        padding: 0.45rem 0.6rem;
+        outline: none;
+
+        &:focus {
+          border-color: var(--keyboard-colors-accent);
+          box-shadow: 0 0 0 1px var(--keyboard-colors-accent);
+        }
       }
     }
   }

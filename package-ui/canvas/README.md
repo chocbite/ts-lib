@@ -38,7 +38,7 @@ const rectangle = basic.add(
 
 ## Pages
 
-A page is plain data: its size and its widgets, each a fixed value or a state. A widget is the path of its definition and a state for every option.
+A page is plain data: its size and its widgets, each an initial value or a state. A widget is the path of its definition and a state for every option.
 
 ```ts
 const x = state.ok_w(20);
@@ -56,7 +56,7 @@ const page: CanvasPage = { width: 800, height: 600, widgets };
 
 - **`width` and `height`**: the size of the page in page units, 1920 by 1080 when not given.
 - **`widgets`**: the widgets, the last is drawn on top. Change the array state to add, remove or reorder widgets. Only widgets that were added, removed or moved are touched, compared by identity. A widget given twice is shown once.
-- **`canvas.widget(definition, options)`** makes a widget from a definition entry. A fixed value or link is made a writable state, a state is used as it is. Or write `{ widget: path, options }` directly with a state for every option, like when a page is loaded.
+- **`canvas.widget(definition, options)`** makes a widget from a definition entry. An initial value or link is made a writable state, a state is used as it is. Or write `{ widget: path, options }` directly with a state for every option, like when a page is loaded.
 - **Options are always states,** so every viewport shares them, the properties editor changes them, and storing the page follows them. A read only state locks the option. The state holds the value of the option, or a link to a state of the depot, see below.
 
 A widget whose path is not registered, or is not a widget definition, shows an error in its place, made from its position and size. It is replaced by the widget as soon as the path is registered, so a page can be shown before the widgets it uses are registered.
@@ -146,7 +146,7 @@ const properties = canvas.properties({ selected });
 - The title is the name of the definition, or tells that the widget is not registered.
 - A linked option shows the path it is linked to and the value the link gives, read only, as it is a state of the app.
 - **The link column** has a chain for every option with a writable state, filled when linked. Pressing it opens the link menu: the path of the state, typed or picked with Choose state from `depot_ui.select_state`, and the fields of the transforms. Link writes the link to the option, Unlink writes the value the link gives now, or the default of the property when it gives none. An option not given to the widget has no state, so it has no field and can not be linked, widgets made by `canvas.new_widget` and the selector have a state for every property.
-- The fields are form elements in `form.list_field` for now, numbers in number inputs, texts in text inputs, colors in color inputs, booleans in switches and enums in dropdowns.
+- The fields are form elements in a `list.node_field` for now, as each property has an element of its own kind, numbers in number inputs, texts in text inputs, colors in color inputs, booleans in switches and enums in dropdowns.
 
 ## Storing pages
 
@@ -185,7 +185,7 @@ In edit mode:
 The `selected` option is the selected widget, as its data. The user changes it, like a value of a form element:
 
 - **A writable state** is written when the user selects, so several viewports, and anything else, share the selection.
-- **A fixed value, or no value,** is kept by the viewport.
+- **An initial value, or no value,** is kept by the viewport.
 - **A read only state** is only shown, pressing does not change it.
 
 The viewport only changes the selection when the user presses, never on its own. When the selected widget is not on the page, or the viewport is not in edit mode, the transformer is hidden and the selection stays.
@@ -197,7 +197,7 @@ The transformer around the selected widget moves it by its outline and center ha
 Position, size and rotation are inputs of the widget the user changes:
 
 - **A writable state** is written, so every viewport showing the widget follows.
-- **No value** is kept by each element itself. `canvas.widget` makes fixed values writable states, so this only happens for an option left out.
+- **No value** is kept by each element itself. `canvas.widget` makes initial values writable states, so this only happens for an option left out.
 - **A read only state** locks that part, and the handles needing it are hidden: moving needs `x` and `y`, resizing needs `x`, `y`, `width` and `height`, as it moves the position, and rotating needs `rotation`.
 
 ## Writing a widget

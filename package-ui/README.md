@@ -15,7 +15,7 @@ npm install @chocbite/ts-lib-ui
 Every module is its own subpath export, there is no root export.
 
 ```ts
-import ctm from "@chocbite/ts-lib-ui/context-menu";
+import ctm from "@chocbite/ts-lib-ui/context_menu";
 import { svg } from "@chocbite/ts-lib-ui/svg";
 ```
 
@@ -30,7 +30,9 @@ Settings like the theme are stored in the local storage under the name of their 
 ```ts
 //setup.ts, the first import of main.ts
 import { settings_set_name_transform } from "@chocbite/ts-lib-ui/settings";
-settings_set_name_transform((name) => name.replace("@chocbite/ts-lib", "myapp"));
+settings_set_name_transform((name) =>
+  name.replace("@chocbite/ts-lib", "myapp"),
+);
 ```
 
 Called later, it reports the settings that already use their name with `console.error`. Renaming starts from empty settings, values stored under the old names are not moved.
@@ -64,7 +66,7 @@ SCSS mixins are available for use in your own styles:
 - `@chocbite/ts-lib-ui/base`
 - `@chocbite/ts-lib-ui/canvas`
 - `@chocbite/ts-lib-ui/composition`
-- `@chocbite/ts-lib-ui/context-menu`
+- `@chocbite/ts-lib-ui/context_menu`
 - `@chocbite/ts-lib-ui/document`
 - `@chocbite/ts-lib-ui/dom`
 - `@chocbite/ts-lib-ui/form`

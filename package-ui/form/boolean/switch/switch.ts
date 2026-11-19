@@ -148,7 +148,7 @@ define_element(FormSwitch);
 export type { FormSwitch };
 
 /**Creates a switch, the value is a boolean
- * A fixed value is where it starts, a writable state is written when the user switches it, a read only state is only shown*/
+ * An initial value is where it starts, a writable state is written when the user switches it, a read only state is only shown*/
 export function form_switch<ID extends string | undefined = undefined>(
   options: FormSwitchCreateOptions<ID> = {},
 ): FormSwitch<ID> {

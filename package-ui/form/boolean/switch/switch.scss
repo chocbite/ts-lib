@@ -2,55 +2,68 @@
 
 form-switch {
   @include base.base;
+  $knob_inset: 0.1875rem;
 
   position: relative;
   display: flex;
   align-items: center;
+  gap: 0.3rem;
+  min-height: base.$size_height;
   -webkit-user-select: none;
   user-select: none;
 
-  @media (pointer: fine) {
-    &:hover > div::after {
-      background-color: base.$color_background_hover;
-    }
+  .touch & {
+    min-height: base.$size_touchHeight;
   }
 
   > input {
     all: unset;
     visibility: hidden;
     position: absolute;
-    width: calc(base.$size_height * 2);
+    width: calc(base.$size_height * 1.8);
     height: 100%;
     inset: 0;
   }
 
+  //Track, grey when off and the accent when on, the knob is always white
   > div {
-    border: base.$border;
-    box-shadow: base.$shadow_in;
+    --knob: calc(#{base.$size_height} - #{$knob_inset * 2});
     border-radius: base.$size_height;
-    width: calc(base.$size_height * 2);
+    width: calc(base.$size_height * 1.8);
     height: base.$size_height;
     touch-action: none;
     flex-shrink: 0;
     position: relative;
+    box-sizing: border-box;
     outline: none;
     cursor: grab;
-    background-color: base.$color_basic_white;
+    background-color: base.$color_border;
     @include base.form-colors(off-color, background-color);
 
-    &.on {
-      background-color: base.$color_basic_black;
-      @include base.form-colors(on-color, background-color);
+    .touch & {
+      --knob: calc(#{base.$size_touchHeight} - #{$knob_inset * 2});
+      width: calc(base.$size_touchHeight * 1.8);
+      height: base.$size_touchHeight;
+    }
 
-      &::after {
-        left: base.$size_height;
+    .anim-all & {
+      transition: background-color base.$animation;
+    }
 
-        .touch & {
-          left: base.$size_touchHeight;
-        }
+    @media (pointer: fine) {
+      &:hover {
+        filter: brightness(0.95);
       }
     }
 
+    &.on {
+      background-color: base.$color_accent;
+      @include base.form-colors(on-color, background-color);
+
+      &::after {
+        left: calc(100% - var(--knob) - #{$knob_inset});
+      }
+    }
 
     &.active {
       cursor: grabbing;
@@ -59,29 +72,22 @@ form-switch {
     &::after {
       touch-action: none;
       content: "";
-      left: 0rem;
+      top: $knob_inset;
+      left: $knob_inset;
       position: absolute;
-      background-color: base.$color_background;
-      box-shadow:
-        inset 0 0 0px 2px base.$color_border,
-        base.$shadow_out;
-      width: base.$size_height;
-      height: base.$size_height;
-      border-radius: base.$size_height;
+      background-color: #ffffff;
+      box-shadow: base.$shadow_knob;
+      width: var(--knob);
+      height: var(--knob);
+      border-radius: 50%;
 
-      .touch & {
-        width: base.$size_touchHeight;
-        height: base.$size_touchHeight;
+      .anim-all & {
+        transition: left base.$animation;
       }
     }
 
-    .touch & {
-      width: calc(base.$size_touchHeight * 2);
-      height: base.$size_touchHeight;
-    }
-
     &:focus-visible {
-      box-shadow: base.$shadow_in_focus_out;
+      box-shadow: base.$focus_out;
       z-index: 2;
     }
   }
@@ -89,30 +95,19 @@ form-switch {
   > svg {
     box-sizing: border-box;
     fill: base.$color_text;
-    height: base.$size_height;
-    max-width: base.$size_height;
+    height: 1.1rem;
     width: auto;
-    padding: 0.2rem;
     flex-shrink: 0;
 
     .touch & {
-      height: base.$size_touchHeight;
-      max-width: base.$size_touchHeight;
-      padding: 0.4rem;
-    }
-
-    .anim-all & {
-      transition:
-        base.$animation,
-        height base.$animation,
-        max-width base.$animation;
+      height: 1.4rem;
     }
   }
 
   > span {
     display: block;
-    padding: 0.1rem 0.1rem 0.1rem 0.1rem;
     color: base.$color_text;
+    font-size: base.$font_size;
 
     &:empty {
       display: none;
@@ -123,7 +118,7 @@ form-switch {
     }
 
     .touch & {
-      font-size: 1.1rem;
+      font-size: base.$touch_font_size;
     }
   }
 }

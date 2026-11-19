@@ -1,7 +1,12 @@
 import { Base, define_element } from "#base";
 import "./error.scss";
 import { ListKeyField } from "./key_field";
-import type { ListParentRows, ListRowParent, ListType } from "./types";
+import type {
+  ListParentRows,
+  ListRoot,
+  ListRowParent,
+  ListType,
+} from "./types";
 
 /**Error text shown instead of the fields of an invalid row */
 export class ListError extends Base {
@@ -32,15 +37,27 @@ export class ListRowsError<A extends ListType<any>>
 
   #text = new ListError();
   #parent: ListRowParent<A>;
+  #root: ListRoot<any, any, any, any>;
+  #key_field?: ListKeyField<A>;
   readonly depth: number;
 
-  constructor(sub_rows: boolean, parent: ListRowParent<A>) {
+  constructor(root: ListRoot<any, any, any, any>, parent: ListRowParent<A>) {
     super();
     this.#parent = parent;
+    this.#root = root;
     this.depth = parent.depth + 1;
-    //With sub rows the text is in the key field after the tree lines, it runs from the key column to the end
-    if (sub_rows) this.appendChild(new ListKeyField(this)).tail = this.#text;
-    else this.appendChild(this.#text);
+    if (root.sub_rows) {
+      this.#key_field = this.appendChild(new ListKeyField(this));
+      this.columns_changed();
+    } else this.appendChild(this.#text);
+  }
+
+  /**With sub rows the text goes after the tree lines, in the key field only without value columns*/
+  columns_changed() {
+    this.#key_field?.place_after(
+      this.#text,
+      this.#root.columns_visible.length > 0,
+    );
   }
 
   set text(value: string) {
@@ -68,7 +85,7 @@ export function list_rows_error_update<A extends ListType<any>>(
   row_box: Element,
   current: ListRowsError<A> | undefined,
   text: string | undefined,
-  sub_rows: boolean,
+  root: ListRoot<any, any, any, any>,
   parent: ListRowParent<A>,
 ): ListRowsError<A> | undefined {
   if (text === undefined) {
@@ -76,7 +93,7 @@ export function list_rows_error_update<A extends ListType<any>>(
     return undefined;
   }
   if (!current) {
-    current = new ListRowsError(sub_rows, parent);
+    current = new ListRowsError(root, parent);
     //Not in the row box, everything in there is a row
     row_box.after(current);
   }

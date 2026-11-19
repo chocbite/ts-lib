@@ -28,11 +28,11 @@ Each module is a folder `<folder>/<module>/` directly in the package folder, wit
 Every module is published as a subpath export, e.g. `@chocbite/ts-lib/state` and `@chocbite/ts-lib-ui/theme`. There is no root export.
 
 - ts-lib: `colors common depot event math parse result safe state string`
-- ts-lib-ui: `base canvas composition context-menu document dom form icons keyboard list prompts selection settings spinner state_ui svg theme`
+- ts-lib-ui: `base canvas composition context_menu document dom form icons keyboard list prompts selection settings spinner state_ui svg theme`
 
 ## Element pattern
 
-ts-lib-ui elements take their inputs with one pattern: factory functions taking optional options, inputs declared as keys with `input_key`, and `set(options)` with fixed values or states. The pattern is for the interface users of the library see, configuration that never changes, references up the tree and internal logic stay out of it. **Read [package-ui/PATTERN.md](package-ui/PATTERN.md) before writing a new element or reworking an existing one, and copy from its complete example [package-ui/pattern_example](package-ui/pattern_example/index.ts).** It is the pattern to use from now on, new elements must follow it. When the pattern changes, update both. The build copies PATTERN.md into the published ts-lib-ui, its `AGENTS.md` points to it, and puts the example source in its `SOURCE.md`, so agents in consumer projects find them too.
+ts-lib-ui elements take their inputs with one pattern: factory functions taking optional options, inputs declared as keys with `input_key`, and `set(options)` with initial values or states. The pattern is for the interface users of the library see, configuration that never changes, references up the tree and internal logic stay out of it. **Read [package-ui/PATTERN.md](package-ui/PATTERN.md) before writing a new element or reworking an existing one, and copy from its complete example [package-ui/pattern_example](package-ui/pattern_example/index.ts).** It is the pattern to use from now on, new elements must follow it. When the pattern changes, update both. The build copies PATTERN.md into the published ts-lib-ui, its `AGENTS.md` points to it, and puts the example source in its `SOURCE.md`, so agents in consumer projects find them too.
 
 Most existing elements still use the older styles: constructor options, setters and getters, or `opts`. Do not copy them into new code, and do not convert an element nobody asked to change.
 

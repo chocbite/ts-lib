@@ -10,7 +10,7 @@ form-group-collapser {
   > :first-child {
     margin: 0;
     margin-bottom: -(base.$border_thickness);
-    border-radius: base.$size_cornerRadius base.$size_cornerRadius 0 0 !important;
+    border-radius: group_base.$radius group_base.$radius 0 0 !important;
     padding-bottom: group_base.$padding;
   }
 
@@ -20,23 +20,21 @@ form-group-collapser {
     }
 
     > span {
-      border-radius: base.$size_cornerRadius !important;
+      border-radius: group_base.$radius !important;
     }
   }
 
   > *.line + span,
   > *.inset + span,
   > *.outset + span {
-    border-radius: 0 0 base.$size_cornerRadius base.$size_cornerRadius;
+    border-radius: 0 0 group_base.$radius group_base.$radius;
   }
 
   > span {
+    @include base.pressable;
     z-index: 2;
-    border: base.$border;
     min-height: base.$size_height;
-    box-shadow: base.$shadow_out;
-    border-radius: base.$size_cornerRadius;
-    background-color: base.$color_background;
+    border-radius: group_base.$radius;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -46,12 +44,6 @@ form-group-collapser {
 
     .touch & {
       min-height: base.$size_touchHeight;
-    }
-
-    @media (hover: hover) and (pointer: fine) {
-      &:hover {
-        background-color: base.$color_background_hover;
-      }
     }
 
     &:focus-visible {
@@ -77,9 +69,10 @@ form-group-collapser {
     }
 
     > svg {
-      fill: base.$color_text;
+      fill: base.$color_text_unselected;
       max-width: base.$size_height;
-      height: calc(base.$size_height - 2px);
+      height: 1.3rem;
+      padding-right: 0.2rem;
       box-sizing: border-box;
       width: auto;
       flex-shrink: 0;

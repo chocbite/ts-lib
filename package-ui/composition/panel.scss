@@ -30,17 +30,6 @@ composition-panel {
     display: none;
   }
 
-  &.modal::after {
-    content: "";
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100dvw;
-    height: 100dvh;
-    background-color: rgba(0, 0, 0, 0.5);
-    z-index: -1;
-    pointer-events: all;
-  }
 
   //       _____ _    _          _____   ______          __
   //      / ____| |  | |   /\   |  __ \ / __ \ \        / /
@@ -342,4 +331,12 @@ composition-panel {
       left: 0;
     }
   }
+}
+
+//Darkens the page behind a modal panel, right before the panel in its layer, covering the whole container
+composition-panelcontainer > * > .backdrop {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  pointer-events: all;
 }

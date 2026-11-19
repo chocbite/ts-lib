@@ -47,7 +47,7 @@ describe("Canvas module", () => {
       canvas.widget(typed, { color: "red" });
       // @ts-expect-error the options are checked against the definition
       canvas.widget(typed, { color: 1 });
-      //A fixed value is made a writable state, shared by every viewport
+      //An initial value is made a writable state, shared by every viewport
       expect(widget.widget).toBe("/widgets/indextest/box");
       const x = widget.options.x as StateROSW<number>;
       expect(x.ok()).toBe(1);

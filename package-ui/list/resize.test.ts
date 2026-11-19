@@ -1,10 +1,14 @@
 import { INPUT_MODE, InputModes, px_to_rem, theme_init } from "#theme";
-import { ok } from "@chocbite/ts-lib/result";
+import { NiceError, ok } from "@chocbite/ts-lib/result";
+import { state } from "@chocbite/ts-lib/state";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import list from ".";
 
 //The input mode is applied by the theme
 theme_init();
+
+/**A test error whose nice text is its message*/
+const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -12,9 +16,17 @@ afterEach(() => {
 
 function name_list() {
   const container = list.container(
-    { name: list.column_string("Name"), id: list.column_string("Id") },
-    (item: number) => ok({ values: { name: "n" + item, id: String(item) } }),
-    [1, 2],
+    {
+      transform: (item: number) =>
+        ok({ values: { name: "n" + item, id: String(item) } }),
+    },
+    {
+      columns: {
+        name: list.column_string("Name"),
+        id: list.column_string("Id"),
+      },
+      rows: [1, 2],
+    },
   );
   document.body.append(container);
   const field = container.querySelector<HTMLElement>("list-headerfield")!;
@@ -116,25 +128,27 @@ describe("List header when scrolled sideways", () => {
   it("keeps the reorder, selection and key headers above the column headers", () => {
     const container = list.container(
       {
-        a: list.column({
-          title: "A",
-          init_width: 20,
-          field_gen: () => list.text_field(),
-          field_apply: () => {},
-        }),
-        b: list.column({
-          title: "B",
-          init_width: 20,
-          field_gen: () => list.text_field(),
-          field_apply: () => {},
-        }),
-      },
-      () => ok({ values: { a: undefined, b: undefined } }),
-      [1, 2],
-      {
+        transform: () => ok({ values: { a: undefined, b: undefined } }),
         sub_rows: true,
         reorder: {},
         selection: { mode: "multi" },
+      },
+      {
+        columns: {
+          a: list.column({
+            title: "A",
+            init_width: 20,
+            field_gen: () => list.text_field(),
+            field_apply: () => {},
+          }),
+          b: list.column({
+            title: "B",
+            init_width: 20,
+            field_gen: () => list.text_field(),
+            field_apply: () => {},
+          }),
+        },
+        rows: [1, 2],
       },
     );
     container.style.width = "20rem";
@@ -169,16 +183,20 @@ describe("Key column resizing", () => {
   };
   function tree() {
     const container = list.container(
-      { name: list.column_string("Name") },
-      (item: Item) =>
-        ok({
-          openable: Boolean(item.sub),
-          key_field: { icon, text: "A long key text " + item.name },
-          sub_rows: () => item.sub ?? [],
-          values: { name: item.name },
-        }),
-      [{ name: "a", sub: [{ name: "b" }] }],
-      { sub_rows: true },
+      {
+        transform: (item: Item) =>
+          ok({
+            openable: Boolean(item.sub),
+            key_field: { icon, text: "A long key text " + item.name },
+            sub_rows: () => item.sub ?? [],
+            values: { name: item.name },
+          }),
+        sub_rows: true,
+      },
+      {
+        columns: { name: list.column_string("Name") },
+        rows: [{ name: "a", sub: [{ name: "b" }] }],
+      },
     );
     document.body.append(container);
     const header = container.querySelector<HTMLElement>(
@@ -251,14 +269,18 @@ describe("Column widths without a header or value columns", () => {
   function widths_list(headless: boolean) {
     const container = list.container(
       {
-        init: value_column({ init_width: 10 }),
-        fixed: value_column({ fixed_width: 5 }),
-        min: value_column({ fixed_width: "min" }),
+        transform: () =>
+          ok({ values: { init: undefined, fixed: undefined, min: undefined } }),
+        headless,
       },
-      () =>
-        ok({ values: { init: undefined, fixed: undefined, min: undefined } }),
-      [1],
-      { headless },
+      {
+        columns: {
+          init: value_column({ init_width: 10 }),
+          fixed: value_column({ fixed_width: 5 }),
+          min: value_column({ fixed_width: "min" }),
+        },
+        rows: [1],
+      },
     );
     document.body.append(container);
     return (container.firstElementChild as HTMLElement).style
@@ -266,13 +288,19 @@ describe("Column widths without a header or value columns", () => {
   }
   function key_only(headless: boolean, columns: boolean) {
     const container = list.container(
-      //Typed as with the column, values are given either way and ignored without it
-      (columns ? { name: list.column_string("Name") } : {}) as {
-        name: ReturnType<typeof list.column_string>;
+      {
+        transform: (name: string) =>
+          ok({ key_field: { text: name }, values: { name } }),
+        headless,
+        sub_rows: true,
       },
-      (name: string) => ok({ key_field: { text: name }, values: { name } }),
-      ["Alpha", "Beta"],
-      { headless, sub_rows: true },
+      {
+        //Typed as with the column, values are given either way and ignored without it
+        columns: (columns ? { name: list.column_string("Name") } : {}) as {
+          name: ReturnType<typeof list.column_string>;
+        },
+        rows: ["Alpha", "Beta"],
+      },
     );
     container.style.width = "30rem";
     document.body.append(container);
@@ -314,5 +342,92 @@ describe("Column widths without a header or value columns", () => {
     pointer(header, "pointerup", 400);
     expect(start).toBeCloseTo(container.clientWidth, 0);
     expect(key.offsetWidth).toBeCloseTo(start - 100, 0);
+  });
+});
+
+describe("List scrolled sideways", () => {
+  const wide = (title: string) =>
+    list.column({
+      title,
+      init_width: 20,
+      field_gen: () => list.text_field(),
+      field_apply: (field, value: string) => (field.text = value),
+    });
+
+  it("scrolls the first header cell with its column without lead columns", async () => {
+    const container = list.container(
+      { transform: (item: string) => ok({ values: { a: item, b: item } }) },
+      { columns: { a: wide("A"), b: wide("B") }, rows: ["x"] },
+    );
+    //Wider than the first column, so a sticky header cell has room to stay
+    container.style.width = "30rem";
+    document.body.append(container);
+    container.scrollLeft = 150;
+    //Sticky positions follow the scroll in the next frame
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const header = container.querySelector("list-headerrow > :first-child")!;
+    const field = container.querySelector("list-row list-textfield")!;
+    expect(header.getBoundingClientRect().left).toBeCloseTo(
+      field.getBoundingClientRect().left,
+      0,
+    );
+  });
+
+  it("keeps the key field of add and error rows in place, the button and error text in the value columns", () => {
+    const rows = state.from_w<string[]>(["x"]);
+    const container = list.container(
+      {
+        transform: (item: string) =>
+          ok({ key_field: { text: item }, values: { a: item, b: item } }),
+        sub_rows: true,
+      },
+      {
+        columns: { a: wide("A"), b: wide("B") },
+        rows,
+        add_row: { text: "Add", on_add: () => {} },
+      },
+    );
+    container.style.width = "20rem";
+    document.body.append(container);
+    rows.set_err(nice_err("broken"));
+    const box = container.getBoundingClientRect();
+    container.scrollLeft = 200;
+    for (const kind of ["list-addrow", "list-rowserror"]) {
+      const key = container.querySelector(`${kind} > list-keyfield`)!;
+      expect(key.getBoundingClientRect().left).toBeCloseTo(box.left, 0);
+    }
+    //After the key field, where the value columns are
+    const column_a = container
+      .querySelector("list-headerrow > list-headerfield:not(.key)")!
+      .getBoundingClientRect().left;
+    expect(
+      container
+        .querySelector("list-rowserror list-error")!
+        .getBoundingClientRect().left,
+    ).toBeCloseTo(column_a, 0);
+    //The button has a small margin in its cell
+    const button = container
+      .querySelector("list-addrow span.add")!
+      .getBoundingClientRect().left;
+    expect(button).toBeGreaterThanOrEqual(column_a);
+    expect(button).toBeLessThan(column_a + 8);
+  });
+
+  it("runs add and error rows from the key column without value columns", () => {
+    const rows = state.from_w<string[]>(["x"]);
+    const container = list.container(
+      {
+        transform: (item: string) =>
+          ok({ key_field: { text: item }, values: {} }),
+        sub_rows: true,
+      },
+      { columns: {}, rows, add_row: { text: "Add", on_add: () => {} } },
+    );
+    document.body.append(container);
+    rows.set_err(nice_err("broken"));
+    for (const kind of ["list-addrow", "list-rowserror"]) {
+      const key = container.querySelector(`${kind} > list-keyfield`)!;
+      expect(key.classList.contains("tail")).toBe(true);
+    }
   });
 });

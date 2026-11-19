@@ -57,6 +57,11 @@ $iconWidthTouch: 2.6rem;
   min-width: $menuMinWidth;
   @include hover;
 
+  //Read access, shown but not usable
+  &[inert] {
+    opacity: 0.5;
+  }
+
   > div {
     display: table-cell;
     box-sizing: border-box;

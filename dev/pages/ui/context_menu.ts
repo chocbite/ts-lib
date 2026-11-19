@@ -1,4 +1,5 @@
-import ctm from "@chocbite/ts-lib-ui/context-menu";
+import { AccessTypes } from "@chocbite/ts-lib-ui/base";
+import ctm from "@chocbite/ts-lib-ui/context_menu";
 import {
   material_content_copy_rounded,
   material_content_cut_rounded,
@@ -13,7 +14,8 @@ import {
   material_star_rounded,
 } from "@chocbite/ts-lib-ui/icons";
 import { array_from_length } from "@chocbite/ts-lib/common";
-import { none, some } from "@chocbite/ts-lib/result";
+import { NiceError, none, some } from "@chocbite/ts-lib/result";
+import st from "@chocbite/ts-lib/state";
 import { box, controls, row, section } from "../../helpers";
 
 const WORDS = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf"];
@@ -37,7 +39,7 @@ const clicked = (text: string) => () => (last.textContent = "Clicked: " + text);
 
 /**Plain line that reports when clicked*/
 const line = (text: string, icon?: () => SVGSVGElement, shortcut?: string) =>
-  ctm.line(text, clicked(text), icon?.(), shortcut);
+  ctm.line({ text, on_click: clicked(text), icon, shortcut });
 
 /**Adds a box to right click*/
 function target(
@@ -104,15 +106,23 @@ function target(
   ctm.attach(
     target(boxes, "Checkmarks"),
     ctm.menu([
-      ctm.line("Checked", clicked("Checked"), undefined, undefined, true),
-      ctm.line("Not checked", clicked("Not checked"), undefined, undefined, false),
-      ctm.line(
-        "Checked with shortcut",
-        clicked("Checked with shortcut"),
-        material_star_rounded(),
-        "F2",
-        true,
-      ),
+      ctm.line({
+        text: "Checked",
+        on_click: clicked("Checked"),
+        checked: true,
+      }),
+      ctm.line({
+        text: "Not checked",
+        on_click: clicked("Not checked"),
+        checked: false,
+      }),
+      ctm.line({
+        text: "Checked with shortcut",
+        on_click: clicked("Checked with shortcut"),
+        icon: material_star_rounded,
+        shortcut: "F2",
+        checked: true,
+      }),
     ]),
   );
   ctm.attach(
@@ -120,10 +130,10 @@ function target(
     ctm.menu([
       line("Cut", material_content_cut_rounded),
       line("Copy", material_content_copy_rounded),
-      ctm.devider(),
+      ctm.divider(),
       line("Delete", material_delete_rounded),
-      ctm.devider(),
-      ctm.devider(),
+      ctm.divider(),
+      ctm.divider(),
       line("After two dividers"),
     ]),
   );
@@ -131,18 +141,82 @@ function target(
   ctm.attach(
     target(boxes, "Factory, toggling line"),
     ctm.menu(() => [
-      ctm.line(
-        "Toggle",
-        () => (toggled = !toggled),
-        undefined,
-        undefined,
-        toggled,
-      ),
+      ctm.line({
+        text: "Toggle",
+        on_click: () => (toggled = !toggled),
+        checked: toggled,
+      }),
       toggled ? line("Only when toggled") : undefined,
       line("Always"),
     ]),
   );
   ctm.attach(target(boxes, "Empty menu"), ctm.menu([]));
+}
+
+//      _____ _   _ _____  _    _ _______ _____
+//     |_   _| \ | |  __ \| |  | |__   __/ ____|
+//       | | |  \| | |__) | |  | |  | | | (___
+//       | | | . ` |  ___/| |  | |  | |  \___ \
+//      _| |_| |\  | |    | |__| |  | |  ____) |
+//     |_____|_| \_|_|     \____/   |_| |_____/
+{
+  const sec = section(
+    "Inputs and states",
+    "Lines take text, icon, shortcut and checked as initial values or states, and access like every element. The menus are kept, not built on open, so the buttons change the open menu: open it, use the buttons, open it again. An error shows the nice text and the fault icon. The checked line writes its own state in on_click, a click does not toggle checked by itself. Read access greys a line out and the keyboard skips it, none hides it",
+  );
+  const text = st.from_w("Rename me");
+  const shortcut = st.ok_w("F1");
+  const checked = st.ok_w(false);
+  const access = st.ok_w<AccessTypes>(AccessTypes.Write);
+  let renames = 0;
+  controls(sec, {
+    Rename: () => text.set_ok("Renamed " + ++renames),
+    "Text error": () =>
+      text.set_err(
+        new NiceError(Symbol("No name"), "The name could not be read"),
+      ),
+    "Change shortcut": () =>
+      shortcut.set_ok(shortcut.ok() === "F1" ? "Ctrl+Shift+F1" : "F1"),
+    "Toggle checked": () => checked.set_ok(!checked.ok()),
+    "Access write": () => access.set_ok(AccessTypes.Write),
+    "Access read": () => access.set_ok(AccessTypes.Read),
+    "Access none": () => access.set_ok(AccessTypes.None),
+  });
+  const boxes = row(sec);
+  ctm.attach(
+    target(boxes, "States"),
+    ctm.menu([
+      ctm.line({ text, on_click: clicked("state text"), shortcut }),
+      ctm.line({
+        text: "Checked from a state",
+        checked,
+        on_click: () => checked.set_ok(!checked.ok()),
+      }),
+      ctm.sub({
+        text,
+        icon: material_folder_rounded,
+        menu: ctm.menu([line("Inside")]),
+      }),
+    ]),
+  );
+  ctm.attach(
+    target(boxes, "Access"),
+    ctm.menu([
+      line("Write"),
+      ctm.line({
+        text: "Read, greyed out",
+        on_click: clicked("read"),
+        access: AccessTypes.Read,
+      }),
+      ctm.line({ text: "None, hidden", access: AccessTypes.None }),
+      ctm.line({
+        text: "Access from the buttons",
+        on_click: clicked("access state"),
+        access,
+      }),
+      line("Last"),
+    ]),
+  );
 }
 
 //      _____ _    _ ____    __  __ ______ _   _ _    _  _____
@@ -159,24 +233,33 @@ function target(
   const nested = (depth: number): ReturnType<typeof ctm.menu> =>
     ctm.menu([
       line("Line at depth " + depth),
-      depth < 4 ? ctm.sub("Deeper", nested(depth + 1), material_folder_rounded()) : undefined,
+      depth < 4
+        ? ctm.sub({
+            text: "Deeper",
+            menu: nested(depth + 1),
+            icon: material_folder_rounded,
+          })
+        : undefined,
       line("Another line"),
     ]);
   const menu = () =>
     ctm.menu([
       line("Copy", material_content_copy_rounded),
-      ctm.sub(
-        "Color",
-        ctm.menu([line("Red"), line("Green"), line("Blue")]),
-        material_palette_rounded(),
-      ),
-      ctm.sub("Without icon", ctm.menu([line("One"), line("Two")])),
-      ctm.sub("Nested 4 deep", nested(1)),
-      ctm.devider(),
-      ctm.sub(
-        "Long sub menu",
-        ctm.menu(array_from_length(40, (i) => line(word(i) + " " + i))),
-      ),
+      ctm.sub({
+        text: "Color",
+        menu: ctm.menu([line("Red"), line("Green"), line("Blue")]),
+        icon: material_palette_rounded,
+      }),
+      ctm.sub({
+        text: "Without icon",
+        menu: ctm.menu([line("One"), line("Two")]),
+      }),
+      ctm.sub({ text: "Nested 4 deep", menu: nested(1) }),
+      ctm.divider(),
+      ctm.sub({
+        text: "Long sub menu",
+        menu: ctm.menu(array_from_length(40, (i) => line(word(i) + " " + i))),
+      }),
       line("Delete", material_delete_rounded),
     ]);
   const boxes = row(sec);
@@ -206,7 +289,9 @@ function target(
     target(boxes, "100 lines"),
     ctm.menu(
       array_from_length(100, (i) =>
-        i % 10 === 9 ? ctm.devider() : line(word(i) + " " + i, i % 2 ? material_star_rounded : undefined),
+        i % 10 === 9
+          ? ctm.divider()
+          : line(word(i) + " " + i, i % 2 ? material_star_rounded : undefined),
       ),
     ),
   );
@@ -260,15 +345,13 @@ function target(
     target(boxes, "Counting factory"),
     ctm.menu(() => [line("Opened " + ++opened + " times")]),
   );
-  ctm.attach(
-    target(boxes, "Attach factory, new menu each open"),
-    () =>
-      some(
-        ctm.menu([
-          line("Fresh menu " + ++opened),
-          ctm.sub("Fresh sub", ctm.menu([line("Inside")])),
-        ]),
-      ),
+  ctm.attach(target(boxes, "Attach factory, new menu each open"), () =>
+    some(
+      ctm.menu([
+        line("Fresh menu " + ++opened),
+        ctm.sub({ text: "Fresh sub", menu: ctm.menu([line("Inside")]) }),
+      ]),
+    ),
   );
 }
 
@@ -336,17 +419,21 @@ function target(
     ctm.menu([
       line("Copy", material_content_copy_rounded),
       line("Search", material_search_rounded),
-      ctm.sub("Settings", ctm.menu([line("One"), line("Two")]), material_settings_rounded()),
+      ctm.sub({
+        text: "Settings",
+        menu: ctm.menu([line("One"), line("Two")]),
+        icon: material_settings_rounded,
+      }),
     ]);
   const w = () => window.innerWidth;
   const h = () => window.innerHeight;
   controls(sec, {
     "No coordinates": () => ctm.summon(menu()),
-    "Top left": () => ctm.summon(menu(), undefined, 2, 2),
-    "Top right": () => ctm.summon(menu(), undefined, w() - 2, 2),
-    "Bottom left": () => ctm.summon(menu(), undefined, 2, h() - 2),
-    "Bottom right": () => ctm.summon(menu(), undefined, w() - 2, h() - 2),
-    Center: () => ctm.summon(menu(), undefined, w() / 2, h() / 2),
+    "Top left": () => ctm.summon(menu(), { x: 2, y: 2 }),
+    "Top right": () => ctm.summon(menu(), { x: w() - 2, y: 2 }),
+    "Bottom left": () => ctm.summon(menu(), { x: 2, y: h() - 2 }),
+    "Bottom right": () => ctm.summon(menu(), { x: w() - 2, y: h() - 2 }),
+    Center: () => ctm.summon(menu(), { x: w() / 2, y: h() / 2 }),
   });
   const buttons = row(sec);
   buttons.style.justifyContent = "space-between";
@@ -360,11 +447,12 @@ function target(
     const on = group.appendChild(document.createElement("button"));
     Object.assign(on.style, style);
     on.textContent = "On";
-    on.onclick = () => ctm.summon(menu(), on);
+    on.onclick = () => ctm.summon(menu(), { element: on });
     const beside = group.appendChild(document.createElement("button"));
     Object.assign(beside.style, style);
     beside.textContent = "Beside";
-    beside.onclick = () => ctm.summon(menu(), beside, undefined, undefined, true);
+    beside.onclick = () =>
+      ctm.summon(menu(), { element: beside, dont_cover: true });
   }
 }
 
@@ -383,7 +471,10 @@ function target(
   const menu = () =>
     ctm.menu([
       line("Copy", material_content_copy_rounded),
-      ctm.sub("More", ctm.menu([line("One"), line("Two"), line("Three")])),
+      ctm.sub({
+        text: "More",
+        menu: ctm.menu([line("One"), line("Two"), line("Three")]),
+      }),
       line("Delete", material_delete_rounded),
     ]);
   const tiny = target(boxes, "Tiny", { width: "1rem", height: "1rem" });
@@ -446,7 +537,7 @@ function target(
 {
   const sec = section(
     "Combined menus",
-    "ctm.combine joins groups of lines and menus with a devider between them, the last box joins lines, two menus and a promised menu, it shows a spinner for a second. Empty groups leave no devider, all empty gives no menu so the default or browser menu shows. The middle group is a function, toggle the lock and right click again, the menu is built on every open",
+    "ctm.combine joins groups of lines and menus with a divider between them, the last box joins lines, two menus and a promised menu, it shows a spinner for a second. Empty groups leave no divider, all empty gives no menu so the default or browser menu shows. The middle group is a function, toggle the lock and right click again, the menu is built on every open",
   );
   let locked = false;
   let opens = 0;
@@ -455,7 +546,10 @@ function target(
   ctm.attach(
     target(boxes, "Three groups"),
     ctm.combine(
-      [line("Cut", material_content_cut_rounded), line("Copy", material_content_copy_rounded)],
+      [
+        line("Cut", material_content_cut_rounded),
+        line("Copy", material_content_copy_rounded),
+      ],
       () => [
         line(locked ? "Unlock" : "Lock"),
         locked ? undefined : line("Edit", material_edit_rounded),

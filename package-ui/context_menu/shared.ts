@@ -45,7 +45,7 @@ variables.make_variable(
 variables.make_variable(
   "border",
   "Border Color",
-  "Color of border and deviders",
+  "Color of border and dividers",
   GREY["300"],
   GREY["800"],
   "Color",

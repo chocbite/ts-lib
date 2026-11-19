@@ -2,42 +2,27 @@
 
 form-textinput {
   @include base.base;
+  @include base.field;
   display: block;
-  border: base.$border;
-  box-shadow: base.$shadow_in;
-  border-radius: base.$size_cornerRadius;
-  background-color: base.$color_background;
   position: relative;
-  box-sizing: border-box;
   user-select: none;
   -webkit-user-select: none;
   outline: none;
   overflow-x: auto;
 
-  &:focus-within {
-    box-shadow: base.$shadow_in_focus_out;
-  }
-
-  @media (pointer: fine) {
-    &:hover {
-      background-color: base.$color_background_hover;
-    }
-  }
-
   > input {
     all: unset;
     @include base.value-font;
     display: block;
-    padding-inline: 0.2rem;
-    padding-top: 0.1rem;
+    padding-inline: base.$field_padding;
     box-sizing: border-box;
     outline: none;
     width: max-content;
     min-width: 100%;
-    height: base.$size_height;
+    height: calc(#{base.$size_height} - #{base.$border_thickness * 2});
 
     .touch & {
-      height: base.$size_touchHeight;
+      height: calc(#{base.$size_touchHeight} - #{base.$border_thickness * 2});
     }
   }
 }

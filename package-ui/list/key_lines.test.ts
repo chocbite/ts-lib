@@ -26,24 +26,28 @@ interface Item {
 function tree(items: Item[]) {
   const container = list.container(
     {
-      name: list.column({
-        title: "Name",
-        field_gen: () => list.node_field(document.createElement("div")),
-        field_apply: (field, item: Item) => {
-          field.node.textContent = item.name;
-          field.node.style.height = item.tall ? "6rem" : "";
-        },
-      }),
+      transform: (item: Item) =>
+        ok({
+          openable: Boolean(item.sub),
+          key_field: item.key_field,
+          sub_rows: () => item.sub ?? [],
+          values: { name: item },
+        }),
+      sub_rows: true,
     },
-    (item: Item) =>
-      ok({
-        openable: Boolean(item.sub),
-        key_field: item.key_field,
-        sub_rows: () => item.sub ?? [],
-        values: { name: item },
-      }),
-    items,
-    { sub_rows: true },
+    {
+      columns: {
+        name: list.column({
+          title: "Name",
+          field_gen: () => list.node_field(document.createElement("div")),
+          field_apply: (field, item: Item) => {
+            field.node.textContent = item.name;
+            field.node.style.height = item.tall ? "6rem" : "";
+          },
+        }),
+      },
+      rows: items,
+    },
   );
   document.body.append(container);
   return container;
@@ -183,19 +187,21 @@ describe("List key field lines of an error instead of rows", () => {
     const rows = state.from_w<string[]>(["a"]);
     const sub_rows = state.from_w<string[]>(["b"]);
     const container = list.container(
-      { name: list.column_string("Name") },
-      (name: string) =>
-        ok({
-          openable: name === "a",
-          opened: true,
-          sub_rows: () => sub_rows,
-          add_row:
-            sub && add ? { text: "Add sub", on_add: () => {} } : undefined,
-          values: { name },
-        }),
-      rows,
       {
+        transform: (name: string) =>
+          ok({
+            openable: name === "a",
+            opened: true,
+            sub_rows: () => sub_rows,
+            add_row:
+              sub && add ? { text: "Add sub", on_add: () => {} } : undefined,
+            values: { name },
+          }),
         sub_rows: true,
+      },
+      {
+        columns: { name: list.column_string("Name") },
+        rows,
         add_row: !sub && add ? { text: "Add", on_add: () => {} } : undefined,
       },
     );

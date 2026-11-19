@@ -2,6 +2,15 @@ import { afterEach, describe, expect, it } from "vitest";
 import list, { ListField } from ".";
 import { ListNodeField, ListNumberField, ListTextField } from "./field";
 import { ok } from "@chocbite/ts-lib/result";
+import { state, type StateOrVal } from "@chocbite/ts-lib/state";
+import {
+  Base,
+  BaseIntersectObserver,
+  define_element,
+  input_key,
+  type BaseOptions,
+  type InputOptions,
+} from "#base";
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -69,22 +78,27 @@ describe("List column helpers", () => {
     const clicked: number[] = [];
     const container = list.container(
       {
-        num: list.column({
-          title: "Number",
-          field_gen: () => list.number_field(),
-          field_apply: (field, value: number) => (field.number = value),
-        }),
-        button: list.column({
-          title: "Button",
-          field_gen: () => list.node_field(document.createElement("button")),
-          field_apply: (field, value: number) => {
-            field.node.textContent = "Press " + value;
-            field.node.onclick = () => clicked.push(value);
-          },
-        }),
+        transform: (item: number) =>
+          ok({ values: { num: item, button: item } }),
       },
-      (item: number) => ok({ values: { num: item, button: item } }),
-      [1, 2],
+      {
+        columns: {
+          num: list.column({
+            title: "Number",
+            field_gen: () => list.number_field(),
+            field_apply: (field, value: number) => (field.number = value),
+          }),
+          button: list.column({
+            title: "Button",
+            field_gen: () => list.node_field(document.createElement("button")),
+            field_apply: (field, value: number) => {
+              field.node.textContent = "Press " + value;
+              field.node.onclick = () => clicked.push(value);
+            },
+          }),
+        },
+        rows: [1, 2],
+      },
     );
     document.body.append(container);
     const numbers = [...container.querySelectorAll("*")].filter(
@@ -97,5 +111,127 @@ describe("List column helpers", () => {
     buttons[1].click();
     buttons[0].click();
     expect(clicked).toEqual([2, 1]);
+  });
+});
+
+//A pattern element that is not a list field, like a form element
+const PROBE = {
+  /**Text shown in the cell*/
+  value: input_key<StateOrVal<string>>(),
+};
+class PatternProbe extends Base {
+  static element_name() {
+    return "patternprobe";
+  }
+  static element_name_space() {
+    return "listtest";
+  }
+  set(options: BaseOptions & InputOptions<typeof PROBE>): this {
+    super.set(options);
+    this.set_input(PROBE.value, options.value, (value) => {
+      this.textContent = value.ok ? value.value : "error";
+    });
+    return this;
+  }
+}
+define_element(PatternProbe);
+
+describe("List columns of any element", () => {
+  const wait = (ms: number) =>
+    new Promise((resolve) => setTimeout(resolve, ms));
+
+  it("takes an element following the pattern as field, wrapped in a cell", () => {
+    const value = state.ok_w("Alpha");
+    const container = list.container(
+      {
+        transform: (item: StateOrVal<string>) => ok({ values: { name: item } }),
+      },
+      {
+        columns: {
+          name: list.column({
+            title: "Name",
+            field_gen: () => PatternProbe.create({}),
+            field_apply: (field, value: StateOrVal<string>) =>
+              field.set({ value }),
+          }),
+        },
+        rows: [value, "Beta"],
+      },
+    );
+    document.body.append(container);
+    const cells = [...container.querySelectorAll("listtest-patternprobe")];
+    expect(cells.map((cell) => cell.textContent)).toEqual(["Alpha", "Beta"]);
+    value.set_ok("Gamma");
+    expect(cells[0].textContent).toBe("Gamma");
+    //The cell takes the row background and borders, so the element keeps its own look
+    for (const cell of cells) {
+      expect(cell.parentElement?.tagName).toBe("LIST-CELL");
+      expect(cell.parentElement?.parentElement?.parentElement?.tagName).toBe(
+        "LIST-ROW",
+      );
+    }
+  });
+
+  it("does not wrap list fields, they are cells themselves", () => {
+    const container = list.container(
+      { transform: (item: string) => ok({ values: { name: item } }) },
+      { columns: { name: list.column_string("Name") }, rows: ["Alpha"] },
+    );
+    document.body.append(container);
+    const field = container.querySelector("list-row list-textfield")!;
+    expect(field.textContent).toBe("Alpha");
+    expect(field.parentElement?.parentElement?.tagName).toBe("LIST-ROW");
+    expect(container.querySelector("list-cell")).toBeNull();
+  });
+
+  it("keeps the cells when the columns change", () => {
+    const probe_column = () =>
+      list.column({
+        title: "Name",
+        field_gen: () => PatternProbe.create({}),
+        field_apply: (field, value: StateOrVal<string>) => field.set({ value }),
+      });
+    const container = list.container(
+      { transform: (item: string) => ok({ values: { name: item } }) },
+      { columns: { name: probe_column() }, rows: ["Alpha"] },
+    );
+    document.body.append(container);
+    container.set({ columns: { name: probe_column() } });
+    const probes = [...container.querySelectorAll("listtest-patternprobe")];
+    expect(probes.map((probe) => probe.textContent)).toEqual(["Alpha"]);
+    expect(probes[0].parentElement?.tagName).toBe("LIST-CELL");
+  });
+
+  it("subscribes the states of a field only while it is visible with the observer of the list", async () => {
+    const value = state.ok_w("Alpha");
+    const root = document.body.appendChild(document.createElement("div"));
+    root.style.cssText = "height:10px;overflow:hidden;";
+    const observer = new BaseIntersectObserver({
+      root,
+      deffered_visible: 0,
+      deffered_hidden: 0,
+    });
+    const container = list.container(
+      {
+        transform: (item: StateOrVal<string>) => ok({ values: { name: item } }),
+        observer,
+      },
+      {
+        columns: {
+          name: list.column({
+            title: "Name",
+            field_gen: () => PatternProbe.create({}),
+            field_apply: (field, value: StateOrVal<string>) =>
+              field.set({ value }),
+          }),
+        },
+        rows: [value],
+      },
+    );
+    //Outside the root of the observer, so never seen
+    container.style.cssText = "display:block;margin-top:100px;";
+    document.body.append(container);
+    await wait(50);
+    expect(value.amount()).toBe(0);
   });
 });

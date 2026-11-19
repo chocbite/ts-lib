@@ -14,10 +14,10 @@ import { IS } from "./is";
 //otherwise the value type would swallow any state not matching the overload, so every state would match the first overload
 //RT defaults to never, so a plain value fails the state overloads and falls through to the last overload
 
-/**Returns the state, or the fixed value wrapped in a read only sync ok state
+/**Returns the state, or the initial value wrapped in a read only sync ok state
  * For elements that need a state internally, like to pass it on to a child or to hand it out,
- * while their users can give a fixed value
- * A wrapped value is read only, as a fixed value never changes*/
+ * while their users can give an initial value
+ * A wrapped value is read only, as there is nothing to write an initial value to*/
 export function as_state<
   RT = never,
   REL extends Option<StateRelated> = Option<{}>,

@@ -7,7 +7,7 @@ import {
   type InputOptions,
   type BaseOptions,
 } from "#base";
-import ctm from "#context-menu";
+import ctm from "#context_menu";
 import type { SVGFunc } from "#svg";
 import { px_to_rem } from "#theme";
 import type { StateOrVal, StateOrValROS } from "@chocbite/ts-lib/state";
@@ -25,7 +25,7 @@ const PANEL = {
   /**Layer of the panel, panels in a higher layer are always above panels in a lower one*/
   layer: input_key<StateOrVal<number>>(),
   /**Horizontal position in rem from the left of the page, of the anchor point of the panel
-   * Not given the panel starts centered, a fixed value is where it starts, the user moves it from there,
+   * Not given the panel starts centered, an initial value is where it starts, the user moves it from there,
    * a writable state is written when the user moves the panel, a read only state can not be moved*/
   x: input_key<StateOrValROS<number>>(),
   /**Vertical position in rem from the top of the page, of the anchor point of the panel, works like x*/
@@ -33,7 +33,7 @@ const PANEL = {
   /**Point of the panel that x and y place, top_left by default*/
   anchor: input_key<StateOrVal<CompAnchor>>(),
   /**Width in rem, not given the panel fits its content
-   * A fixed value is the width it starts with, the user sizes it from there,
+   * An initial value is the width it starts with, the user sizes it from there,
    * a writable state is written when the user sizes the panel, a read only state can not be sized*/
   width: input_key<StateOrValROS<number>>(),
   /**Height in rem, works like width*/
@@ -133,6 +133,9 @@ class Panel extends Base {
   #close_button?: HTMLSpanElement;
   #content_box = this.appendChild(document.createElement("div"));
   #focus_catcher?: HTMLDivElement;
+  /**Darkens the page behind a modal panel, a sibling before the panel in its layer
+   * Not a child, the translate placing the panel would make it fixed to the panel instead of the page*/
+  #backdrop?: HTMLDivElement;
 
   #layer = 0;
   #anchor: CompAnchor = CompAnchor.TOP_LEFT;
@@ -156,7 +159,7 @@ class Panel extends Base {
     this.tabIndex = 0;
     this.addEventListener("focus", () => this.#content.focus());
     this.addEventListener("focusin", () => {
-      if (this.#shown) this.#host[HOST_RAISE](this);
+      if (this.#shown) this.#raise();
     });
     this.addEventListener("content_closed", (e) => {
       e.stopPropagation();
@@ -216,7 +219,10 @@ class Panel extends Base {
     super.set(options);
     this.set_input(PANEL.layer, options.layer, (layer) => {
       this.#layer = layer.ok ? layer.value : 0;
-      if (this.#shown) this.#host[HOST_LAYER](this, this.#layer);
+      if (this.#shown) {
+        this.#host[HOST_LAYER](this, this.#layer);
+        this.#place_backdrop();
+      }
     });
     this.set_input(PANEL.anchor, options.anchor, (anchor) => {
       this.#anchor = anchor.ok ? anchor.value : CompAnchor.TOP_LEFT;
@@ -278,6 +284,7 @@ class Panel extends Base {
     });
     if (this.#shown) this.#host[HOST_REMOVE](this);
     this.#shown = false;
+    this.#backdrop?.remove();
     this.remove();
     this.#content[CONTENT_CLOSED]();
     for (const resolve of this.#on_close.splice(0)) resolve();
@@ -287,7 +294,7 @@ class Panel extends Base {
   [PANEL_ADDED](): void {
     this.#shown = true;
     this.#host[HOST_LAYER](this, this.#layer);
-    this.#host[HOST_RAISE](this);
+    this.#raise();
     this.ownerDocument.addEventListener("pointerdown", this.#outside, {
       capture: true,
       passive: true,
@@ -312,12 +319,12 @@ class Panel extends Base {
     return state === undefined || state.writable;
   }
 
-  /**The state the input has, undefined for a fixed value or one never given*/
+  /**The state the input has, undefined for an initial value or one never given*/
   #state_of(name: Changeable) {
     return this.input_state<StateOrValROS<number | boolean>>(PANEL[name]);
   }
 
-  /**Writes a change by the user, to a writable state, or to the panel for a fixed value or one never given*/
+  /**Writes a change by the user, to a writable state, or to the panel for an initial value or one never given*/
   #change<N extends Changeable>(
     name: N,
     value: NonNullable<ChangeableValues[N]>,
@@ -433,6 +440,7 @@ class Panel extends Base {
 
   #show_hidden(): void {
     this.classList.toggle("hidden", this.#values.hidden);
+    this.#place_backdrop();
     //A hidden panel is not placed, it is placed when shown again
     this.#place();
   }
@@ -606,8 +614,32 @@ class Panel extends Base {
     }
   }
 
+  /**Puts the panel above the others of its layer, with its backdrop right under it*/
+  #raise(): void {
+    this.#host[HOST_RAISE](this);
+    this.#place_backdrop();
+  }
+
+  /**Keeps the backdrop right before the panel in its layer, at its height, shown while the panel is*/
+  #place_backdrop(): void {
+    const backdrop = this.#backdrop;
+    if (!backdrop) return;
+    if (!this.#shown) return backdrop.remove();
+    if (backdrop.nextSibling !== this) this.before(backdrop);
+    backdrop.style.zIndex = this.style.zIndex;
+    backdrop.hidden = this.#values.hidden;
+  }
+
   #set_modal(modal: boolean): void {
     this.classList.toggle("modal", modal);
+    if (modal && !this.#backdrop) {
+      this.#backdrop = document.createElement("div");
+      this.#backdrop.classList.add("backdrop");
+      this.#place_backdrop();
+    } else if (!modal && this.#backdrop) {
+      this.#backdrop.remove();
+      this.#backdrop = undefined;
+    }
     if (modal && !this.#focus_catcher) {
       //Tabbing past the end of the panel comes back to its content
       this.#focus_catcher = this.appendChild(document.createElement("div"));

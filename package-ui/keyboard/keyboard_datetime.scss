@@ -1,14 +1,7 @@
+@use "./tray";
+
 onscreen-keyboard-keyboard-datetime {
-  z-index: 4294967296;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  background-color: var(--keyboard-colors-background);
-  box-shadow: 0 0px 10px var(--keyboard-colors-border);
-  border-radius: 0.6rem 0.6rem 0rem 0rem;
-  user-select: none;
-  pointer-events: all;
+  @include tray.tray;
 
   > div {
     width: min(30rem, 100%);
@@ -42,9 +35,11 @@ onscreen-keyboard-keyboard-datetime {
     grid-template-columns: repeat(7, 1fr);
     gap: 0.25rem;
 
+    //Week day names
     > span {
       padding: 0.2rem;
       color: var(--keyboard-colors-keytext);
+      opacity: 0.7;
       font-size: 0.75rem;
       text-align: center;
     }
@@ -71,8 +66,9 @@ onscreen-keyboard-keyboard-datetime {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
     align-items: center;
-    border: 1px solid var(--keyboard-colors-border);
-    border-radius: 0.5rem;
+    border-radius: tray.$radius;
+    background-color: var(--keyboard-colors-key);
+    box-shadow: tray.$key_shadow;
 
     span {
       color: var(--keyboard-colors-keytext);
@@ -119,23 +115,34 @@ onscreen-keyboard-keyboard-datetime {
   }
 
   button {
+    @include tray.key;
     min-height: 2.6rem;
-    border: 1px solid var(--keyboard-colors-border);
-    border-radius: 0.5rem;
-    background: transparent;
-    box-shadow: 0 2px 5px var(--keyboard-colors-shadow);
-    color: var(--keyboard-colors-keytext);
-    font: inherit;
 
-    &:active,
     &.selected {
-      background-color: var(--keyboard-colors-active);
-      box-shadow: 0 0 0 var(--keyboard-colors-shadow);
+      @include tray.accent;
     }
 
-    &.outside,
+    //Days of the months around, there but quiet
+    &.outside {
+      background-color: transparent;
+      box-shadow: none;
+      opacity: 0.5;
+    }
+
     &:disabled {
       opacity: 0.4;
+      cursor: default;
     }
+  }
+
+  //Previous, next and close in the header, and the time navigation
+  .keyboard-datetime-header button,
+  .keyboard-datetime-time-navigation button {
+    background-color: var(--keyboard-colors-key_special);
+  }
+
+  .keyboard-datetime-header strong,
+  .keyboard-datetime-header span {
+    font-size: 1.1rem;
   }
 }

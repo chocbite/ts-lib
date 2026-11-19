@@ -93,9 +93,9 @@ describe("Text multiline options", () => {
     theme_init();
     const { area } = make();
     const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
-    //$size_height - 0.2rem in the styles, 1.3rem - 0.2rem with the default theme
+    //$size_height minus the top and bottom border in the styles, 1.6rem - 2 * 0.0625rem with the default theme
     expect(parseFloat(getComputedStyle(area).minHeight)).toBeCloseTo(
-      1.1 * rem,
+      1.475 * rem,
       0,
     );
   });

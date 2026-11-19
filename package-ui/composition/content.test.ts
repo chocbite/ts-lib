@@ -1,6 +1,6 @@
 import { state_ui } from "#state_ui";
 import { CREATE, define_element, input_key, type InputOptions } from "#base";
-import ctm from "#context-menu";
+import ctm from "#context_menu";
 import state from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -69,7 +69,7 @@ describe("Content", () => {
 
 describe("Content context menu", () => {
   it("gives lines, a function or nothing as lines", () => {
-    const line = ctm.line("A", () => {});
+    const line = ctm.line({ text: "A", on_click: () => {} });
     expect(content_context_lines(content({ context_menu: [line] }))).toEqual([
       line,
     ]);
@@ -81,9 +81,9 @@ describe("Content context menu", () => {
   });
 
   it("opens its own menu, and set replaces it", () => {
-    const c = attach(content({ context_menu: [ctm.line("First", () => {})] }));
+    const c = attach(content({ context_menu: [ctm.line({ text: "First", on_click: () => {} })] }));
     expect(open_menu(c).textContent).toContain("First");
-    c.set({ context_menu: () => [ctm.line("Second", () => {})] });
+    c.set({ context_menu: () => [ctm.line({ text: "Second", on_click: () => {} })] });
     expect(open_menu(c).textContent).toContain("Second");
   });
 });

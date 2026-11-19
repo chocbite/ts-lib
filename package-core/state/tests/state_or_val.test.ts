@@ -17,7 +17,7 @@ import {
 import { TEST_ERROR } from "./tests_shared";
 
 describe("as_state", () => {
-  it("wraps a fixed value in a read only ok state", () => {
+  it("wraps an initial value in a read only ok state", () => {
     const wrapped = st.as_state(5);
     expect(st.is.ros(wrapped)).toBe(true);
     expect(wrapped.writable).toBe(false);
@@ -80,7 +80,7 @@ describe("as_state", () => {
 });
 
 describe("is.state_of", () => {
-  it("tells states from fixed values", () => {
+  it("tells states from initial values", () => {
     expect(st.is.state_of(st.ok(1))).toBe(true);
     expect(st.is.state_of(1)).toBe(false);
     expect(st.is.state_of(0)).toBe(false);
@@ -88,7 +88,7 @@ describe("is.state_of", () => {
     expect(st.is.state_of({ a: 1 })).toBe(false);
   });
 
-  it("narrows to the exact state type and the fixed value", () => {
+  it("narrows to the exact state type and the initial value", () => {
     const narrow = (sov: StateOrValROSW<number>) => {
       if (st.is.state_of(sov)) {
         expectTypeOf(sov).toEqualTypeOf<StateROSW<number>>();

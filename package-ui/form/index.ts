@@ -34,7 +34,6 @@ import {
   FormGroupCollapser,
   type FormGroupCollapserOptions,
 } from "./group/group_collapser";
-import { form_list_field, ListFormField } from "./list/list_field";
 import {
   type FormNumberCreateOptions,
   type FormNumberOptions,
@@ -158,9 +157,6 @@ export const form = {
   text: form_text,
   text_input: form_text_input,
   text_multiline: form_text_multiline,
-
-  //List
-  list_field: form_list_field,
 };
 export default form;
 
@@ -224,7 +220,6 @@ export type {
   FormValueCreateOptions,
   FormValueOptions,
   FormValueWriteOptions,
-  ListFormField,
 };
 
 export { FormColors, FormElement, FormValue, FormValueWrite } from "./base";

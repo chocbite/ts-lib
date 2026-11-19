@@ -68,7 +68,7 @@ export const state = {
   rea,
   /**Creates a writable async errorable state from an initial result */
   reaw,
-  /**Returns the state, or the fixed value wrapped in a read only sync ok state, see StateOrVal */
+  /**Returns the state, or the initial value wrapped in a read only sync ok state, see StateOrVal */
   as_state,
   //The "as typeof" casts make the declaration output reference the helper objects instead of inlining
   //their types, inlining would drop the doc comments on their members

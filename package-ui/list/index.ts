@@ -21,5 +21,12 @@ export const list = {
 
 export { ListField } from "./field";
 export type { ListDragGroup, ListDropTarget, ListReorderOptions } from "./drag";
+export type {
+  ListColumns,
+  ListContainer,
+  ListContainerConfig,
+  ListContainerOptions,
+} from "./container";
+export type { ListAddRowOptions } from "./add_row";
 
 export default list;

@@ -3,18 +3,17 @@
 
 form-slider {
   @include base.base;
+  @include base.field;
   $textPadding: 0.2rem;
   $thumbWidth: base.$unit_width + 0.4rem + $textPadding;
   $touchThumbWidth: base.$touch_unit_width + 0.4rem + $textPadding;
+  //Inner height and the size of the - and + buttons
+  $inner: calc(base.$size_height - #{base.$border_thickness * 2});
+  $touch_inner: calc(base.$size_touchHeight - #{base.$border_thickness * 2});
 
-  border: base.$border;
   height: base.$size_height;
-  box-shadow: base.$shadow_in;
-  border-radius: base.$size_cornerRadius;
-  background-color: base.$color_background;
   -webkit-user-select: none;
   user-select: none;
-  box-sizing: border-box;
   position: relative;
   display: flex;
   flex-direction: row;
@@ -24,44 +23,35 @@ form-slider {
     height: base.$size_touchHeight;
   }
 
+  //The track the knob moves along, between the buttons, the knob sits at 0 to 100% of it
   > div {
     display: flex;
     justify-content: space-between;
     align-items: center;
     height: 100%;
-    width: calc(
-      100% -
-        (($thumbWidth + (base.$size_height * 2)) - (base.$border_thickness * 4))
-    );
+    width: calc(100% - #{$thumbWidth} - #{$inner} * 2);
     position: relative;
-    left: -(base.$border_thickness) * 2;
     z-index: 1;
 
     .touch & {
-      width: calc(
-        100% -
-          (
-            ($touchThumbWidth + (base.$size_touchHeight * 2)) -
-              (base.$border_thickness * 4)
-          )
-      );
+      width: calc(100% - #{$touchThumbWidth} - #{$touch_inner} * 2);
     }
 
+    //Knob, a grey block with the value, value and unit side by side
     > div {
-      top: -(base.$border_thickness);
+      top: 0;
       width: $thumbWidth;
-      border: base.$border;
-      height: base.$size_height;
-      box-shadow: base.$shadow_out;
-      border-radius: base.$size_cornerRadius;
-      background-color: base.$color_background;
+      height: 100%;
+      border-radius: calc(#{base.$size_cornerRadius} - #{base.$border_thickness});
+      background-color: base.$color_button;
       box-sizing: border-box;
       left: 50%;
       position: absolute;
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
       justify-content: center;
-      align-items: center;
+      align-items: baseline;
+      padding-top: 0.25rem;
       padding-inline: 0.2rem;
       outline: none;
       cursor: grab;
@@ -69,46 +59,40 @@ form-slider {
 
       &.active {
         cursor: grabbing;
+        background-color: base.$color_button_active;
       }
 
-      &:focus-within {
-        box-shadow: base.$shadow_out_focus_out;
+      &:focus-visible {
+        box-shadow: base.$focus_in;
         z-index: 2;
       }
 
       @media (pointer: fine) {
         &:hover {
-          background-color: base.$color_background_hover;
+          background-color: base.$color_button_hover;
         }
       }
 
       .touch & {
-        height: base.$size_touchHeight;
         width: $touchThumbWidth;
+        padding-top: 0.35rem;
       }
 
       > span:first-child {
         @include base.value-font;
         box-sizing: border-box;
-        line-height: base.$value_font_size - 0.1rem;
         text-align: center;
-        max-width: $thumbWidth - $textPadding * 2;
+        white-space: nowrap;
         overflow: hidden;
-
-        .touch & {
-          line-height: base.$touch_value_font_size;
-          max-width: $touchThumbWidth;
-        }
+        flex-shrink: 1;
+        min-width: 0;
       }
 
       > span:last-child {
         @include base.unit-container;
-        line-height: base.$unit_font_size - 0.2rem;
-        text-align: center;
-
-        .touch & {
-          line-height: base.$touch_unit_font_size;
-        }
+        padding-left: 0.15rem;
+        flex-shrink: 2;
+        min-width: 0;
       }
     }
   }
@@ -117,31 +101,24 @@ form-slider {
     @include number_base.svg-stepper-button;
     z-index: 1;
 
-    &:nth-child(1) {
-      left: -(base.$border_thickness);
-    }
-
     &:nth-child(4) {
       position: absolute;
-      right: -(base.$border_thickness);
+      right: 0;
     }
   }
 
+  //Min and max at the ends of the track
   > span {
     position: absolute;
     inset: 0;
-    padding-left: calc(base.$size_height + 0.4rem);
-    padding-right: calc(base.$size_height + 0.4rem);
-    padding-top: 0.1rem;
+    padding-inline: calc(#{$inner} + 0.3rem);
     justify-content: space-between;
     align-items: center;
     gap: 0.4rem;
     display: flex;
 
     .touch & {
-      padding-left: calc(base.$size_touchHeight + 0.4rem);
-      padding-right: calc(base.$size_touchHeight + 0.4rem);
-      padding-top: 0.2rem;
+      padding-inline: calc(#{$touch_inner} + 0.3rem);
     }
 
     > * {

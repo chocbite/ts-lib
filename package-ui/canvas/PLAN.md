@@ -23,14 +23,14 @@ The same page can be shown in several viewports at once, like an editor and a pr
 - **Position and size are inputs the user changes,** with the pattern's model:
   - **A writable state** is written by the transformer, and every viewport follows it.
   - **A read only state** locks the widget.
-  - **A fixed value** is the element's own. Each viewport's element would then move on its own, so shared pages use writable states.
+  - **An initial value** is the element's own. Each viewport's element would then move on its own, so shared pages use writable states.
 - **The widget definition comes from the depot.** Canvas registers the `widgets` type. A widget holds the depot entry, which gives files a path to save later.
 - **The page is an input of the viewport,** `StateOrVal<CanvasPage | undefined>`, so a state can switch which page a viewport shows.
 - **The page element is internal.** The viewport makes it from the page data. `canvas.page()` as an element factory goes away.
 - **Widget elements are made per item, and only when needed.** An array state of widgets uses its change metadata, so adding, removing or moving one widget touches only that one. The array order is the drawing order.
 - **The content of a depot entry is a state,** and possibly async. Each widget therefore gets a small internal slot element with `display: contents`. It follows the entry's content and makes the widget element when the content arrives, or again if it changes.
 - **Locked parts hide their handles.** Moving needs `x` and `y`, resizing needs `x`, `y`, `width` and `height`, because it keeps the opposite corner in place, which moves the position, and rotating needs `rotation`. A read only state for any of them hides the handles of the action.
-- **The transformer writes through the widget.** `WidgetBase` gets an internal method that writes a change to the states of its inputs, or keeps it for fixed values, and refuses it for read only states. The transformer reads the current values from internal getters. This is internal logic, outside the pattern.
+- **The transformer writes through the widget.** `WidgetBase` gets an internal method that writes a change to the states of its inputs, or keeps it for initial values, and refuses it for read only states. The transformer reads the current values from internal getters. This is internal logic, outside the pattern.
 
 ## Sketch
 
@@ -111,11 +111,11 @@ basic.add("rectangle", "Rectangle", "A filled rectangle", {
 
 ### Decisions
 
-1. **Properties editor fields.** `form.list_field` already wraps any form element as a field of a list column, it is used with switches, steppers and dropdowns on the form list field dev page. Proposed: the properties editor uses it with the form elements, and only gets fields of its own in canvas if that turns out too slow or too big, measured on a dev page.
+1. **Properties editor fields.** `form.list_field` wrapped any form element as a field of a list column (since removed, form elements are list fields directly and the editor uses `list.node_field`), it is used with switches, steppers and dropdowns on the form list field dev page. Proposed: the properties editor uses it with the form elements, and only gets fields of its own in canvas if that turns out too slow or too big, measured on a dev page.
 2. **Saving through settings.** `group.register` stores one state with `to_json` on every change of that state, but a page is states inside states: a change of the `x` of a widget is not a change of the array state of the widgets, and `to_json` of the array has no values in it. Proposed: canvas gets `page_to_json(page)` and `page_from_json(json)`, and `canvas.store_page(group, id, page)` that follows every state of the page and stores the JSON with `group.set`, which settings already has for values that are not registered, a fixed time after the last change. Loading is `page_from_json(group.get(id, fallback))`. Settings needs no change for it. The other way is a `register` in settings for nested states, which every other nested structure could use too.
 3. **Links to other states.** An option linked to a state of the app, like `/states/machine/speed`, can not be saved as a value. Proposed: only property values are saved for now, links to depot states are added when they are needed.
 
-Decided: 1, form elements in `form.list_field` for now, kept in a file of their own in canvas so they are easy to replace with real list fields. 2, the state is the link to settings: `register_debounced` of settings follows every state in a page with the viewer of the state module, rewritten for it, and stores the page a delay after the last change, `canvas.page_from_json` is the check of `get` for loading. 3, options are only linked to states of the depot, so a link is saved as its path.
+Decided: 1, form elements in `form.list_field` for now (now `list.node_field`), kept in a file of their own in canvas so they are easy to replace with real list fields. 2, the state is the link to settings: `register_debounced` of settings follows every state in a page with the viewer of the state module, rewritten for it, and stores the page a delay after the last change, `canvas.page_from_json` is the check of `get` for loading. 3, options are only linked to states of the depot, so a link is saved as its path.
 
 ### Steps
 
@@ -123,11 +123,11 @@ Saving was done first, as it does not need the properties.
 
 4. **Properties in definitions,** done: `size` and `properties` of a definition, `canvas.definition` to check the properties against the options, `canvas.widget_properties` and `canvas.new_widget`. A definition given to `add` directly is only checked against the base options, as the depot type holds definitions of any options.
 5. **Widget selector,** done: `canvas.select_widget(options)` gives new widgets from the defaults of the picked definitions. Dev page: an add with selector button.
-6. **Properties editor,** done: `canvas.properties({ selected })`, a list of the properties of the selected widget with form elements in `form.list_field`, made in `fields.ts` to be replaced by real list fields. Dev page: the editor next to the two viewports.
+6. **Properties editor,** done: `canvas.properties({ selected })`, a list of the properties of the selected widget with form elements in a `list.node_field`, made in `fields.ts` to be replaced by real list fields. Dev page: the editor next to the two viewports.
 7. **Saving and loading** a page, done: `group.register_debounced("page", ..., page_state)` and `group.get("page", fallback, canvas.page_from_json)`. Dev page: a page kept across reloads.
 8. **Links to depot states,** done: `canvas.link(path)` in place of any option, the slot looks every link up next to the definition and gives the widget the registered state, showing an error until all are registered. Saved as `{ "link": path }`. The properties editor shows the path. Dev page: links to a counter and a writable x, and one to a state registered by a button.
 
-9. **Options as states of a value or a link,** done: every option is a state, `canvas.widget` makes fixed values and links writable states. The state holds the value or a `CanvasLink`, writing it switches. The slot follows every option and gives the widget the option state through a proxy, or the linked state, with `set`, so switching does not make the widget again and a missing state only faults its option. Links have transforms, `linear` first, in a table in `link.ts` that more kinds are added to, and are saved as `{ "$link": { ... } }`.
+9. **Options as states of a value or a link,** done: every option is a state, `canvas.widget` makes initial values and links writable states. The state holds the value or a `CanvasLink`, writing it switches. The slot follows every option and gives the widget the option state through a proxy, or the linked state, with `set`, so switching does not make the widget again and a missing state only faults its option. Links have transforms, `linear` first, in a table in `link.ts` that more kinds are added to, and are saved as `{ "$link": { ... } }`.
 
 10. **Linking in the properties editor,** done: a link column with a chain per option, opening a link menu, a prompt with the path, Choose state with `depot_ui.select_state`, and fields per transform kind from a table in `link_menu.ts`. Unlink keeps the value shown. Linked values are converted to the type of the option by its property kind.
 

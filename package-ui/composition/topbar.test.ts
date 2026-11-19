@@ -67,7 +67,7 @@ describe("Topbar", () => {
 });
 
 describe("Topbar button", () => {
-  it("shows a fixed text and icon, the icon first", () => {
+  it("shows an initial text and icon, the icon first", () => {
     const button = attach(topbar_button({ text: "Save", icon: icon("save") }));
     expect(button.textContent).toBe("Save");
     expect(button.firstElementChild?.getAttribute("data-icon")).toBe("save");
@@ -120,7 +120,7 @@ describe("Topbar button", () => {
 });
 
 describe("Topbar label", () => {
-  it("shows a fixed text, a state and its errors", () => {
+  it("shows an initial text, a state and its errors", () => {
     expect(attach(topbar_label({ text: "a" })).textContent).toBe("a");
     const text = state.from_w("b");
     const label = attach(topbar_label({ text }));

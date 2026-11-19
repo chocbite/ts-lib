@@ -7,7 +7,7 @@ import {
   type InputOptions,
   type BaseOptions,
 } from "#base";
-import ctm, { type ContextMenuGroup } from "#context-menu";
+import ctm, { type ContextMenuGroup } from "#context_menu";
 import { state_ui, type StateUISize } from "#state_ui";
 import type { SVGFunc } from "#svg";
 import type { StateOrVal } from "@chocbite/ts-lib/state";

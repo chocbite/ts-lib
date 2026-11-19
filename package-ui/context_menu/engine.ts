@@ -1,16 +1,16 @@
 import { DOCUMENT_HANDLER } from "#document";
 import type { Option } from "@chocbite/ts-lib/result";
 import { Container } from "./container";
-import { ContextMenu } from "./menu";
+import type { ContextMenu } from "./menu";
 
-export const CONTEXT_MENY_SYMBOL = Symbol("context_menu");
+export const CONTEXT_MENU_SYMBOL = Symbol("context_menu");
 
 declare global {
   interface Document {
-    [CONTEXT_MENY_SYMBOL]: Container | undefined;
+    [CONTEXT_MENU_SYMBOL]: Container | undefined;
   }
   interface Element {
-    [CONTEXT_MENY_SYMBOL]: EventListenerOrEventListenerObject | undefined;
+    [CONTEXT_MENU_SYMBOL]: EventListenerOrEventListenerObject | undefined;
   }
 }
 
@@ -29,7 +29,7 @@ DOCUMENT_HANDLER.for_documents((doc) => {
 
 function apply_to_doc(doc: Document) {
   const container = new Container();
-  doc[CONTEXT_MENY_SYMBOL] = container;
+  doc[CONTEXT_MENU_SYMBOL] = container;
   doc.documentElement.appendChild(container);
   apply_default_to_doc(doc);
 }
@@ -53,7 +53,7 @@ export function context_menu_attach(
   lines: ContextMenu | (() => Option<ContextMenu>),
   block?: () => boolean,
 ) {
-  if (element[CONTEXT_MENY_SYMBOL]) context_menu_detach(element);
+  if (element[CONTEXT_MENU_SYMBOL]) context_menu_detach(element);
   const listener = (e: Event) => {
     e.preventDefault();
     e.stopPropagation();
@@ -61,41 +61,45 @@ export function context_menu_attach(
     const lineses =
       typeof lines === "function" ? lines().unwrap_or(undefined) : lines;
     if (!lineses) return;
-    context_menu_summon(
-      lineses,
+    context_menu_summon(lineses, {
       element,
-      (e as MouseEvent).clientX,
-      (e as MouseEvent).clientY,
-    );
+      x: (e as MouseEvent).clientX,
+      y: (e as MouseEvent).clientY,
+    });
   };
   element.addEventListener("contextmenu", listener);
-  element[CONTEXT_MENY_SYMBOL] = listener;
+  element[CONTEXT_MENU_SYMBOL] = listener;
 }
 
 /**Dettaches the context menu from the given element */
 export function context_menu_detach(element: Element) {
-  if (element[CONTEXT_MENY_SYMBOL]) {
-    element.removeEventListener("contextmenu", element[CONTEXT_MENY_SYMBOL]);
-    delete element[CONTEXT_MENY_SYMBOL];
+  if (element[CONTEXT_MENU_SYMBOL]) {
+    element.removeEventListener("contextmenu", element[CONTEXT_MENU_SYMBOL]);
+    delete element[CONTEXT_MENU_SYMBOL];
   }
 }
 
-/**Summons a context menu at a given location
- * @param menu the context menu to summon
- * @param element the element the context menu is referenced to, if undefined the context menu will appear in the main document
- * @param x x position for context menu, if undefined, will use element middle, if element undefined, will put context menu in the top left corner of the screen
- * @param y y position for context menu, if undefined, will use element middle, if element undefined, will put context menu in the top left corner of the screen
- * @param dont_cover when set true */
+/**Where ctm.summon opens a menu*/
+export interface ContextMenuSummonOptions {
+  /**Element the menu belongs to, it opens in the document of the element, without it in the main document*/
+  element?: Element;
+  /**Position of the menu, without both x and y the menu opens at the middle of the element, or the top left corner without an element*/
+  x?: number;
+  y?: number;
+  /**Places the menu beside the element instead of covering it*/
+  dont_cover?: boolean;
+}
+
+/**Opens a menu, see ContextMenuSummonOptions for where*/
 export function context_menu_summon(
   menu: ContextMenu,
-  element?: Element,
-  x?: number,
-  y?: number,
-  dont_cover?: boolean,
+  options: ContextMenuSummonOptions = {},
 ) {
+  const { element, dont_cover } = options;
+  let { x, y } = options;
   const container = element
-    ? element.ownerDocument[CONTEXT_MENY_SYMBOL]
-    : DOCUMENT_HANDLER.main[CONTEXT_MENY_SYMBOL];
+    ? element.ownerDocument[CONTEXT_MENU_SYMBOL]
+    : DOCUMENT_HANDLER.main[CONTEXT_MENU_SYMBOL];
   if (container) {
     if (typeof x !== "number" || typeof y !== "number") {
       if (element) {

@@ -29,14 +29,14 @@ define_element(TestElement);
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/**Element with a state subscribed only while visible, sized so an intersection observer sees it*/
+/**Element with a state, sized so an intersection observer sees it, with an observer the state follows visibility*/
 const make_element = (observer?: BaseIntersectObserver) => {
   const state = st.ok_w(1);
   const element = new TestElement();
   element.style.display = "block";
   element.style.height = "10px";
   if (observer) element.attach_to_intersect_observer(observer);
-  element.attach_state(state, () => {}, true);
+  element.attach_state(state, () => {});
   return { state, element };
 };
 
@@ -65,21 +65,31 @@ describe("Base element lifecycle", () => {
     expect(state.amount()).toBe(0);
   });
 
-  it("does not subscribe visible states when the observer is removed while disconnected", () => {
+  it("follows the connection again when the observer is removed before it is connected", () => {
     const { state, element } = make_element(new BaseIntersectObserver({}));
     element.attach_to_intersect_observer();
     expect(element.is_visible).toBe(false);
     expect(state.amount()).toBe(0);
+    document.body.appendChild(element);
+    expect(element.is_visible).toBe(true);
+    expect(state.amount()).toBe(1);
   });
 
-  it("becomes visible when the observer is removed while connected", async () => {
+  it("refuses an observer change once the element has been connected", () => {
     const { state, element } = make_element(
       new BaseIntersectObserver({ deffered_visible: 5000, deffered_hidden: 0 }),
     );
     document.body.appendChild(element);
-    element.attach_to_intersect_observer();
-    expect(element.is_visible).toBe(true);
-    expect(state.amount()).toBe(1);
+    expect(silent_error(() => element.attach_to_intersect_observer())).toBe(1);
+    //Still on the observer, which has not shown it yet
+    expect(element.is_visible).toBe(false);
+    expect(state.amount()).toBe(0);
+    element.remove();
+    expect(
+      silent_error(() =>
+        element.attach_to_intersect_observer(new BaseIntersectObserver({})),
+      ),
+    ).toBe(1);
   });
 });
 
@@ -282,7 +292,7 @@ describe("Base attach_state", () => {
     element.style.cssText = "display:block;height:10px;margin-top:100px;";
     const observer = hidden_observer();
     element.attach_to_intersect_observer(observer);
-    element.attach_state(state, () => {}, true);
+    element.attach_state(state, () => {});
     document.body.appendChild(element);
     await wait(50);
     expect(element.is_connected).toBe(true);
@@ -290,7 +300,7 @@ describe("Base attach_state", () => {
     expect(state.amount()).toBe(0);
   });
 
-  it("a connected state is subscribed even while the element is hidden", async () => {
+  it("every state follows visibility with an observer, also while connected and hidden", async () => {
     const state = st.ok_w(1);
     const element = new ProbeElement();
     element.style.cssText = "display:block;height:10px;margin-top:100px;";
@@ -298,7 +308,8 @@ describe("Base attach_state", () => {
     element.attach_state(state, () => {});
     document.body.appendChild(element);
     await wait(50);
-    expect(state.amount()).toBe(1);
+    expect(element.is_connected).toBe(true);
+    expect(state.amount()).toBe(0);
   });
 
   it("a visible state subscribes once the observer reports the element visible", async () => {
@@ -308,7 +319,7 @@ describe("Base attach_state", () => {
     element.attach_to_intersect_observer(
       new BaseIntersectObserver({ deffered_visible: 0, deffered_hidden: 0 }),
     );
-    element.attach_state(state, () => {}, true);
+    element.attach_state(state, () => {});
     document.body.appendChild(element);
     expect(state.amount()).toBe(0);
     await wait(100);
@@ -316,11 +327,11 @@ describe("Base attach_state", () => {
     expect(state.amount()).toBe(1);
   });
 
-  it("detach_state unsubscribes a visible function", () => {
+  it("detach_state unsubscribes a function of an element without observer", () => {
     const state = st.ok_w(1);
     const func = () => {};
     const element = document.body.appendChild(new ProbeElement());
-    element.attach_state(state, func, true);
+    element.attach_state(state, func);
     expect(state.amount()).toBe(1);
     element.detach_state(func);
     expect(state.amount()).toBe(0);
@@ -341,7 +352,7 @@ describe("Base visibility and connection", () => {
 
   it("does not call on_visible again when visibility does not change", () => {
     const element = document.body.appendChild(new ProbeElement());
-    element.attach_to_intersect_observer();
+    silent_error(() => element.attach_to_intersect_observer());
     expect(element.visible_calls.length).toBe(1);
   });
 
@@ -371,23 +382,6 @@ describe("Base visibility and connection", () => {
     expect(observer).toBeInstanceOf(BaseIntersectObserver);
     expect(element.intersect_observer()).toBe(observer);
     expect(observer.root).toBe(element);
-  });
-
-  it("switching observers while connected keeps visibility working", async () => {
-    const state = st.ok_w(1);
-    const element = new ProbeElement();
-    element.style.cssText = "display:block;height:10px;";
-    element.attach_to_intersect_observer(hidden_observer());
-    element.attach_state(state, () => {}, true);
-    document.body.appendChild(element);
-    await wait(50);
-    expect(element.is_visible).toBe(false);
-    element.attach_to_intersect_observer(
-      new BaseIntersectObserver({ deffered_visible: 0, deffered_hidden: 0 }),
-    );
-    await wait(100);
-    expect(element.is_visible).toBe(true);
-    expect(state.amount()).toBe(1);
   });
 });
 
@@ -524,12 +518,12 @@ describe("Base state to property", () => {
     expect(element.value).toBe(2);
   });
 
-  it("attach_state_ROA_to_prop with visible only updates while visible", async () => {
+  it("attach_state_ROA_to_prop only updates while visible with an observer", async () => {
     const state = st.ok_w(1);
     const element = new ProbeElement();
     element.style.cssText = "display:block;height:10px;margin-top:100px;";
     element.attach_to_intersect_observer(hidden_observer());
-    element.attach_state_ROA_to_prop("value", state, true);
+    element.attach_state_ROA_to_prop("value", state);
     document.body.appendChild(element);
     await wait(50);
     expect(element.value).toBe(0);
@@ -551,7 +545,9 @@ describe("Base state to property", () => {
   it("attach_state_to_prop sets ok values and uses map_err for errors", () => {
     const state = st.from_w(1);
     const element = document.body.appendChild(new ProbeElement());
-    const map_err = vi.fn((e: NiceError) => (e.message === "skip" ? none() : some(-1)));
+    const map_err = vi.fn((e: NiceError) =>
+      e.message === "skip" ? none() : some(-1),
+    );
     element.attach_state_to_prop("value", state, map_err);
     expect(element.value).toBe(1);
     state.set_err(nice_err("bad"));
@@ -757,7 +753,7 @@ describe("Base access", () => {
     expect(element.access_calls).toEqual([AccessTypes.Read, AccessTypes.Write]);
   });
 
-  it("follows a state, and a fixed value set again releases it", () => {
+  it("follows a state, and an initial value set again releases it", () => {
     const state = st.ok_w<AccessTypes>(AccessTypes.Read);
     const element = document.body.appendChild(new ProbeElement());
     element.set({ access: state });
@@ -997,7 +993,31 @@ describe("Base set", () => {
   const attach = <T extends HTMLElement>(element: T): T =>
     document.body.appendChild(element);
 
-  it("applies fixed values right away", () => {
+  it("subscribes input states only while visible when the element has an observer", async () => {
+    const width = st.ok_w(5);
+    const element = new SetProbe();
+    element.style.cssText = "display:block;height:10px;margin-top:100px;";
+    //Given after set, before the element is connected
+    element.set({ width });
+    element.attach_to_intersect_observer(hidden_observer());
+    attach(element);
+    await wait(50);
+    expect(width.amount()).toBe(0);
+    expect(element.style.width).toBe("");
+
+    const shown = new SetProbe();
+    shown.style.cssText = "display:block;height:10px;";
+    shown.attach_to_intersect_observer(
+      new BaseIntersectObserver({ deffered_visible: 0, deffered_hidden: 0 }),
+    );
+    shown.set({ width });
+    attach(shown);
+    await wait(100);
+    expect(width.amount()).toBe(1);
+    expect(shown.style.width).toBe("5px");
+  });
+
+  it("applies initial values right away", () => {
     const element = new SetProbe().set({ width: 5, label: "a" });
     expect(element.style.width).toBe("5px");
     expect(element.textContent).toBe("a");
@@ -1035,7 +1055,7 @@ describe("Base set", () => {
     expect(element.style.width).toBe("6px");
   });
 
-  it("setting a fixed value detaches the previous state, also after reconnecting", () => {
+  it("setting an initial value detaches the previous state, also after reconnecting", () => {
     const width = st.ok_w(5);
     const element = attach(new SetProbe().set({ width }));
     element.set({ width: 9 });
@@ -1072,7 +1092,7 @@ describe("Base set", () => {
     expect(element.style.width).toBe("5px");
   });
 
-  it("an override can use fields of the subclass, with a fixed value or a state", () => {
+  it("an override can use fields of the subclass, with an initial value or a state", () => {
     expect(new SetPrefix().set({ prefix: "p", label: "a" }).textContent).toBe(
       "pa",
     );

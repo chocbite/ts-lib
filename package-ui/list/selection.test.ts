@@ -1,4 +1,4 @@
-import ctm from "#context-menu";
+import ctm from "#context_menu";
 import { theme_init } from "#theme";
 import { err, ok, some, type Option, NiceError } from "@chocbite/ts-lib/result";
 import {
@@ -56,28 +56,30 @@ function create(
   >([]),
 ) {
   const container = list.container(
-    { name: list.column_string("Name") },
-    (data: Item) =>
-      data.invalid
-        ? err("invalid")
-        : ok({
-            openable: Boolean(data.sub),
-            sub_rows: sub_rows ? () => data.sub ?? [] : undefined,
-            selectable: data.selectable,
-            context_menu: data.menu_fn
-              ? () => some(ctm.menu([ctm.line("Own", () => {})]))
-              : data.menu
-                ? ctm.menu([ctm.line("Line", () => {})])
-                : undefined,
-            values: { name: data.name },
-          }),
-    rows,
     {
+      transform: (data: Item) =>
+        data.invalid
+          ? err("invalid")
+          : ok({
+              openable: Boolean(data.sub),
+              sub_rows: sub_rows ? () => data.sub ?? [] : undefined,
+              selectable: data.selectable,
+              context_menu: data.menu_fn
+                ? () =>
+                    some(
+                      ctm.menu([ctm.line({ text: "Own", on_click: () => {} })]),
+                    )
+                : data.menu
+                  ? ctm.menu([ctm.line({ text: "Line", on_click: () => {} })])
+                  : undefined,
+              values: { name: data.name },
+            }),
       sub_rows,
       selection: { mode: "multi", key: (data) => data.id, ...selection },
     },
+    { columns: { name: list.column_string("Name") }, rows },
   );
-  container.bind({ selection: selection_state });
+  container.set({ selected: selection_state });
   bound.set(container, selection_state);
   document.body.append(container);
   return container;
@@ -140,12 +142,11 @@ const write = (container: HTMLElement, keys: number[]) =>
 describe("List selection with the pointer", () => {
   it("has no checkbox column without the option, binding a selection does nothing", () => {
     const container = list.container(
-      { name: list.column_string("Name") },
-      (data: string) => ok({ values: { name: data } }),
-      ["a"],
+      { transform: (data: string) => ok({ values: { name: data } }) },
+      { columns: { name: list.column_string("Name") }, rows: ["a"] },
     );
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    container.bind({ selection: state.ok_w<string[]>(["a"]) });
+    container.set({ selected: state.ok_w<string[]>(["a"]) });
     expect(error).toHaveBeenCalledOnce();
     error.mockRestore();
     document.body.append(container);
@@ -442,12 +443,13 @@ describe("List selection state", () => {
   it("an error of the state shows nothing selected", () => {
     const selection = state.from_w<number[]>([1]);
     const container = list.container(
-      { name: list.column_string("Name") },
-      (data: Item) => ok({ values: { name: data.name } }),
-      [item(1)],
-      { selection: { mode: "multi", key: (data) => data.id } },
+      {
+        transform: (data: Item) => ok({ values: { name: data.name } }),
+        selection: { mode: "multi", key: (data) => data.id },
+      },
+      { columns: { name: list.column_string("Name") }, rows: [item(1)] },
     );
-    container.bind({ selection });
+    container.set({ selected: selection });
     document.body.append(container);
     expect(selected(container)).toEqual(["item 1"]);
     selection.set_err(nice_err("broken"));
@@ -466,17 +468,21 @@ describe("List selection state", () => {
 
   it("works without a bound state", () => {
     const container = list.container(
-      { name: list.column_string("Name") },
-      (data: Item) => ok({ values: { name: data.name } }),
-      [item(1), item(2)],
-      { selection: { mode: "multi", key: (data) => data.id } },
+      {
+        transform: (data: Item) => ok({ values: { name: data.name } }),
+        selection: { mode: "multi", key: (data) => data.id },
+      },
+      {
+        columns: { name: list.column_string("Name") },
+        rows: [item(1), item(2)],
+      },
     );
     document.body.append(container);
     click(check(rows_of(container)[0]));
     click(check(rows_of(container)[1]));
     expect(selected(container)).toEqual(["item 1", "item 2"]);
     //Binding a state replaces the own one
-    container.bind({ selection: state.ok_w<number[]>([2]) });
+    container.set({ selected: state.ok_w<number[]>([2]) });
     expect(selected(container)).toEqual(["item 2"]);
   });
 });
@@ -559,18 +565,22 @@ describe("List selection with the keyboard", () => {
   it("a click does not take the focus from an input in the row", () => {
     const container = list.container(
       {
-        name: list.column({
-          title: "Name",
-          field_gen: () => list.node_field(document.createElement("input")),
-          field_apply: () => {},
-        }),
+        transform: (data: number) => ok({ values: { name: data } }),
+        selection: { mode: "multi" },
       },
-      (data: number) => ok({ values: { name: data } }),
-      [1, 2],
-      { selection: { mode: "multi" } },
+      {
+        columns: {
+          name: list.column({
+            title: "Name",
+            field_gen: () => list.node_field(document.createElement("input")),
+            field_apply: () => {},
+          }),
+        },
+        rows: [1, 2],
+      },
     );
     const selection = state.ok_w<number[]>([]);
-    container.bind({ selection });
+    container.set({ selected: selection });
     document.body.append(container);
     const input = container.querySelector("input")!;
     input.focus();
@@ -587,10 +597,11 @@ describe("List selection with the keyboard", () => {
 
   it("keeps arrow navigation without selection", () => {
     const container = list.container(
-      { name: list.column_string("Name") },
-      (data: string) => ok({ values: { name: data } }),
-      ["a", "b"],
-      { sub_rows: true },
+      {
+        transform: (data: string) => ok({ values: { name: data } }),
+        sub_rows: true,
+      },
+      { columns: { name: list.column_string("Name") }, rows: ["a", "b"] },
     );
     document.body.append(container);
     const rows = rows_of(container);
@@ -828,7 +839,7 @@ describe("List selection in the row menu", () => {
       "Own",
     ]);
     expect(
-      document.documentElement.querySelector("contextmenu-devider"),
+      document.documentElement.querySelector("contextmenu-divider"),
     ).not.toBeNull();
     choose("Deselect");
     expect(ids(container)).toEqual([1]);
@@ -877,11 +888,13 @@ describe("List selection in the row menu", () => {
   });
 
   it("a list without selection uses the row menu as it is", () => {
-    const menu = ctm.menu([ctm.line("Plain", () => {})]);
+    const menu = ctm.menu([ctm.line({ text: "Plain", on_click: () => {} })]);
     const container = list.container(
-      { name: list.column_string("Name") },
-      (data: string) => ok({ context_menu: menu, values: { name: data } }),
-      ["a"],
+      {
+        transform: (data: string) =>
+          ok({ context_menu: menu, values: { name: data } }),
+      },
+      { columns: { name: list.column_string("Name") }, rows: ["a"] },
     );
     document.body.append(container);
     right_click(cell(rows_of(container)[0]));
@@ -910,15 +923,19 @@ describe("List selection in the row menu", () => {
     choose("Select");
 
     const plain = list.container(
-      { name: list.column_string("Name") },
-      (data: Item) =>
-        ok({
-          openable: Boolean(data.sub),
-          sub_rows: () => data.sub ?? [],
-          values: { name: data.name },
-        }),
-      [item(1, [item(10)]), item(2)],
-      { sub_rows: true },
+      {
+        transform: (data: Item) =>
+          ok({
+            openable: Boolean(data.sub),
+            sub_rows: () => data.sub ?? [],
+            values: { name: data.name },
+          }),
+        sub_rows: true,
+      },
+      {
+        columns: { name: list.column_string("Name") },
+        rows: [item(1, [item(10)]), item(2)],
+      },
     );
     document.body.append(plain);
     right_click(cell(rows_of(plain)[0]));
@@ -936,15 +953,19 @@ describe("List selection in the row menu", () => {
   it("follows an openable state", () => {
     const openable = state.ok_w(false);
     const container = list.container(
-      { name: list.column_string("Name") },
-      (data: Item) =>
-        ok({
-          openable,
-          sub_rows: () => data.sub ?? [],
-          values: { name: data.name },
-        }),
-      [item(1, [item(10)])],
-      { sub_rows: true },
+      {
+        transform: (data: Item) =>
+          ok({
+            openable,
+            sub_rows: () => data.sub ?? [],
+            values: { name: data.name },
+          }),
+        sub_rows: true,
+      },
+      {
+        columns: { name: list.column_string("Name") },
+        rows: [item(1, [item(10)])],
+      },
     );
     document.body.append(container);
     const row = rows_of(container)[0];

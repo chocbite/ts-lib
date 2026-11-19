@@ -92,7 +92,7 @@ describe("registration", () => {
 });
 
 describe("content", () => {
-  it("wraps a fixed value in a state", async () => {
+  it("wraps a value that is not a state in a state", async () => {
     const entry = depot.type<number>("t", "", "").add("e", "", "", 5);
     expect((await entry.value).unwrap()).toBe(5);
   });

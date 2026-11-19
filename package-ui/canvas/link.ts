@@ -207,7 +207,7 @@ export type WidgetOptionStates<O> = {
   readonly [K in keyof O]?: OptionState<ValueOf<O[K]>>;
 };
 
-/**Options given to canvas.widget, fixed values and links are made writable states*/
+/**Options given to canvas.widget, initial values and links are made writable states*/
 export type WidgetOptionsInput<O> = {
   readonly [K in keyof O]?: StateOrVal<
     ValueOf<O[K]> | CanvasLink<ValueOf<O[K]>>

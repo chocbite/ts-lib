@@ -1,6 +1,6 @@
 # @chocbite/ts-lib-ui/base
 
-`Base`, the class every element of ts-lib-ui extends, and what it gives elements: inputs that are fixed values or states, states that are only followed while the element is shown, faults, access, and size and visibility.
+`Base`, the class every element of ts-lib-ui extends, and what it gives elements: inputs that are initial values or states, states that are only followed while the element is shown, faults, access, and size and visibility.
 
 ```ts
 import {
@@ -47,9 +47,9 @@ export function my_box(options: MyBoxOptions = {}): MyBox {
 }
 ```
 
-- **`set_input(key, input, apply)`** takes a fixed value or a state. A fixed value is applied right away, a state is followed while the element is in the document. Setting the key again replaces the state it had.
+- **`set_input(key, input, apply)`** takes an initial value or a state. An initial value is applied right away, a state is followed while the element is in the document. Setting the key again replaces the state it had.
 - **`input_state(key)`** gives the state an input has now, to write to it when the user changes the value.
-- **`Base.create(options, ...args)`** creates the element and applies the options. Arguments after the options go to the constructor, for required references like a device a page shows, see [PATTERN.md](../PATTERN.md#required-references). Inputs other elements follow are given once, at creation, through the `[CREATE]` hook.
+- **`Base.create(options, ...args)`** creates the element and applies the options. Arguments after the options go to the constructor, for required references like a device a page shows and values that never change, see [PATTERN.md](../PATTERN.md#required-references-and-fixed-values). Inputs other elements follow are given once, at creation, through the `[CREATE]` hook.
 - **`super.set(options)`** must be called by every `set`, it applies the inputs every element has.
 
 ## Names
@@ -77,7 +77,11 @@ this.attach_state(size.width, () => this.#draw());
 this.attach_state(size.height, () => this.#draw());
 ```
 
-To also unsubscribe its states while it is scrolled out of view, attach an element to the intersection observer of its scrolling parent, `child.attach_to_intersect_observer(parent.intersect_observer())`. `is_visible` and the `on_visible` hook follow it.
+To subscribe its states only while it is in view, give an element the intersection observer of its scrolling parent, `child.attach_to_intersect_observer(parent.intersect_observer())`. Then every state of the element, those of its inputs and those attached with `attach_state`, is subscribed while the observer sees it, and `is_visible` and the `on_visible` hook follow it. Without an observer they follow the connection.
+
+- **The observer is given before the element is first connected.** After that it is fixed, an element never needs another one, and changing it logs an error. A list gives each field its observer between creating the field and inserting the row.
+- **It applies to that element only.** Children it passes inputs on to follow their own observer, or the connection without one.
+- **A hidden element does not follow its states.** Its values are the last ones it had while visible, so do not read values from elements that can be out of view, read the states.
 
 ## Faults
 

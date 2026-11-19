@@ -1,5 +1,5 @@
 import { theme_init_variable_root } from "#theme";
-import { BLUE, GREY, ORANGE, RED } from "@chocbite/ts-lib/colors";
+import { BLUE, GREY, RED } from "@chocbite/ts-lib/colors";
 
 const theme_root = theme_init_variable_root(
   "list",
@@ -171,8 +171,8 @@ colors_background.make_variable(
   "row_even",
   "Even Row Background Color",
   "Color of even row element backgrounds",
-  GREY["200"],
-  GREY["800"],
+  GREY["100"],
+  "#262626",
   "Color",
   undefined,
 );
@@ -189,8 +189,8 @@ colors_background.make_variable(
   "row_hover",
   "Hover Row Background Color",
   "Color of row element backgrounds when hovering",
-  GREY["300"],
-  GREY["700"],
+  GREY["200"],
+  "#333333",
   "Color",
   undefined,
 );
@@ -198,8 +198,8 @@ colors_background.make_variable(
   "row_selected",
   "Selected Row Background Color",
   "Color of selected row element backgrounds",
-  BLUE["100"],
-  BLUE["900"],
+  BLUE["50"],
+  "#1A2C42",
   "Color",
   undefined,
 );
@@ -207,8 +207,8 @@ colors_background.make_variable(
   "row_selected_hover",
   "Selected Hover Row Background Color",
   "Color of selected row element backgrounds when hovering",
-  BLUE["200"],
-  BLUE["800"],
+  BLUE["100"],
+  "#21364F",
   "Color",
   undefined,
 );
@@ -228,8 +228,8 @@ colors_border.make_variable(
   "header",
   "Header Border Color",
   "Color of borders under header",
-  GREY["600"],
   GREY["400"],
+  GREY["700"],
   "Color",
   undefined,
 );
@@ -237,8 +237,8 @@ colors_border.make_variable(
   "row",
   "Row Border Color",
   "Color of borders between rows",
-  GREY["400"],
-  GREY["600"],
+  GREY["300"],
+  GREY["800"],
   "Color",
   undefined,
 );
@@ -246,8 +246,8 @@ colors_border.make_variable(
   "column",
   "Column Border Color",
   "Color of border between columns",
-  GREY["500"],
-  GREY["500"],
+  GREY["300"],
+  GREY["800"],
   "Color",
   undefined,
 );
@@ -267,8 +267,8 @@ colors_focus.make_variable(
   "normal",
   "Focus Color",
   "Color of focussed list element",
-  ORANGE["600"],
-  ORANGE["300"],
+  BLUE["400"],
+  BLUE["300"],
   "Color",
   undefined,
 );

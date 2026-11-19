@@ -40,7 +40,7 @@ const names = (editor: HTMLElement) =>
 const field = (editor: HTMLElement, name: string) =>
   [...editor.querySelectorAll("list-row")]
     .find((row) => row.querySelector("list-textfield")!.textContent === name)!
-    .querySelector("form-listfield")!.firstElementChild!;
+    .querySelector("list-nodefield")!.firstElementChild!;
 /**The value a number field shows, in its value box*/
 const number_of = (editor: HTMLElement, name: string) =>
   field(editor, name).querySelector(":scope > span")!.textContent;

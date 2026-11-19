@@ -1,13 +1,14 @@
-import type { BaseIntersectObserver } from "#base";
+import type { Base, BaseIntersectObserver } from "#base";
 import { type Option, type Result } from "@chocbite/ts-lib/result";
-import type { State } from "@chocbite/ts-lib/state";
+import type { State, StateOrVal } from "@chocbite/ts-lib/state";
 import list from ".";
-import type { ListField, ListTextField } from "./field";
+import type { ListTextField } from "./field";
 import type { ListRow, ListRowOptions } from "./row";
 import type { ListReorder } from "./drag";
 import type { ListSelection } from "./selection";
 
-export type ListType<R> = R[] | State<R[]>;
+/**Rows of a list or of the sub rows of a row, a fixed array or an array state*/
+export type ListType<R> = StateOrVal<R[]>;
 
 export type ListTypeExtract<A extends ListType<any>> = A extends (infer U)[]
   ? U
@@ -28,7 +29,8 @@ export type ListDataType = (typeof ListDataType)[keyof typeof ListDataType];
 
 export type ListColumnAlign = "left" | "center" | "right";
 
-export interface ListColumnOptions<V, C extends ListField> {
+/**Options of a column, its fields can be any element, like the list fields or form elements*/
+export interface ListColumnOptions<V, C extends Base> {
   /**Initial width of the column in rem, auto when undefined, ignored in a headless list as nothing can resize it*/
   init_width?: number;
   /**If the column has a fixed width in rem, overrides init_width and disables resizing*/
@@ -52,7 +54,7 @@ export interface ListColumnOptions<V, C extends ListField> {
 }
 
 /**Helper to create a column object */
-export function column<V, C extends ListField>(
+export function column<V, C extends Base>(
   options: ListColumnOptions<V, C>,
 ): ListColumnOptions<V, C> {
   return options;
@@ -98,7 +100,7 @@ export interface ListRoot<
   /**Sub rows */
   readonly sub_rows: S;
   /**Columns options mapped by column key */
-  readonly columns: Map<keyof T, ListColumnOptions<T[keyof T], ListField>>;
+  readonly columns: Map<keyof T, ListColumnOptions<T[keyof T], Base>>;
   /**Order of visible columns by column key */
   columns_visible: (keyof T)[];
   /**Function to transform a row data into row options */

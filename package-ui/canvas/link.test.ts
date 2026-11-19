@@ -276,7 +276,7 @@ describe("Links to depot states", () => {
         .find(
           (row) => row.querySelector("list-textfield")!.textContent === "Text",
         )!
-        .querySelector("form-listfield")!;
+        .querySelector("list-nodefield")!;
     expect(field().querySelector("canvas-linkedvalue")!.textContent).toContain(
       TEXT,
     );

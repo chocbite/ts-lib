@@ -22,7 +22,7 @@ const VIEWPORT = {
   edit: input_key<StateOrVal<boolean>>(),
   /**Selected widget of the page, the transformer is shown on it in edit mode
    * Pressing a widget selects it and pressing the page clears it: a writable state is written, so viewports and a properties editor
-   * can share the selection, a fixed value or no value is kept by the viewport, a read only state can not be changed by the user
+   * can share the selection, an initial value or no value is kept by the viewport, a read only state can not be changed by the user
    * The viewport only changes the selection when the user presses, never on its own*/
   selected: input_key<StateOrVal<CanvasWidget | undefined>>(),
 };
@@ -139,7 +139,7 @@ class Viewport extends Base {
     this.#update_view();
   }
 
-  /**Selects like the user does, a writable state is written, a fixed value or no value is kept, a read only state is left*/
+  /**Selects like the user does, a writable state is written, an initial value or no value is kept, a read only state is left*/
   #select(widget: CanvasWidget | undefined) {
     const given = this.input_state(VIEWPORT.selected);
     if (given === undefined) {

@@ -106,12 +106,12 @@ describe("Fault icon", () => {
     expect(element.faults.map((fault) => fault.message)).toEqual(["width"]);
   });
 
-  it("clears the fault of an input given a fixed value", () => {
+  it("clears the fault of an input given an initial value", () => {
     const label = state.from_w("a");
     const element = box({ label });
     label.set_err(new NiceError(OFFLINE, "label"));
 
-    element.set({ label: "fixed" });
+    element.set({ label: "initial" });
 
     expect(icon_of(element)).toBeNull();
   });

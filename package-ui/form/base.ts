@@ -64,7 +64,7 @@ const FORM_VALUE = {
 /**Options of form value elements on the element pattern*/
 export interface FormValueOptions<RT> extends BaseOptions {
   /**Value the element shows and the user changes
-   * A fixed value is the value the element starts with, the element keeps the user's changes itself,
+   * An initial value is the value the element starts with, the element keeps the user's changes itself,
    * a writable state is written when the user changes the value,
    * a read only state is only shown, a change by the user is refused with a warning
    * Not given, the element starts without a value and keeps it itself
@@ -131,7 +131,7 @@ export abstract class FormValue<
     return this._buffer;
   }
 
-  /**The state the value comes from, undefined for a fixed value or a value the element keeps itself*/
+  /**The state the value comes from, undefined for an initial value or a value the element keeps itself*/
   protected get _state(): State<RT, Option<{}>, RT> | undefined {
     return this.input_state(FORM_VALUE.value) as
       State<RT, Option<{}>, RT> | undefined;
@@ -170,7 +170,7 @@ export abstract class FormValue<
   /**Clears form element graphically*/
   protected abstract clear_value(): void;
 
-  /**Called when the value input changes, with the related states of the value state, like limits, {} for a fixed value
+  /**Called when the value input changes, with the related states of the value state, like limits, {} for an initial value
    * Elements follow the ones they use with follow_related*/
   protected abstract state_related(related: {}): void;
 

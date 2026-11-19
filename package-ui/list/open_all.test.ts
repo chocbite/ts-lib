@@ -32,15 +32,17 @@ const endless = (name: string): Node => ({
 
 function make(rows: Node[], headless = false) {
   const container = list.container(
-    { name: list.column_string("Name") },
-    (data: Node) =>
-      ok({
-        openable: Boolean(data.sub),
-        sub_rows: () => data.sub ?? [],
-        values: { name: data.name },
-      }),
-    rows,
-    { sub_rows: true, headless },
+    {
+      transform: (data: Node) =>
+        ok({
+          openable: Boolean(data.sub),
+          sub_rows: () => data.sub ?? [],
+          values: { name: data.name },
+        }),
+      sub_rows: true,
+      headless,
+    },
+    { columns: { name: list.column_string("Name") }, rows },
   );
   document.body.append(container);
   return container;

@@ -1,9 +1,9 @@
 import { define_element } from "#base";
 import { spinner } from "#spinner";
 import "./buffer.scss";
-import { MenuLine } from "./line";
+import { ContextMenuLine } from "./line";
 
-export class Buffer extends MenuLine {
+export class Buffer extends ContextMenuLine {
   /**Returns the name used to define the element */
   static element_name() {
     return "buffer";

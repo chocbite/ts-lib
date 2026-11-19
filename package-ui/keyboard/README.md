@@ -63,3 +63,7 @@ keyboard_open(pin_input, PIN);
 - **`"layer:<name>"`** switches to the layer with that name, the same key again switches back to the default layer, like shift.
 
 A key acts like a key on a real keyboard: the field gets `keydown`, `beforeinput`, `input` and `keyup` events, and the text changes at the cursor. Enter and Escape are `keydown` events for the field to act on. When the keyboard closes after a change, the field gets a `change` event.
+
+## Look
+
+The keyboards sit in a grey tray at the bottom of the screen, with white keys that type, darker special keys (backspace, shift, close and the other keys given as `key` from `KeyboardSpecialKeys` or `layer:`), and the accent color on Enter, an active layer like shift, and the selected day or time. The colors are the theme variables of the `keyboard` group: `background` (the tray), `key`, `key_special`, `keytext`, `active` (a pressed key), `accent`, `accent_text`, `border` and `shadow`. Special keys carry a `special` attribute with the name of the key, or `layer` for a layer switch.

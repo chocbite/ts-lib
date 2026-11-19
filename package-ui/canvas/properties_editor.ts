@@ -16,7 +16,7 @@ import {
   type CanvasWidget,
   type WidgetDefinition,
 } from "./data";
-import { LinkField, linked_field, property_field } from "./fields";
+import { linked_field, LinkField, property_field } from "./fields";
 import { CanvasLink, option_value_state, type OptionState } from "./link";
 import type { WidgetProperty } from "./properties";
 import "./properties_editor.scss";
@@ -63,34 +63,38 @@ class PropertiesEditor extends Base {
     this.appendChild(
       list.container(
         {
-          name: list.column_string("Property", { align: "left" }),
-          value: list.column({
-            title: "Value",
-            field_gen: () => form.list_field(form.text({ text: "" })),
-            field_apply: (field, row: PropertyRow) => {
-              field.element = (
-                row.link
+          transform: (row) =>
+            ok({
+              values: { name: row.property.name, value: row, link: row },
+            }),
+          headless: true,
+        },
+        {
+          columns: {
+            name: list.column_string("Property", { align: "left" }),
+            value: list.column({
+              title: "Value",
+              //A node field, as each property has an element of its own kind
+              field_gen: () =>
+                list.node_field<Element>(form.text({ text: "" })),
+              field_apply: (field, row: PropertyRow) => {
+                field.node = row.link
                   ? linked_field(row.link, row.property)
                   : property_field(
                       row.property,
                       row.option && option_value_state(row.option),
-                    )
-              ) as never;
-            },
-          }),
-          link: list.column({
-            title: "Link",
-            field_gen: () => new LinkField(),
-            field_apply: (field, row: PropertyRow) =>
-              field.show(row.option, row.property, row.link !== undefined),
-          }),
+                    );
+              },
+            }),
+            link: list.column({
+              title: "Link",
+              field_gen: () => new LinkField(),
+              field_apply: (field, row: PropertyRow) =>
+                field.show(row.option, row.property, row.link !== undefined),
+            }),
+          },
+          rows: this.#rows,
         },
-        (row) =>
-          ok({
-            values: { name: row.property.name, value: row, link: row },
-          }),
-        this.#rows,
-        { headless: true },
       ),
     );
   }

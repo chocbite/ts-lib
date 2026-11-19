@@ -7,21 +7,48 @@ import list from "@chocbite/ts-lib-ui/list";
 import { ok } from "@chocbite/ts-lib/result";
 ```
 
-## `list.container(columns, transform, rows, options?)`
+## `list.container(config, options)`
 
-- `columns`: an object of columns made with `list.column({...})` or `list.column_string(title)`. The keys are the column keys.
+The list follows the element pattern, see [PATTERN.md](../PATTERN.md). The configuration is fixed for the life of the list, as the header, the lead columns and the rows are built from it. The options are its inputs, `container.set(options)` changes them later, options left out stay as they are.
+
+Configuration:
+
 - `transform(data, row, rows)`: turns the data of a row into row options. It returns `ok({ values, ... })`, where `values` has a value per column key. Returning `err(text)` makes the row invalid: the text replaces its fields, and it gets no sub rows, add row, context menu or selection.
-- `rows`: an array or an array state of row data.
-- `options`: `headless`, `sub_rows`, `add_row`, `observer` and `selection`.
+- `headless`, `sub_rows`, `observer`, `selection` (mode and key) and `reorder`.
+
+Inputs:
+
+- `columns`: an object of columns made with `list.column({...})` or `list.column_string(title)`, the keys are the column keys. Required at creation, as it decides the keys and value types the transform gives values for. `set` can replace them with columns of the same keys and types, to change titles, widths or order.
+- `rows`: an array or an array state of row data. An error of the state shows as the error row and the fault icon.
+- `add_row`: the add row below the rows, `{ text, icon, on_add, access }`, `null` removes it. Each option is a fixed value or a state, `access` locks it like any element.
+- `selected`: the keys of the selected rows, with the selection configuration, see [Selection](#selection).
+- `access`, like every element.
 
 ```ts
 const users = state.ok_w([{ id: 1, name: "Ann" }]);
 const container = list.container(
-  { name: list.column_string("Name") },
-  (user) => ok({ values: { name: user.name } }),
-  users,
+  { transform: (user) => ok({ values: { name: user.name } }) },
+  { columns: { name: list.column_string("Name") }, rows: users },
 );
+container.set({ rows: other_users });
 ```
+
+### Fields
+
+A column makes a field per row with `field_gen()` and gives it the value of the row with `field_apply(field, value)`. A field can be any element of the library:
+
+- **`list.text_field()`, `list.number_field()`, `list.node_field(node)`** are the plain fields, the cheapest for columns that only show values. `column_string(title)` is a column of text fields.
+- **An element following the element pattern, like a form element,** is used directly, `field_apply` gives it its value with `set`. A writable state then changes with the user, and a row reused for other data swaps its states. The row wraps it in a `list-cell`, which gets the row background, borders and padding, so the element keeps its own look and fills the width of the column, giving up minimum widths of its own like the 14rem of a stepper in touch mode:
+
+```ts
+list.column({
+  title: "Speed",
+  field_gen: () => form.stepper({ min: 0, max: 100 }),
+  field_apply: (field, speed: StateROSW<number>) => field.set({ value: speed }),
+});
+```
+
+With the `observer` option every field gets the observer, so the states of a field are only subscribed while it is in view, see the base README. Without it they are subscribed while the field is in the document, which for a long list is every row.
 
 Row options besides `values`: `openable`, `opened`, `sub_rows` (with the `sub_rows` container option), `key_field`, `add_row`, `context_menu` and `selectable`.
 
@@ -41,17 +68,21 @@ A `headless` list has no handles, so `init_width` does not apply and columns wit
 
 ## Selection
 
-The `selection` option lets the user select rows. It adds a column in front of the rows, with radio buttons in single mode and checkboxes in multi mode, so selection works on touch without modifier keys. Single mode with sub rows has no such column, a click on the row selects it and the key field takes the keyboard, so radio buttons would only take space.
+The `selection` configuration lets the user select rows. It adds a column in front of the rows, with radio buttons in single mode and checkboxes in multi mode, so selection works on touch without modifier keys. Single mode with sub rows has no such column, a click on the row selects it and the key field takes the keyboard, so radio buttons would only take space.
 
-The selection is an array state of keys owned by the app, given to the list with `bind`, the same way form elements take their value. Several lists, or any other element, can share one state.
+The selected keys are the `selected` input, an input the user changes, like the value of a form element:
+
+- **A fixed value** is where the selection starts, the list keeps the user's changes itself.
+- **A writable state** is written when the user changes the selection, so several lists, or any other element, can share one state.
+- **A read only state** is only shown, a change by the user is refused with "Selection read only" at the row, an error of kind `list.errors.SELECTION_READ_ONLY`.
+- **Not given**, the list starts with nothing selected and keeps the selection itself.
 
 ```ts
 const selected = state.ok_w<number[]>([]);
-const container = list
-  .container(columns, transform, users, {
-    selection: { mode: "multi", key: (user) => user.id },
-  })
-  .bind({ selection: selected });
+const container = list.container(
+  { transform, selection: { mode: "multi", key: (user) => user.id } },
+  { columns, rows: users, selected },
+);
 
 selected.sub((keys) => console.log("selected", keys.value));
 selected.write([1, 4]); // selects the rows with these keys
@@ -72,7 +103,7 @@ A row with `selectable: false` in its row options, or an invalid row, can not be
 - A toggle or ctrl shift range keeps the keys the list does not show, so lists showing different rows can share a state. Select all replaces the selection with all visible selectable rows of the list, deselect all and escape clear the whole selection.
 - The rows show a change when the state gives it back, so a state that rejects a write, or writes asynchronously, is shown as it is. The nice text of the error of a rejected write is shown at the row as the validation message of the browser. An error of the state shows nothing selected.
 - The state is attached while the list is in the document, like other element states.
-- Without `bind` the selection is kept in a state of the list nobody else can reach, `bind({})` goes back to that.
+- `set({ selected })` swaps the state, and a fixed value gives the list a selection of its own again.
 
 The selection follows the data, not the row elements. When a whole new array reuses row elements by position, each row shows the selection of its new key.
 
@@ -97,7 +128,7 @@ The keyboard works in the key field (lists with sub rows), or else in the radio 
 
 ### Row menu
 
-The list adds lines in front of the row's own `context_menu`, each group with a devider after it:
+The list adds lines in front of the row's own `context_menu`, each group with a divider after it:
 
 1. "Open" or "Close" for a row that can be opened, in lists with sub rows, with or without selection.
 2. "Select" or "Deselect" for a selectable row, and in multi mode "Select all" and "Deselect all".

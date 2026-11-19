@@ -1,4 +1,4 @@
-import ctm from "@chocbite/ts-lib-ui/context-menu";
+import ctm from "@chocbite/ts-lib-ui/context_menu";
 import { DOCUMENT_HANDLER } from "@chocbite/ts-lib-ui/document";
 import { VIRTUAL_KEYBOARD } from "@chocbite/ts-lib-ui/keyboard";
 import { theme_init_variable_root } from "@chocbite/ts-lib-ui/theme";
@@ -59,8 +59,14 @@ function fill(doc: Document, name: string) {
   ctm.attach(
     target,
     ctm.menu([
-      ctm.line("Line in " + name, () => (target.textContent = "Clicked")),
-      ctm.sub("Sub menu", ctm.menu([ctm.line("Inside", () => {})])),
+      ctm.line({
+        text: "Line in " + name,
+        on_click: () => (target.textContent = "Clicked"),
+      }),
+      ctm.sub({
+        text: "Sub menu",
+        menu: ctm.menu([ctm.line({ text: "Inside" })]),
+      }),
     ]),
   );
   const input = doc.body.appendChild(doc.createElement("input"));

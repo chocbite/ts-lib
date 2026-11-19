@@ -69,8 +69,8 @@ describe("Panel content", () => {
     expect(title.amount()).toBe(0);
   });
 
-  it("shows the title of the content, fixed, as a state and its error", () => {
-    expect(title_of(panel_with({ title: "Fixed" })).textContent).toBe("Fixed");
+  it("shows the title of the content, initial, as a state and its error", () => {
+    expect(title_of(panel_with({ title: "Initial" })).textContent).toBe("Initial");
     const title = state.from_w("a");
     const panel = panel_with({ title });
     expect(title_of(panel).textContent).toBe("a");
@@ -307,7 +307,7 @@ describe("Panel position", () => {
     expect(y.ok()).toBe(6);
   });
 
-  it("starts at a fixed position and moves from there by itself", () => {
+  it("starts at an initial position and moves from there by itself", () => {
     const panel = panel_with({}, { x: 5, y: 5, width: 10, height: 6 });
     press(panel, "ArrowRight");
     expect(left_of(panel)).toBeCloseTo(6);
@@ -341,7 +341,7 @@ describe("Panel sizing", () => {
     expect(
       sizer_of(panel_with({}, { width, height: state.ok(6) })).className,
     ).toBe("x");
-    //A fixed size is where the panel starts, the user sizes it from there
+    //An initial size is where the panel starts, the user sizes it from there
     expect(sizer_of(panel_with({}, { width: 10, height: 6 })).className).toBe(
       "x y",
     );
@@ -372,7 +372,7 @@ describe("Panel hiding", () => {
     expect(panel.classList.contains("hidden")).toBe(false);
   });
 
-  it("auto_hide hides a panel with a fixed hidden by itself", () => {
+  it("auto_hide hides a panel with an initial hidden by itself", () => {
     const panel = panel_with({}, { hidden: false, auto_hide: true });
     press_outside();
     expect(panel.classList.contains("hidden")).toBe(true);
@@ -392,6 +392,44 @@ describe("Panel hiding", () => {
 });
 
 describe("Panel title bar and modal", () => {
+  /**Whether the point of the page is covered by the backdrop of a modal panel, a panel itself is not a backdrop*/
+  const covered = (x: number, y: number) => {
+    const hit = document.elementFromPoint(x, y);
+    return (
+      !!hit?.closest("composition-panelcontainer") &&
+      !hit.closest("composition-panel")
+    );
+  };
+
+  it("darkens the whole page with a modal, wherever the panel is placed", () => {
+    panel_with({}, { modal: true, x: 20, y: 10, width: 10, height: 6 });
+    expect(covered(1, 1)).toBe(true);
+    expect(covered(innerWidth - 2, innerHeight - 2)).toBe(true);
+  });
+
+  it("the backdrop follows the panel, hidden, raised, to another layer and closed", () => {
+    const hidden = state.ok_w(false);
+    const layer = state.ok_w(0);
+    const modal = panel_with(
+      {},
+      { modal: true, hidden, layer, x: 20, y: 10, width: 10, height: 6 },
+    );
+    const other = panel_with({}, { x: 0, y: 0, width: 10, height: 6 });
+    //The other panel is in front, the backdrop of the modal one is behind it
+    expect(document.elementFromPoint(5, 5)?.closest("composition-panel")).toBe(
+      other,
+    );
+    modal.focus();
+    expect(covered(5, 5)).toBe(true);
+    hidden.set_ok(true);
+    expect(covered(1, 1)).toBe(false);
+    hidden.set_ok(false);
+    layer.set_ok(2);
+    expect(covered(innerWidth - 2, innerHeight - 2)).toBe(true);
+    modal.close();
+    expect(covered(1, 1)).toBe(false);
+  });
+
   it("hides the title bar", () => {
     const titlebar = state.ok_w(true);
     const panel = panel_with({}, { titlebar });

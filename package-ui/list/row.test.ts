@@ -1,9 +1,10 @@
-import type { ContextMenu } from "#context-menu";
+import type { ContextMenu } from "#context_menu";
 import type { SVGFunc } from "#svg";
 import { none, ok, type Option, NiceError } from "@chocbite/ts-lib/result";
 import { state, type State } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import list from ".";
+import type { ListType } from "./types";
 import { ListAddRow, type ListAddRowOptions } from "./add_row";
 import { ListField } from "./field";
 import { ListKeyField } from "./key_field";
@@ -12,24 +13,25 @@ import { ListRow } from "./row";
 /**A test error whose nice text is its message, so shown texts read as before*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);
 
-type Row = ListRow<number, { col: string }, number[], true>;
+type Row = ListRow<number, { col: string }, ListType<number>, true>;
 type AnyRow = ListRow<any, any, any, any>;
 
 function create_list(sub_rows: () => number[] | State<number[]>): Row {
   let top_row: Row | undefined;
   document.body.append(
     list.container(
-      { col: list.column_string("Column") },
-      (item, row) => {
-        if (row.depth === 0) top_row = row;
-        return ok({
-          openable: row.depth === 0,
-          sub_rows,
-          values: { col: item.toString() },
-        });
+      {
+        transform: (item, row) => {
+          if (row.depth === 0) top_row = row;
+          return ok({
+            openable: row.depth === 0,
+            sub_rows,
+            values: { col: item.toString() },
+          });
+        },
+        sub_rows: true,
       },
-      [1],
-      { sub_rows: true },
+      { columns: { col: list.column_string("Column") }, rows: [1] },
     ),
   );
   return top_row!;
@@ -102,10 +104,8 @@ function item_list(rows: Item[] | State<Item[]>) {
     values: { name: item.name },
   }));
   const container = list.container(
-    { name: list.column_string("Name") },
-    transform,
-    rows,
-    { sub_rows: true },
+    { transform: transform, sub_rows: true },
+    { columns: { name: list.column_string("Name") }, rows },
   );
   document.body.append(container);
   return { container, transform };
@@ -514,9 +514,11 @@ describe("ListRow add row", () => {
     add.querySelector<HTMLElement>("span.add")!.click();
     expect(on_add).toHaveBeenCalledOnce();
 
+    //New options from the transform make a new add row, so options left out of them are gone
     rows.array.change(0, { name: "a", add_row: { text: "More", on_add } });
-    expect(row.lastElementChild).toBe(add);
-    expect(add.textContent).toBe("More");
+    expect(row.lastElementChild).not.toBe(add);
+    expect(row.lastElementChild).toBeInstanceOf(ListAddRow);
+    expect(row.lastElementChild!.textContent).toBe("More");
 
     rows.array.change(0, { name: "a" });
     expect(row.querySelector(":scope > *:last-child")).not.toBeInstanceOf(

@@ -336,6 +336,37 @@ describe("Keyboard_Keys opening and closing", () => {
     instance.close();
   });
 
+  it("marks special and layer keys with the special attribute, so they can be styled apart from the typing keys", () => {
+    const instance = new Keyboard_Keys({
+      default: {
+        keys: [
+          [
+            { text: "a" },
+            { text: "Space", key: " " },
+            { text: "⌫", key: KeyboardSpecialKeys.Backspace },
+            { text: "⏎", key: KeyboardSpecialKeys.Enter },
+            { text: "⇧", key: "layer:shift" },
+          ],
+        ],
+      },
+      layers: { shift: { keys: [[{ text: "A" }]] } },
+    });
+    instance.open(appendInput());
+    const special = (text: string) => {
+      const key = [...instance.querySelectorAll("onscreen-keyboard-key")].find(
+        (k) => k.textContent === text,
+      );
+      expect(key, text).toBeDefined();
+      return key!.getAttribute("special");
+    };
+    expect(special("a")).toBeNull();
+    expect(special("Space")).toBeNull();
+    expect(special("⌫")).toBe("backspace");
+    expect(special("⏎")).toBe("enter");
+    expect(special("⇧")).toBe("layer");
+    instance.close();
+  });
+
   it("opens on the default layer and shows the keys of the active layer", () => {
     const input = appendInput();
     const instance = new Keyboard_Keys({
