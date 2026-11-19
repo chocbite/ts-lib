@@ -1,10 +1,7 @@
-import {
-  is_promise_like,
-  sync_reject,
-  sync_resolve,
-} from "#common";
+import { is_promise_like, sync_reject, sync_resolve } from "#common";
 import {
   none,
+  ok,
   OptionNone,
   ResultInferOk as RIOK,
   type ResultOk,
@@ -19,8 +16,12 @@ import {
   StateROA,
   StateSub,
   type State,
+  type StateREAW,
   type StateRES,
+  type StateRESW,
+  type StateROAW,
   type StateROS,
+  type StateROSW,
 } from "./types";
 
 //##################################################################################################################################################
@@ -41,6 +42,21 @@ export type StateCollectedTransValUnk<IN extends State<any>[]> = {
       ? SR<RT>
       : unknown;
 };
+
+/**The plain values of the collected states, for the transform of the ok forms like res_ok*/
+export type StateCollectedOkVal<IN extends State<any>[]> = {
+  [I in keyof IN]: RIOK<SIR<IN[I]>>;
+};
+
+/**Writing of a writable collected state, each function gets the value and the collected states.
+ * write sends the value on, usually by writing parts of it to the collected states.
+ * check tells if a value can be written, limit gives the closest value that can, both give the value as it is when left out.
+ * All three go through the write gate*/
+export interface StateCollectedWrite<IN extends State<any>[], WT> {
+  write(value: WT, states: IN): PromiseLike<SR<void>>;
+  check?(value: WT, states: IN): PromiseLike<SR<WT>>;
+  limit?(value: WT, states: IN): PromiseLike<SR<WT>>;
+}
 
 export type StateCollectedSubs<IN extends State<any>[]> = {
   [I in keyof IN]: StateSub<SIR<IN[I]>>;
@@ -100,6 +116,69 @@ export type StateCollectedREA<RT, IN extends State<any>[], WT = any> = StateREA<
     get read_only(): StateREA<RT, any, WT>;
   };
 
+/**Owner of a writable collected state, it can gate its writes*/
+interface WriteOwner {
+  /**Sets the state that decides if writing is allowed right now, undefined removes the gate*/
+  set_write_enabled(gate: State<boolean> | undefined): void;
+}
+export type StateCollectedROSW<
+  RT,
+  IN extends [StateRES<any>, ...StateRES<any>[]],
+  WT,
+> = StateROSW<RT, OptionNone, WT> &
+  Owner<RT, IN, WT, ResultOk<RT>> &
+  WriteOwner & {
+    get read_only(): StateROS<RT, any, WT>;
+  };
+export type StateCollectedROAW<
+  RT,
+  IN extends [State<any>, ...State<any>[]],
+  WT,
+> = StateROAW<RT, OptionNone, WT> &
+  Owner<RT, IN, WT, ResultOk<RT>> &
+  WriteOwner & {
+    get read_only(): StateROA<RT, any, WT>;
+  };
+export type StateCollectedRESW<RT, IN extends StateRES<any>[], WT> = StateRESW<
+  RT,
+  OptionNone,
+  WT
+> &
+  Owner<RT, IN, WT, SR<RT>> &
+  WriteOwner & {
+    get read_only(): StateRES<RT, any, WT>;
+  };
+export type StateCollectedREAW<RT, IN extends State<any>[], WT> = StateREAW<
+  RT,
+  OptionNone,
+  WT
+> &
+  Owner<RT, IN, WT, SR<RT>> &
+  WriteOwner & {
+    get read_only(): StateREA<RT, any, WT>;
+  };
+
+/**Gives a collected state its writing, internal so the constructor stays the same for subclasses*/
+const SET_WRITE = Symbol("set_write");
+
+/**A transform of the results made from a transform of plain values, the first error is passed on as it is*/
+function ok_values<IN extends State<any>[], RT>(
+  transform: (values: StateCollectedOkVal<IN>) => RT,
+): (values: StateCollectedTransVal<IN>) => SR<RT> {
+  return (values) => {
+    const results = values as unknown as readonly SR<unknown>[];
+    for (const result of results) if (result.err) return result;
+    return ok(
+      transform(
+        //All are ok after the loop
+        results.map(
+          (result) => (result as ResultOk<unknown>).value,
+        ) as StateCollectedOkVal<IN>,
+      ),
+    );
+  };
+}
+
 //##################################################################################################################################################
 //       _____ _                _____ _____
 //      / ____| |        /\    / ____/ ____|
@@ -156,7 +235,10 @@ export class RXX<RT, IN extends State<any>[], WT, RRT extends SR<RT>>
   protected on_sub() {
     const subscription_id = ++this.#subscription_id;
     if (!this.#states.length) {
-      this.#buffer = err_nice(state_errors.NO_STATES, "No states registered") as RRT;
+      this.#buffer = err_nice(
+        state_errors.NO_STATES,
+        "No states registered",
+      ) as RRT;
       return;
     } else if (this.#rsync) {
       //Correct size of buffer array
@@ -311,14 +393,36 @@ export class RXX<RT, IN extends State<any>[], WT, RRT extends SR<RT>>
   }
 
   //#Writer Context
-  get writable(): false {
-    return false;
+  #write?: StateCollectedWrite<IN, WT>;
+  /**Makes the state writable, used by the writable factories*/
+  [SET_WRITE](write: StateCollectedWrite<IN, WT>): this {
+    this.#write = write;
+    return this;
   }
-  limit(_value: WT): PromiseLike<SR<WT>> {
-    return sync_resolve(not_writable());
+  get writable(): boolean {
+    return Boolean(this.#write);
   }
-  check(_value: WT): PromiseLike<SR<WT>> {
-    return sync_resolve(not_writable());
+  set_write_enabled(gate: State<boolean> | undefined): void {
+    super.set_write_enabled(gate);
+  }
+  write(value: WT): PromiseLike<SR<void>> {
+    const write = this.#write;
+    if (!write) return sync_resolve(not_writable());
+    return this.write_gated(() => write.write(value, this.#states));
+  }
+  limit(value: WT): PromiseLike<SR<WT>> {
+    const write = this.#write;
+    if (!write) return sync_resolve(not_writable());
+    return this.write_gated(
+      () => write.limit?.(value, this.#states) ?? sync_resolve(ok(value)),
+    );
+  }
+  check(value: WT): PromiseLike<SR<WT>> {
+    const write = this.#write;
+    if (!write) return sync_resolve(not_writable());
+    return this.write_gated(
+      () => write.check?.(value, this.#states) ?? sync_resolve(ok(value)),
+    );
   }
 }
 
@@ -378,6 +482,98 @@ export const COLLECTED = {
       transform,
       ...states,
     ) as StateCollectedREA<RT, IN, WT>;
+  },
+  /**Like res, the transform gets the plain values and gives a plain value, the first error of the states is passed on as it is.
+   * @param transform - Function to translate the values of the collected states.
+   * @param states - The states to collect.*/
+  res_ok<RT, IN extends StateRES<any>[], WT = any>(
+    transform: (values: StateCollectedOkVal<IN>) => RT,
+    ...states: IN
+  ) {
+    return COLLECTED.res<RT, IN, WT>(ok_values(transform), ...states);
+  },
+  /**Like rea, the transform gets the plain values and gives a plain value, the first error of the states is passed on as it is.
+   * @param transform - Function to translate the values of the collected states.
+   * @param states - The states to collect.*/
+  rea_ok<RT, IN extends State<any>[], WT = any>(
+    transform: (values: StateCollectedOkVal<IN>) => RT,
+    ...states: IN
+  ) {
+    return COLLECTED.rea<RT, IN, WT>(ok_values(transform), ...states);
+  },
+  /**Like ros, and writable through write, see StateCollectedWrite.
+   * @param transform - Function to translate value of collected states, false means first states values is used.
+   * @param write - Writes, checks and limits a value, given the collected states.
+   * @param states - The states to collect.*/
+  rosw<RT, IN extends [StateRES<any>, ...StateRES<any>[]], WT = RT>(
+    transform: ((values: StateCollectedTransVal<IN>) => ResultOk<RT>) | false,
+    write: StateCollectedWrite<IN, WT>,
+    ...states: IN
+  ) {
+    return new RXX<RT, IN, WT, ResultOk<RT>>(true, true, transform, ...states)[
+      SET_WRITE
+    ](write) as unknown as StateCollectedROSW<RT, IN, WT>;
+  },
+  /**Like roa, and writable through write, see StateCollectedWrite.
+   * @param transform - Function to translate value of collected states, false means first states values is used.
+   * @param write - Writes, checks and limits a value, given the collected states.
+   * @param states - The states to collect.*/
+  roaw<RT, IN extends [State<any>, ...State<any>[]], WT = RT>(
+    transform: ((values: StateCollectedTransVal<IN>) => ResultOk<RT>) | false,
+    write: StateCollectedWrite<IN, WT>,
+    ...states: IN
+  ) {
+    return new RXX<RT, IN, WT, ResultOk<RT>>(true, false, transform, ...states)[
+      SET_WRITE
+    ](write) as unknown as StateCollectedROAW<RT, IN, WT>;
+  },
+  /**Like res, and writable through write, see StateCollectedWrite.
+   * @param transform - Function to translate value of collected states, false means first states values is used.
+   * @param write - Writes, checks and limits a value, given the collected states.
+   * @param states - The states to collect.*/
+  resw<RT, IN extends StateRES<any>[], WT = RT>(
+    transform: ((values: StateCollectedTransVal<IN>) => SR<RT>) | false,
+    write: StateCollectedWrite<IN, WT>,
+    ...states: IN
+  ) {
+    return new RXX<RT, IN, WT, SR<RT>>(false, true, transform, ...states)[
+      SET_WRITE
+    ](write) as unknown as StateCollectedRESW<RT, IN, WT>;
+  },
+  /**Like rea, and writable through write, see StateCollectedWrite.
+   * @param transform - Function to translate value of collected states, false means first states values is used.
+   * @param write - Writes, checks and limits a value, given the collected states.
+   * @param states - The states to collect.*/
+  reaw<RT, IN extends State<any>[], WT = RT>(
+    transform: ((values: StateCollectedTransVal<IN>) => SR<RT>) | false,
+    write: StateCollectedWrite<IN, WT>,
+    ...states: IN
+  ) {
+    return new RXX<RT, IN, WT, SR<RT>>(false, false, transform, ...states)[
+      SET_WRITE
+    ](write) as unknown as StateCollectedREAW<RT, IN, WT>;
+  },
+  /**Like resw, the transform gets the plain values and gives a plain value, the first error of the states is passed on as it is.
+   * @param transform - Function to translate the values of the collected states.
+   * @param write - Writes, checks and limits a value, given the collected states.
+   * @param states - The states to collect.*/
+  resw_ok<RT, IN extends StateRES<any>[], WT = RT>(
+    transform: (values: StateCollectedOkVal<IN>) => RT,
+    write: StateCollectedWrite<IN, WT>,
+    ...states: IN
+  ) {
+    return COLLECTED.resw<RT, IN, WT>(ok_values(transform), write, ...states);
+  },
+  /**Like reaw, the transform gets the plain values and gives a plain value, the first error of the states is passed on as it is.
+   * @param transform - Function to translate the values of the collected states.
+   * @param write - Writes, checks and limits a value, given the collected states.
+   * @param states - The states to collect.*/
+  reaw_ok<RT, IN extends State<any>[], WT = RT>(
+    transform: (values: StateCollectedOkVal<IN>) => RT,
+    write: StateCollectedWrite<IN, WT>,
+    ...states: IN
+  ) {
+    return COLLECTED.reaw<RT, IN, WT>(ok_values(transform), write, ...states);
   },
   class: RXX,
 };

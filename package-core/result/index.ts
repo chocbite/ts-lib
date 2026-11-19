@@ -420,10 +420,34 @@ export function none() {
   return new OptionNone();
 }
 
+/**Values of a list of results, per position for a tuple*/
+export type ResultsInferOk<R extends readonly Result<any, any>[]> = {
+  -readonly [K in keyof R]: ResultInferOk<R[K]>;
+};
+
+/**One result for a list of results. All ok gives their values in order, typed per position for a tuple.
+ * Otherwise an error of the given kind, made of every error of the list in order, so none is lost,
+ * the faults prompt of ts-lib-ui shows them under it
+ * @param kind kind of the error made, its description is the nice text, like Symbol("Settings are invalid")*/
+export function all_nice<const R extends readonly Result<unknown, NiceError>[]>(
+  results: R,
+  kind: symbol,
+): Result<ResultsInferOk<R>, NiceError> {
+  const values: unknown[] = [];
+  const errors: NiceError[] = [];
+  for (const result of results) {
+    if (result.ok) values.push(result.value);
+    else errors.push(result.error);
+  }
+  if (errors.length) return err_nice(kind, `${errors.length} of ${results.length} failed`, errors);
+  return ok(values as ResultsInferOk<R>);
+}
+
 export const result = {
   ok,
   err,
   err_nice,
+  all_nice,
   some,
   none,
   RESULT_KEY,

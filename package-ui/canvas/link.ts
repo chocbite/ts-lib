@@ -278,16 +278,21 @@ export function linked_state(
   const reverses = steps.map(([kind, transform]) => kind.reverse(transform));
   if (!linked.writable || !reverses.every((reverse) => reverse))
     return state.proxy.rea(linked, read);
+  const to_linked = (value: unknown) =>
+    like(
+      raw,
+      reverses.reduceRight<unknown>((v, reverse) => reverse!(v), value),
+    );
+  const from_linked = (value: unknown) => {
+    const result = read(ok(value));
+    return result.ok ? result.value : value;
+  };
   return state.proxy.reaw(linked as StateREAW<unknown>, read, {
-    wout_win: (value) =>
-      like(
-        raw,
-        reverses.reduceRight<unknown>((v, reverse) => reverse!(v), value),
-      ),
-    win_wout: (value) => {
-      const result = read(ok(value));
-      return result.ok ? result.value : value;
-    },
+    write: (value: unknown, source) => source.write(to_linked(value)),
+    check: (value, source) =>
+      source.check(to_linked(value)).then((checked) => checked.map(from_linked)),
+    limit: (value, source) =>
+      source.limit(to_linked(value)).then((limited) => limited.map(from_linked)),
   });
 }
 

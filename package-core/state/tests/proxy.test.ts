@@ -1,7 +1,12 @@
 import { sleep } from "#common";
 import { ok, ResultOk, err_nice } from "#result";
-import { describe, expect, it } from "vitest";
-import { state as st, StateResult } from "..";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import {
+  state as st,
+  StateResult,
+  type StateROSW,
+  type StateProxyWrite,
+} from "..";
 import {
   test_state_get,
   test_state_get_ok,
@@ -14,6 +19,9 @@ import {
   type TestStateSync,
   type TestStateWrite,
 } from "./tests_shared";
+
+/**Kind of the errors tests make themselves*/
+const TEST_KIND = Symbol("Test error");
 
 describe("Proxy with sync states", function () {
   describe("ROS", { timeout: 100 }, function () {
@@ -63,17 +71,11 @@ describe("Proxy with sync states", function () {
   //##################################################################################################################################################
   describe("ROSW", { timeout: 100 }, function () {
     it("ok", async function () {
-      st.p.rosw(st.rosw(ok(1), true), undefined, {
-        wout_win: (v: number) => v,
-        win_wout: (v: number) => v,
-      });
+      st.p.rosw(st.rosw(ok(1), true));
     });
     const maker: TestStateOkSync = () => {
       const stat = st.rosw(ok(1), true);
-      const state = st.p.rosw(stat, undefined, {
-        wout_win: (v: number) => v,
-        win_wout: (v: number) => v,
-      });
+      const state = st.p.rosw(stat);
       const set = (val: ResultOk<number>) => stat.set(val);
       return { o: true, s: true, w: true, state, set };
     };
@@ -91,10 +93,7 @@ describe("Proxy with sync states", function () {
     });
     const maker_write: TestStateWrite = () => {
       const stat = st.rosw(ok(1), true);
-      const state = st.p.rosw(stat, undefined, {
-        wout_win: (v: number) => v,
-        win_wout: (v: number) => v,
-      });
+      const state = st.p.rosw(stat);
       const set = (val: ResultOk<number>) => stat.set(val);
       return { o: true, s: true, w: true, state, set };
     };
@@ -105,17 +104,11 @@ describe("Proxy with sync states", function () {
   //##################################################################################################################################################
   describe("RESW", { timeout: 100 }, function () {
     it("ok", async function () {
-      st.p.resw(st.resw(ok(1), true), undefined, {
-        wout_win: (v: number) => v,
-        win_wout: (v: number) => v,
-      });
+      st.p.resw(st.resw(ok(1), true));
     });
     const maker: TestStateSync = () => {
       const stat = st.resw(ok(1), true);
-      const state = st.p.resw(stat, undefined, {
-        wout_win: (v: number) => v,
-        win_wout: (v: number) => v,
-      });
+      const state = st.p.resw(stat);
       const set = (val: StateResult<number>) => stat.set(val);
       return { o: false, s: true, w: true, state, set };
     };
@@ -130,10 +123,7 @@ describe("Proxy with sync states", function () {
     });
     const maker_write: TestStateWrite = () => {
       const stat = st.resw(ok(1), true);
-      const state = st.p.resw(stat, undefined, {
-        wout_win: (v: number) => v,
-        win_wout: (v: number) => v,
-      });
+      const state = st.p.resw(stat);
       const set = (val: StateResult<number>) => stat.set(val);
       return { o: false, s: true, w: true, state, set };
     };
@@ -304,15 +294,67 @@ describe("Proxy features", function () {
     });
   });
   //##################################################################################################################################################
-  describe("transform_write", { timeout: 100 }, function () {
-    it("transforms written values through proxy", async function () {
+  describe("write", { timeout: 100 }, function () {
+    it("calls write with the value and the source state", async function () {
       const inner = st.rosw(ok(1), true);
       const proxy = st.p.rosw(inner, undefined, {
-        wout_win: (v: number) => v * 2,
-        win_wout: (v: number) => v / 2,
+        write: (value: number, source) => source.write(value * 2),
       });
-      await proxy.write(5);
+      expect(await proxy.write(5)).toEqual(ok(undefined));
       expect(inner.get()).toEqual(ok(10));
+    });
+    it("gives the error of write", async function () {
+      const failed = err_nice(TEST_KIND, "refused");
+      const proxy = st.p.rosw(st.rosw(ok(1), true), undefined, {
+        write: (_value: number) => Promise.resolve(failed),
+      });
+      expect(await proxy.write(5)).toBe(failed);
+    });
+    it("can have a write type of its own", async function () {
+      const inner = st.rosw(ok(1), true);
+      const proxy = st.p.rosw(inner, (val) => ok(String(val.value)), {
+        write: (value: string, source) => source.write(Number(value)),
+      });
+      await proxy.write("7");
+      expect(inner.get()).toEqual(ok(7));
+      expect(proxy.ok()).toBe("7");
+      expectTypeOf(proxy).toMatchTypeOf<StateROSW<string, any, string>>();
+    });
+    it("needs write when the write type differs from the source", function () {
+      const inner = st.rosw(ok(1), true);
+      const compile_only = () => {
+        // @ts-expect-error a write type of its own needs write
+        st.p.rosw<typeof inner, number, number, number, string>(inner);
+      };
+      expect(compile_only).toBeTypeOf("function");
+      expectTypeOf(st.p.rosw(inner)).toMatchTypeOf<StateROSW<number, any, number>>();
+    });
+    it("runs write, check and limit behind the write gate of the source", async function () {
+      const inner = st.rosw(ok(1), true);
+      inner.set_write_enabled(st.ok(false));
+      let calls = 0;
+      const count = (value: number) => {
+        calls++;
+        return Promise.resolve(ok(value));
+      };
+      const proxy = st.p.rosw(inner, undefined, {
+        write: (_value: number) => {
+          calls++;
+          return Promise.resolve(ok(undefined));
+        },
+        check: count,
+        limit: count,
+      });
+      const disabled = (result: StateResult<unknown>) =>
+        !result.ok && result.error.kind === st.errors.WRITE_DISABLED;
+      expect(disabled(await proxy.write(1))).toBe(true);
+      expect(disabled(await proxy.check(1))).toBe(true);
+      expect(disabled(await proxy.limit(1))).toBe(true);
+      expect(calls).toBe(0);
+    });
+    it("has the write form as a type", function () {
+      expectTypeOf<StateProxyWrite<StateROSW<number, any, number>, string>>()
+        .toHaveProperty("write");
     });
   });
   //##################################################################################################################################################
@@ -392,27 +434,38 @@ describe("Proxy features", function () {
   });
   //##################################################################################################################################################
   describe("limit and check", { timeout: 100 }, function () {
-    const maker = () => {
-      const inner = st.rosw(
-        st.n.help(ok(5), { min: st.ok(0), max: st.ok(10) }),
-        true,
+    const inner_of = () =>
+      st.rosw(st.n.help(ok(5), { min: st.ok(0), max: st.ok(10) }), true);
+    it("limits and checks through the source without write", async function () {
+      const proxy = st.p.rosw(inner_of());
+      expect(await proxy.limit(11)).toEqual(ok(10));
+      expect(await proxy.limit(-11)).toEqual(ok(0));
+      expect(await proxy.check(3)).toEqual(ok(3));
+      expect(await proxy.check(11)).toEqual(
+        err_nice(st.errors.ABOVE_MAX, "11 is bigger than the limit of 10"),
       );
-      return st.p.rosw(inner, undefined, {
-        wout_win: (v: number) => v * 2,
-        win_wout: (v: number) => v / 2,
+    });
+    it("calls check and limit of the write form with the value and the source", async function () {
+      const proxy = st.p.rosw(inner_of(), undefined, {
+        write: (value: number, source) => source.write(value * 2),
+        limit: (value, source) =>
+          source.limit(value * 2).then((limited) => limited.map((v) => v / 2)),
+        check: (value, source) =>
+          source.check(value * 2).then((checked) => checked.map(() => value)),
       });
-    };
-    it("limits through the inner state with transforms", async function () {
-      const proxy = maker();
       expect(await proxy.limit(11)).toEqual(ok(5));
       expect(await proxy.limit(-11)).toEqual(ok(0));
-    });
-    it("checks through the inner state with transforms", async function () {
-      const proxy = maker();
       expect(await proxy.check(3)).toEqual(ok(3));
       expect(await proxy.check(11)).toEqual(
         err_nice(st.errors.ABOVE_MAX, "22 is bigger than the limit of 10"),
       );
+    });
+    it("gives the value as it is when the write form has no check or limit", async function () {
+      const proxy = st.p.rosw(inner_of(), undefined, {
+        write: (value: number, source) => source.write(value),
+      });
+      expect(await proxy.limit(50)).toEqual(ok(50));
+      expect(await proxy.check(50)).toEqual(ok(50));
     });
   });
 });

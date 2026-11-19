@@ -137,10 +137,16 @@ export default state;
 //      ____) |  | |/ ____ \| |  | |____     | |     | |  | |    | |____ ____) |
 //     |_____/   |_/_/    \_\_|  |______|    |_|     |_|  |_|    |______|_____/
 export {
+  type StateCollectedOkVal,
   type StateCollectedREA,
+  type StateCollectedREAW,
   type StateCollectedRES,
+  type StateCollectedRESW,
   type StateCollectedROA,
+  type StateCollectedROAW,
   type StateCollectedROS,
+  type StateCollectedROSW,
+  type StateCollectedWrite,
 } from "./collected";
 export {
   STATE_ARRAY_HELPER_KEY,
@@ -207,6 +213,7 @@ export {
   type StateProxyROAW,
   type StateProxyROS,
   type StateProxyROSW,
+  type StateProxyWrite,
 } from "./proxy";
 export {
   type StateRemote,

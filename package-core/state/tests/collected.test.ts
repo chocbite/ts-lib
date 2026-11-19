@@ -1,7 +1,16 @@
 import { sleep } from "#common";
 import { ok, ResultOk, err_nice } from "#result";
-import { describe, expect, it } from "vitest";
-import { state as st, StateResult } from "..";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import {
+  state as st,
+  StateResult,
+  type StateREA,
+  type StateREAW,
+  type StateRES,
+  type StateRESW,
+  type StateROAW,
+  type StateROSW,
+} from "..";
 import {
   test_state_get,
   test_state_get_ok,
@@ -571,3 +580,176 @@ describe("Collected states", function () {
     });
   });
 });
+
+describe("Collected states with ok values", () => {
+  it("gives res_ok the plain values and makes an ok result of what it returns", () => {
+    const speed = st.res(ok(4));
+    const name = st.res(ok("pump"));
+
+    const label = st.c.res_ok(([s, n]) => `${n}: ${s}`, speed, name);
+
+    expect(label.get()).toEqual(ok("pump: 4"));
+    expectTypeOf(label).toMatchTypeOf<StateRES<string>>();
+  });
+
+  it("passes the first error on unchanged without calling the transform", () => {
+    const first = err_nice(TEST_ERROR, "first");
+    let calls = 0;
+    const label = st.c.res_ok(
+      ([a, b, c]) => {
+        calls++;
+        return a + b + c;
+      },
+      st.res(ok(1)),
+      st.res<number>(first),
+      st.res<number>(err_nice(TEST_ERROR, "second")),
+    );
+
+    expect(label.get()).toBe(first);
+    expect(calls).toBe(0);
+  });
+
+  it("gives rea_ok the plain values of async states", async () => {
+    const total = st.c.rea_ok(([a, b]) => a * b, st.rea(() => sleep(1, ok(3))), st.res(ok(5)));
+
+    expect(await total).toEqual(ok(15));
+    expectTypeOf(total).toMatchTypeOf<StateREA<number>>();
+  });
+
+  it("follows changes of the states like the other collected states", async () => {
+    const a = st.resw(ok(1));
+    const sum = st.c.res_ok(([v]) => v * 10, a);
+    const seen: unknown[] = [];
+    sum.sub((value) => seen.push(value.ok && value.value));
+
+    a.set(ok(2));
+    await sleep(0);
+    a.set(err_nice(TEST_ERROR, "gone"));
+    await sleep(0);
+
+    expect(seen).toEqual([20, false]);
+  });
+});
+
+describe("Writable collected states", () => {
+  const states = () => [st.resw(ok(1)), st.resw(ok(2))] as const;
+
+  it("is writable and calls write with the value and the states", async () => {
+    const [a, b] = states();
+    const calls: unknown[] = [];
+    const sum = st.c.resw(
+      (values) => result_sum(values),
+      {
+        write: (value: number, collected) => {
+          calls.push([value, collected]);
+          return Promise.resolve(ok(undefined));
+        },
+      },
+      a,
+      b,
+    );
+
+    expect(sum.writable).toBe(true);
+    expect(await sum.write(9)).toEqual(ok(undefined));
+    expect(calls).toEqual([[9, [a, b]]]);
+    expectTypeOf(sum).toMatchTypeOf<StateRESW<number, any, number>>();
+  });
+
+  it("gives the result of write, an error included", async () => {
+    const [a, b] = states();
+    const failed = err_nice(TEST_ERROR, "refused");
+    const sum = st.c.resw(result_sum, { write: (_value: number) => Promise.resolve(failed) }, a, b);
+
+    expect(await sum.write(9)).toBe(failed);
+  });
+
+  it("calls check and limit with the value and the states, and gives the value back without them", async () => {
+    const [a, b] = states();
+    const with_both = st.c.resw(
+      result_sum,
+      {
+        write: (_value: number) => Promise.resolve(ok(undefined)),
+        check: (value, collected) =>
+          Promise.resolve(value > collected.length ? ok(value) : err_nice(TEST_ERROR, "too low")),
+        limit: (value) => Promise.resolve(ok(Math.min(value, 10))),
+      },
+      a,
+      b,
+    );
+    const without = st.c.resw(result_sum, { write: (_value: number) => Promise.resolve(ok(undefined)) }, a, b);
+
+    expect(await with_both.limit(50)).toEqual(ok(10));
+    expect((await with_both.check(1)).err).toBe(true);
+    expect(await with_both.check(5)).toEqual(ok(5));
+    expect(await without.limit(50)).toEqual(ok(50));
+    expect(await without.check(50)).toEqual(ok(50));
+  });
+
+  it("applies the write gate to write, check and limit", async () => {
+    const [a, b] = states();
+    let writes = 0;
+    const sum = st.c.resw(
+      result_sum,
+      {
+        write: (_value: number) => {
+          writes++;
+          return Promise.resolve(ok(undefined));
+        },
+      },
+      a,
+      b,
+    );
+    sum.set_write_enabled(st.ok(false));
+
+    const disabled = (result: StateResult<unknown>) => !result.ok && result.error.kind === st.errors.WRITE_DISABLED;
+    expect(disabled(await sum.write(1))).toBe(true);
+    expect(disabled(await sum.check(1))).toBe(true);
+    expect(disabled(await sum.limit(1))).toBe(true);
+    expect(writes).toBe(0);
+  });
+
+  it("has rosw, roaw and reaw, and ok forms of resw and reaw", async () => {
+    const write = { write: (_value: number) => Promise.resolve(ok(undefined)) };
+    const a = st.ok(2);
+    const rosw = st.c.rosw((values) => ok(values[0].value * 2), write, a);
+    const roaw = st.c.roaw((values) => ok(values[0].value * 3), write, a);
+    const reaw = st.c.reaw((values) => values[0], write, st.rea(() => sleep(1, ok(4))));
+    const resw_ok = st.c.resw_ok(([v]) => v + 1, write, a);
+    const reaw_ok = st.c.reaw_ok(([v]) => v + 2, write, st.rea(() => sleep(1, ok(4))));
+
+    expect(rosw.ok()).toBe(4);
+    expect((await roaw).value).toBe(6);
+    expect(await reaw).toEqual(ok(4));
+    expect(resw_ok.get()).toEqual(ok(3));
+    expect(await reaw_ok).toEqual(ok(6));
+    for (const s of [rosw, roaw, reaw, resw_ok, reaw_ok]) expect(s.writable).toBe(true);
+    expectTypeOf(rosw).toMatchTypeOf<StateROSW<number, any, number>>();
+    expectTypeOf(roaw).toMatchTypeOf<StateROAW<number, any, number>>();
+    expectTypeOf(reaw).toMatchTypeOf<StateREAW<number, any, number>>();
+    expectTypeOf(reaw_ok).toMatchTypeOf<StateREAW<number, any, number>>();
+  });
+
+  it("gives a read only view that can not write", async () => {
+    const write = { write: (_value: number) => Promise.resolve(ok(undefined)) };
+    const view = st.c.rosw((values) => ok(values[0].value), write, st.ok(1)).read_only;
+
+    expect(view.writable).toBe(false);
+  });
+
+  it("stays not writable when made without a write", async () => {
+    const sum = st.c.res(result_sum, ...states());
+
+    expect(sum.writable).toBe(false);
+    expect((await sum.check!(1)).err).toBe(true);
+  });
+});
+
+/**Sum of the values, the first error when one fails*/
+function result_sum(values: readonly StateResult<number>[]): StateResult<number> {
+  let sum = 0;
+  for (const value of values) {
+    if (value.err) return value;
+    sum += value.value;
+  }
+  return ok(sum);
+}

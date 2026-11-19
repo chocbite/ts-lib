@@ -1,6 +1,13 @@
 import { is_promise_like, sync_reject, sync_resolve } from "#common";
-import { err, none, ok, OptionNone, ResultInferOk, ResultOk } from "#result";
-import { not_writable } from "./errors";
+import {
+  err_nice,
+  none,
+  ok,
+  OptionNone,
+  ResultInferOk,
+  ResultOk,
+} from "#result";
+import { not_writable, state_errors } from "./errors";
 import { STATE_WRITE_DISABLED, StateBase } from "./base";
 import {
   StateResult as SR,
@@ -24,16 +31,36 @@ import {
 //        | |     | |  | |    | |____ ____) |
 //        |_|     |_|  |_|    |______|_____/
 
-interface Owner<S extends State<any, any>, WIN, ROUT, WOUT, RROUT> {
+/**Writing of a writable proxy state with a write type of its own, each function gets the value and the source state.
+ * write sends the value on, usually by writing it, changed, to the source.
+ * check tells if a value can be written, limit gives the closest value that can, both give the value as it is when left out.
+ * All three go through the write gate of the source*/
+export interface StateProxyWrite<S, WOUT> {
+  write(value: WOUT, state: S): PromiseLike<SR<void>>;
+  check?(value: WOUT, state: S): PromiseLike<SR<WOUT>>;
+  limit?(value: WOUT, state: S): PromiseLike<SR<WOUT>>;
+}
+
+/**Runs func when the gate allows writing, otherwise resolves to a write disabled error, like the write gate of every state*/
+function gated<T>(
+  gate: State<boolean> | undefined,
+  func: () => PromiseLike<SR<T>>,
+): PromiseLike<SR<T>> {
+  if (!gate) return func();
+  return gate.then((res) =>
+    res.ok && res.value
+      ? func()
+      : err_nice(state_errors.WRITE_DISABLED, "writing is disabled"),
+  );
+}
+
+interface Owner<S extends State<any, any>, ROUT, WOUT, RROUT> {
   /**Sets the state that is being proxied, and updates subscribers with new value*/
   set_state(state: S): void;
   /**Changes the transform function of the proxy, and updates subscribers with new value*/
   set_transform_read(transform: (value: StateInferResult<S>) => RROUT): void;
-  /**Changes the transform function of the proxy, and updates subscribers with new value*/
-  set_transform_write(
-    wout_win: (val: WOUT) => WIN,
-    win_wout: (val: WIN) => WOUT,
-  ): void;
+  /**Changes how the proxy writes, see StateProxyWrite, undefined writes to the source as it is*/
+  set_write(write: StateProxyWrite<S, WOUT> | undefined): void;
   readonly state: State<ROUT, OptionNone, WOUT>;
 }
 
@@ -44,7 +71,7 @@ export type StateProxyROA<
   ROUT = RIN,
   WOUT = WIN,
 > = StateROA<ROUT, OptionNone, WOUT> &
-  Owner<S, WIN, ROUT, WOUT, ResultOk<ROUT>> & {
+  Owner<S, ROUT, WOUT, ResultOk<ROUT>> & {
     readonly read_only: StateROA<ROUT, OptionNone, WOUT>;
     readonly read_write?: StateROAW<ROUT, OptionNone, WOUT>;
   };
@@ -56,7 +83,7 @@ export type StateProxyROAW<
   ROUT = RIN,
   WOUT = WIN,
 > = StateROAW<ROUT, OptionNone, WOUT> &
-  Owner<S, WIN, ROUT, WOUT, ResultOk<ROUT>> & {
+  Owner<S, ROUT, WOUT, ResultOk<ROUT>> & {
     readonly read_only: StateROA<ROUT, OptionNone, WOUT>;
     readonly read_write: StateROAW<ROUT, OptionNone, WOUT>;
   };
@@ -68,7 +95,7 @@ export type StateProxyROS<
   ROUT = RIN,
   WOUT = WIN,
 > = StateROS<ROUT, OptionNone, WOUT> &
-  Owner<S, WIN, ROUT, WOUT, ResultOk<ROUT>> & {
+  Owner<S, ROUT, WOUT, ResultOk<ROUT>> & {
     readonly read_only: StateROS<ROUT, OptionNone, WOUT>;
     readonly read_write?: StateROSW<ROUT, OptionNone, WOUT>;
   };
@@ -80,7 +107,7 @@ export type StateProxyROSW<
   ROUT = RIN,
   WOUT = WIN,
 > = StateROSW<ROUT, OptionNone, WOUT> &
-  Owner<S, WIN, ROUT, WOUT, ResultOk<ROUT>> & {
+  Owner<S, ROUT, WOUT, ResultOk<ROUT>> & {
     readonly read_only: StateROS<ROUT, OptionNone, WOUT>;
     readonly read_write: StateROSW<ROUT, OptionNone, WOUT>;
   };
@@ -92,7 +119,7 @@ export type StateProxyREA<
   ROUT = RIN,
   WOUT = WIN,
 > = StateREA<ROUT, OptionNone, WOUT> &
-  Owner<S, WIN, ROUT, WOUT, SR<ROUT>> & {
+  Owner<S, ROUT, WOUT, SR<ROUT>> & {
     readonly read_only: StateREA<ROUT, OptionNone, WOUT>;
     readonly read_write?: StateREAW<ROUT, OptionNone, WOUT>;
   };
@@ -104,7 +131,7 @@ export type StateProxyREAW<
   ROUT = RIN,
   WOUT = WIN,
 > = StateREAW<ROUT, OptionNone, WOUT> &
-  Owner<S, WIN, ROUT, WOUT, SR<ROUT>> & {
+  Owner<S, ROUT, WOUT, SR<ROUT>> & {
     readonly read_only: StateREA<ROUT, OptionNone, WOUT>;
     readonly read_write: StateREAW<ROUT, OptionNone, WOUT>;
   };
@@ -116,7 +143,7 @@ export type StateProxyRES<
   ROUT = RIN,
   WOUT = WIN,
 > = StateRES<ROUT, OptionNone, WOUT> &
-  Owner<S, WIN, ROUT, WOUT, SR<ROUT>> & {
+  Owner<S, ROUT, WOUT, SR<ROUT>> & {
     readonly read_only: StateRES<ROUT, OptionNone, WOUT>;
     readonly read_write?: StateRESW<ROUT, OptionNone, WOUT>;
   };
@@ -128,7 +155,7 @@ export type StateProxyRESW<
   ROUT = RIN,
   WOUT = WIN,
 > = StateRESW<ROUT, OptionNone, WOUT> &
-  Owner<S, WIN, ROUT, WOUT, SR<ROUT>> & {
+  Owner<S, ROUT, WOUT, SR<ROUT>> & {
     readonly read_only: StateRES<ROUT, OptionNone, WOUT>;
     readonly read_write: StateRESW<ROUT, OptionNone, WOUT>;
   };
@@ -150,32 +177,28 @@ class RXXX<
   RROUT extends SR<ROUT>,
 >
   extends StateBase<RROUT, WOUT, OptionNone>
-  implements Owner<S, WIN, ROUT, WOUT, RROUT>
+  implements Owner<S, ROUT, WOUT, RROUT>
 {
   constructor(
     rok: boolean,
     writable: boolean,
     state: S,
     transform_read?: (value: StateInferResult<S>) => RROUT,
-    transform_write?: {
-      wout_win: (val: WOUT) => WIN;
-      win_wout: (val: WIN) => WOUT;
-    },
+    write?: StateProxyWrite<S, WOUT>,
   ) {
     super();
     this.#rok = rok;
     this.#writable = writable;
     this.#state = state;
     if (transform_read) this.transform_read = transform_read;
-    if (transform_write) {
-      this.transform_wout_win = transform_write.wout_win;
-      this.transform_win_wout = transform_write.win_wout;
-    }
+    this.#write = write;
   }
 
   #rok: boolean;
   #writable: boolean;
   #state: S;
+  /**How to write a value, undefined writes it to the source as it is*/
+  #write?: StateProxyWrite<S, WOUT>;
   #subscriber = (value: SR<RIN>) => {
     const transformed = this.transform_read(value as StateInferResult<S>);
     //Objects and arrays can be changed in place, so they are always passed on
@@ -189,12 +212,6 @@ class RXXX<
 
   private transform_read(value: StateInferResult<S>): RROUT {
     return value as unknown as RROUT;
-  }
-  private transform_wout_win(value: WOUT): WIN {
-    return value as unknown as WIN;
-  }
-  private transform_win_wout(value: WIN): WOUT {
-    return value as unknown as WOUT;
   }
   protected on_sub(run: boolean = false): void {
     this.#state.sub(this.#subscriber, run);
@@ -219,12 +236,8 @@ class RXXX<
       this.on_sub(true);
     } else this.transform_read = transform;
   }
-  set_transform_write(
-    wout_win: (val: WOUT) => WIN,
-    win_wout: (val: WIN) => WOUT,
-  ) {
-    this.transform_wout_win = wout_win;
-    this.transform_win_wout = win_wout;
+  set_write(write: StateProxyWrite<S, WOUT> | undefined) {
+    this.#write = write;
   }
   get state() {
     return this as State<ROUT, OptionNone, WOUT>;
@@ -292,32 +305,44 @@ class RXXX<
   write(value: WOUT): PromiseLike<SR<void>> {
     if (!this.#writable || !this.#state.write)
       return sync_resolve(not_writable());
-    return this.#state.write(this.transform_wout_win(value));
+    const write = this.#write;
+    if (write)
+      return gated(this.#state.write_enabled, () =>
+        write.write(value, this.#state),
+      );
+    //Without write the proxy has the write type of the source
+    return this.#state.write(value as unknown as WIN);
   }
 
   //@ts-expect-error typescript workaround
   get limit(): ((value: WOUT) => PromiseLike<SR<WOUT>>) | undefined {
-    const limit = this.#state.limit?.bind(this.#state);
-    return limit
-      ? (value) => {
-          if (!this.#writable) return sync_resolve(not_writable());
-          return limit(this.transform_wout_win(value)).then((res) => {
-            if (res.err) return err(res.error);
-            return ok(this.transform_win_wout(res.value));
-          });
-        }
-      : undefined;
+    return this.#write_helper("limit");
   }
   //@ts-expect-error typescript workaround
   get check(): ((value: WOUT) => PromiseLike<SR<WOUT>>) | undefined {
-    const check = this.#state.check?.bind(this.#state);
-    return check
+    return this.#write_helper("check");
+  }
+
+  /**limit or check, of the write form when given, else of the source with the value as it is, undefined when the source has none*/
+  #write_helper(
+    name: "limit" | "check",
+  ): ((value: WOUT) => PromiseLike<SR<WOUT>>) | undefined {
+    const write = this.#write;
+    if (write)
+      return (value) => {
+        if (!this.#writable) return sync_resolve(not_writable());
+        return gated(
+          this.#state.write_enabled,
+          () => write[name]?.(value, this.#state) ?? sync_resolve(ok(value)),
+        );
+      };
+    const helper = this.#state[name]?.bind(this.#state);
+    return helper
       ? (value) => {
           if (!this.#writable) return sync_resolve(not_writable());
-          return check(this.transform_wout_win(value)).then((res) => {
-            if (res.err) return err(res.error);
-            return ok(this.transform_win_wout(res.value));
-          });
+          return helper(value as unknown as WIN) as unknown as PromiseLike<
+            SR<WOUT>
+          >;
         }
       : undefined;
   }
@@ -359,9 +384,21 @@ function roa_from<
 //     | | \ \| |__| / ____ \  /\  /
 //     |_|  \_\\____/_/    \_\/  \/
 
-/**Creates a proxy state which mirrors another state, with an optional transform function.
+/**Creates a writable proxy state which mirrors another state, with an optional transform function.
+ * Without write, writes, check and limit go to the source as they are, and the proxy has the write type of the source.
+ * With write, see StateProxyWrite, the proxy can have a write type of its own, which needs write.
  * @param state - state to proxy.
- * @param transform_read - Function to transform value of proxy*/
+ * @param transform_read - Function to transform value of proxy
+ * @param write - Writes, checks and limits a value, given the source state*/
+function roaw_from<
+  S extends StateREAW<RIN, any, WIN>,
+  RIN = S extends State<infer RT> ? RT : never,
+  WIN = S extends State<any, any, infer WT> ? WT : any,
+  ROUT = RIN,
+>(
+  state: S,
+  transform_read?: (value: StateInferResult<S>) => ResultOk<ROUT>,
+): StateProxyROAW<S, RIN, WIN, ROUT, WIN>;
 function roaw_from<
   S extends StateREAW<RIN, any, WIN>,
   RIN = S extends State<infer RT> ? RT : never,
@@ -370,18 +407,20 @@ function roaw_from<
   WOUT = WIN,
 >(
   state: S,
+  transform_read: ((value: StateInferResult<S>) => ResultOk<ROUT>) | undefined,
+  write: StateProxyWrite<S, WOUT>,
+): StateProxyROAW<S, RIN, WIN, ROUT, WOUT>;
+function roaw_from<S extends StateREAW<RIN, any, WIN>, RIN, WIN, ROUT, WOUT>(
+  state: S,
   transform_read?: (value: StateInferResult<S>) => ResultOk<ROUT>,
-  transform_write?: {
-    wout_win: (val: WOUT) => WIN;
-    win_wout: (val: WIN) => WOUT;
-  },
+  write?: StateProxyWrite<S, WOUT>,
 ): StateProxyROAW<S, RIN, WIN, ROUT, WOUT> {
   return new RXXX<S, RIN, WIN, ROUT, WOUT, ResultOk<ROUT>>(
     true,
     true,
     state,
     transform_read,
-    transform_write,
+    write,
   ) as StateProxyROAW<S, RIN, WIN, ROUT, WOUT>;
 }
 
@@ -420,9 +459,21 @@ function ros_from<
 //     |  _  /| |  | |\___ \  \ \/  \/ /
 //     | | \ \| |__| |____) |  \  /\  /
 //     |_|  \_\\____/|_____/    \/  \/
-/**Creates a proxy state which mirrors another state, with an optional transform function.
+/**Creates a writable proxy state which mirrors another state, with an optional transform function.
+ * Without write, writes, check and limit go to the source as they are, and the proxy has the write type of the source.
+ * With write, see StateProxyWrite, the proxy can have a write type of its own, which needs write.
  * @param state - state to proxy.
- * @param transform_read - Function to transform value of proxy*/
+ * @param transform_read - Function to transform value of proxy
+ * @param write - Writes, checks and limits a value, given the source state*/
+function rosw_from<
+  S extends StateRESW<RIN, any, WIN>,
+  RIN = S extends State<infer RT> ? RT : never,
+  WIN = S extends State<any, any, infer WT> ? WT : any,
+  ROUT = RIN,
+>(
+  state: S,
+  transform_read?: (value: StateInferResult<S>) => ResultOk<ROUT>,
+): StateProxyROSW<S, RIN, WIN, ROUT, WIN>;
 function rosw_from<
   S extends StateRESW<RIN, any, WIN>,
   RIN = S extends State<infer RT> ? RT : never,
@@ -431,18 +482,20 @@ function rosw_from<
   WOUT = WIN,
 >(
   state: S,
+  transform_read: ((value: StateInferResult<S>) => ResultOk<ROUT>) | undefined,
+  write: StateProxyWrite<S, WOUT>,
+): StateProxyROSW<S, RIN, WIN, ROUT, WOUT>;
+function rosw_from<S extends StateRESW<RIN, any, WIN>, RIN, WIN, ROUT, WOUT>(
+  state: S,
   transform_read?: (value: StateInferResult<S>) => ResultOk<ROUT>,
-  transform_write?: {
-    wout_win: (val: WOUT) => WIN;
-    win_wout: (val: WIN) => WOUT;
-  },
+  write?: StateProxyWrite<S, WOUT>,
 ): StateProxyROSW<S, RIN, WIN, ROUT, WOUT> {
   return new RXXX<S, RIN, WIN, ROUT, WOUT, ResultOk<ROUT>>(
     true,
     true,
     state,
     transform_read,
-    transform_write,
+    write,
   ) as StateProxyROSW<S, RIN, WIN, ROUT, WOUT>;
 }
 
@@ -481,9 +534,21 @@ function rea_from<
 //     |  _  /|  __|   / /\ \ \/  \/ /
 //     | | \ \| |____ / ____ \  /\  /
 //     |_|  \_\______/_/    \_\/  \/
-/**Creates a proxy state which mirrors another state, with an optional transform function.
+/**Creates a writable proxy state which mirrors another state, with an optional transform function.
+ * Without write, writes, check and limit go to the source as they are, and the proxy has the write type of the source.
+ * With write, see StateProxyWrite, the proxy can have a write type of its own, which needs write.
  * @param state - state to proxy.
- * @param transform_read - Function to transform value of proxy*/
+ * @param transform_read - Function to transform value of proxy
+ * @param write - Writes, checks and limits a value, given the source state*/
+function reaw_from<
+  S extends StateREAW<RIN, any, WIN>,
+  RIN = S extends State<infer RT> ? RT : never,
+  WIN = S extends State<any, any, infer WT> ? WT : any,
+  ROUT = RIN,
+>(
+  state: S,
+  transform_read?: (value: StateInferResult<S>) => SR<ROUT>,
+): StateProxyREAW<S, RIN, WIN, ROUT, WIN>;
 function reaw_from<
   S extends StateREAW<RIN, any, WIN>,
   RIN = S extends State<infer RT> ? RT : never,
@@ -492,18 +557,20 @@ function reaw_from<
   WOUT = WIN,
 >(
   state: S,
+  transform_read: ((value: StateInferResult<S>) => SR<ROUT>) | undefined,
+  write: StateProxyWrite<S, WOUT>,
+): StateProxyREAW<S, RIN, WIN, ROUT, WOUT>;
+function reaw_from<S extends StateREAW<RIN, any, WIN>, RIN, WIN, ROUT, WOUT>(
+  state: S,
   transform_read?: (value: StateInferResult<S>) => SR<ROUT>,
-  transform_write?: {
-    wout_win: (val: WOUT) => WIN;
-    win_wout: (val: WIN) => WOUT;
-  },
+  write?: StateProxyWrite<S, WOUT>,
 ): StateProxyREAW<S, RIN, WIN, ROUT, WOUT> {
   return new RXXX<S, RIN, WIN, ROUT, WOUT, SR<ROUT>>(
     false,
     true,
     state,
     transform_read,
-    transform_write,
+    write,
   ) as StateProxyREAW<S, RIN, WIN, ROUT, WOUT>;
 }
 
@@ -544,9 +611,21 @@ function res_from<
 //     | | \ \| |____ ____) |  \  /\  /
 //     |_|  \_\______|_____/    \/  \/
 
-/**Creates a proxy state which mirrors another state, with an optional transform function.
+/**Creates a writable proxy state which mirrors another state, with an optional transform function.
+ * Without write, writes, check and limit go to the source as they are, and the proxy has the write type of the source.
+ * With write, see StateProxyWrite, the proxy can have a write type of its own, which needs write.
  * @param state - state to proxy.
- * @param transform_read - Function to transform value of proxy*/
+ * @param transform_read - Function to transform value of proxy
+ * @param write - Writes, checks and limits a value, given the source state*/
+function resw_from<
+  S extends StateRESW<RIN, any, WIN>,
+  RIN = S extends State<infer RT> ? RT : never,
+  WIN = S extends State<any, any, infer WT> ? WT : any,
+  ROUT = RIN,
+>(
+  state: S,
+  transform_read?: (value: StateInferResult<S>) => SR<ROUT>,
+): StateProxyRESW<S, RIN, WIN, ROUT, WIN>;
 function resw_from<
   S extends StateRESW<RIN, any, WIN>,
   RIN = S extends State<infer RT> ? RT : never,
@@ -555,18 +634,20 @@ function resw_from<
   WOUT = WIN,
 >(
   state: S,
+  transform_read: ((value: StateInferResult<S>) => SR<ROUT>) | undefined,
+  write: StateProxyWrite<S, WOUT>,
+): StateProxyRESW<S, RIN, WIN, ROUT, WOUT>;
+function resw_from<S extends StateRESW<RIN, any, WIN>, RIN, WIN, ROUT, WOUT>(
+  state: S,
   transform_read?: (value: StateInferResult<S>) => SR<ROUT>,
-  transform_write?: {
-    wout_win: (val: WOUT) => WIN;
-    win_wout: (val: WIN) => WOUT;
-  },
+  write?: StateProxyWrite<S, WOUT>,
 ): StateProxyRESW<S, RIN, WIN, ROUT, WOUT> {
   return new RXXX<S, RIN, WIN, ROUT, WOUT, SR<ROUT>>(
     false,
     true,
     state,
     transform_read,
-    transform_write,
+    write,
   ) as StateProxyRESW<S, RIN, WIN, ROUT, WOUT>;
 }
 

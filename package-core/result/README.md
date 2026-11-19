@@ -340,6 +340,19 @@ function read_settings(text: string): ResultNice<Settings> {
 
 **`compare` treats two NiceErrors as equal when `equals` says so,** even when they are different objects. A source makes a new `NiceError` for every failure, and states compare results to skip updates that change nothing. Other errors are still compared by identity.
 
+### `result.all_nice(results, kind)`
+
+One result for a list of results. All ok gives their values in order, typed per position for a tuple. Otherwise an error of `kind` made of every error of the list, in order, so the faults prompt of ts-lib-ui lists each one under it. Its message is `"2 of 3 failed"`.
+
+```typescript
+const FORM_INVALID = Symbol("Form invalid");
+
+const all = result.all_nice([read_name(), read_speed()], FORM_INVALID);
+if (all.ok) {
+  const [name, speed] = all.value; // string, number
+}
+```
+
 **It wraps an `Error` instead of extending it, for speed.** Creating an `Error` captures a stack trace, which takes about a microsecond. A `NiceError` costs about as much as a string, and the stack worth having is the one of the wrapped `Error`, where the failure happened. It is not an `Error`, so it is not meant to be thrown, it lives in results.
 
 ## Type Helpers

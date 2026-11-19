@@ -274,10 +274,18 @@ counter.then((result) => {
 console.log((await counter).value);
 ```
 
+## Deriving a state
+
+A state made from other states is a proxy or a collected state:
+
+- **From one state, use a proxy**, `state.p`. It changes the value of that state, and can pass writes back to it, see [Proxy States](#proxy-states).
+- **From several states, use a collected state**, `state.c`. It combines their values into one, see [Collected States](#collected-states).
+
+Both follow their states only while they have subscribers themselves, so a derived state nobody uses costs nothing. The states of `make_fetch_parser` of `@chocbite/ts-lib/parse` are async states that can fail, so values combined from several members are `state.c.rea_ok`, one member changed is `state.p.rea`.
+
 ## Collected States
 
-Combine multiple states into a single derived state:
-Combination function is evaluated as a promise/microtask, so if you change first_name and last_name in the same cycle, it will only be called once.
+Combines the values of several states into one. The transform gets the result of every state, in the order the states are given, and returns the result of the collected state. It runs as a microtask, so states changed in the same cycle call it once.
 
 ```typescript
 const first_name = state.ok("Alice");
@@ -291,11 +299,70 @@ const full_name = state.c.ros(
 // full_name.ok() === "Alice Smith"
 ```
 
-Available variants: `state.c.ros`, `state.c.roa`, `state.c.res`, `state.c.rea`.
+Available variants: `state.c.ros`, `state.c.roa`, `state.c.res`, `state.c.rea`, the ok forms `res_ok` and `rea_ok` below, and the writable forms below.
+
+### Errors of the states
+
+With `res` and `rea` any state can give an error. **Return the failed result as it is** to pass the error on, it keeps its kind, message and cause, so the error shows where it came from. Returning a new error result works too, for an error that says what failed for the collected value.
+
+```typescript
+const temperature_text = state.c.rea(
+  ([temperature, unit]) => {
+    if (temperature.err) return temperature;
+    if (unit.err) return unit;
+    return ok(`${temperature.value} ${unit.value}`);
+  },
+  device.temperature,
+  device.unit,
+);
+```
+
+That is what the ok forms do for you, and is the way to write most transforms:
+
+**Ok forms, `res_ok` and `rea_ok`,** give the transform the plain values and make an ok result of what it returns. The first error of the states is passed on as it is, without calling the transform. `set_getter` of such a state still takes the results.
+
+```typescript
+const temperature_text = state.c.rea_ok(
+  ([temperature, unit]) => `${temperature} ${unit}`,
+  device.temperature,
+  device.unit,
+);
+```
+
+To report every error instead of the first, `result.all_nice(values, kind)` of `@chocbite/ts-lib/result` makes one error of a kind of your own, with every error of the states inside it:
+
+```typescript
+const settings = state.c.rea(
+  (values) => result.all_nice(values, SETTINGS_INVALID).map(([speed, mode]) => ({ speed, mode })),
+  device.speed,
+  device.mode,
+);
+```
+
+### Writable collected states
+
+**Writable forms, `rosw`, `roaw`, `resw`, `reaw`, `resw_ok` and `reaw_ok`,** take a `StateCollectedWrite` before the states. Each function gets the written value and the collected states:
+
+- `write(value, states)` sends the value on, usually by writing parts of it to the collected states, and gives the result of that.
+- `check(value, states)` tells if a value can be written, `limit(value, states)` gives the closest value that can. Both are optional, and give the value as it is when left out.
+
+All three go through the write gate, `set_write_enabled(gate)` sets it, see [Write gate](#write-gate). The read only view is not writable.
+
+```typescript
+const span = state.c.resw(
+  (values) => result.all_nice(values, RANGE_INVALID).map(([min, max]) => max - min),
+  {
+    write: (value: number, [min, max]) => max.write(min.ok() + value),
+    check: async (value) => (value >= 0 ? ok(value) : err_nice(RANGE_INVALID, "Span below 0")),
+  },
+  min,
+  max,
+);
+```
 
 ## Proxy States
 
-Wrap a state with read/write transformation functions or proxy its value:
+Changes the value of one state, for several states use a [collected state](#collected-states). The read transform gets the result of the state, so with `res` and `rea` an error is passed on by returning it, `(val) => val.err ? val : ok(val.value * 2)`, or with `val.map((v) => v * 2)`, which passes an error on by itself. Without a transform the proxy gives the value of the state as it is. With write transforms it can also pass writes back to the state:
 
 ```typescript
 const source = state.ok_w(5);
@@ -304,18 +371,22 @@ const source = state.ok_w(5);
 const doubled = state.p.ros(source, (val) => ok(val.value * 2));
 // doubled.ok() === 10
 
-// Writable proxy
-// A proxy can also be writable, without write transforms values are passed to the source unchanged,
-// with a transform both directions are needed, this is to support the write helper methods limit and check
-const offset = state.p.rosw(
-  source,
-  (val) => ok(val.value + 10), // read: add 10
-  {
-    wout_win: (val) => ok(val.value - 10), // write→inner: subtract 10
-    win_wout: (val) => ok(val.value + 10), // inner→write: add 10
-  },
-);
+// Writable proxy, writes, check and limit go to the source as they are
+const shown = state.p.rosw(source, (val) => ok(val.value * 2));
+
+// Writable proxy with a write of its own, here showing the value as text
+const text = state.p.rosw(source, (val) => ok(String(val.value)), {
+  write: (value: string, source) => source.write(Number(value)),
+  check: async (value) => (isNaN(Number(value)) ? err_nice(NOT_A_NUMBER, `${value} is not a number`) : ok(value)),
+});
 ```
+
+The writable proxies `rosw`, `roaw`, `resw` and `reaw` take an optional `StateProxyWrite` after the read transform:
+
+- **Without it** the proxy has the write type of its source, and writes, `check` and `limit` go to the source as they are.
+- **With it** the proxy can have a write type of its own, and needs it for that, the types refuse a proxy with another write type without it. `write(value, source)` sends the value on, usually by writing it, changed, to the source. `check(value, source)` and `limit(value, source)` are optional, and give the value as it is when left out. All three go through the write gate of the source.
+
+It is the same form as the write of [collected states](#writable-collected-states), with the source in place of the collected states. `set_write(write)` changes it later, `undefined` writes to the source as it is again.
 
 ## Remote States
 

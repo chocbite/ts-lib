@@ -5,6 +5,8 @@ import {
   NiceError,
   ok,
   type ResultErr,
+  result,
+  type Result,
   type ResultNice,
 } from "./index";
 
@@ -143,5 +145,49 @@ describe("NiceError with inner errors", () => {
     expect(make("speed").equals(make("speed"))).toBe(true);
     expect(make("speed").equals(make("unit"))).toBe(false);
     expect(make("speed").equals(new NiceError(FORM_INVALID, "same"))).toBe(false);
+  });
+});
+
+describe("result.all_nice", () => {
+  const FORM_INVALID = Symbol("Form invalid");
+  const A = Symbol("A");
+  const B = Symbol("B");
+
+  it("gives the values in order when all are ok, typed per position", () => {
+    const results = [ok(1), ok("a"), ok(true)] as [ResultNice<number>, ResultNice<string>, ResultNice<boolean>];
+
+    const all = result.all_nice(results, FORM_INVALID);
+
+    expect(all.ok && all.value).toEqual([1, "a", true]);
+    expectTypeOf(all).toEqualTypeOf<Result<[number, string, boolean], NiceError>>();
+  });
+
+  it("gives an array of values for an array of results", () => {
+    const results: ResultNice<number>[] = [ok(1), ok(2)];
+
+    const all = result.all_nice(results, FORM_INVALID);
+
+    expect(all.ok && all.value).toEqual([1, 2]);
+    expectTypeOf(all).toEqualTypeOf<Result<number[], NiceError>>();
+  });
+
+  it("gives one error of the kind with every error inside, in order", () => {
+    const a = new NiceError(A, "first");
+    const b = new NiceError(B, "second");
+
+    const all = result.all_nice([err(a), ok(1), err(b)], FORM_INVALID);
+
+    expect(all.err).toBe(true);
+    const error = all.unwrap_err();
+    expect(error.kind).toBe(FORM_INVALID);
+    expect(error.errors).toEqual([a, b]);
+    expect(error.errors[0]).toBe(a);
+    expect(error.message).toBe("2 of 3 failed");
+  });
+
+  it("gives an ok empty array for no results", () => {
+    const all = result.all_nice([], FORM_INVALID);
+
+    expect(all.ok && all.value).toEqual([]);
   });
 });

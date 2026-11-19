@@ -1345,3 +1345,212 @@ describe("make_fetch_parser NiceErrors", () => {
     expect(parsed.name).toBeDefined();
   });
 });
+
+/**Fake timers with the clock past 0, like in a page. At 0 an empty remote state reads as valid, its validity starts at 0*/
+const fake_timers = () => {
+  vi.useFakeTimers();
+  vi.advanceTimersByTime(1);
+};
+
+describe("make_fetch_parser reads while polling", () => {
+  /**A fetch whose answers the test gives, each call waits for the next answer*/
+  const fetch_answered = () => {
+    const answers: ((result: Result<string, NiceError>) => void)[] = [];
+    const fetch = vi.fn<FetchFunction>(
+      () => new Promise((resolve) => answers.push(resolve)),
+    );
+    return { fetch, answer: (result: Result<string, NiceError>) => answers.shift()!(result) };
+  };
+  const user_of = (fetch: FetchFunction) =>
+    make_fetch_parser(() => "/user", 100, { name: "s", age: "n" }, { fetch });
+  const ADA = ok('{"name":"Ada","age":36}');
+
+  it("gives an await the last polled value, without a request", async () => {
+    fake_timers();
+    try {
+      const { fetch, answer } = fetch_answered();
+      const user = user_of(fetch);
+      const update = () => {};
+      user.name.sub(update);
+      answer(ADA);
+      //Time passes after the poll, the clock of fake timers only moves when told to
+      await vi.advanceTimersByTimeAsync(1);
+
+      expect(await user.age).toMatchObject({ ok: true, value: 36 });
+      expect(await user[FETCH_PARSE]).toMatchObject({ ok: true, value: { name: "Ada", age: 36 } });
+      expect(fetch).toHaveBeenCalledTimes(1);
+      user.name.unsub(update);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives a new subscriber the last polled value, without a request", async () => {
+    fake_timers();
+    try {
+      const { fetch, answer } = fetch_answered();
+      const user = user_of(fetch);
+      const update = () => {};
+      user.name.sub(update);
+      answer(ADA);
+      //Time passes after the poll, the clock of fake timers only moves when told to
+      await vi.advanceTimersByTimeAsync(1);
+      const ages: unknown[] = [];
+      const on_age = (age: StateResult<number>) => ages.push(age.ok && age.value);
+
+      user.age.sub(on_age, true);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(ages).toEqual([36]);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      user.age.unsub(on_age);
+      user.name.unsub(update);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives an await the error of the last poll until the next poll", async () => {
+    fake_timers();
+    try {
+      const { fetch, answer } = fetch_answered();
+      const user = user_of(fetch);
+      const update = () => {};
+      user.name.sub(update);
+      answer(err_nice(TEST_ERROR, "offline"));
+      await vi.advanceTimersByTimeAsync(1);
+
+      const age = await user.age;
+      expect(!age.ok && age.error.kind).toBe(TEST_ERROR);
+      expect(fetch).toHaveBeenCalledTimes(1);
+      user.name.unsub(update);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("lets an await before the first poll answers wait for that poll", async () => {
+    fake_timers();
+    try {
+      const { fetch, answer } = fetch_answered();
+      const user = user_of(fetch);
+      const update = () => {};
+      user.name.sub(update);
+      const age = user.age.then((result) => result);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      answer(ADA);
+
+      expect(await age).toMatchObject({ ok: true, value: 36 });
+      expect(fetch).toHaveBeenCalledTimes(1);
+      user.name.unsub(update);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fetches for an await that waited for a poll, when the subscription ends before the poll answers", async () => {
+    fake_timers();
+    try {
+      const { fetch, answer } = fetch_answered();
+      const user = user_of(fetch);
+      const update = () => {};
+      user.name.sub(update);
+      const age = user.age.then((result) => result);
+      await vi.advanceTimersByTimeAsync(0);
+
+      user.name.unsub(update);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      answer(err_nice(TEST_ERROR, "aborted poll, ignored"));
+      answer(ADA);
+
+      expect(await age).toMatchObject({ ok: true, value: 36 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("fetches for every await without a subscription, and after polling stopped", async () => {
+    const fetch = vi.fn<FetchFunction>(() => Promise.resolve(ADA));
+    const user = user_of(fetch);
+
+    await user.age;
+    await user.age;
+    expect(fetch).toHaveBeenCalledTimes(2);
+
+    const update = () => {};
+    user.name.sub(update);
+    await sleep(0);
+    user.name.unsub(update);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    await user.age;
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe("make_fetch_parser timeout", () => {
+  const hanging = () => vi.fn<FetchFunction>(() => new Promise(() => {}));
+  const is_timed_out = (result: StateResult<unknown>) =>
+    !result.ok && result.error.kind === safe.fetch.errors.TIMED_OUT;
+
+  it("gives TIMED_OUT when a poll gets no answer within 5000 ms, and polls again after retry_rate", async () => {
+    fake_timers();
+    try {
+      const fetch = hanging();
+      const user = make_fetch_parser(() => "/user", 100, { name: "s" }, { fetch, retry_rate: 1000 });
+      const names: StateResult<string>[] = [];
+      const on_name = (name: StateResult<string>) => names.push(name);
+      user.name.sub(on_name);
+
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(names).toEqual([]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(names.length).toBe(1);
+      expect(is_timed_out(names[0]!)).toBe(true);
+      expect(is_timed_out(await user.name)).toBe(true);
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(fetch).toHaveBeenCalledTimes(2);
+      user.name.unsub(on_name);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("aborts the request at the timeout, with a TimeoutError", async () => {
+    fake_timers();
+    try {
+      let signal: AbortSignal | undefined;
+      const fetch = vi.fn<FetchFunction>((_url, init) => {
+        signal = init.signal ?? undefined;
+        return new Promise(() => {});
+      });
+      const user = make_fetch_parser(() => "/user", 100, { name: "s" }, { fetch, timeout: 300 });
+      const age = user.name.then((result) => result);
+
+      await vi.advanceTimersByTimeAsync(300);
+
+      expect(signal?.aborted).toBe(true);
+      expect((signal?.reason as Error).name).toBe("TimeoutError");
+      expect(is_timed_out(await age)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives an await without a subscription the TIMED_OUT of the fetch, not a timeout of the state", async () => {
+    fake_timers();
+    try {
+      const user = make_fetch_parser(() => "/user", 100, { name: "s" }, { fetch: hanging(), timeout: 2000 });
+      const name = user.name.then((result) => result);
+
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(is_timed_out(await name)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

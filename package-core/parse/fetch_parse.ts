@@ -1,5 +1,5 @@
 import { is_promise_like, type Prettify } from "#common";
-import { fetch_text_safe } from "#safe";
+import { fetch_text_safe, safe } from "#safe";
 import {
   err,
   err_nice,
@@ -269,7 +269,13 @@ export type FetchParserOptions = {
    * A write that would overwrite the write of another member, like an encoded array item, sends the collected writes first.
    * Defaults to 0, every write is sent at once*/
   readonly write_debounce?: number;
+  /**Time in ms a request may take, then it is aborted and gives a safe.fetch.errors.TIMED_OUT, like any other failed read.
+   * Also when a fetch given in the options ignores the signal. Defaults to 5000*/
+  readonly timeout?: number;
 };
+
+/**Default of the timeout option*/
+const TIMEOUT = 5000;
 
 const default_fetch: FetchFunction = fetch_text_safe;
 
@@ -628,6 +634,33 @@ export function make_fetch_parser<const S extends FetchSchema>(
   let timer: ReturnType<typeof setTimeout> | undefined;
   //Each subscription gets its own controller, ending it aborts its fetches and stops its polling
   let subscription: AbortController | undefined;
+  const timeout = options?.timeout ?? TIMEOUT;
+  /**Fetches with the timeout, the request is aborted when the subscription of the signal ends or the time is up.
+   * The time being up gives TIMED_OUT also when the fetch ignores the signal, so a request never hangs the polling*/
+  const fetch_timed = (url: string, init: RequestInit | undefined, signal?: AbortSignal) => {
+    const controller = new AbortController();
+    const end = () => controller.abort(signal?.reason);
+    signal?.addEventListener("abort", end, { once: true });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timed_out = new Promise<ResultErr<NiceError>>((resolve) => {
+      timer = setTimeout(() => {
+        //The name tells fetch and fetch_text_safe it is a timeout, not an abort
+        const error = new Error(`No answer within ${timeout}ms`);
+        error.name = "TimeoutError";
+        controller.abort(error);
+        resolve(err_nice(safe.fetch.errors.TIMED_OUT, error));
+      }, timeout);
+    });
+    //Started right away, a throw of the fetch becomes a rejection, so the timer and listener are always cleaned up
+    const fetching = new Promise<Awaited<ReturnType<FetchFunction>>>((resolve) =>
+      resolve(fetch_with(url, { ...init, signal: controller.signal })),
+    );
+    return Promise.race([fetching, timed_out]).finally(() => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", end);
+    });
+  };
+
   //Expected failures arrive as errors, a throw from request or fetch is a bug
   const read = async (signal?: AbortSignal): Promise<StateResult<unknown>> => {
     let url: string;
@@ -639,7 +672,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
     }
     let fetched: unknown;
     try {
-      fetched = await fetch_with(url, { ...init, signal });
+      fetched = await fetch_timed(url, init, signal);
     } catch (cause) {
       return unexpected("fetch", cause);
     }
@@ -668,11 +701,23 @@ export function make_fetch_parser<const S extends FetchSchema>(
     return result.ok;
   };
 
+  //A poll request of the subscription is running, and a read waits for its answer instead of fetching itself
+  let polling = false;
+  let read_waits = false;
+  /**One poll of the subscription, its answer also answers the reads waiting*/
+  const poll = async (owner: RemoteOwner, signal: AbortSignal): Promise<boolean> => {
+    polling = true;
+    const loaded = await load(owner, signal);
+    //An ended subscription has handed its waiting reads on in teardown, a new one may be polling by now
+    if (!signal.aborted) polling = read_waits = false;
+    return loaded;
+  };
+
   const retry_rate = options?.retry_rate ?? update_rate;
   const schedule = (owner: RemoteOwner, signal: AbortSignal, loaded: boolean) => {
     if (signal.aborted) return;
     timer = setTimeout(
-      async () => schedule(owner, signal, await load(owner, signal)),
+      async () => schedule(owner, signal, await poll(owner, signal)),
       loaded ? update_rate : retry_rate,
     );
   };
@@ -750,17 +795,24 @@ export function make_fetch_parser<const S extends FetchSchema>(
   };
 
   const root = state.r.reaw.from<unknown, any, unknown>(
-    (owner) => void load(owner),
+    //While polling, the value is valid and only reads before the first answer get here, they wait for it
+    (owner) => {
+      if (polling) read_waits = true;
+      else void load(owner);
+    },
     (owner) => {
       subscription = new AbortController();
       const signal = subscription.signal;
-      void load(owner, signal).then((loaded) => schedule(owner, signal, loaded));
+      void poll(owner, signal).then((loaded) => schedule(owner, signal, loaded));
     },
-    () => {
+    (owner) => {
       subscription?.abort();
       subscription = undefined;
       if (timer) clearTimeout(timer);
       timer = undefined;
+      //The aborted poll gives no answer, so reads waiting for it fetch themselves
+      if (read_waits) void load(owner);
+      polling = read_waits = false;
     },
     (payload) => {
       if (payload instanceof UnsentWrite) return Promise.resolve(err(payload.error));
@@ -769,6 +821,9 @@ export function make_fetch_parser<const S extends FetchSchema>(
       if (write_debounce <= 0) return send(outgoing.payload);
       return add_to_batch(outgoing);
     },
+    //Polling keeps the value current, so it is valid while subscribed, errors included until the next poll.
+    //The own timeout of the state is later than the one of the request, so a read gets the TIMED_OUT of the request
+    { validity: true, timeout: timeout + 1000 },
   ) as StateREAW<ResolveSchema<S>, any, unknown>;
 
   /**Builds the payload for writing value at path.
@@ -833,29 +888,20 @@ export function make_fetch_parser<const S extends FetchSchema>(
     return ok(base.value as unknown[]);
   };
 
-  /**Writable projection of the root, limit and check on the root give the payload back,
-   * it is mapped back to the value it was built from, as a payload can not always be turned back into the value*/
+  /**Writable projection of the root, a written value is sent as the payload built from it.
+   * The root has no limit or check of its own, they give the payload back as it is,
+   * so a value that passes is given back as it is, a payload can not always be turned back into the value*/
   const writable = (
     transform: (result: StateResult<unknown>) => StateResult<unknown>,
     to_payload: (value: unknown) => unknown,
-  ) => {
-    const sent = new WeakMap<object, unknown>();
-    return state.proxy.reaw(root as any, transform, {
-      wout_win: (value) => {
-        const payload = to_payload(value);
-        if (payload !== null && typeof payload === "object")
-          sent.set(payload, value);
-        return payload;
-      },
-      win_wout: (payload) => {
-        if (payload !== null && typeof payload === "object" && sent.has(payload))
-          return sent.get(payload);
-        throw new Error(
-          "Writable fetch projections can only map back payloads they built themselves",
-        );
-      },
+  ) =>
+    state.proxy.reaw(root as StateREAW<unknown, any, unknown>, transform, {
+      write: (value: unknown, source) => source.write(to_payload(value)),
+      check: (value, source) =>
+        source.check(to_payload(value)).then((checked) => checked.map(() => value)),
+      limit: (value, source) =>
+        source.limit(to_payload(value)).then((limited) => limited.map(() => value)),
     });
-  };
 
   /**Builds the states for a part of the schema.
    * @param optional_at index in the path of the outermost optional member, a member missing from there on reads as undefined*/
