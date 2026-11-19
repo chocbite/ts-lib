@@ -184,6 +184,16 @@ describe("selection edge cases", () => {
     expect(range.startOffset).toBe(5);
   });
 
+  it("leaves the selection alone for a negative offset, the -1 of get_cursor_position", () => {
+    for (const [, create] of editable_elements) {
+      const element = create();
+      const other = create_contenteditable();
+      set_cursor_position(other, 2);
+      expect(() => set_cursor_position(element, -1)).not.toThrow();
+      expect(get_cursor_position(other)).toBe(2);
+    }
+  });
+
   it("sets the cursor at the start with offset 0", () => {
     const element = create_contenteditable();
     set_cursor_position(element, 0);

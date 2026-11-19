@@ -30,11 +30,13 @@ export function get_cursor_position(element: HTMLElement): number {
 
 /** Sets the cursor position (caret) inside a contenteditable element, input, or textarea.
  * @param element The editable HTML element.
- * @param offset The character offset from the beginning of the element's text content.*/
+ * @param offset The character offset from the beginning of the element's text content.
+ * A negative offset, like the -1 of get_cursor_position when there was no position, leaves the selection as it is.*/
 export function set_cursor_position(
   element: HTMLElement,
   offset: number,
 ): void {
+  if (offset < 0) return;
   if (is_text_control(element)) {
     element.focus();
     element.setSelectionRange(offset, offset);

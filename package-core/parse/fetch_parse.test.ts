@@ -1741,7 +1741,7 @@ describe("make_fetch_parser write only containers", () => {
   const SCHEMA = {
     access: [MAX_ACCESS_LEVELS, [MAX_ACCESS, "bw"]],
     passcode: [MAX_ACCESS_LEVELS, "swo"],
-    save: ["?", "nwo", () => false, { reset: true }],
+    save: ["?", "bwo", () => false, { reset: true }],
   } as const satisfies FetchSchema;
   const ACCESS = [
     [true, false],
@@ -1778,13 +1778,13 @@ describe("make_fetch_parser write only containers", () => {
     expect(FETCH_PARSE in parsed.passcode).toBe(false);
   });
 
-  it("reads the default and the written values, typed as both", async () => {
+  it("reads the default, then goes back to it after a write with reset", async () => {
     const { parsed, send } = parser_from(SCHEMA, {});
     expect(parsed.save.ok()).toBe(false);
-    expectTypeOf(parsed.save.ok()).toEqualTypeOf<number | boolean>();
-    expectTypeOf<Parameters<typeof parsed.save.write>[0]>().toEqualTypeOf<number>();
-    expect((await parsed.save.write(1)).ok).toBe(true);
-    expect(send).toHaveBeenCalledWith({ save: 1 });
+    expectTypeOf(parsed.save.ok()).toEqualTypeOf<boolean>();
+    expectTypeOf<Parameters<typeof parsed.save.write>[0]>().toEqualTypeOf<boolean>();
+    expect((await parsed.save.write(true)).ok).toBe(true);
+    expect(send).toHaveBeenCalledWith({ save: true });
     expect(parsed.save.ok()).toBe(false);
   });
 
@@ -1815,5 +1815,63 @@ describe("make_fetch_parser write only containers", () => {
     expect(made({ fixed: [2, ["n", "nwo"]] })).toThrow("write only");
     expect(made({ list: [0, "nwo"] })).toThrow("write only");
     expect(made({ items: [0, { cmd: [2, "nwo"] }, { write: "all" }] })).toThrow("write only");
+  });
+});
+
+describe("make_fetch_parser defaults", () => {
+  const write = async () => ok(undefined);
+
+  it("refuses a default of another type than its type string, also with satisfies", () => {
+    // @ts-expect-error false is not a string
+    const write_only = { new: ["?", "swo", () => false, { reset: true }] } as const satisfies FetchSchema;
+    // @ts-expect-error false is not a string
+    const read = { name: ["?", "s", () => false] } as const satisfies FetchSchema;
+    // @ts-expect-error a string is not a number
+    const writable = { speed: ["?", "nw", () => "fast"] } as const satisfies FetchSchema;
+    expect([write_only, read, writable]).toHaveLength(3);
+  });
+
+  it("accepts defaults of the type of their spec", () => {
+    const schema = {
+      name: ["?", "s", () => "none"],
+      speed: ["?", "nw", () => 0],
+      mode: ["?", "nsl", () => null],
+      save: ["?", "bwo", () => false, { reset: true }],
+      pin: ["?", "swo", () => ""],
+      settings: ["?", { eco: "b", level: "n" }, () => ({ eco: false, level: 1 })],
+      tags: ["?", [0, "s"], () => []],
+    } as const satisfies FetchSchema;
+    expect(() => make_fetch_parser(() => "/x", 1_000, schema, { write })).not.toThrow();
+  });
+
+  it("refuses a default of a container that does not match it, with the path in the error", () => {
+    const compile_only = () => {
+      make_fetch_parser(
+        () => "/x",
+        1_000,
+        // @ts-expect-error level is a number
+        { device: { settings: ["?", { eco: "b", level: "n" }, () => ({ eco: false, level: "high" })] } },
+      );
+      make_fetch_parser(
+        () => "/x",
+        1_000,
+        // @ts-expect-error the items are strings
+        { tags: ["?", [0, "s"], () => [1, 2]] },
+      );
+    };
+    expect(compile_only).toBeTypeOf("function");
+    type Errors = Parameters<
+      typeof make_fetch_parser<{ readonly device: { readonly settings: readonly ["?", { readonly level: "n" }, () => { level: string }] } }>
+    >[2];
+    expectTypeOf<Errors>().toHaveProperty("Wrong default");
+    expectTypeOf<Errors["Wrong default"]>().toEqualTypeOf<"device.settings: the default gives a value the spec does not allow">();
+  });
+
+  it("throws for a write only default of another type, as nothing parses it", () => {
+    const made = (schema: unknown) => () =>
+      make_fetch_parser(() => "/x", 1_000, schema as FetchSchema, { write });
+    expect(made({ new: ["?", "swo", () => false, { reset: true }] })).toThrow("default");
+    expect(made({ count: ["?", "nwo", () => "1"] })).toThrow("default");
+    expect(made({ mode: ["?", "nlwo", () => null] })).not.toThrow();
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { make_parser, type Parsed } from "./parse";
+import { ok } from "#result";
 
 describe("make_parser", () => {
   describe("Parsed", () => {
@@ -477,6 +478,8 @@ describe("make_parser", () => {
       });
 
       it("should reject an invalid default", () => {
+        //The types refuse it, plain javascript and any get past them
+        // @ts-expect-error the default is not a number
         const invalid_default = make_parser({ count: ["?", "n", () => "zero"] as const });
         expect(invalid_default({}).ok).toBe(false);
       });
@@ -647,5 +650,29 @@ describe("make_parser edge cases", () => {
     });
     const result = parse({ v: { c: 2 } });
     expect(result.ok && result.value.v).toEqual({ c: 2 });
+  });
+});
+
+describe("make_parser defaults", () => {
+  it("refuses a default of another type than its spec", () => {
+    const compile_only = () => {
+      // @ts-expect-error false is not a string
+      make_parser({ name: ["?", "s", () => false] });
+      // @ts-expect-error level is a number
+      make_parser({ settings: ["?", { level: "n" }, () => ({ level: "high" })] });
+      // @ts-expect-error the items are numbers
+      make_parser([0, { tags: ["?", [0, "n"], () => ["a"]] }]);
+    };
+    expect(compile_only).toBeTypeOf("function");
+  });
+
+  it("accepts defaults of the type of their spec", () => {
+    const parse = make_parser({
+      name: ["?", "s", () => "none"],
+      mode: ["?", "nsl", () => null],
+      settings: ["?", { level: "n" }, () => ({ level: 1 })],
+      tags: ["?", [0, "s"], () => []],
+    });
+    expect(parse({})).toEqual(ok({ name: "none", mode: null, settings: { level: 1 }, tags: [] }));
   });
 });

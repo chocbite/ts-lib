@@ -21,7 +21,7 @@ import {
   type StateROSW,
 } from "#state";
 import { fetch_parse_errors } from "./fetch_errors";
-import { make_parser, type Parsed } from "./parse";
+import { make_parser, type CheckDefaults, type Parsed } from "./parse";
 
 type FetchTypeCharOrder = ["n", "s", "b", "l"];
 type OrderedFetchTypeString<Chars extends readonly string[]> =
@@ -69,22 +69,64 @@ export type FetchArrayOptions<T = any> =
   | { readonly write: "all"; readonly key?: string };
 export const FETCH_PARSE: unique symbol = Symbol("FETCH_PARSE");
 
-export type FetchSchema =
-  | FetchPrimitiveSpec
+export type FetchSchema = FetchPrimitiveSpec | FetchSchemaContainer;
+
+/**An optional type string with a default, the default gives the type of the type string, one entry per type string.
+ * A write only one can have options after the default*/
+type FetchDefaultedTypeString = {
+  [K in FetchPrimitiveSpec]: K extends FetchWriteOnlySpec
+    ?
+        | readonly ["?", K, () => ResolveString<K>]
+        | readonly ["?", K, () => ResolveString<K>, FetchWriteOnlyOptions]
+    : readonly ["?", K, () => ResolveString<K>];
+}[FetchPrimitiveSpec];
+
+/**Every spec but a type string, a default of a container or parser is checked by make_fetch_parser, see FetchDefaultErrors*/
+type FetchSchemaContainer =
   | Parser
   | readonly ["?", FetchSchema]
-  | readonly ["?", FetchSchema, () => unknown]
-  | readonly ["?", FetchWriteOnlySpec, () => unknown, FetchWriteOnlyOptions]
+  | FetchDefaultedTypeString
+  | readonly ["?", FetchSchemaContainer, () => unknown]
   | readonly ["{}", FetchSchema]
   | readonly [number, FetchSchema]
   | readonly [0, FetchSchema, ArrayWriteEncoder | FetchArrayOptions]
   | readonly FetchSchema[]
   | { readonly [key: string]: FetchSchema };
 
-/**True only for the generic FetchSchema itself, as in the constraint of a generic S.
- * FetchSchema contains itself, so the recursive types below would recurse into it forever (TS2589).
+/**A message for every default in the schema that gives a value its spec does not allow, never when all fit, with the path to it.
+ * The schema type checks the defaults of type strings, these are the ones of containers and parsers*/
+type FetchDefaultErrors<S, P extends string = ""> =
+  IsWholeSchema<S> extends true
+    ? never
+    : S extends string | Parser
+      ? never
+      : S extends readonly ["?", infer Item, () => infer Default, ...unknown[]]
+        ?
+            | ([Default] extends [ResolveSchema<Item>]
+                ? never
+                : `${P extends "" ? "root" : P}: the default gives a value the spec does not allow`)
+            | FetchDefaultErrors<Item, P>
+        : S extends readonly ["?", infer Item]
+          ? FetchDefaultErrors<Item, P>
+          : S extends readonly [0, infer Item, ...unknown[]]
+            ? FetchDefaultErrors<Item, `${P}[]`>
+            : S extends readonly ["{}" | number, infer Item]
+              ? FetchDefaultErrors<Item, `${P}[]`>
+              : S extends readonly unknown[]
+                ? FetchDefaultErrors<S[number], `${P}[]`>
+                : S extends object
+                  ? {
+                      [K in keyof S & string]: FetchDefaultErrors<
+                        S[K],
+                        P extends "" ? K : `${P}.${K}`
+                      >;
+                    }[keyof S & string]
+                  : never;
+
+/**True only for the generic FetchSchema itself, or FetchSchemaContainer, as in the constraint of a generic S.
+ * Both contain themselves, so the recursive types below would recurse into it forever (TS2589).
  * They give a wide type for it instead. Lint rules ask for such constraints, an error there leaks into other types*/
-type IsWholeSchema<S> = [FetchSchema] extends [S] ? true : false;
+type IsWholeSchema<S> = [FetchSchemaContainer] extends [S] ? true : false;
 
 type RemoveWritable<S> = IsWholeSchema<S> extends true ? S : RemoveWritableEach<S>;
 type RemoveWritableEach<S> = S extends string
@@ -231,8 +273,8 @@ type FetchNode<S, Value> = IsWholeSchema<S> extends true
   : FetchNodeEach<S, Value>;
 type FetchNodeEach<S, Value> = S extends FetchWriteOnlySpec
   ? StateROSW<undefined, Option<{}>, WriteOnlyType<S>>
-  : S extends readonly ["?", FetchWriteOnlySpec, () => infer Default, ...unknown[]]
-    ? StateROSW<WriteOnlyType<S> | Default, Option<{}>, WriteOnlyType<S>>
+  : S extends readonly ["?", FetchWriteOnlySpec, () => unknown, ...unknown[]]
+    ? StateROSW<WriteOnlyType<S>, Option<{}>, WriteOnlyType<S>>
   : S extends string
   ? Writable<S> extends true
     ? StateREAW<Value, Option<{}>, Value>
@@ -511,6 +553,25 @@ function check_write_only(
     for (const value of Object.values(schema)) check_write_only(value, true, in_all);
 }
 
+/**Throws when the default of a write only member is not of its type, type_chars like "ns"*/
+function check_write_only_default(
+  path: readonly PathPart[],
+  value: unknown,
+  type_chars: string,
+): void {
+  const fits = [...type_chars].some(
+    (char) =>
+      (char === "n" && typeof value === "number") ||
+      (char === "s" && typeof value === "string") ||
+      (char === "b" && typeof value === "boolean") ||
+      (char === "l" && value === null),
+  );
+  if (!fits)
+    throw new Error(
+      `The default of the write only member at ${path.map((part) => (part instanceof ItemKey ? `${part.key}=${String(part.value)}` : String(part))).join(".")} gives ${JSON.stringify(value)}, which is not of the type "${type_chars}"`,
+    );
+}
+
 /**Throws for a write only type string with a "?" prefix, inside a write only spec*/
 function check_write_only_prefix(schema: unknown): void {
   if (typeof schema === "string") {
@@ -753,7 +814,7 @@ function request_parts(
 export function make_fetch_parser<const S extends FetchSchema>(
   request: () => FetchRequest,
   update_rate: number,
-  schema: S,
+  schema: S & CheckDefaults<S, FetchDefaultErrors<S>>,
   options?: FetchParserOptions,
 ): FetchParsed<S> {
   check_write_only(schema, false, false, true);
@@ -1051,10 +1112,13 @@ export function make_fetch_parser<const S extends FetchSchema>(
   const write_only = (
     path: readonly PathPart[],
     encoder: ArrayWriteEncoder<unknown> | undefined,
+    type_chars: string,
     default_value?: () => unknown,
     reset = false,
   ) => {
     let kept = default_value?.();
+    //Nothing parses the default of a write only member, the types check it, plain javascript and any get past them
+    if (default_value) check_write_only_default(path, kept, type_chars);
     //Only the last write decides what is read when it finishes
     let last_write = 0;
     return state.rosw<unknown, unknown>(ok(kept), (value, owner) => {
@@ -1088,14 +1152,15 @@ export function make_fetch_parser<const S extends FetchSchema>(
     };
 
     if (is_write_only_leaf(part_schema)) {
-      if (typeof part_schema === "string") return write_only(path, encoder);
-      const [, , default_value, write_options] = part_schema as [
+      if (typeof part_schema === "string")
+        return write_only(path, encoder, part_schema.slice(0, -2));
+      const [, spec, default_value, write_options] = part_schema as [
         "?",
         string,
         (() => unknown)?,
         FetchWriteOnlyOptions?,
       ];
-      return write_only(path, encoder, default_value, write_options?.reset);
+      return write_only(path, encoder, spec.slice(0, -2), default_value, write_options?.reset);
     }
 
     if (typeof part_schema === "string") {

@@ -102,15 +102,58 @@ type InferRecordSchema<S extends readonly ["{}", unknown]> =
     ? Record<string, ResolveSpec<Item>>
     : never;
 
-type SchemaQNSBL =
-  | PrimitiveSpec
+type SchemaQNSBL = PrimitiveSpec | SchemaContainer;
+
+/**An optional type string with a default, the default gives the type of the type string, one entry per type string*/
+type DefaultedTypeString = {
+  [K in PrimitiveSpec]: readonly ["?", K, () => ParseTypeString<K>];
+}[PrimitiveSpec];
+
+/**Every spec but a type string, a default of a container or parser is checked by make_parser, see DefaultErrors*/
+type SchemaContainer =
   | Parser
   | readonly ["?", SchemaQNSBL]
-  | readonly ["?", SchemaQNSBL, () => unknown]
+  | DefaultedTypeString
+  | readonly ["?", SchemaContainer, () => unknown]
   | readonly ["{}", SchemaQNSBL]
   | readonly [number, SchemaQNSBL]
   | readonly SchemaQNSBL[]
   | { readonly [key: string]: SchemaQNSBL };
+
+/**True for the generic SchemaQNSBL and SchemaContainer, which contain themselves, so DefaultErrors does not recurse into them forever*/
+type IsWholeSchema<S> = [SchemaContainer] extends [S] ? true : false;
+
+/**A message for every default in the schema that gives a value its spec does not allow, never when all fit, with the path to it*/
+type DefaultErrors<S, P extends string = ""> =
+  IsWholeSchema<S> extends true
+    ? never
+    : S extends string | Parser
+      ? never
+      : S extends readonly ["?", infer Item, () => infer Default]
+        ?
+            | ([Default] extends [ResolveSpec<Item>]
+                ? never
+                : `${P extends "" ? "root" : P}: the default gives a value the spec does not allow`)
+            | DefaultErrors<Item, P>
+        : S extends readonly ["?", infer Item]
+          ? DefaultErrors<Item, P>
+          : S extends readonly ["{}" | number, infer Item]
+            ? DefaultErrors<Item, `${P}[]`>
+            : S extends readonly unknown[]
+              ? DefaultErrors<S[number], `${P}[]`>
+              : S extends object
+                ? {
+                    [K in keyof S & string]: DefaultErrors<
+                      S[K],
+                      P extends "" ? K : `${P}.${K}`
+                    >;
+                  }[keyof S & string]
+                : never;
+
+/**What a schema parameter adds to the schema, an error naming each default that gives a value its spec does not allow*/
+export type CheckDefaults<S, Errors = DefaultErrors<S>> = [Errors] extends [never]
+  ? unknown
+  : { readonly "Wrong default": Errors };
 
 type ParsedReturn<T> =
   T extends ResultOk<infer Value>
@@ -313,17 +356,17 @@ function validate_object(
  * @param default_value - Optional factory used when an object schema receives a non-object input
  * @returns A parser that accepts unknown input (or JSON string) and returns Result<T, string>*/
 export function make_parser<const S extends Record<string, SchemaQNSBL>>(
-  schema: S,
+  schema: S & CheckDefaults<S>,
   default_value: () => unknown,
 ): (input: unknown) => Result<InferSchema<S>, string>;
 export function make_parser<const S extends Record<string, SchemaQNSBL>>(
-  schema: S,
+  schema: S & CheckDefaults<S>,
 ): (input: unknown) => Result<InferSchema<S>, string>;
 export function make_parser<const S extends readonly [0, unknown]>(
-  schema: S & readonly [0, SchemaQNSBL],
+  schema: S & readonly [0, SchemaQNSBL] & CheckDefaults<S>,
 ): (input: unknown) => Result<InferArraySchema<S>, string>;
 export function make_parser<const S extends readonly ["{}", unknown]>(
-  schema: S & readonly ["{}", SchemaQNSBL],
+  schema: S & readonly ["{}", SchemaQNSBL] & CheckDefaults<S>,
 ): (input: unknown) => Result<InferRecordSchema<S>, string>;
 export function make_parser(
   schema: unknown,

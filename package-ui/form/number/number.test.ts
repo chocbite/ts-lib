@@ -265,6 +265,28 @@ describe("Number input", () => {
     expect(change).toHaveBeenCalledWith(7);
   });
 
+  it("sets a typed value on Enter while the selection is outside the value, without restoring a caret", async () => {
+    const rejections: unknown[] = [];
+    const on_rejection = (e: PromiseRejectionEvent) => {
+      rejections.push(e.reason);
+      e.preventDefault();
+    };
+    window.addEventListener("unhandledrejection", on_rejection);
+    try {
+      const { element, value_box } = make_input({ value: 1 });
+      value_box.focus();
+      value_box.textContent = "7";
+      //Like a caller pressing Enter on the element with the caret elsewhere, the caret position is -1
+      window.getSelection()?.removeAllRanges();
+      key(element, "Enter");
+      await wait();
+      expect(element.buffer).toBe(7);
+      expect(rejections).toEqual([]);
+    } finally {
+      window.removeEventListener("unhandledrejection", on_rejection);
+    }
+  });
+
   it("accepts a comma as decimal separator", async () => {
     const { element, type } = make_input({ decimals: 2 });
     await type("1,25");

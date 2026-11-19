@@ -89,23 +89,21 @@ describe("Form theme variables", () => {
       "--form-colors-border-normal",
       "--form-colors-focus-normal",
       "--form-colors-basic-yellow",
-      "--form-size-height",
-      "--form-size-touchHeight",
       "--form-font-size",
       "--form-font-touch_size",
     ];
     for (const variable of variables)
       expect(style.getPropertyValue(variable), variable).not.toBe("");
-    expect(style.getPropertyValue("--form-size-height").trim()).toBe("1.6rem");
     expect(style.getPropertyValue("--form-read-filter").trim()).toBe(
       "opacity(0.6)",
     );
   });
 
-  it("gives the form elements the themed height", () => {
+  it("gives the form elements the height of the styles", () => {
     const element = document.body.appendChild(form.ip({ type: 4 }));
     const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
-    expect(element.getBoundingClientRect().height).toBeCloseTo(1.6 * rem, 0);
+    //$size_height in base.scss, a fixed size, not a theme variable
+    expect(element.getBoundingClientRect().height).toBeCloseTo(1.5 * rem, 0);
     element.remove();
   });
 });

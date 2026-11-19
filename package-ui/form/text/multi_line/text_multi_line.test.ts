@@ -89,13 +89,13 @@ describe("Text multiline options", () => {
     expect(document.activeElement).toBe(area);
   });
 
-  it("sizes the textarea from the themed form height", () => {
+  it("sizes the textarea from the form height", () => {
     theme_init();
     const { area } = make();
     const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
-    //$size_height minus the top and bottom border in the styles, 1.6rem - 2 * 0.0625rem with the default theme
+    //$size_height minus the top and bottom border in the styles, 1.5rem - 2 * 0.0625rem
     expect(parseFloat(getComputedStyle(area).minHeight)).toBeCloseTo(
-      1.475 * rem,
+      1.375 * rem,
       0,
     );
   });
