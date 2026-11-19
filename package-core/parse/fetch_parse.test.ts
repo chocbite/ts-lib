@@ -1728,11 +1728,92 @@ describe("make_fetch_parser write only members", () => {
     const made = (schema: FetchSchema) => () => make_fetch_parser(() => "/x", 1_000, schema, { write });
     expect(made({ point: ["n", "nwo"] })).toThrow("write only");
     expect(made({ list: [0, "nwo"] })).toThrow("write only");
-    expect(made({ fixed: [2, "nwo"] })).toThrow("write only");
-    expect(made({ record: ["{}", "nwo"] })).toThrow("write only");
     expect(made({ items: [0, { cmd: "nwo" }, { write: "all" }] })).toThrow("write only");
     expect(made({ outer: [0, { inner: { cmd: "nwo" } }, { write: "all" }] })).toThrow("write only");
     //An optional prefix means nothing for a member that is never received
     expect(made({ cmd: "?nwo" as "nwo" })).toThrow("write only");
+  });
+});
+
+describe("make_fetch_parser write only containers", () => {
+  const MAX_ACCESS_LEVELS = 3;
+  const MAX_ACCESS = 2;
+  const SCHEMA = {
+    access: [MAX_ACCESS_LEVELS, [MAX_ACCESS, "bw"]],
+    passcode: [MAX_ACCESS_LEVELS, "swo"],
+    save: ["?", "nwo", () => false, { reset: true }],
+  } as const satisfies FetchSchema;
+  const ACCESS = [
+    [true, false],
+    [false, false],
+    [true, true],
+  ];
+  /**A parser of the schema whose fetch gives body, and its write mock*/
+  const parser_from = <const S extends FetchSchema>(schema: S, body: unknown) => {
+    const send = vi.fn<FetchWrite>(async () => ok(undefined));
+    const parsed = make_fetch_parser(() => "/x", 60_000, schema, {
+      write: send,
+      fetch: async () => ok(JSON.stringify(body)),
+    });
+    return { parsed, send };
+  };
+
+  it("makes a parser of a fixed array of write only items, the server does not send it", async () => {
+    const { parsed, send } = parser_from(SCHEMA, { access: ACCESS });
+    expect(await parsed[FETCH_PARSE]).toEqual(ok({ access: ACCESS }));
+    expect((await parsed.passcode[2][FETCH_PARSE].write("1234")).ok).toBe(true);
+    expect(send).toHaveBeenCalledWith({ passcode: { 2: "1234" } });
+    expect((await parsed.access[1][0][FETCH_PARSE].write(true)).ok).toBe(true);
+    expect(send).toHaveBeenLastCalledWith({ access: { 1: { 0: true } } });
+  });
+
+  it("types the items of a write only fixed array, with no state of the whole array", () => {
+    const { parsed } = parser_from(SCHEMA, {});
+    expectTypeOf<Parameters<(typeof parsed.passcode)[0][typeof FETCH_PARSE]["write"]>[0]>().toEqualTypeOf<string>();
+    expectTypeOf(parsed.passcode[0][FETCH_PARSE].ok()).toEqualTypeOf<undefined>();
+    expectTypeOf<typeof FETCH_PARSE extends keyof typeof parsed.passcode ? true : false>().toEqualTypeOf<false>();
+    expectTypeOf<StateRV<(typeof parsed)[typeof FETCH_PARSE]>>().toEqualTypeOf<{
+      access: [[boolean, boolean], [boolean, boolean], [boolean, boolean]];
+    }>();
+    expect(FETCH_PARSE in parsed.passcode).toBe(false);
+  });
+
+  it("reads the default and the written values, typed as both", async () => {
+    const { parsed, send } = parser_from(SCHEMA, {});
+    expect(parsed.save.ok()).toBe(false);
+    expectTypeOf(parsed.save.ok()).toEqualTypeOf<number | boolean>();
+    expectTypeOf<Parameters<typeof parsed.save.write>[0]>().toEqualTypeOf<number>();
+    expect((await parsed.save.write(1)).ok).toBe(true);
+    expect(send).toHaveBeenCalledWith({ save: 1 });
+    expect(parsed.save.ok()).toBe(false);
+  });
+
+  it("leaves out an object, a record and a tuple of only write only members", async () => {
+    const { parsed, send } = parser_from(
+      {
+        id: "n",
+        settings: { reboot: "bwo", pin: "swo" },
+        users: ["{}", { password: "swo" }],
+        point: ["nwo", "nwo"],
+      },
+      { id: 1 },
+    );
+    expect(await parsed[FETCH_PARSE]).toEqual(ok({ id: 1 }));
+    expectTypeOf<StateRV<(typeof parsed)[typeof FETCH_PARSE]>>().toEqualTypeOf<{ id: number }>();
+    await parsed.settings.reboot.write(true);
+    expect(send).toHaveBeenLastCalledWith({ settings: { reboot: true } });
+    await parsed.users["anna"]!.password.write("secret");
+    expect(send).toHaveBeenLastCalledWith({ users: { anna: { password: "secret" } } });
+    await parsed.point[1].write(4);
+    expect(send).toHaveBeenLastCalledWith({ point: { 1: 4 } });
+  });
+
+  it("still throws for a write only member mixed into a list that is received", () => {
+    const write = async () => ok(undefined);
+    const made = (schema: FetchSchema) => () => make_fetch_parser(() => "/x", 1_000, schema, { write });
+    expect(made({ point: ["n", "nwo"] })).toThrow("write only");
+    expect(made({ fixed: [2, ["n", "nwo"]] })).toThrow("write only");
+    expect(made({ list: [0, "nwo"] })).toThrow("write only");
+    expect(made({ items: [0, { cmd: [2, "nwo"] }, { write: "all" }] })).toThrow("write only");
   });
 });

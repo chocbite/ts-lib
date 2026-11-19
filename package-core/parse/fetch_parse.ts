@@ -152,10 +152,41 @@ type WriteOnlyType<S> = S extends `${infer Type extends FetchTypeString}wo`
   : S extends readonly ["?", infer Item, ...unknown[]]
     ? WriteOnlyType<Item>
     : never;
+/**True for a spec the server does not send, a write only type string,
+ * or a fixed array, tuple, record or object of only write only members*/
+type IsWriteOnly<S> =
+  IsWholeSchema<S> extends true
+    ? false
+    : S extends FetchWriteOnlySpec
+      ? true
+      : S extends readonly ["?", infer Item, ...unknown[]]
+        ? IsWriteOnly<Item>
+        : S extends readonly [0, ...unknown[]]
+          ? false
+          : S extends readonly ["{}", infer Item]
+            ? IsWriteOnly<Item>
+            : S extends readonly [number, infer Item]
+              ? IsWriteOnly<Item>
+              : S extends readonly unknown[]
+                ? false extends IsWriteOnly<S[number]>
+                  ? false
+                  : true
+                : S extends string | Parser
+                  ? false
+                  : S extends object
+                    ? [keyof S] extends [never]
+                      ? false
+                      : false extends { [K in keyof S]-?: IsWriteOnly<S[K]> }[keyof S]
+                        ? false
+                        : true
+                    : false;
 /**Keys of write only members, the server does not send them so they are not in the value*/
 type WriteOnlyKeys<S> = {
-  [K in keyof S]-?: [WriteOnlyType<S[K]>] extends [never] ? never : K;
+  [K in keyof S]-?: IsWriteOnly<S[K]> extends true ? K : never;
 }[keyof S];
+/**A container with the state of its whole value under FETCH_PARSE, a write only container has none, the server does not send it*/
+type WithFetchState<S, Value, T> =
+  IsWriteOnly<S> extends true ? T : FetchContainer<Value> & T;
 
 /**Value type of an object schema, keys that may be missing are optional.
  * An index signature, like the generic FetchSchema constraint, keeps the lazy mapped type,
@@ -183,11 +214,9 @@ type FetchContainer<
   Value,
   State extends StateREA<Value> = StateREA<Value>,
 > = { readonly [FETCH_PARSE]: State };
-//A write only item is refused, so the node of a string item is always a StateREA
+//Primitive items are wrapped, their state is under FETCH_PARSE
 type FetchArrayItem<S, Value> = S extends string
-  ? FetchNode<S, Value> extends infer Node extends StateREA<Value>
-    ? FetchContainer<Value, Node>
-    : never
+  ? { readonly [FETCH_PARSE]: FetchNode<S, Value> }
   : FetchNode<S, Value>;
 type FetchDynamicArrayItem<S, Value> = S extends string
   ? FetchNode<S, Value>
@@ -202,8 +231,8 @@ type FetchNode<S, Value> = IsWholeSchema<S> extends true
   : FetchNodeEach<S, Value>;
 type FetchNodeEach<S, Value> = S extends FetchWriteOnlySpec
   ? StateROSW<undefined, Option<{}>, WriteOnlyType<S>>
-  : S extends readonly ["?", FetchWriteOnlySpec, () => unknown, ...unknown[]]
-    ? StateROSW<WriteOnlyType<S>, Option<{}>, WriteOnlyType<S>>
+  : S extends readonly ["?", FetchWriteOnlySpec, () => infer Default, ...unknown[]]
+    ? StateROSW<WriteOnlyType<S> | Default, Option<{}>, WriteOnlyType<S>>
   : S extends string
   ? Writable<S> extends true
     ? StateREAW<Value, Option<{}>, Value>
@@ -229,21 +258,21 @@ type FetchNodeEach<S, Value> = S extends FetchWriteOnlySpec
         : S extends readonly ["?", infer Item]
           ? FetchNode<Item, Value>
           : S extends readonly ["{}", infer Item]
-            ? FetchContainer<Value> & {
+            ? WithFetchState<S, Value, {
                 readonly [key: string]: FetchNode<Item, RecordItem<Value>>;
-              }
+              }>
             : S extends readonly [infer Count extends number, infer Item]
-            ? FetchContainer<Value> &
-                FetchRepeat<FetchArrayItem<Item, ArrayItem<Value>>, Count>
+            ? WithFetchState<S, Value,
+                FetchRepeat<FetchArrayItem<Item, ArrayItem<Value>>, Count>>
             : S extends Parser
               ? StateREA<Value>
               : S extends object
-                ? FetchContainer<Value> & {
+                ? WithFetchState<S, Value, {
                     -readonly [K in keyof S]: FetchNode<
                       S[K],
                       ValueForKey<Value, K>
                     >;
-                  }
+                  }>
                 : StateREA<Value>;
 
 //Distributive, a member under an optional container is undefined when the container is
@@ -417,23 +446,55 @@ function array_options(
   return { write: write ?? "single", encode, key };
 }
 
-/**True for a write only spec, "nwo" or ["?", "nwo", ...]*/
+/**True for a spec the server does not send, a write only type string, "nwo" or ["?", "nwo", ...],
+ * or a fixed array, tuple, record or object of only write only members*/
 function is_write_only(schema: unknown): boolean {
   if (typeof schema === "string") return schema.endsWith("wo");
-  return Array.isArray(schema) && schema[0] === "?" && is_write_only(schema[1]);
+  if (Array.isArray(schema)) {
+    if (schema[0] === "?") return is_write_only(schema[1]);
+    if (schema[0] === 0) return false;
+    if (schema[0] === "{}" || typeof schema[0] === "number") return is_write_only(schema[1]);
+    return schema.length > 0 && schema.every(is_write_only);
+  }
+  if (schema && typeof schema === "object") {
+    const members = Object.values(schema);
+    return members.length > 0 && members.every(is_write_only);
+  }
+  return false;
 }
 
-/**Throws for a write only member where it can not be. It must be a member of an object,
- * and outside write "all" arrays, which send the whole array built from the received value*/
-function check_write_only(schema: unknown, in_object = false, in_all = false): void {
-  if (typeof schema === "string") {
-    if (!schema.endsWith("wo")) return;
-    if (schema.startsWith("?"))
-      throw new Error(`The write only member "${schema}" can not have a "?" prefix, use ["?", spec, () => default] for a default`);
+/**A write only state, "nwo" or ["?", "nwo", ...], not a container of them*/
+function is_write_only_leaf(schema: unknown): boolean {
+  if (typeof schema === "string") return schema.endsWith("wo");
+  return Array.isArray(schema) && schema[0] === "?" && typeof schema[1] === "string" && schema[1].endsWith("wo");
+}
+
+/**Throws for a write only member where it can not be. It must be a member of an object, or inside a write only container,
+ * as positions in a received list can not be left out, and outside write "all" arrays, which send the whole array built from the received value.
+ * @param root the schema of the parser, its members are checked, not the schema itself*/
+function check_write_only(
+  schema: unknown,
+  in_object = false,
+  in_all = false,
+  root = false,
+): void {
+  if (!root && is_write_only(schema)) {
+    const shown = JSON.stringify(schema);
     if (!in_object)
-      throw new Error(`The write only member "${schema}" must be a member of an object`);
+      throw new Error(
+        `The write only member ${shown} must be a member of an object, or in a fixed array, tuple, record or object of only write only members`,
+      );
     if (in_all)
-      throw new Error(`The write only member "${schema}" can not be inside a write "all" array`);
+      throw new Error(`The write only member ${shown} can not be inside a write "all" array`);
+    check_write_only_prefix(schema);
+    return;
+  }
+  if (typeof schema === "string") {
+    //A write only string here is in a received list
+    if (schema.endsWith("wo"))
+      throw new Error(
+        `The write only member "${schema}" must be a member of an object, or in a fixed array, tuple, record or object of only write only members`,
+      );
     return;
   }
   if (Array.isArray(schema)) {
@@ -441,13 +502,30 @@ function check_write_only(schema: unknown, in_object = false, in_all = false): v
     const options = array_options(schema);
     if (options)
       return check_write_only(schema[1], false, in_all || options.write === "all");
-    if (schema[0] === "{}" || typeof schema[0] === "number")
+    if (schema[0] === 0 || schema[0] === "{}" || typeof schema[0] === "number")
       return check_write_only(schema[1], false, in_all);
     for (const entry of schema) check_write_only(entry, false, in_all);
     return;
   }
   if (schema && typeof schema === "object")
     for (const value of Object.values(schema)) check_write_only(value, true, in_all);
+}
+
+/**Throws for a write only type string with a "?" prefix, inside a write only spec*/
+function check_write_only_prefix(schema: unknown): void {
+  if (typeof schema === "string") {
+    if (schema.startsWith("?"))
+      throw new Error(`The write only member "${schema}" can not have a "?" prefix, use ["?", spec, () => default] for a default`);
+    return;
+  }
+  if (Array.isArray(schema)) {
+    if (schema[0] === "?" || schema[0] === "{}" || typeof schema[0] === "number")
+      return check_write_only_prefix(schema[1]);
+    for (const entry of schema) check_write_only_prefix(entry);
+    return;
+  }
+  if (schema && typeof schema === "object")
+    for (const value of Object.values(schema)) check_write_only_prefix(value);
 }
 
 function strip_writable(schema: unknown): unknown {
@@ -678,7 +756,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
   schema: S,
   options?: FetchParserOptions,
 ): FetchParsed<S> {
-  check_write_only(schema);
+  check_write_only(schema, false, false, true);
   if (has_writable(schema) && !options?.write) {
     throw new Error(
       "A write function is required when the schema contains writable values",
@@ -1000,7 +1078,16 @@ export function make_fetch_parser<const S extends FetchSchema>(
     all_path?: PathPart[],
     optional_at?: number,
   ): unknown => {
-    if (is_write_only(part_schema)) {
+    /**Gives a container the state of its whole value, a write only container has none, the server does not send it*/
+    const whole_value = (container: object) => {
+      if (is_write_only(part_schema)) return;
+      set_fetch_state(
+        container,
+        state.proxy.rea(root as any, (result) => at_path(result, path, optional_at)),
+      );
+    };
+
+    if (is_write_only_leaf(part_schema)) {
       if (typeof part_schema === "string") return write_only(path, encoder);
       const [, , default_value, write_options] = part_schema as [
         "?",
@@ -1182,12 +1269,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
       const item: unknown = part_schema[1];
       const items = new Map<string, unknown>();
       const record = {};
-      set_fetch_state(
-        record,
-        state.proxy.rea(root as any, (result) =>
-          at_path(result, path, optional_at),
-        ),
-      );
+      whole_value(record);
       return new Proxy(record, {
         get(target, property) {
           if (typeof property !== "string")
@@ -1214,13 +1296,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
       const fixed = Array.from({ length: count }, (_value, index) =>
         array_item(item, [...path, index]),
       );
-      //The whole array, like every other container
-      set_fetch_state(
-        fixed,
-        state.proxy.rea(root as any, (result) =>
-          at_path(result, path, optional_at),
-        ),
-      );
+      whole_value(fixed);
       return fixed;
     }
 
@@ -1232,12 +1308,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
       const tuple = part_schema.map((entry, index) =>
         node(entry, [...path, index], undefined, all_path, optional_at),
       );
-      set_fetch_state(
-        tuple,
-        state.proxy.rea(root as any, (result) =>
-          at_path(result, path, optional_at),
-        ),
-      );
+      whole_value(tuple);
       return tuple;
     }
 
@@ -1246,11 +1317,8 @@ export function make_fetch_parser<const S extends FetchSchema>(
       typeof part_schema === "object" &&
       !Array.isArray(part_schema)
     ) {
-      const object_state = state.proxy.rea(root as any, (result) =>
-        at_path(result, path, optional_at),
-      );
       const object: Record<string, unknown> = {};
-      set_fetch_state(object, object_state);
+      whole_value(object);
       for (const [key, child] of Object.entries(part_schema))
         object[key] = node(child, [...path, key], undefined, all_path, optional_at);
       return object;

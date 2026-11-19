@@ -228,10 +228,11 @@ device.restart.write(true); // write({ restart: true })
 - **The state is local and never fetches.** Subscribing to it doesn't start polling.
 - **What it reads:**
   - **Without a default** it always reads `undefined`.
-  - **With a default,** `["?", "nwo", () => v]`, it reads the default. A written value is read at once, so an input shows what you sent, also while `write_debounce` collects it. When the write finishes, the state reads the last value written successfully, so a failed write goes back to the one before it.
+  - **With a default,** `["?", "nwo", () => v]`, it reads the default, typed as the write type and the type of the default. A written value is read at once, so an input shows what you sent, also while `write_debounce` collects it. When the write finishes, the state reads the last value written successfully, so a failed write goes back to the one before it.
   - **With `{ reset: true }`** as the fourth entry, the state reads the default again when a write finishes, whether it succeeded or failed. This suits PINs and commands.
 - **When writes overlap,** only the last one decides what the state reads when it finishes.
-- **Only as a member of an object,** also inside the items of a dynamic array. It can't be in a tuple, a fixed array, a record or an `"all"` array, which sends the whole array built from the received value. It can't have a `?` prefix either. `make_fetch_parser` throws for these.
+- **Write-only containers:** a fixed array, tuple, record or object of only write-only members is write-only as a whole. The server doesn't send it, so it's left out of parsing and has no `FETCH_PARSE` state of its own. `passcode: [3, "swo"]` writes `{ passcode: { 2: "1234" } }` through `passcode[2][FETCH_PARSE]`, as primitive items of a fixed array are wrapped.
+- **Only as a member of an object or in a write-only container,** also inside the items of a dynamic array. A received tuple, fixed array or dynamic array can't have write-only items, as the server sends every position, and nothing in an `"all"` array can be write-only, as it sends the whole array built from the received value. A `?` prefix isn't allowed either. `make_fetch_parser` throws for these.
 
 ### Dynamic arrays
 
