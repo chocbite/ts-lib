@@ -144,13 +144,17 @@ The `reorder` option adds a column of drag handles in front of the rows, before 
 
 ```ts
 const group = list.drag_group<File>();
-list.container(columns, transform, files, {
-  sub_rows: true,
-  reorder: {
-    group, // optional, lists of one group give rows to each other
-    can_drop: (file, target) => target.parent?.kind !== "file",
+list.container(
+  {
+    transform,
+    sub_rows: true,
+    reorder: {
+      group, // optional, lists of one group give rows to each other
+      can_drop: (file, target) => target.parent?.kind !== "file",
+    },
   },
-});
+  { columns, rows: files },
+);
 ```
 
 - Only rows in a writable array state can be moved, they show a handle. Rows of a plain array or a read only state have an empty handle cell.
