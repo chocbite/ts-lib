@@ -1,4 +1,4 @@
-import { GREY, ORANGE, RED } from "@chocbite/ts-lib/colors";
+import { BLUE, GREY, RED } from "@chocbite/ts-lib/colors";
 import { px_to_rem, theme_init_variable_root } from "#theme";
 
 /** Type to store a position related to composition
@@ -53,95 +53,105 @@ const theme_root = theme_init_variable_root(
 const colors = theme_root.make_sub_group(
   "colors",
   "Colors",
-  "Colors used in all form elements",
+  "Colors of the top bar and panels",
 );
 
 colors.make_variable(
   "titlebar",
-  "Title Bar Background",
-  "Background color for the title bar of UI panels",
-  GREY[500],
-  GREY[800],
+  "Title Bar Color",
+  "Background of the top bar and the title bars of panels",
+  GREY[100],
+  "#262626",
   "Color",
   undefined,
 );
-
 colors.make_variable(
   "titlebarHover",
-  "Title Bar Hover Background",
-  "Background color for the title bar of UI panels when hovered",
-  GREY[400],
-  GREY[700],
+  "Title Bar Hover Color",
+  "Background of title bars and top bar buttons when hovering",
+  GREY[200],
+  "#363636",
   "Color",
   undefined,
 );
-
 colors.make_variable(
   "titlebarCloseHover",
-  "Title Bar Close Hover Background",
-  "Background color for the title bar close button of UI panels when hovered",
-  RED[400],
+  "Close Hover Color",
+  "Background of the close button of a panel when hovering",
+  RED[600],
   RED[700],
   "Color",
   undefined,
 );
-
 colors.make_variable(
   "titlebarText",
-  "Title Bar Text",
-  "Text color for the title bar of UI panels",
+  "Title Bar Text Color",
+  "Text of the top bar and the title bars",
   GREY[900],
-  GREY[50],
+  GREY[100],
   "Color",
   undefined,
 );
-
 colors.make_variable(
   "background",
-  "Content Background",
-  "Default background color for content areas",
-  GREY[100],
-  "#000000",
+  "Background Color",
+  "Background of the content of panels",
+  "#FFFFFF",
+  "#2B2B2B",
   "Color",
   undefined,
 );
-
 colors.make_variable(
   "icons",
-  "Icons Color",
-  "Default color for icons",
-  GREY[900],
-  GREY[100],
+  "Icon Color",
+  "Icons in title bars and the sizers",
+  GREY[800],
+  GREY[200],
   "Color",
   undefined,
 );
-
 colors.make_variable(
   "sizers",
-  "Sizers",
-  "Background color of the sizers of panels, shown in touch mode",
-  GREY[300],
-  GREY[900],
+  "Sizer Color",
+  "Frame around a panel with the sizers in touch mode",
+  GREY[200],
+  "#333333",
   "Color",
   undefined,
 );
-
+colors.make_variable(
+  "border",
+  "Border Color",
+  "Line around panels and below the top bar and title bars",
+  GREY[300],
+  GREY[700],
+  "Color",
+  undefined,
+);
 colors.make_variable(
   "shadow",
-  "Border Shadow",
-  "Shadow color for borders and outlines",
-  "#000000",
-  GREY[50],
+  "Shadow Color",
+  "Shadow of panels floating above the page",
+  "rgba(0, 0, 0, 0.18)",
+  "rgba(0, 0, 0, 0.6)",
   "Color",
   undefined,
 );
-
+colors.make_variable(
+  "glow",
+  "Glow Color",
+  "Light halo around panels, a dark shadow does not show on a dark page so dark mode lifts panels with this instead",
+  "rgba(255, 255, 255, 0)",
+  "rgba(255, 255, 255, 0.25)",
+  "Color",
+  undefined,
+);
 colors.make_variable(
   "shadowFocus",
-  "Border Shadow In Focus",
-  "Shadow color for borders and outlines when in focus",
-  ORANGE[500],
-  ORANGE[500],
+  "Focus Color",
+  "Border of the panel that has focus",
+  BLUE[400],
+  BLUE[300],
   "Color",
   undefined,
 );

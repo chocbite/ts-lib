@@ -3,7 +3,7 @@
 
 //Children of a panel: sizers, title bar, content box, and the focus catcher of a modal panel
 composition-panel {
-  $radius: 0.8rem;
+  $radius: 0.6rem;
   $radius_visible: $radius * 2;
   $sizer_width: 0.7rem;
   $sizer_touch: $sizer_width * 2.4;
@@ -44,13 +44,19 @@ composition-panel {
     left: -1px;
     width: 100%;
     height: 100%;
-    box-shadow: 0 0 0.3rem 0.01rem var(--composition-colors-shadow);
+    box-shadow:
+      0 0.5rem 1.5rem 0 var(--composition-colors-shadow),
+      0 0 0.6rem 0.1rem var(--composition-colors-glow);
     border-radius: $radius;
-    border: 1px solid var(--composition-colors-shadow);
+    border: 1px solid var(--composition-colors-border);
   }
 
+  //The panel with focus gets an accent border and a little more shadow
   &:focus-within::before {
-    box-shadow: 0 0 0.4rem 0.05rem var(--composition-colors-shadowFocus);
+    border-color: var(--composition-colors-shadowFocus);
+    box-shadow:
+      0 0.75rem 2rem 0 var(--composition-colors-shadow),
+      0 0 0.8rem 0.15rem var(--composition-colors-glow);
   }
 
   //In touch mode the sizers are shown, the shadow goes around them
@@ -82,6 +88,8 @@ composition-panel {
     pointer-events: all;
     height: var(--titlebar-height);
     background-color: var(--composition-colors-titlebar);
+    border-bottom: 1px solid var(--composition-colors-border);
+    box-sizing: border-box;
     border-radius: $radius $radius 0 0;
     cursor: grab;
     overflow: hidden;
@@ -97,19 +105,24 @@ composition-panel {
 
     > .icon {
       display: flex;
-      padding: 0.1rem;
-      padding-left: 0.3rem;
+      align-items: center;
+      padding-left: 0.6rem;
 
       > svg {
         fill: var(--composition-colors-icons);
-        height: 100%;
+        height: 1.2rem;
         width: auto;
+
+        .touch & {
+          height: 1.6rem;
+        }
       }
     }
 
     > .title {
       color: var(--composition-colors-titlebarText);
-      padding: 0 0.3rem;
+      font-weight: 500;
+      padding: 0 0.5rem;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -118,7 +131,7 @@ composition-panel {
 
       //Without an icon the title keeps clear of the rounded corner
       &:first-child {
-        padding-left: 0.6rem;
+        padding-left: 0.8rem;
       }
 
       .touch & {
@@ -128,7 +141,7 @@ composition-panel {
 
     > .close-button {
       color: var(--composition-colors-icons);
-      font-size: 1.5rem;
+      font-size: 1.3rem;
       line-height: var(--titlebar-height);
       text-align: center;
       flex-shrink: 0;
@@ -137,11 +150,12 @@ composition-panel {
       border-radius: math.div($radius, 2) $radius 0 math.div($radius, 2);
 
       .touch & {
-        font-size: 2rem;
+        font-size: 1.8rem;
       }
 
       &:hover {
         background-color: var(--composition-colors-titlebarCloseHover);
+        color: #ffffff;
       }
     }
   }
@@ -337,6 +351,6 @@ composition-panel {
 composition-panelcontainer > * > .backdrop {
   position: absolute;
   inset: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(0, 0, 0, 0.4);
   pointer-events: all;
 }

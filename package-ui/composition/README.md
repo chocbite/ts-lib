@@ -33,7 +33,7 @@ const bar = comp.topbar({
 - **`comp.topbar_button({ text, icon, on_click })`**: a button with an icon, a text or both. A text in error shows the nice text of the error, an icon in error is left out. `on_click` is a plain function, `set({ on_click })` replaces it.
 - **`comp.topbar_label({ text })`**: a text, showing the nice text of the error when the state is in error.
 
-Colors come from the theme variables of the composition group: title bar background, hover and text.
+Colors come from the theme variables of the composition group: `titlebar`, `titlebarHover`, `titlebarText`, `icons` and `border` (the line below the bar). Panels use the same title bar colors, with `background` for their content, `border`, `shadow` and `glow` (a light halo, for dark mode) around them, `shadowFocus` for the border of the panel with focus, `titlebarCloseHover` for the close button and `sizers` for the frame of the sizers in touch mode.
 
 ## Content
 

@@ -6,8 +6,8 @@ contextmenu-divider {
     content: "";
     display: block;
     position: absolute;
-    left: 0;
-    width: 100%;
+    left: 0.5rem;
+    right: 0.5rem;
     height: 1px;
     margin-block: 0.2rem;
     background-color: var(--contextmenu-border);

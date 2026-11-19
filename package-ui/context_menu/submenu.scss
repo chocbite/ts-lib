@@ -14,11 +14,14 @@ contextmenu-submenu {
     > svg {
       display: block;
       box-sizing: border-box;
-      height: 100%;
-      width: 1.8rem;
+      height: line.$iconSize;
+      width: line.$iconSize;
+      margin-inline: 0.3rem;
+      opacity: 0.6;
 
       .touch & {
-        width: 2.6rem;
+        height: line.$iconSizeTouch;
+        width: line.$iconSizeTouch;
       }
     }
   }
