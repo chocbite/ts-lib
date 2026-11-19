@@ -119,13 +119,18 @@ describe("Linked values are converted to the type of the option", () => {
   });
 });
 
-/**Opens the properties editor of the widget*/
-const editor_of = (widget: CanvasWidget) =>
-  document.body.appendChild(canvas.properties({ selected: widget }));
 const row = (editor: HTMLElement, name: string) =>
   [...editor.querySelectorAll("list-row")].find(
-    (row) => row.querySelector("list-textfield")!.textContent === name,
+    (row) => row.querySelector("list-keyfield")!.textContent === name,
   )!;
+/**Opens the properties editor of the widgets, with the General section open*/
+const editor_of = (...selected: CanvasWidget[]) => {
+  const editor = document.body.appendChild(canvas.properties({ selected }));
+  row(editor, "General")
+    .querySelector<HTMLElement>("list-keyfield .opener > div")!
+    .click();
+  return editor;
+};
 const chain = (editor: HTMLElement, name: string) =>
   row(editor, name).querySelector("canvas-linkfield") as HTMLElement;
 /**The link menu open now*/
@@ -158,6 +163,9 @@ describe("The link column of the properties editor", () => {
     expect(chain(editor, "Y").classList.contains("linked")).toBe(false);
     expect(chain(editor, "Y").classList.contains("none")).toBe(false);
     expect(chain(editor, "X").classList.contains("none")).toBe(true);
+    //Base properties not given have a writable state too, so they can be linked
+    expect(chain(editor, "Opacity").classList.contains("none")).toBe(false);
+    expect(chain(editor, "Visible").classList.contains("none")).toBe(false);
   });
 
   it("shows the path and the value of a linked option", () => {
@@ -245,5 +253,46 @@ describe("The link column of the properties editor", () => {
     await tick();
     await tick();
     expect((widget.options.text as StateROSW<unknown>).ok()).toBe("");
+  });
+
+  it("links the option of every selected widget to the same state", async () => {
+    states.add("text", "Text", "", state.ok("linked"));
+    const both = [
+      canvas.widget(definition, { text: "one" }),
+      canvas.widget(definition, { text: "two" }),
+    ];
+    const editor = editor_of(...both);
+    chain(editor, "Text").click();
+    await tick();
+    type_path(PATH("text"));
+    await tick();
+    button("Link").click();
+    await tick();
+    for (const widget of both) {
+      const value = (widget.options.text as StateROSW<unknown>).ok();
+      expect(value).toBeInstanceOf(CanvasLink);
+      expect((value as CanvasLink).path).toBe(PATH("text"));
+    }
+    expect(
+      row(editor, "Text").querySelector("canvas-linkedvalue")!.textContent,
+    ).toBe(PATH("text") + "linked");
+  });
+
+  it("unlinks every selected widget, each keeping the value its own link gives", async () => {
+    states.add("a", "A", "", state.ok("from a"));
+    states.add("b", "B", "", state.ok("from b"));
+    const both = [
+      canvas.widget(definition, { text: canvas.link(PATH("a")) }),
+      canvas.widget(definition, { text: canvas.link(PATH("b")) }),
+    ];
+    const editor = editor_of(...both);
+    chain(editor, "Text").click();
+    await tick();
+    button("Unlink").click();
+    await tick();
+    await tick();
+    expect(
+      both.map((widget) => (widget.options.text as StateROSW<unknown>).ok()),
+    ).toEqual(["from a", "from b"]);
   });
 });

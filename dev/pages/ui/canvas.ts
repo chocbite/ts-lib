@@ -130,6 +130,125 @@ const GRAPHIC = dev.add(
   }),
 );
 
+/**Inputs of the dev label, many properties in sections*/
+const DEV_LABEL = {
+  text: input_key<StateOrVal<string>>(),
+  size: input_key<StateOrVal<number>>(),
+  bold: input_key<StateOrVal<boolean>>(),
+  color: input_key<StateOrVal<string>>(),
+  background: input_key<StateOrVal<string>>(),
+  border: input_key<StateOrVal<string>>(),
+  border_width: input_key<StateOrVal<number>>(),
+  radius: input_key<StateOrVal<number>>(),
+};
+type DevLabelOptions = WidgetBaseOptions & InputOptions<typeof DEV_LABEL>;
+
+/**Label with a frame, to try the sections of the properties editor*/
+class DevLabel extends WidgetBase {
+  static element_name() {
+    return "devlabel";
+  }
+  constructor() {
+    super();
+    this.style.display = "flex";
+    this.style.alignItems = "center";
+    this.style.justifyContent = "center";
+    this.style.fontFamily = "sans-serif";
+    this.style.borderStyle = "solid";
+  }
+  set(options: DevLabelOptions): this {
+    super.set(options);
+    const css =
+      (
+        property:
+          | "fontSize"
+          | "color"
+          | "background"
+          | "borderColor"
+          | "borderWidth"
+          | "borderRadius",
+        unit = "",
+      ) =>
+      (value: { ok: boolean; value?: unknown }) => {
+        this.style[property] = value.ok ? String(value.value) + unit : "";
+      };
+    this.set_input(DEV_LABEL.text, options.text, (text) => {
+      this.textContent = text.ok ? text.value : "⚠";
+    });
+    this.set_input(DEV_LABEL.size, options.size, css("fontSize", "px"));
+    this.set_input(DEV_LABEL.bold, options.bold, (bold) => {
+      this.style.fontWeight = bold.ok && bold.value ? "bold" : "";
+    });
+    this.set_input(DEV_LABEL.color, options.color, css("color"));
+    this.set_input(DEV_LABEL.background, options.background, css("background"));
+    this.set_input(DEV_LABEL.border, options.border, css("borderColor"));
+    this.set_input(
+      DEV_LABEL.border_width,
+      options.border_width,
+      css("borderWidth", "px"),
+    );
+    this.set_input(DEV_LABEL.radius, options.radius, css("borderRadius", "px"));
+    return this;
+  }
+}
+define_element(DevLabel);
+
+const LABEL = dev.add(
+  "label",
+  "Label",
+  "Text with a frame, its properties are in sections",
+  canvas.definition({
+    create: (options: DevLabelOptions) => DevLabel.create(options),
+    size: { width: 200, height: 60 },
+    properties: {
+      text: { kind: "text", name: "Text", default: "Label" },
+      size: {
+        kind: "number",
+        name: "Size",
+        default: 20,
+        min: 1,
+        unit: "px",
+        section: "Font",
+      },
+      bold: { kind: "boolean", name: "Bold", default: false, section: "Font" },
+      color: {
+        kind: "color",
+        name: "Color",
+        default: "#000000",
+        section: "Font",
+      },
+      background: {
+        kind: "color",
+        name: "Background",
+        default: "#ecf0f1",
+        section: "Frame",
+      },
+      border: {
+        kind: "color",
+        name: "Border",
+        default: "#2c3e50",
+        section: "Frame",
+      },
+      border_width: {
+        kind: "number",
+        name: "Border width",
+        default: 2,
+        min: 0,
+        unit: "px",
+        section: "Frame",
+      },
+      radius: {
+        kind: "number",
+        name: "Corner radius",
+        default: 6,
+        min: 0,
+        unit: "px",
+        section: "Frame",
+      },
+    },
+  }),
+);
+
 /**Writable states for the place of a widget, so every viewport follows a change*/
 const place = (
   x: number,
@@ -193,7 +312,7 @@ const viewport_in = (
   size: { width: string; height: string },
   page: StateOrVal<CanvasPage | undefined>,
   edit = false,
-  selected?: StateROSW<CanvasWidget | undefined>,
+  selected?: StateROSW<CanvasWidget[]>,
 ) => {
   const vp = canvas.viewport({ page, edit, selected });
   vp.style.width = "100%";
@@ -211,18 +330,20 @@ const viewport_in = (
 {
   const sec = section(
     "One page, two viewports",
-    "The same page data in two editing viewports sharing a selection state, the line above them shows the selected widget. Selecting in one shows the transformer in both. Move, resize and rotate in either, the other follows, as both are bound to the same states. Add, remove and reorder change the array state of the widgets, only the widgets that change are made or removed. The page size buttons change the size states. Add with selector opens the selector of the registered widget definitions, the picked widgets are made from the defaults of their properties. The properties editor follows the selection: change a text or color there and the widget changes in both viewports, move the widget and the numbers follow. Every value of these widgets is a writable state, so every field is live",
+    "Two editors, an outline and a properties editor on one page and selection. Click, ctrl or shift click, or drag a rectangle on the page to select. Drag the box to move, resize and rotate. Right click for menus. In a focused editor or outline: Ctrl+A, Ctrl+X, Ctrl+C, Ctrl+V and Delete. The buttons change the widgets and page size, see the canvas README for the details",
   );
   const width = state.ok_w(800);
   const height = state.ok_w(600);
   const widgets = state.ok_w<CanvasWidget[]>(trial_widgets());
   const page: CanvasPage = { width, height, widgets };
-  const selected = state.ok_w<CanvasWidget | undefined>(undefined);
+  const selected = state.ok_w<CanvasWidget[]>([]);
   const shown = sec.appendChild(document.createElement("div"));
   shown.style.fontFamily = "monospace";
   selected.sub((s) => {
     shown.textContent =
-      s.ok && s.value ? "selected " + s.value.widget : "nothing selected";
+      s.ok && s.value.length
+        ? "selected " + s.value.map((w) => w.widget).join(", ")
+        : "nothing selected";
   }, true);
   const boxes = row(sec);
   viewport_in(
@@ -241,6 +362,11 @@ const viewport_in = (
     true,
     selected,
   );
+  box(boxes, "Outline", {
+    width: "14rem",
+    height: "27rem",
+    display: "flex",
+  }).appendChild(canvas.outline({ page, selected })).style.flexGrow = "1";
   box(boxes, "Properties of the selected widget", {
     width: "22rem",
     height: "27rem",
@@ -250,23 +376,24 @@ const viewport_in = (
   controls(sec, {
     "Add box": () => {
       added++;
-      widgets.set_ok([
-        ...widgets.ok(),
+      //Array instructions, so the viewports and the outline add one slot and one row
+      widgets.array.push(
         box_widget({
           color: "#d35400",
           text: "Added " + added,
           ...place(40 + ((added * 30) % 400), 380, 120, 60),
         }),
-      ]);
+      );
     },
     "Add with selector": async () => {
       const picked = await canvas.select_widget({
         mode: "multi",
         at: { x: 320, y: 260 },
       });
-      widgets.set_ok([...widgets.ok(), ...picked]);
+      widgets.array.push(...picked);
     },
-    "Remove last": () => widgets.set_ok(widgets.ok().slice(0, -1)),
+    "Remove last": () => widgets.array.pop(),
+    //A whole new array, the slots are reused by place
     "Reverse order": () => widgets.set_ok([...widgets.ok()].reverse()),
     "Page 800 x 600": () => {
       width.set_ok(800);
@@ -277,6 +404,59 @@ const viewport_in = (
       height.set_ok(800);
     },
   });
+}
+
+//Sections, opacity and visible
+{
+  const sec = section(
+    "Property sections, opacity and visible",
+    "Select the label: its text is at the root, the rest is in the Font and Frame sections, open them with the arrow. Link an option in an open section, the section stays open. Position, size, rotation, opacity (0 to 1) and visible are the base properties of every widget, in the General section, select another widget and the open sections stay open. Every widget has a state for them, so they can be linked too. The half transparent box has opacity 0.5. The hidden box is not visible: the view shows nothing, the editor shows it faintly so it can still be selected, turn visible on in the editor and it shows in both",
+  );
+  const page: CanvasPage = {
+    width: state.ok_w(600),
+    height: state.ok_w(300),
+    widgets: state.ok_w<CanvasWidget[]>([
+      canvas.widget(LABEL, {
+        ...place(20, 20, 240, 70),
+        text: "Sectioned label",
+        size: 22,
+        bold: true,
+        color: "#c0392b",
+        background: "#fdebd0",
+        border: "#c0392b",
+        border_width: 3,
+        radius: 12,
+      }),
+      box_widget({
+        color: "#2980b9",
+        text: "Opacity 0.5",
+        opacity: 0.5,
+        ...place(300, 20, 160, 80),
+      }),
+      box_widget({
+        color: "#8e44ad",
+        text: "Hidden",
+        visible: false,
+        ...place(300, 150, 160, 80),
+      }),
+    ]),
+  };
+  const selected = state.ok_w<CanvasWidget[]>([]);
+  const boxes = row(sec);
+  viewport_in(
+    boxes,
+    "Editor",
+    { width: "30rem", height: "15rem" },
+    page,
+    true,
+    selected,
+  );
+  viewport_in(boxes, "View", { width: "20rem", height: "10rem" }, page);
+  box(boxes, "Properties of the selected widget", {
+    width: "22rem",
+    height: "27rem",
+    display: "flex",
+  }).appendChild(canvas.properties({ selected })).style.flexGrow = "1";
 }
 
 //Kept across reloads
@@ -338,10 +518,10 @@ const viewport_in = (
     "Remove last": () => widgets().set_ok(widgets().ok().slice(0, -1)),
     Reset: () => {
       page.set_ok(default_page());
-      selected.set_ok(undefined);
+      selected.set_ok([]);
     },
   });
-  const selected = state.ok_w<CanvasWidget | undefined>(undefined);
+  const selected = state.ok_w<CanvasWidget[]>([]);
   const boxes = row(sec);
   viewport_in(
     boxes,
@@ -515,7 +695,7 @@ const viewport_in = (
     }),
   ];
   const page: CanvasPage = { width: 480, height: 200, widgets };
-  const selected = state.ok_w<CanvasWidget | undefined>(widgets[0]);
+  const selected = state.ok_w<CanvasWidget[]>([widgets[0]]);
   const line = row(sec);
   line.append("x state:");
   line.append(form.number_input({ value: x }));

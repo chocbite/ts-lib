@@ -5,12 +5,15 @@ import {
   type BaseOptions,
   type InputOptions,
 } from "#base";
+import { state_ui } from "#state_ui";
 import type { StateOrVal } from "@chocbite/ts-lib/state";
 import type { CanvasPage, CanvasWidget } from "./data";
 import "./page.scss";
 import "./shared";
-import { WIDGET_ELEMENTS_EVENT, WidgetSlot } from "./slot";
-import type { WidgetBase } from "./widget";
+import { group_bounds } from "./group";
+import { fill_ids } from "./ids";
+import { WIDGET_ELEMENTS_EVENT, WIDGET_ID_EVENT, WidgetSlot } from "./slot";
+import { WIDGET_GEOMETRY, type WidgetBase } from "./widget";
 
 /**Inputs of the page element, the values of a CanvasPage*/
 const PAGE = {
@@ -20,8 +23,32 @@ const PAGE = {
 };
 type PageElementOptions = BaseOptions & InputOptions<typeof PAGE>;
 
+/**Page elements in the document, to find the page of a widget*/
+const PAGES = new Set<PageElement>();
+
+/**The widgets of a page shown in the document with the widget on it, undefined when no page shows the widget*/
+export function page_widgets_of(
+  widget: CanvasWidget,
+): readonly CanvasWidget[] | undefined {
+  for (const page of PAGES) if (page.slot_of(widget)) return page.widgets;
+  return undefined;
+}
+
+/**The element of a widget on a page shown in the document, undefined when no page shows the widget*/
+export function widget_element_of(
+  widget: CanvasWidget,
+): WidgetBase | undefined {
+  for (const page of PAGES) {
+    const element = page.slot_of(widget)?.element;
+    if (element) return element;
+  }
+  return undefined;
+}
+
 /**Element showing a page in one viewport, internal to canvas, the viewport makes it from the page data
- * Every widget gets a slot, which makes the widget element, the order of the slots is the drawing order*/
+ * Every widget gets a slot, which makes the widget element, the order of the slots is the drawing order
+ * It keeps the ids of the widgets unique, giving a widget with an empty or taken id a new one, see fill_ids,
+ * every page element showing the page does it, the first one leaves nothing for the others*/
 export class PageElement extends Base {
   /**Returns the name used to define the element */
   static element_name() {
@@ -35,10 +62,39 @@ export class PageElement extends Base {
   #width: number = 1920;
   #height: number = 1080;
 
+  #widgets: readonly CanvasWidget[] = [];
+  #fill_queued = false;
+
   constructor() {
     super();
     this.style.width = this.#width + "px";
     this.style.height = this.#height + "px";
+    this.addEventListener(WIDGET_ID_EVENT, () => this.#queue_fill());
+  }
+
+  protected connectedCallback(): void {
+    super.connectedCallback();
+    PAGES.add(this);
+  }
+
+  protected disconnectedCallback(): void {
+    super.disconnectedCallback();
+    PAGES.delete(this);
+  }
+
+  /**The widgets shown, in drawing order*/
+  get widgets(): readonly CanvasWidget[] {
+    return this.#widgets;
+  }
+
+  /**Fills the ids once after the changes of this moment, so loading a page with many widgets checks the ids once*/
+  #queue_fill() {
+    if (this.#fill_queued) return;
+    this.#fill_queued = true;
+    queueMicrotask(() => {
+      this.#fill_queued = false;
+      if (this.isConnected) fill_ids(this.#widgets);
+    });
   }
 
   /**Width of the page in page units*/
@@ -79,24 +135,69 @@ export class PageElement extends Base {
     return this;
   }
 
-  /**Makes the slots follow the widgets by identity, so only slots of added, removed or moved widgets are touched
-   * The array is compared as a whole every time, so changes missed while the page was not in the document do not matter*/
+  /**Makes the slots follow the widgets, a slot per widget in drawing order
+   * The changes an array state gives, like a move, touch only their slots, a whole array, like after the page was out
+   * of the document, reuses the slots by place, a slot given another widget makes its element again*/
   #apply(widgets: readonly CanvasWidget[]): void {
-    const slots = this.children as HTMLCollectionOf<WidgetSlot>;
-    const old = new Map<CanvasWidget, WidgetSlot>();
-    for (const slot of slots) old.set(slot.widget, slot);
-    const next: WidgetSlot[] = [];
-    const seen = new Set<CanvasWidget>();
-    for (const widget of widgets) {
-      if (seen.has(widget)) continue;
-      seen.add(widget);
-      next.push(old.get(widget) ?? WidgetSlot.create({}, widget));
-      old.delete(widget);
-    }
-    for (const slot of old.values()) slot.remove();
-    for (let i = 0; i < next.length; i++)
-      if (slots[i] !== next[i]) this.insertBefore(next[i], slots[i] ?? null);
+    state_ui.a.apply(this, widgets, {
+      create: (widget) => WidgetSlot.create({}, widget),
+      update: (slot, widget) => (slot.widget = widget),
+    });
+    this.#widgets = widgets;
+    this.#queue_fill();
     this.dispatchEvent(new Event(WIDGET_ELEMENTS_EVENT, { bubbles: true }));
+  }
+
+  /**The widgets whose outline covers the point on the page, in front first, invisible ones included
+   * A rotated widget is found by its rotated outline*/
+  widgets_at(x: number, y: number): CanvasWidget[] {
+    const found: CanvasWidget[] = [];
+    const slots = this.children as HTMLCollectionOf<WidgetSlot>;
+    for (let i = slots.length - 1; i >= 0; i--) {
+      const element = slots[i].element;
+      if (!element) continue;
+      const {
+        x: left,
+        y: top,
+        width,
+        height,
+        rotation,
+      } = element[WIDGET_GEOMETRY];
+      //The point turned back around the center of the widget, into the frame of the widget
+      const cx = left + width / 2;
+      const cy = top + height / 2;
+      const radians = (-rotation * Math.PI) / 180;
+      const cos = Math.cos(radians);
+      const sin = Math.sin(radians);
+      const dx = (x - cx) * cos - (y - cy) * sin;
+      const dy = (x - cx) * sin + (y - cy) * cos;
+      if (Math.abs(dx) <= width / 2 && Math.abs(dy) <= height / 2)
+        found.push(slots[i].widget);
+    }
+    return found;
+  }
+
+  /**The widgets whose whole outline is inside the rectangle on the page, in drawing order, rotated ones by their rotated outline*/
+  widgets_inside(
+    left: number,
+    top: number,
+    right: number,
+    bottom: number,
+  ): CanvasWidget[] {
+    const found: CanvasWidget[] = [];
+    for (const slot of this.children as HTMLCollectionOf<WidgetSlot>) {
+      const element = slot.element;
+      if (!element) continue;
+      const box = group_bounds([element[WIDGET_GEOMETRY]]);
+      if (
+        box.x >= left &&
+        box.y >= top &&
+        box.x + box.width <= right &&
+        box.y + box.height <= bottom
+      )
+        found.push(slot.widget);
+    }
+    return found;
   }
 
   /**The slot of a widget, undefined when the widget is not on the page*/

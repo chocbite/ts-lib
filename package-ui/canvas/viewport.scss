@@ -9,6 +9,13 @@ canvas-viewport {
   &[edit] {
     touch-action: none;
     user-select: none;
+    //Focusable for ctrl+a, the selection shows where it is
+    outline: none;
+  }
+
+  //Widgets outside the page are shown while editing, so they can be found and moved back
+  &[edit] canvas-page {
+    overflow: visible;
   }
 
   > .checkerboard {
@@ -25,6 +32,15 @@ canvas-viewport {
 
   &[edit] > .checkerboard {
     display: block;
+  }
+
+  //The selection rectangle, in viewport pixels
+  > .marquee {
+    position: absolute;
+    box-sizing: border-box;
+    border: 1px dashed base.$transformer_color;
+    background: color-mix(in srgb, #{base.$transformer_color} 15%, transparent);
+    pointer-events: none;
   }
 
   > .container {

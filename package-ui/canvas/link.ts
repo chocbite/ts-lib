@@ -145,6 +145,16 @@ export class CanvasLink<T = unknown> {
   }
 }
 
+/**Whether two links link to the same state with the same transforms*/
+export function same_link(a: CanvasLink, b: CanvasLink): boolean {
+  return (
+    a === b ||
+    (a.kind === b.kind &&
+      a.path === b.path &&
+      JSON.stringify(a.transforms) === JSON.stringify(b.transforms))
+  );
+}
+
 /**A link to a state of the depot, for an option of a widget
  * Fits any option, the linked state is only known once the page is shown, give the value type to check it against the option,
  * canvas.link<number>("/states/machine/speed")
@@ -290,9 +300,13 @@ export function linked_state(
   return state.proxy.reaw(linked as StateREAW<unknown>, read, {
     write: (value: unknown, source) => source.write(to_linked(value)),
     check: (value, source) =>
-      source.check(to_linked(value)).then((checked) => checked.map(from_linked)),
+      source
+        .check(to_linked(value))
+        .then((checked) => checked.map(from_linked)),
     limit: (value, source) =>
-      source.limit(to_linked(value)).then((limited) => limited.map(from_linked)),
+      source
+        .limit(to_linked(value))
+        .then((limited) => limited.map(from_linked)),
   });
 }
 

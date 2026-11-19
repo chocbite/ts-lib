@@ -15,10 +15,12 @@ import "./fields.scss";
 
 /**Form element editing the value of a property, bound to the option of the widget
  * A writable state is written, an initial value is kept by the element, a read only state is only shown, as form elements do
+ * Without a value the element starts blank, change is called with what the user enters, like for several widgets with different values
  * Kept in a file of its own, to be replaced by real list fields later*/
 export function property_field(
   property: WidgetProperty,
   value: unknown,
+  change?: (value: unknown) => void,
 ): HTMLElement {
   const description = property.description;
   switch (property.kind) {
@@ -31,22 +33,26 @@ export function property_field(
         decimals: property.decimals,
         unit: property.unit,
         description,
+        change,
       });
     case "text":
       return form.text_input({
         value: value as StateOrVal<string> | undefined,
         max_length: property.max_length,
         description,
+        change,
       });
     case "color":
       return form.color({
         value: value as StateOrVal<string> | undefined,
         description,
+        change,
       });
     case "boolean":
       return form.switch({
         value: value as StateOrVal<boolean> | undefined,
         description,
+        change,
       });
     case "enum":
       return form.dropdown({
@@ -56,6 +62,7 @@ export function property_field(
           text: entry.name,
         })),
         description,
+        change,
       });
   }
 }
@@ -102,7 +109,8 @@ export function linked_field(
   return new LinkedValue(link, (value) => property_value(property.kind, value));
 }
 
-/**The chain of a row of the properties editor, opens the link menu of the option, empty for an option that can not be written*/
+/**The chain of a row of the properties editor, opens the link menu of the options, one per selected widget,
+ * empty when one of them can not be written or the property can not be linked*/
 export class LinkField extends ListField {
   static element_name() {
     return "linkfield";
@@ -111,22 +119,29 @@ export class LinkField extends ListField {
     return "canvas";
   }
   #target:
-    { option: OptionState<unknown>; property: WidgetProperty } | undefined;
+    { options: OptionState<unknown>[]; property: WidgetProperty } | undefined;
   constructor() {
     super();
     this.addEventListener("click", (event) => {
       if (!this.#target) return;
       event.stopPropagation();
-      void open_link_menu(this.#target.option, this.#target.property);
+      void open_link_menu(this.#target.options, this.#target.property);
     });
   }
-  /**Shows the chain for the option, linked or not*/
+  /**Shows the chain for the options, filled when linked, nothing without options, like for a section*/
   show(
-    option: OptionState<unknown> | undefined,
-    property: WidgetProperty,
-    linked: boolean,
+    options?: readonly (OptionState<unknown> | undefined)[],
+    property?: WidgetProperty,
+    linked = false,
   ): void {
-    this.#target = option?.writable ? { option, property } : undefined;
+    const writable =
+      options?.length &&
+      options.every((option) => option?.writable) &&
+      property &&
+      property.linkable !== false;
+    this.#target = writable
+      ? { options: options as OptionState<unknown>[], property }
+      : undefined;
     this.classList.toggle("linked", linked);
     this.classList.toggle("none", !this.#target);
   }

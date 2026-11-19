@@ -14,7 +14,12 @@ import {
   option_value_state,
   type OptionState,
 } from "./link";
-import { property_value, type WidgetProperty } from "./properties";
+import {
+  base_properties,
+  DEFAULT_WIDGET_SIZE,
+  property_value,
+  type WidgetProperty,
+} from "./properties";
 import { WidgetBase, type WidgetBaseOptions } from "./widget";
 
 /**Inputs of the error widget*/
@@ -42,11 +47,22 @@ define_element(ErrorWidget);
 /**Internal to canvas, dispatched bubbling when the widget elements of a page change,
  * by a slot making a new element and by a page adding, removing or moving slots*/
 export const WIDGET_ELEMENTS_EVENT = "canvas_widget_elements";
+/**Internal to canvas, dispatched bubbling by a slot when the id of its widget changes, so the page keeps the ids unique*/
+export const WIDGET_ID_EVENT = "canvas_widget_id";
 
 const LOOKUP = Symbol("lookup");
 const DEFINITION = Symbol("definition");
 
 const GEOMETRY = new Set(["x", "y", "width", "height", "rotation"]);
+
+/**The kind of the property of every base property, known before the definition arrives*/
+const base_kinds = () =>
+  new Map<string, WidgetProperty["kind"]>(
+    base_properties(DEFAULT_WIDGET_SIZE).map(([key, property]) => [
+      key,
+      property.kind,
+    ]),
+  );
 
 /**How an option is given to the widget now*/
 interface Resolved {
@@ -61,6 +77,7 @@ interface Resolved {
  * an error is shown in the place of the widget until then
  * It follows every option too, a link is looked up in the depot and the widget is given the linked state, so switching an option
  * between a value and a link, or a linked state being registered, changes only that input of the widget
+ * Given another widget, it follows that one instead and makes its element, so a page reuses slots, see PageElement
  * It has display contents, so the widget is placed on the page as if the slot was not there*/
 export class WidgetSlot extends Base {
   static element_name() {
@@ -70,29 +87,58 @@ export class WidgetSlot extends Base {
     return "canvas";
   }
 
-  readonly widget: CanvasWidget;
+  #widget!: CanvasWidget;
+  /**Symbols of the option states and links followed for the widget*/
+  #followed: symbol[] = [];
   /**The definition, or why there is none, undefined until looked up*/
   #definition: WidgetDefinition | string | undefined;
   /**The definition the shown element was made from, undefined while an error is shown*/
   #made: WidgetDefinition | undefined;
-  /**The kind of the property of every option, linked values are converted to it, position, size and rotation are numbers*/
-  #kinds = new Map<string, WidgetProperty["kind"]>(
-    [...GEOMETRY].map((key) => [key, "number"]),
-  );
+  /**The kind of the property of every option, linked values are converted to it,
+   * the base properties every widget has are known before the definition arrives*/
+  #kinds = base_kinds();
   /**The state the widget gets for every option*/
   #options = new Map<string, Resolved>();
 
   constructor(widget: CanvasWidget) {
     super();
-    this.widget = widget;
+    this.#follow(widget);
+  }
+
+  /**The widget held*/
+  get widget(): CanvasWidget {
+    return this.#widget;
+  }
+  /**Follows another widget, its element is made from its definition and options, the same widget changes nothing*/
+  set widget(widget: CanvasWidget) {
+    if (widget === this.#widget) return;
+    this.#follow(widget);
+  }
+
+  #follow(widget: CanvasWidget): void {
+    for (const symbol of this.#followed) this.detach_state_from_symbol(symbol);
+    this.#followed = [];
+    this.detach_state_from_symbol(LOOKUP);
+    this.detach_state_from_symbol(DEFINITION);
+    this.#widget = widget;
+    this.#definition = undefined;
+    this.#made = undefined;
+    this.#kinds = base_kinds();
+    this.#options.clear();
+    //The element of the widget before is not shown with the options of this one
+    this.replaceChildren();
     for (const [key, option] of Object.entries(
       widget.options as Record<string, OptionState<unknown> | undefined>,
     ))
       if (option) {
+        const value = Symbol(key);
         const lookup = Symbol(key);
-        this.attach_state_to_symbol(Symbol(key), option, (value) =>
-          this.#option(key, option, lookup, value),
-        );
+        this.#followed.push(value, lookup);
+        this.attach_state_to_symbol(value, option, (result) => {
+          if (key === "id")
+            this.dispatchEvent(new Event(WIDGET_ID_EVENT, { bubbles: true }));
+          this.#option(key, option, lookup, result);
+        });
       }
     this.attach_state_to_symbol(LOOKUP, depot.get(widget.widget), (node) =>
       this.#node(node),

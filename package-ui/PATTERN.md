@@ -119,7 +119,10 @@ class DevicePage extends Base {
   // set and [CREATE] can use this.#device, it is set before both
 }
 
-export function device_page(device: Device, options: DevicePageOptions = {}): DevicePage {
+export function device_page(
+  device: Device,
+  options: DevicePageOptions = {},
+): DevicePage {
   return DevicePage.create(options, device);
 }
 ```
@@ -317,12 +320,6 @@ Elements created in large numbers, like list rows, list fields and canvas widget
 ## `set` and `bind`
 
 `set` gives inputs. Form elements take their value as the `value` input like any other, see the form README, and list containers take their selected keys as the `selected` input. There is no `bind`.
-
-## Status
-
-- **Done and tested** in `package-ui/base/base.test.ts`: `Base.create` with `[CREATE]`, `Base.set` with the `access` input, `Base.set_input`, `Base.input_state`, and the key helpers `input_key`, `InputOptions` and `InputOf`.
-- **Being converted:** `composition` is the first production module written to the pattern. `form` is converted too, every form element takes its inputs with `set`, with the value model of the form README. The list container and its add row are converted, rows, key fields and the plain fields keep their lighter way, as they are made in large numbers. The lines and submenus of `context_menu` are converted, menus keep their lines as a plain argument, as they are built when they open. Other elements are converted one at a time, canvas `Page` and `Viewport` after the depot work.
-- **Example:** `package-ui/pattern_example` is kept as the reference and must stay in line with this file. It is never built or exported, its source reaches consumers through the `SOURCE.md` of the package.
 
 ## Checklist for a new or converted element
 

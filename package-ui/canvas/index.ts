@@ -7,6 +7,9 @@ import {
   WIDGETS,
 } from "./data";
 import { canvas_link, linear_transform } from "./link";
+import { copy_widgets, cut_widgets, paste_widgets } from "./clipboard";
+import { remove_widgets, reorder_widget } from "./order";
+import { canvas_outline } from "./outline";
 import { canvas_properties } from "./properties_editor";
 import { select_widget } from "./select";
 import { canvas_viewport } from "./viewport";
@@ -27,12 +30,25 @@ export const canvas = {
   linear: linear_transform,
   /**A new widget from a definition, every property a writable state starting at its default*/
   new_widget,
-  /**Every property of a widget made from a definition, position, size and rotation first*/
+  /**Every property of a widget made from a definition, the id, position, size, rotation, opacity and visible first*/
   widget_properties,
   /**Opens a selector of the widget definitions, gives a new widget for every picked definition*/
   select_widget,
   /**Creates a properties editor, a list of the properties of the selected widget bound to its options*/
   properties: canvas_properties,
+  /**Creates an outline, a list of the widgets of a page sharing the selection with the viewports*/
+  outline: canvas_outline,
+  /**Moves widgets in the drawing order of a page, to the front or back, or one step forward or backward, keeping their order*/
+  reorder: reorder_widget,
+  /**Removes widgets from a page, writing delete instructions to its widgets state*/
+  remove: remove_widgets,
+  /**Copies widgets to the clipboard of the app, shared by every page, gives the JSON text for the clipboard of the system*/
+  copy: copy_widgets,
+  /**Copies widgets and removes them from a page*/
+  cut: cut_widgets,
+  /**Adds copies of the copied widgets to a page, in front, or of the widgets in a text from the clipboard of the system,
+   * placed at a point or kept inside an area if given, gives the copies*/
+  paste: paste_widgets,
   /**The widgets type of the depot, where widget definitions are registered*/
   widgets: WIDGETS,
   /**Builds a page from its JSON with writable states, the check of get of a settings group storing a page*/
@@ -64,6 +80,8 @@ export type {
   CanvasPropertiesOptions,
   PropertiesEditor,
 } from "./properties_editor";
+export type { WidgetOrder } from "./order";
+export type { CanvasOutlineOptions, Outline } from "./outline";
 export type { CanvasSelectWidgetOptions } from "./select";
 export type { CanvasViewportOptions, Viewport } from "./viewport";
 export { WIDGET_TRANSFORM_EVENT, WidgetBase } from "./widget";

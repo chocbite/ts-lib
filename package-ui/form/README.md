@@ -32,6 +32,7 @@ An error of the state shows as the fault icon on the element, a click on it expl
 - **`change`** is called with every value the user changes the element to, after it is accepted. `set({ change })` replaces it.
 - **`description`** is shown as a tooltip.
 - **`element.get_value`** gives the value, wherever it comes from, as a `ResultNice`. While its state is in error it is that error, with all its details, and without a value yet it is a `form.errors.NO_VALUE` error. **`element.changed`** is true once the user changed it.
+- **Without a value**, not given one yet, or after `element.clear()`, the element has the `no-value` attribute and shows it has none, see Look. Giving no value and a `change` listener makes a field that starts blank, like for several things with different values.
 
 ### Settings from the value state
 
@@ -100,6 +101,8 @@ Limits of 0, like `max_length: 0`, mean no limit. Every option of the elements i
 The elements are flat. Fields that take input (text, numbers, dropdowns) are white with a faint border that darkens on hover and gets a ring with focus, buttons are filled grey, and what is on or selected (a switch that is on, the selected option, a toggled button) uses one accent color. Shadows are only on things floating above the page, the open dropdown and the switch knob. Lamps and progress bars are read only and have no hover.
 
 All of it comes from the theme variables of the `form` group: `form.colors.accent` (`normal`, `hover`, `text`), `form.colors.button` (`normal`, `hover`, `active`), `form.colors.background`, `form.colors.border` (`normal`, `hover`), `form.colors.focus`, `form.colors.shadow` and `form.size.height` (1.6rem, `touchHeight` 2rem in touch mode). A `color` option (`FormColors`) fills a button, lamp or switch with that color instead.
+
+An element without a value has the `no-value` attribute, and these elements show it, so it is never taken for a value: text and number inputs a short grey line where the value would be, hidden while typing, the color input a muted rainbow, the switch its knob in the middle on a lighter track, a press turns it on. Dropdowns ask to select something. Other elements have the attribute without a look of their own yet.
 
 ## Keyboard
 

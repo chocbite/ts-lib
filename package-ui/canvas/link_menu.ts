@@ -5,6 +5,7 @@ import state from "@chocbite/ts-lib/state";
 import {
   CanvasLink,
   link_value,
+  same_link,
   type LinearTransform,
   type LinkTransform,
   type OptionState,
@@ -61,17 +62,27 @@ const EDITORS: {
 const editor_of = (kind: string) =>
   (EDITORS as Record<string, TransformEditor<LinkTransform> | undefined>)[kind];
 
-/**Opens the link menu of an option, to link it to a state of the depot, change the transforms of the link, or unlink it
- * Writes the option state when the user links or unlinks, unlinking keeps the value the link gives now*/
+/**Opens the link menu of the options of a property, one per selected widget, to link them to a state of the depot,
+ * change the transforms of the link, or unlink them
+ * The menu shows the link the options share, Link writes the same link to every option,
+ * Unlink writes each linked option the value its own link gives now, the default of the property when it gives none*/
 export async function open_link_menu(
-  option: OptionState<unknown>,
+  options: readonly OptionState<unknown>[],
   property: WidgetProperty,
 ): Promise<void> {
-  const current = await option;
-  const link =
+  const currents = await Promise.all(options.map((option) => option));
+  const links = currents.map((current) =>
     current.ok && current.value instanceof CanvasLink
       ? current.value
+      : undefined,
+  );
+  const first = links[0];
+  //The link they share, shown in the menu
+  const link =
+    first && links.every((other) => other && same_link(other, first))
+      ? first
       : undefined;
+  const linked = links.some((other) => other !== undefined);
   const path = state.ok_w(link?.path ?? "");
   const fields: FormElement[] = [];
   for (const kind of Object.keys(EDITORS))
@@ -98,7 +109,7 @@ export async function open_link_menu(
       ...fields,
     ],
     [
-      ...(link
+      ...(linked
         ? [
             {
               text: "Unlink",
@@ -120,9 +131,15 @@ export async function open_link_menu(
   const given = values.value as Record<string, unknown>;
   const convert = (value: unknown) => property_value(property.kind, value);
   if (given.unlink === true) {
-    //Keeps what the widget shows, the default when the link gives nothing
-    const value = link ? await link_value(link, convert) : undefined;
-    void option.write?.(value?.ok ? value.value : property.default);
+    //Keeps what each widget shows, the default when its link gives nothing, options without a link keep their value
+    await Promise.all(
+      options.map(async (option, i) => {
+        const own = links[i];
+        if (!own) return;
+        const value = await link_value(own, convert);
+        await option.write?.(value.ok ? value.value : property.default);
+      }),
+    );
     return;
   }
   const transforms: LinkTransform[] = [];
@@ -133,5 +150,11 @@ export async function open_link_menu(
   //Transforms of kinds without an editor, like ones saved by a newer version, are kept
   for (const transform of link?.transforms ?? [])
     if (!editor_of(transform.kind)) transforms.push(transform);
-  void option.write?.(new CanvasLink(path.ok().trim(), { transforms }));
+  await Promise.all(
+    options.map((option) =>
+      Promise.resolve(
+        option.write?.(new CanvasLink(path.ok().trim(), { transforms })),
+      ),
+    ),
+  );
 }

@@ -1,3 +1,9 @@
+import {
+  group_bounds,
+  transform_group,
+  wrap_angle,
+  type GroupRotation,
+} from "./group";
 import { Base, define_element } from "#base";
 import {
   material_arrow_range_rounded,
@@ -13,10 +19,13 @@ import {
   WIDGET_GEOMETRY,
   WIDGET_TRANSFORM_EVENT,
   type WidgetBase,
+  type WidgetGeometry,
 } from "./widget";
 
 /**Smallest width and height a widget can be resized to */
 const MIN_SIZE = 1;
+const GROUP = Symbol("group");
+
 /**Grid positions and sizes snap to, and the finer grid used while alt is held */
 const SNAP_GRID = 5;
 const SNAP_GRID_FINE = 1;
@@ -57,8 +66,10 @@ interface Drag {
   /**Point on the page that was pressed */
   page_x: number;
   page_y: number;
-  /**Angle from the center of the widget to the point that was pressed, used for rotation */
+  /**Angle from the center of the box to the point that was pressed, used for rotation */
   angle: number;
+  /**Geometry of every widget when the drag started, for several widgets*/
+  starts: WidgetGeometry[];
   /**Latest pointer event of the drag, undefined until the pointer has moved */
   last: PointerEvent | undefined;
   x: number;
@@ -68,9 +79,12 @@ interface Drag {
   rotation: number;
 }
 
-/**Dashed outline with handles, attached to a widget to move, resize and rotate it
+/**Dashed outline with handles, attached to widgets to move, resize and rotate them
+ * One widget is outlined by its own rotated outline, several by the box around them, see group_bounds,
+ * which moves, scales and rotates them together, see transform_group
+ * The box of several widgets is turned by their group rotation, which the rotate handle sets, see GroupRotation
  * Corner handles resize both axes and side handles one axis, keeping the opposite corner or side in place
- * The handle above the outline rotates the widget around its center
+ * The handle above the outline rotates around the center
  * The center handle and the outline itself move the widget, the inside of the outline is left to the widgets below
  *
  * Position and size snap to a 5px grid and rotation to 15 degrees
@@ -80,8 +94,8 @@ interface Drag {
  *
  * The transformer is drawn in viewport pixels, so it keeps its size when the page is zoomed
  *
- * Changes go through the widget, which writes them to the states of its inputs,
- * handles of parts given as read only states are hidden*/
+ * Changes go through the widgets, which write them to the states of their inputs,
+ * handles of parts any widget has as a read only state are hidden*/
 export class Transformer extends Base {
   /**Returns the name used to define the element */
   static element_name() {
@@ -92,7 +106,20 @@ export class Transformer extends Base {
     return "canvas";
   }
 
-  #widget: WidgetBase | undefined;
+  #widgets: WidgetBase[] = [];
+  /**The box while several widgets are dragged, as the drag makes it, the bounds of the widgets otherwise*/
+  #drag_box: WidgetGeometry | undefined;
+  /**The rotation of the box of several widgets, shared with the other viewports and properties editors of the selection*/
+  #group: GroupRotation | undefined;
+
+  /**Sets the rotation of the box of several widgets, the transformer follows it and sets it when the box is turned*/
+  set group(group: GroupRotation | undefined) {
+    if (this.#group === group) return;
+    this.#group = group;
+    if (group)
+      this.attach_state_to_symbol(GROUP, group.rotation, () => this.#update());
+    else this.detach_state_from_symbol(GROUP);
+  }
   #offset_x: number = 0;
   #offset_y: number = 0;
   #scale: number = 1;
@@ -126,21 +153,51 @@ export class Transformer extends Base {
     this.#stop_drag();
   }
 
-  /**Sets the widget the transformer is attached to, undefined hides the transformer */
-  set widget(widget: WidgetBase | undefined) {
-    if (this.#widget === widget) return;
+  /**Sets the widgets the transformer is attached to, none hides the transformer */
+  set widgets(widgets: readonly WidgetBase[]) {
+    if (
+      widgets.length === this.#widgets.length &&
+      widgets.every((widget, i) => widget === this.#widgets[i])
+    )
+      return;
     this.#stop_drag();
-    this.#widget?.removeEventListener(
-      WIDGET_TRANSFORM_EVENT,
-      this.#on_widget_transform,
-    );
-    this.#widget = widget;
-    widget?.addEventListener(WIDGET_TRANSFORM_EVENT, this.#on_widget_transform);
+    for (const widget of this.#widgets)
+      widget.removeEventListener(
+        WIDGET_TRANSFORM_EVENT,
+        this.#on_widget_transform,
+      );
+    this.#widgets = [...widgets];
+    for (const widget of this.#widgets)
+      widget.addEventListener(
+        WIDGET_TRANSFORM_EVENT,
+        this.#on_widget_transform,
+      );
     this.#update();
   }
-  /**Returns the widget the transformer is attached to */
-  get widget(): WidgetBase | undefined {
-    return this.#widget;
+  /**Returns the widgets the transformer is attached to */
+  get widgets(): readonly WidgetBase[] {
+    return this.#widgets;
+  }
+
+  /**The outline, the geometry of one widget, or the box around several*/
+  #frame(): WidgetGeometry | undefined {
+    const widgets = this.#widgets;
+    if (widgets.length === 0) return undefined;
+    if (widgets.length === 1) return widgets[0][WIDGET_GEOMETRY];
+    return (
+      this.#drag_box ??
+      group_bounds(
+        widgets.map((widget) => widget[WIDGET_GEOMETRY]),
+        this.#group?.rotation.ok() ?? 0,
+      )
+    );
+  }
+
+  /**Whether every widget can change all the parts*/
+  #changeable(...keys: Parameters<WidgetBase[typeof WIDGET_CHANGEABLE]>[0][]) {
+    return this.#widgets.every((widget) =>
+      keys.every((key) => widget[WIDGET_CHANGEABLE](key)),
+    );
   }
 
   /**Returns whether a handle is being dragged */
@@ -166,11 +223,11 @@ export class Transformer extends Base {
   }
 
   #update() {
-    const widget = this.#widget;
-    this.hidden = !widget;
-    if (!widget) return;
+    const frame = this.#frame();
+    this.hidden = !frame;
+    if (!frame) return;
     const scale = this.#scale;
-    const { x, y, width, height, rotation } = widget[WIDGET_GEOMETRY];
+    const { x, y, width, height, rotation } = frame;
     this.style.left = this.#offset_x + x * scale + "px";
     this.style.top = this.#offset_y + y * scale + "px";
     this.style.width = width * scale + "px";
@@ -178,29 +235,35 @@ export class Transformer extends Base {
     this.style.transform = `rotate(${rotation}deg)`;
     const changeable = (
       ...keys: Parameters<WidgetBase[typeof WIDGET_CHANGEABLE]>[0][]
-    ) => keys.every((key) => widget[WIDGET_CHANGEABLE](key));
+    ) => this.#changeable(...keys);
     this.classList.toggle("no-move", !changeable("x", "y"));
     this.classList.toggle(
       "no-resize",
       !changeable("x", "y", "width", "height"),
     );
-    this.classList.toggle("no-rotate", !changeable("rotation"));
+    //Several widgets turn around the center of the box, which moves them
+    this.classList.toggle(
+      "no-rotate",
+      this.#widgets.length > 1
+        ? !changeable("x", "y", "rotation")
+        : !changeable("rotation"),
+    );
     //Cursors only exist in 45 degree steps repeating every 180 degrees, the stylesheet picks the cursors from the closest step
     const half_turn = ((rotation % 180) + 180) % 180;
     this.setAttribute("cursor-step", String(Math.round(half_turn / 45) % 4));
   }
 
   #start(action: Action, e: PointerEvent) {
-    const widget = this.#widget;
-    if (!widget || this.#drag) return;
+    const frame = this.#frame();
+    if (!frame || this.#drag) return;
     e.preventDefault();
     e.stopPropagation();
-    //The bounding box of the rotated outline is centered on the widget center
+    //The bounding box of the rotated outline is centered on the center of the frame
     const rect = this.getBoundingClientRect();
     const center_x = rect.left + rect.width / 2;
     const center_y = rect.top + rect.height / 2;
     const scale = this.#scale;
-    const { x, y, width, height, rotation } = widget[WIDGET_GEOMETRY];
+    const { x, y, width, height, rotation } = frame;
     const origin_x = center_x - this.#offset_x - (x + width / 2) * scale;
     const origin_y = center_y - this.#offset_y - (y + height / 2) * scale;
     this.#drag = {
@@ -212,6 +275,7 @@ export class Transformer extends Base {
       page_y: (e.clientY - origin_y - this.#offset_y) / scale,
       angle: Math.atan2(e.clientY - center_y, e.clientX - center_x),
       last: undefined,
+      starts: this.#widgets.map((widget) => ({ ...widget[WIDGET_GEOMETRY] })),
       x,
       y,
       width,
@@ -226,6 +290,11 @@ export class Transformer extends Base {
   #stop_drag() {
     if (!this.#drag) return;
     this.#drag = undefined;
+    //Several widgets are bounded again, in the rotation of the box
+    if (this.#drag_box) {
+      this.#drag_box = undefined;
+      this.#update();
+    }
     window.removeEventListener("pointermove", this.#on_pointer_move);
     window.removeEventListener("pointerup", this.#on_pointer_up);
     window.removeEventListener("pointercancel", this.#on_pointer_up);
@@ -254,12 +323,41 @@ export class Transformer extends Base {
     if (e.pointerId === this.#drag?.pointer_id) this.#stop_drag();
   };
 
-  /**Updates the widget from the pointer event and the current view */
+  /**Changes the frame like the drag, one widget directly, several through their box*/
+  #change(drag: Drag, change: Partial<WidgetGeometry>) {
+    const widgets = this.#widgets;
+    if (widgets.length === 1) {
+      if (change.rotation !== undefined)
+        change.rotation = wrap_angle(change.rotation);
+      widgets[0][WIDGET_CHANGE](change);
+      return;
+    }
+    const from: WidgetGeometry = {
+      x: drag.x,
+      y: drag.y,
+      width: drag.width,
+      height: drag.height,
+      rotation: drag.rotation,
+    };
+    const to = { ...from, ...change };
+    //Set first, the widgets tell the transformer about every change
+    this.#drag_box = to;
+    //The box keeps the rotation after the drag, the properties editor shows it while turning
+    this.#group?.set(to.rotation);
+    const geometries = transform_group(drag.starts, from, to);
+    widgets.forEach((widget, i) => {
+      const geometry = geometries[i];
+      geometry.rotation = wrap_angle(geometry.rotation);
+      widget[WIDGET_CHANGE](geometry);
+    });
+    this.#update();
+  }
+
+  /**Updates the widgets from the pointer event and the current view */
   #apply_drag(drag: Drag, e: PointerEvent) {
-    const widget = this.#widget;
     const scale = this.#scale;
     //A viewport without a size has a scale of 0, which has no page position
-    if (!widget || scale <= 0) return;
+    if (!this.#widgets.length || scale <= 0) return;
     const view_x = drag.origin_x + this.#offset_x;
     const view_y = drag.origin_y + this.#offset_y;
     //Pointer movement in page units
@@ -269,7 +367,7 @@ export class Transformer extends Base {
     const action = drag.action;
     switch (action.type) {
       case "move":
-        widget[WIDGET_CHANGE]({
+        this.#change(drag, {
           x: snap(drag.x + delta_x, grid),
           y: snap(drag.y + delta_y, grid),
         });
@@ -294,7 +392,7 @@ export class Transformer extends Base {
           drag.x + drag.width / 2 + shift_x * cos - shift_y * sin;
         const center_y =
           drag.y + drag.height / 2 + shift_x * sin + shift_y * cos;
-        widget[WIDGET_CHANGE]({
+        this.#change(drag, {
           x: center_x - width / 2,
           y: center_y - height / 2,
           width,
@@ -311,7 +409,7 @@ export class Transformer extends Base {
           drag.rotation + ((now - drag.angle) * 180) / Math.PI,
           e.shiftKey ? 0 : e.altKey ? SNAP_ANGLE_FINE : SNAP_ANGLE,
         );
-        widget[WIDGET_CHANGE]({ rotation: ((rotation % 360) + 360) % 360 });
+        this.#change(drag, { rotation });
         break;
       }
     }

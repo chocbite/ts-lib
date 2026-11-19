@@ -35,6 +35,11 @@ form-numberinput {
     }
   }
 
+  //No value, in the place of the number, hidden while typing
+  &[no-value]:not(:focus-within) > span:first-child::after {
+    @include base.no-value-line;
+  }
+
   > span:nth-child(2) {
     @include base.unit-container;
     padding-inline: 0.2rem;

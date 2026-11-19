@@ -1,0 +1,10 @@
+canvas-outline {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+
+  > list-container {
+    flex-grow: 1;
+    min-height: 0;
+  }
+}

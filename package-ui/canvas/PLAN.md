@@ -78,7 +78,7 @@ const preview = canvas.viewport({ page });
 
 - **Typing of `canvas.widget`.** `add` of the depot keeps the type of the content for types of objects, so a definition keeps its options type and `canvas.widget` checks the options against it.
 - **`undefined` leaves an input unchanged,** so `set({ page: undefined })` does not clear the page of a viewport. A state of the page clears it with `undefined`.
-- **The array metadata of the widgets is not used.** It is kept on the array object, so after a page was out of the document it would be applied again. The page compares the array by identity every time instead, which is plain JavaScript work per change, and only touches the DOM for widgets that changed.
+- **The array metadata of the widgets is used,** with `state_ui.a.apply`. The state puts the changes on the array only while it tells its subscribers, so a page put back in the document gets the whole array, which reuses the slots by place. An earlier version compared the array by identity itself, as the metadata was thought to stay on the array.
 
 ## Steps
 
@@ -131,6 +131,18 @@ Saving was done first, as it does not need the properties.
 
 10. **Linking in the properties editor,** done: a link column with a chain per option, opening a link menu, a prompt with the path, Choose state with `depot_ui.select_state`, and fields per transform kind from a table in `link_menu.ts`. Unlink keeps the value shown. Linked values are converted to the type of the option by its property kind.
 
-Later: several selected widgets, undo. The link menu shows each transform kind once, in a fixed order, a list of transforms to add and order is for when there are more kinds.
+11. **Sections, opacity and visible,** done: a `section` per property, sections are sub rows in the properties editor, which remembers the open ones. The base properties are in General, and every widget has a state for each of them. Opacity and visible are inputs of `WidgetBase`.
+
+12. **IDs, outline and ordering,** done: an `id` base property that can not be linked, given as `Name-n` by the page element when empty or taken, a taken id typed in the properties editor is refused. `canvas.outline({ page, selected })` lists the widgets front first. `canvas.reorder` and the menus of the outline and the viewport order widgets. The viewport menu opens on a right click without moving or a long press, with Select covered listing the widgets at the point.
+
+13. **Several selected widgets, step 1 of 2,** done: the selection is an array state. Ctrl or shift click toggles a widget, a drag on the empty page selects with a rectangle. The transformer bounds the selection, see `group.ts`, and moves, scales along the widgets own axes and rotates them around the box. The outline uses the list in multi mode, the menus order all selected widgets. The properties editor shows one selected widget, and how many for several.
+
+14. **Properties of several widgets, step 2 of 2,** done: the properties editor shows the properties all selected widgets have, blank where the values differ, a change sets all. X, Y, width and height are the box of the transformer, the ID is left out, rotation sets the rotation of each. Linking links the option of every selected widget.
+
+15. **Removing and adding,** done: `canvas.remove` with delete instructions, Delete and backspace in a focused viewport or outline, a Delete line in their menus, and an Add widget row in the outline.
+
+16. **Cut, copy and paste,** done: the JSON of the widgets in the clipboard of the system, so they can be copied between browsers, and a copy kept in the app, ctrl+x, ctrl+c and ctrl+v in a focused viewport or outline, the lines in their menus, and Center view in the menu of the viewport.
+
+Later: undo. The link menu shows each transform kind once, in a fixed order, a list of transforms to add and order is for when there are more kinds.
 
 Each step ends with typecheck, tests and lint passing, and a stop for review.

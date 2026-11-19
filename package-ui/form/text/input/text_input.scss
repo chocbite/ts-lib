@@ -10,6 +10,15 @@ form-textinput {
   outline: none;
   overflow-x: auto;
 
+  //No value, hidden while typing
+  &[no-value]:not(:focus-within)::after {
+    @include base.no-value-line;
+    position: absolute;
+    left: base.$field_padding;
+    top: 50%;
+    translate: 0 -50%;
+  }
+
   > input {
     all: unset;
     @include base.value-font;

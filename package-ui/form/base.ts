@@ -90,6 +90,12 @@ export abstract class FormValue<
   }
 
   #form_id?: ID;
+
+  constructor() {
+    super();
+    //No value until one is given or entered
+    this.setAttribute("no-value", "");
+  }
   /**Id the group of the element knows its value by, given at creation*/
   get form_id(): ID {
     return this.#form_id as ID;
@@ -126,7 +132,16 @@ export abstract class FormValue<
     else this.removeAttribute("title");
   }
 
-  protected _buffer?: RT;
+  #buffer?: RT;
+  /**The value the element has, undefined while it has none, the element then has the no-value attribute,
+   * so its stylesheet can show that it has no value, like for several things with different values*/
+  protected get _buffer(): RT | undefined {
+    return this.#buffer;
+  }
+  protected set _buffer(value: RT | undefined) {
+    this.#buffer = value;
+    this.toggleAttribute("no-value", value === undefined);
+  }
   get buffer(): RT | undefined {
     return this._buffer;
   }

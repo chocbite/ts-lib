@@ -1,3 +1,4 @@
+import { theme_init_variable_root } from "#theme";
 import {
   BLUE,
   GREEN,
@@ -6,7 +7,6 @@ import {
   RED,
   YELLOW,
 } from "@chocbite/ts-lib/colors";
-import { theme_init_variable_root } from "#theme";
 
 const theme_root = theme_init_variable_root(
   "form",
@@ -424,40 +424,6 @@ colors_basic.make_variable(
   ORANGE["900"],
   "Color",
   undefined,
-);
-
-//#################################################################################3
-//#################################################################################3
-//       _____ _____ ____________  _____
-//      / ____|_   _|___  /  ____|/ ____|
-//     | (___   | |    / /| |__  | (___
-//      \___ \  | |   / / |  __|  \___ \
-//      ____) |_| |_ / /__| |____ ____) |
-//     |_____/|_____/_____|______|_____/
-const sizes = theme_root.make_sub_group(
-  "size",
-  "Size",
-  "Sizes used in all form elements",
-);
-
-sizes.make_variable(
-  "height",
-  "Height",
-  "Default height used in all form elements",
-  "1.6rem",
-  "1.6rem",
-  "Length",
-  { min: 0.1, max: 10 },
-);
-
-sizes.make_variable(
-  "touchHeight",
-  "Touch Height",
-  "Minimum height for touch devices used in all form elements",
-  "2.0rem",
-  "2.0rem",
-  "Length",
-  { min: 0.1, max: 10 },
 );
 
 //#################################################################################3

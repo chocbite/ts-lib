@@ -8,6 +8,7 @@ import {
   type CanvasPage,
   type CanvasWidget,
 } from "./data";
+import { reorder_widget as canvas_reorder } from "./order";
 import { WidgetSlot } from "./slot";
 import { Transformer } from "./transformer";
 import { canvas_viewport, type Viewport } from "./viewport";
@@ -100,6 +101,15 @@ const item = (x: number, y: number, width: number, height: number) =>
 const item_of = (element: WidgetBase) =>
   (element.parentElement as WidgetSlot).widget;
 
+/**Expects the same element objects in the same order, toEqual compares elements by their content*/
+const expect_same = (
+  actual: readonly unknown[],
+  expected: readonly unknown[],
+) => {
+  expect(actual.length).toBe(expected.length);
+  actual.forEach((element, i) => expect(element).toBe(expected[i]));
+};
+
 /**The widget elements a viewport shows*/
 const elements = (viewport: Viewport) =>
   [...viewport.querySelectorAll("canvas-slot")].map(
@@ -176,34 +186,69 @@ describe("Page", () => {
     ]);
   });
 
-  it("only touches added and removed widgets, the others stay connected", async () => {
+  it("only touches the widgets the state says were added or removed, the others stay connected", async () => {
     const { viewport, page } = await make_viewport();
     const [a, b, c] = [item(1, 0, 1, 1), item(2, 0, 1, 1), item(3, 0, 1, 1)];
     page.widgets.set_ok([a, b, c]);
     const [ea, eb, ec] = elements(viewport) as TestWidget[];
-    page.widgets.set_ok([a, c]);
-    expect(elements(viewport)).toEqual([ea, ec]);
+    page.widgets.array.delete(b);
+    expect_same(elements(viewport), [ea, ec]);
     expect(eb.isConnected).toBe(false);
-    page.widgets.set_ok([a, c, item(4, 0, 1, 1)]);
-    expect(elements(viewport).slice(0, 2)).toEqual([ea, ec]);
+    page.widgets.array.push(item(4, 0, 1, 1));
+    expect_same(elements(viewport).slice(0, 2), [ea, ec]);
     expect(ea.connects).toBe(1);
     expect(ec.connects).toBe(1);
   });
 
-  it("reorders widgets", async () => {
+  it("moves only the moved widget, the elements stay the same", async () => {
     const { viewport, page } = await make_viewport();
     const [a, b, c] = [item(1, 0, 1, 1), item(2, 0, 1, 1), item(3, 0, 1, 1)];
     page.widgets.set_ok([a, b, c]);
-    const [ea, eb, ec] = elements(viewport);
-    page.widgets.set_ok([c, a, b]);
-    expect(elements(viewport)).toEqual([ec, ea, eb]);
+    const [ea, eb, ec] = elements(viewport) as TestWidget[];
+    page.widgets.array.move(2, 0);
+    expect_same(elements(viewport), [ec, ea, eb]);
+    expect([ea, eb].map((e) => e.connects)).toEqual([1, 1]);
   });
 
-  it("shows a widget given twice once", async () => {
+  it("shows a whole new array of widgets in its order, reusing the slots by place", async () => {
+    const { viewport, page } = await make_viewport();
+    const [a, b, c] = [item(1, 0, 1, 1), item(2, 0, 1, 1), item(3, 0, 1, 1)];
+    page.widgets.set_ok([a, b, c]);
+    const slots = [...viewport.querySelectorAll("canvas-slot")];
+    page.widgets.set_ok([c, a]);
+    expect(elements(viewport).map((e) => e![WIDGET_GEOMETRY].x)).toEqual([
+      3, 1,
+    ]);
+    expect_same(
+      [...viewport.querySelectorAll("canvas-slot")],
+      slots.slice(0, 2),
+    );
+  });
+
+  it("keeps the slots and widget elements when put back in the document unchanged", async () => {
+    const { viewport, page } = await make_viewport();
+    page.widgets.set_ok([item(1, 0, 1, 1), item(2, 0, 1, 1)]);
+    const before = elements(viewport);
+    viewport.remove();
+    document.body.appendChild(viewport);
+    expect_same(elements(viewport), before);
+  });
+
+  it("moves only the element of a widget ordered with canvas.reorder", async () => {
+    const { viewport, page } = await make_viewport();
+    const [a, b, c] = [item(1, 0, 1, 1), item(2, 0, 1, 1), item(3, 0, 1, 1)];
+    page.widgets.set_ok([a, b, c]);
+    const [ea, eb, ec] = elements(viewport) as TestWidget[];
+    expect(await canvas_reorder(page, [a], "front")).toBe(true);
+    expect_same(elements(viewport), [eb, ec, ea]);
+    expect([eb, ec].map((e) => e.connects)).toEqual([1, 1]);
+  });
+
+  it("shows a widget given twice twice, one slot per value", async () => {
     const { viewport, page } = await make_viewport();
     const a = item(1, 0, 1, 1);
     page.widgets.set_ok([a, a]);
-    expect(elements(viewport).length).toBe(1);
+    expect(elements(viewport).length).toBe(2);
   });
 
   it("follows changes made while the viewport was not in the document", async () => {
@@ -359,6 +404,45 @@ describe("Widget", () => {
     expect(w[WIDGET_GEOMETRY].x).toBe(5);
     expect(w[WIDGET_GEOMETRY].y).toBe(40);
   });
+
+  it("shows its opacity, fully opaque until given", () => {
+    const opacity = state.ok_w(0.5);
+    const w = document.body.appendChild(TestWidget.create({ opacity }));
+    expect(getComputedStyle(w).opacity).toBe("0.5");
+    opacity.set_ok(0.25);
+    expect(getComputedStyle(w).opacity).toBe("0.25");
+    expect(
+      getComputedStyle(document.body.appendChild(widget(0, 0, 1, 1))).opacity,
+    ).toBe("1");
+  });
+
+  it("hides when not visible, visible until given", () => {
+    const visible = state.ok_w(false);
+    const w = document.body.appendChild(TestWidget.create({ visible }));
+    expect(getComputedStyle(w).visibility).toBe("hidden");
+    visible.set_ok(true);
+    expect(getComputedStyle(w).visibility).toBe("visible");
+    expect(
+      getComputedStyle(document.body.appendChild(widget(0, 0, 1, 1)))
+        .visibility,
+    ).toBe("visible");
+  });
+
+  it("shows faintly when not visible in an editing viewport, so it can still be selected", async () => {
+    const { viewport, place_with } = await make_viewport();
+    const w = place_with({
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      visible: false,
+      opacity: 0.8,
+    });
+    expect(getComputedStyle(w).visibility).toBe("hidden");
+    viewport.set({ edit: true });
+    expect(getComputedStyle(w).visibility).toBe("visible");
+    expect(Number(getComputedStyle(w).opacity)).toBeLessThan(0.5);
+  });
 });
 
 describe("Viewport", () => {
@@ -391,16 +475,16 @@ describe("Viewport", () => {
   it("replacing the page removes the old one, the transformer hides as the selected widget is not on the new page", async () => {
     const { viewport, transformer, place } = await make_viewport();
     const old = viewport.querySelector("canvas-page");
-    const selected = state.ok_w<CanvasWidget | undefined>(undefined);
+    const selected = state.ok_w<CanvasWidget[]>([]);
     viewport.set({ edit: true, selected });
-    selected.set_ok(item_of(place(0, 0, 10, 10)));
+    selected.set_ok([item_of(place(0, 0, 10, 10))]);
     expect(transformer.hidden).toBe(false);
     viewport.set({ page: page_data() });
     expect(old!.isConnected).toBe(false);
     expect(viewport.querySelectorAll("canvas-page").length).toBe(1);
     expect(transformer.hidden).toBe(true);
     //The viewport never changes the selection on its own
-    expect(selected.ok()).toBeDefined();
+    expect(selected.ok()).toHaveLength(1);
   });
 
   it("follows a state of the page", async () => {
@@ -529,7 +613,7 @@ describe("Viewport", () => {
   it("leaving edit mode resets the view and hides the transformer, the selection stays", async () => {
     const { viewport, container, transformer, place } = await make_viewport();
     const w = place(0, 0, 10, 10);
-    viewport.set({ edit: true, selected: item_of(w) });
+    viewport.set({ edit: true, selected: [item_of(w)] });
     viewport.dispatchEvent(
       new WheelEvent("wheel", { deltaY: 100, ctrlKey: true, cancelable: true }),
     );
@@ -538,7 +622,7 @@ describe("Viewport", () => {
     expect(container.style.transform).toBe("translate(0px, 50px) scale(2)");
     expect(transformer.hidden).toBe(true);
     viewport.set({ edit: true });
-    expect(transformer.widget).toBe(w);
+    expect_same(transformer.widgets, [w]);
   });
 
   it("middle and right mouse drag pan", async () => {
@@ -551,6 +635,14 @@ describe("Viewport", () => {
       pointer(viewport, "pointermove", { clientX: 200, clientY: 200 });
     }
     expect(container.style.transform).toBe("translate(20px, 30px) scale(2)");
+  });
+
+  it("shows widgets outside the page in edit mode only", async () => {
+    const { viewport } = await make_viewport();
+    const page = viewport.querySelector("canvas-page")!;
+    expect(getComputedStyle(page).overflow).toBe("hidden");
+    viewport.set({ edit: true });
+    expect(getComputedStyle(page).overflow).toBe("visible");
   });
 
   it("prevents the context menu in edit mode only", async () => {
@@ -605,46 +697,46 @@ describe("Viewport", () => {
     const inner = w.appendChild(document.createElement("span"));
     viewport.set({ edit: true });
     pointer(inner, "pointerdown");
-    expect(transformer.widget).toBe(w);
+    expect_same(transformer.widgets, [w]);
     expect(transformer.hidden).toBe(false);
     pointer(viewport.querySelector("canvas-page")!, "pointerdown");
-    expect(transformer.widget).toBeUndefined();
+    expect(transformer.widgets).toHaveLength(0);
     expect(transformer.hidden).toBe(true);
   });
 
   it("does not select outside edit mode", async () => {
     const { viewport, place } = await make_viewport();
-    const selected = state.ok_w<CanvasWidget | undefined>(undefined);
+    const selected = state.ok_w<CanvasWidget[]>([]);
     viewport.set({ selected });
     const w = place(10, 10, 20, 20);
     pointer(w, "pointerdown");
-    expect(selected.ok()).toBeUndefined();
+    expect(selected.ok()).toEqual([]);
   });
 
   it("writes a writable selection state, so viewports share the selection", async () => {
     const page = page_data();
     const first = await make_viewport(page);
     const second = await make_viewport(page);
-    const selected = state.ok_w<CanvasWidget | undefined>(undefined);
+    const selected = state.ok_w<CanvasWidget[]>([]);
     first.viewport.set({ edit: true, selected });
     second.viewport.set({ edit: true, selected });
     const a = first.place(10, 10, 20, 20);
     pointer(a, "pointerdown");
-    expect(selected.ok()).toBe(item_of(a));
-    expect(first.transformer.widget).toBe(a);
+    expect(selected.ok()).toEqual([item_of(a)]);
+    expect_same(first.transformer.widgets, [a]);
     const b = elements(second.viewport)[0]!;
-    expect(second.transformer.widget).toBe(b);
+    expect_same(second.transformer.widgets, [b]);
   });
 
   it("does not change a read only selection state", async () => {
     const { viewport, transformer, place } = await make_viewport();
     const w = place(10, 10, 20, 20);
-    const selected = state.ok_w<CanvasWidget | undefined>(undefined);
+    const selected = state.ok_w<CanvasWidget[]>([]);
     viewport.set({ edit: true, selected: selected.read_only });
     pointer(w, "pointerdown");
-    expect(transformer.widget).toBeUndefined();
-    selected.set_ok(item_of(w));
-    expect(transformer.widget).toBe(w);
+    expect(transformer.widgets).toHaveLength(0);
+    selected.set_ok([item_of(w)]);
+    expect_same(transformer.widgets, [w]);
   });
 
   it("listens to the keyboard only while connected in edit mode", async () => {
@@ -664,6 +756,405 @@ describe("Viewport", () => {
   });
 });
 
+describe("Selecting several widgets", () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  /**Three widgets in an editing viewport sharing a selection state*/
+  const three = async () => {
+    const made = await make_viewport();
+    const selected = state.ok_w<CanvasWidget[]>([]);
+    made.viewport.set({ edit: true, selected });
+    const a = made.place(10, 10, 20, 20);
+    const b = made.place(50, 10, 20, 20);
+    const c = made.place(120, 60, 20, 20);
+    return { ...made, selected, a, b, c };
+  };
+
+  it("ctrl or shift click toggles a widget, a plain click selects only it", async () => {
+    const { selected, a, b, c } = await three();
+    pointer(a, "pointerdown");
+    pointer(b, "pointerdown", { ctrlKey: true });
+    pointer(c, "pointerdown", { shiftKey: true });
+    expect(selected.ok()).toEqual([a, b, c].map(item_of));
+    pointer(b, "pointerdown", { ctrlKey: true });
+    expect(selected.ok()).toEqual([a, c].map(item_of));
+    pointer(c, "pointerdown");
+    expect(selected.ok()).toEqual([item_of(c)]);
+  });
+
+  it("ctrl+a selects all widgets while the viewport has focus, which pressing it gives", async () => {
+    const { viewport, selected, a, b, c } = await three();
+    const ctrl_a = (target: EventTarget) =>
+      target.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "a",
+          ctrlKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    //Elsewhere, like in a text field, ctrl+a is left alone
+    expect(ctrl_a(document.body)).toBe(true);
+    expect(selected.ok()).toEqual([]);
+    pointer(viewport.querySelector("canvas-page")!, "pointerdown");
+    expect(document.activeElement).toBe(viewport);
+    expect(ctrl_a(viewport)).toBe(false);
+    expect(selected.ok()).toEqual([a, b, c].map(item_of));
+    viewport.set({ edit: false });
+    selected.set_ok([]);
+    ctrl_a(viewport);
+    expect(selected.ok()).toEqual([]);
+  });
+
+  it("delete removes the selected widgets while the viewport has focus", async () => {
+    const { viewport, page, selected, a, b, c } = await three();
+    pointer(a, "pointerdown");
+    pointer(c, "pointerdown", { ctrlKey: true });
+    const key = (key: string) =>
+      viewport.dispatchEvent(
+        new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+      );
+    expect(key("Delete")).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(page.widgets.ok()).toEqual([item_of(b)]);
+    expect(selected.ok()).toEqual([]);
+    pointer(elements(viewport)[0]!, "pointerdown");
+    key("Backspace");
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(page.widgets.ok()).toEqual([]);
+  });
+
+  it("copy and paste of the system paste copies of the selected widgets and select them, cut removes them", async () => {
+    const { viewport, page, selected, a, b } = await three();
+    pointer(a, "pointerdown");
+    pointer(b, "pointerdown", { ctrlKey: true });
+    //Ctrl+x, ctrl+c and ctrl+v give these events on the focused viewport, with the clipboard of the system
+    const clipboard = new DataTransfer();
+    const event = (type: "copy" | "cut" | "paste") =>
+      viewport.dispatchEvent(
+        new ClipboardEvent(type, {
+          clipboardData: clipboard,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    expect(event("copy")).toBe(false);
+    const copied = JSON.parse(clipboard.getData("text/plain")) as {
+      widgets: unknown[];
+    };
+    expect(copied.widgets).toHaveLength(2);
+    event("paste");
+    await new Promise((resolve) => setTimeout(resolve));
+    const widgets = page.widgets.ok();
+    expect(widgets).toHaveLength(5);
+    expect(selected.ok()).toEqual(widgets.slice(3));
+    event("cut");
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(page.widgets.ok()).toEqual(widgets.slice(0, 3));
+    expect(selected.ok()).toEqual([]);
+  });
+
+  it("a ctrl click on the empty page keeps the selection", async () => {
+    const { viewport, selected, a } = await three();
+    pointer(a, "pointerdown");
+    pointer(viewport.querySelector("canvas-page")!, "pointerdown", {
+      ctrlKey: true,
+    });
+    expect(selected.ok()).toEqual([item_of(a)]);
+  });
+
+  it("a drag on the empty page selects the widgets fully inside the rectangle", async () => {
+    const { viewport, selected, client, a, b, c } = await three();
+    const page = viewport.querySelector("canvas-page")!;
+    const rectangle = (
+      from: [number, number],
+      to: [number, number],
+      keys: { ctrlKey?: boolean } = {},
+    ) => {
+      pointer(page, "pointerdown", { ...client(...from), ...keys });
+      pointer(viewport, "pointermove", { ...client(...to), ...keys });
+      expect(viewport.querySelector(".marquee")).not.toBeNull();
+      pointer(viewport, "pointerup", { ...client(...to), ...keys });
+      expect(viewport.querySelector(".marquee")).toBeNull();
+    };
+    //b is only partly inside
+    rectangle([5, 5], [60, 40]);
+    expect(selected.ok()).toEqual([item_of(a)]);
+    rectangle([100, 50], [150, 90], { ctrlKey: true });
+    expect(selected.ok()).toEqual([a, c].map(item_of));
+    rectangle([5, 5], [150, 90]);
+    expect(selected.ok()).toEqual([a, b, c].map(item_of));
+  });
+
+  it("keeps the selection on a right click on a selected widget, the menu orders them all", async () => {
+    const { page, selected, client, viewport, a, b, c } = await three();
+    pointer(a, "pointerdown");
+    pointer(c, "pointerdown", { ctrlKey: true });
+    const at = client(15, 15);
+    pointer(viewport, "pointerdown", { button: 2, ...at });
+    pointer(viewport, "pointerup", { button: 2, ...at });
+    expect(selected.ok()).toEqual([a, c].map(item_of));
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        "contextmenu-container contextmenu-option",
+      ),
+    ]
+      .find((option) => option.textContent === "Send to back")!
+      .click();
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(page.widgets.ok()).toEqual([a, c, b].map(item_of));
+    (document.activeElement as HTMLElement | null)?.blur();
+    document.querySelector("contextmenu-container")?.replaceChildren();
+  });
+});
+
+describe("Viewport menu", () => {
+  afterEach(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+    document.querySelector("contextmenu-container")?.replaceChildren();
+    //Viewports left behind move the next one, which the client points of a test are taken from
+    document.body.replaceChildren();
+  });
+
+  const options = () =>
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        "contextmenu-container contextmenu-option, contextmenu-container contextmenu-submenu",
+      ),
+    ].map((option) => option.textContent);
+  const option = (text: string) =>
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        "contextmenu-container contextmenu-option, contextmenu-container contextmenu-submenu",
+      ),
+    ].find((option) => option.textContent === text)!;
+
+  /**Two overlapping widgets in an editing viewport sharing a selection state*/
+  const overlapping = async () => {
+    const made = await make_viewport();
+    const selected = state.ok_w<CanvasWidget[]>([]);
+    made.viewport.set({ edit: true, selected });
+    const under = made.place_with({
+      x: 0,
+      y: 0,
+      width: 50,
+      height: 50,
+      id: "Under",
+    });
+    const over = made.place_with({
+      x: 20,
+      y: 20,
+      width: 50,
+      height: 50,
+      id: "Over",
+    });
+    const right_click = (x: number, y: number, move = 0) => {
+      const at = made.client(x, y);
+      pointer(made.viewport, "pointerdown", { button: 2, ...at });
+      const to = { clientX: at.clientX + move, clientY: at.clientY };
+      pointer(made.viewport, "pointermove", to);
+      pointer(made.viewport, "pointerup", { button: 2, ...to });
+    };
+    return { ...made, selected, under, over, right_click };
+  };
+
+  it("opens on a right click without moving, selecting the widget in front at the point", async () => {
+    const { selected, over, right_click } = await overlapping();
+    right_click(30, 30);
+    expect(selected.ok()).toEqual([item_of(over)]);
+    expect(options()).toEqual([
+      "CutCtrl+X",
+      "CopyCtrl+C",
+      "PasteCtrl+V",
+      "DeleteDel",
+      "Bring to front",
+      "Move forward",
+      "Move backward",
+      "Send to back",
+      "Select covered",
+    ]);
+  });
+
+  it("does not open on a right drag, which pans", async () => {
+    const { right_click, container } = await overlapping();
+    const before = container.style.transform;
+    right_click(30, 30, 40);
+    expect(options()).toEqual([]);
+    expect(container.style.transform).not.toBe(before);
+  });
+
+  it("opens a menu of the viewport where there is no widget, keeping the selection", async () => {
+    const { selected, right_click, under, over } = await overlapping();
+    right_click(10, 10);
+    (document.activeElement as HTMLElement | null)?.blur();
+    document.querySelector("contextmenu-container")?.replaceChildren();
+    right_click(150, 80);
+    expect(options()).toEqual([
+      "PasteCtrl+V",
+      "Select allCtrl+A",
+      "Center view",
+    ]);
+    expect(selected.ok()).toEqual([item_of(under)]);
+    option("Select allCtrl+A").click();
+    expect(selected.ok()).toEqual([under, over].map(item_of));
+  });
+
+  it("opens on a long press on touch", async () => {
+    const { viewport, selected, under, client } = await overlapping();
+    viewport.dispatchEvent(
+      new PointerEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        pointerType: "touch",
+        ...client(10, 10),
+      }),
+    );
+    expect(selected.ok()).toEqual([item_of(under)]);
+    expect(options()).toContain("Bring to front");
+  });
+
+  it("deletes the selected widgets, or the one clicked when it is not selected", async () => {
+    const { page, selected, under, over, right_click } = await overlapping();
+    right_click(10, 10);
+    expect(options()).toContain("DeleteDel");
+    option("DeleteDel").click();
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(page.widgets.ok()).toEqual([item_of(over)]);
+    expect(selected.ok()).toEqual([]);
+    void under;
+  });
+
+  it("pastes copied widgets at the point of the menu of the viewport, and selects them", async () => {
+    const { page, selected, under, right_click } = await overlapping();
+    right_click(10, 10);
+    option("CopyCtrl+C").click();
+    await new Promise((resolve) => setTimeout(resolve));
+    (document.activeElement as HTMLElement | null)?.blur();
+    document.querySelector("contextmenu-container")?.replaceChildren();
+    right_click(150, 80);
+    option("PasteCtrl+V").click();
+    //The menu asks the browser whether the clipboard of the system may be read first
+    await vi.waitFor(() => expect(page.widgets.ok()).toHaveLength(3));
+    const widgets = page.widgets.ok();
+    const copy = widgets[2];
+    expect(copy.widget).toBe(item_of(under).widget);
+    //At the point, pulled up to stay in view, the 50 high widget would reach 130 and the viewport shows down to 125
+    expect(
+      ["x", "y"].map((key) =>
+        (copy.options as Record<string, { ok(): unknown }>)[key].ok(),
+      ),
+    ).toEqual([150, 75]);
+    expect(selected.ok()).toEqual([copy]);
+  });
+
+  it("keeps pasted widgets inside the area the viewport shows", async () => {
+    const { viewport, page, client } = await overlapping();
+    //A widget copied far off in another browser
+    const clipboard = new DataTransfer();
+    clipboard.setData(
+      "text/plain",
+      JSON.stringify({
+        format: "chocbite-canvas-widgets",
+        widgets: [
+          {
+            widget: "/widgets/canvastest/testwidget",
+            options: { x: 1000, y: 1000, width: 10, height: 10 },
+          },
+        ],
+      }),
+    );
+    pointer(
+      viewport.querySelector("canvas-page")!,
+      "pointerdown",
+      client(150, 80),
+    );
+    viewport.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: clipboard,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await vi.waitFor(() => expect(page.widgets.ok()).toHaveLength(3));
+    const pasted = page.widgets.ok()[2];
+    //The 200 by 100 page fills the 400 wide viewport at scale 2, 25 units show above and below it
+    expect(
+      ["x", "y"].map((key) =>
+        (pasted.options as Record<string, { ok(): unknown }>)[key].ok(),
+      ),
+    ).toEqual([190, 115]);
+  });
+
+  it("center view resets zoom and pan to the view the viewport starts with", async () => {
+    const { viewport, container, client, box } = await overlapping();
+    const start = container.style.transform;
+    viewport.dispatchEvent(
+      new WheelEvent("wheel", {
+        deltaY: -200,
+        ctrlKey: true,
+        cancelable: true,
+        bubbles: true,
+        ...client(50, 50),
+      }),
+    );
+    expect(container.style.transform).not.toBe(start);
+    (document.activeElement as HTMLElement | null)?.blur();
+    document.querySelector("contextmenu-container")?.replaceChildren();
+    //The bottom right corner, empty after zooming in at the top left
+    const corner = {
+      clientX: box.right - 2,
+      clientY: box.bottom - 2,
+    };
+    pointer(viewport, "pointerdown", { button: 2, ...corner });
+    pointer(viewport, "pointerup", { button: 2, ...corner });
+    option("Center view").click();
+    expect(container.style.transform).toBe(start);
+  });
+
+  it("orders the widget", async () => {
+    const { page, selected, under, over, right_click } = await overlapping();
+    right_click(10, 10);
+    expect(selected.ok()).toEqual([item_of(under)]);
+    option("Bring to front").click();
+    await new Promise((resolve) => setTimeout(resolve));
+    expect(page.widgets.ok()).toEqual([item_of(over), item_of(under)]);
+  });
+
+  it("selects a covered widget, from the widgets at the point front first by id", async () => {
+    const { selected, under, right_click } = await overlapping();
+    right_click(30, 30);
+    option("Select covered").click();
+    await new Promise((resolve) => setTimeout(resolve));
+    //The selected widget has a checkmark
+    expect(options().slice(9)).toEqual(["Over✓", "Under"]);
+    option("Under").click();
+    expect(selected.ok()).toEqual([item_of(under)]);
+  });
+
+  it("finds rotated widgets by their outline", async () => {
+    const { selected, place_with, right_click } = await overlapping();
+    //A 100 by 10 bar turned upright, centered on 150,50
+    const bar = place_with({
+      x: 100,
+      y: 45,
+      width: 100,
+      height: 10,
+      rotation: 90,
+      id: "Bar",
+    });
+    right_click(150, 20);
+    expect(selected.ok()).toEqual([item_of(bar)]);
+    (document.activeElement as HTMLElement | null)?.blur();
+    document.querySelector("contextmenu-container")?.replaceChildren();
+    //Beside the upright bar, inside where it was before turning, only the menu of the viewport
+    right_click(120, 50);
+    expect(options()).toContain("Select allCtrl+A");
+    expect(options()).not.toContain("DeleteDel");
+  });
+});
+
 describe("Transformer", () => {
   afterEach(() => {
     document.body.replaceChildren();
@@ -673,7 +1164,7 @@ describe("Transformer", () => {
   const with_selection = async () => {
     const parts = await make_viewport();
     const w = parts.place(50, 25, 40, 20);
-    const selected = state.ok_w<CanvasWidget | undefined>(item_of(w));
+    const selected = state.ok_w<CanvasWidget[]>([item_of(w)]);
     parts.viewport.set({ edit: true, selected });
     const handle = (name: string) =>
       parts.transformer.querySelector(
@@ -726,10 +1217,99 @@ describe("Transformer", () => {
 
   it("stops following a widget it is no longer attached to", async () => {
     const { transformer, w, selected } = await with_selection();
-    selected.set_ok(undefined);
+    selected.set_ok([]);
     w.set({ x: 0 });
     expect(transformer.hidden).toBe(true);
     expect(transformer.style.left).toBe("100px");
+  });
+
+  /**Viewport in edit mode with a 40 by 20 widget at 50,25 and a 20 by 30 widget at 110,45 selected,
+   * so the box is 80 by 50 at 50,25*/
+  const with_two = async () => {
+    const parts = await with_selection();
+    const v = parts.place(110, 45, 20, 30);
+    parts.selected.set_ok([item_of(parts.w), item_of(v)]);
+    return { ...parts, v };
+  };
+  const place_of = (w: WidgetBase) => {
+    const { x, y, width, height, rotation } = w[WIDGET_GEOMETRY];
+    return [x, y, width, height, rotation].map((n) => Math.round(n) + 0);
+  };
+
+  it("bounds several selected widgets, without rotation", async () => {
+    const { transformer, w, v } = await with_two();
+    expect_same(transformer.widgets, [w, v]);
+    expect(transformer.style.left).toBe("100px");
+    expect(transformer.style.top).toBe("100px");
+    expect(transformer.style.width).toBe("160px");
+    expect(transformer.style.height).toBe("100px");
+    expect(transformer.style.transform).toBe("rotate(0deg)");
+    v.set({ x: 140 });
+    expect(transformer.style.width).toBe("220px");
+  });
+
+  it("moves several widgets by the same amount", async () => {
+    const { w, v, drag } = await with_two();
+    drag("handle move", 26, -8);
+    expect(place_of(w)).toEqual([65, 20, 40, 20, 0]);
+    expect(place_of(v)).toEqual([125, 40, 20, 30, 0]);
+  });
+
+  it("scales several widgets relative to the box", async () => {
+    const { w, v, drag } = await with_two();
+    //40 page units wider, the box is 1.5 times as wide
+    drag("handle resize e", 80, 0);
+    expect(place_of(w)).toEqual([50, 25, 60, 20, 0]);
+    expect(place_of(v)).toEqual([140, 45, 30, 30, 0]);
+  });
+
+  it("rotates several widgets around the center of the box", async () => {
+    const { w, transformer, handle } = await with_two();
+    const rotate = handle("handle rotate");
+    const box = transformer.getBoundingClientRect();
+    const cx = box.left + box.width / 2;
+    const cy = box.top + box.height / 2;
+    const start = rotate.getBoundingClientRect();
+    const x = start.left + start.width / 2;
+    const y = start.top + start.height / 2;
+    pointer(rotate, "pointerdown", { clientX: x, clientY: y });
+    pointer(window, "pointermove", {
+      clientX: cx + (cy - y),
+      clientY: cy + (x - cx),
+    });
+    //The box turns with the drag
+    expect(transformer.style.transform).toBe("rotate(90deg)");
+    pointer(window, "pointerup", { clientX: x, clientY: y });
+    //Center 70,35 turned a quarter around 90,50
+    expect(place_of(w)).toEqual([85, 20, 40, 20, 90]);
+    //The box keeps its rotation, while the same widgets are selected
+    expect(transformer.style.transform).toBe("rotate(90deg)");
+    expect(transformer.style.width).toBe("160px");
+    expect(transformer.style.height).toBe("100px");
+  });
+
+  it("turns the box of widgets with the rotation they share", async () => {
+    const parts = await with_selection();
+    const turned = [
+      parts.place_with({ x: 10, y: 10, width: 20, height: 10, rotation: 30 }),
+      parts.place_with({ x: 60, y: 40, width: 20, height: 30, rotation: 30 }),
+    ];
+    parts.selected.set_ok(turned.map(item_of));
+    expect(parts.transformer.style.transform).toBe("rotate(30deg)");
+  });
+
+  it("hides the handles of a part that any selected widget locks", async () => {
+    const parts = await with_selection();
+    const v = parts.place_with({
+      x: state.ok(110),
+      y: 45,
+      width: 20,
+      height: 30,
+    });
+    parts.selected.set_ok([item_of(parts.w), item_of(v)]);
+    expect(parts.transformer.classList).toContain("no-move");
+    expect(parts.transformer.classList).toContain("no-resize");
+    expect(parts.transformer.classList).toContain("no-rotate");
   });
 
   it("the move handle moves the widget on a 5 unit grid", async () => {
@@ -925,7 +1505,7 @@ describe("Transformer", () => {
     const { viewport, transformer, handle, place, selected } =
       await with_selection();
     pointer(handle("handle move"), "pointerdown", { clientX: 0, clientY: 0 });
-    selected.set_ok(item_of(place(0, 0, 10, 10)));
+    selected.set_ok([item_of(place(0, 0, 10, 10))]);
     expect(transformer.dragging).toBe(false);
     pointer(handle("handle move"), "pointerdown", { clientX: 0, clientY: 0 });
     viewport.remove();
@@ -937,7 +1517,7 @@ describe("Transformer", () => {
     const x = state.ok_w(50);
     const y = state.ok_w(25);
     const w = parts.place_with({ x, y, width: 40, height: 20 });
-    parts.viewport.set({ edit: true, selected: item_of(w) });
+    parts.viewport.set({ edit: true, selected: [item_of(w)] });
     const move = parts.transformer.querySelector(
       ":scope > .handle.move",
     ) as HTMLElement;
@@ -959,7 +1539,7 @@ describe("Transformer", () => {
       height: 20,
       rotation: state.ok(0),
     });
-    parts.viewport.set({ edit: true, selected: item_of(w) });
+    parts.viewport.set({ edit: true, selected: [item_of(w)] });
     const shown = (name: string) =>
       getComputedStyle(
         parts.transformer.querySelector(
@@ -1010,6 +1590,6 @@ describe("Transformer", () => {
     const { transformer, w, handle } = await with_selection();
     pointer(handle("handle se"), "pointerdown", { clientX: 0, clientY: 0 });
     pointer(window, "pointerup");
-    expect(transformer.widget).toBe(w);
+    expect_same(transformer.widgets, [w]);
   });
 });

@@ -92,6 +92,19 @@ form-switch {
     }
   }
 
+  //No value, the knob in the middle on a lighter track, a press turns it on
+  &[no-value] > div {
+    background-color: color-mix(
+      in srgb,
+      #{base.$color_border} 50%,
+      transparent
+    );
+
+    &::after {
+      left: calc(50% - var(--knob) / 2);
+    }
+  }
+
   > svg {
     box-sizing: border-box;
     fill: base.$color_text;

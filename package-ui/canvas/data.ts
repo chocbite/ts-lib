@@ -16,7 +16,7 @@ import {
 } from "./link";
 import {
   DEFAULT_WIDGET_SIZE,
-  geometry_properties,
+  base_properties,
   type WidgetProperties,
   type WidgetProperty,
 } from "./properties";
@@ -32,7 +32,7 @@ export interface WidgetDefinition<
   size?: { width: number; height: number };
   /**The options the user changes, in the order they are shown, with what a new widget starts with
    * Typed by the options, so a property must match the type of its option, number options get number properties and so on
-   * Position, size and rotation are added by canvas, options without a property are left to code*/
+   * Position, size, rotation, opacity and visible are added by canvas, options without a property are left to code*/
   properties?: WidgetProperties<O>;
 }
 
@@ -71,7 +71,7 @@ export interface CanvasPage {
   /**Height of the page in page units, 1080 when undefined*/
   readonly height?: StateOrVal<number>;
   /**Widgets on the page, the last is drawn on top
-   * A widget object is shown once per page, the same widget twice in the array is shown once*/
+   * Change it with the array helpers or write instructions of the state, so viewports touch only the widgets that changed*/
   readonly widgets?: StateOrVal<readonly CanvasWidget[]>;
 }
 
@@ -85,8 +85,39 @@ export function canvas_widget<O extends WidgetBaseOptions>(
   for (const [key, value] of Object.entries(options))
     if (value !== undefined)
       states[key] = state.is.state(value) ? value : state.ok_w<unknown>(value);
+  with_base_options(states, definition_size(definition));
   //Every option is made a state of its own value type
   return { widget: definition.path, options: states as WidgetOptionStates<O> };
+}
+
+/**The size of the definition when it is there already, as it is for a definition registered as a value*/
+function definition_size(
+  definition: DepotEntry<WidgetDefinition<any>>,
+): { width: number; height: number } | undefined {
+  const content = definition.value.rsync ? definition.value.get() : undefined;
+  return content?.ok ? content.value.size : undefined;
+}
+
+/**The size of the definition at the path, when it is registered and there already*/
+function size_at(path: string): { width: number; height: number } | undefined {
+  const node = depot.get(path);
+  const found = node.rsync ? node.get() : undefined;
+  if (!found?.ok) return undefined;
+  const entry = found.value;
+  return entry.kind === "entry" && entry.type === WIDGETS
+    ? definition_size(entry as DepotEntry<WidgetDefinition>)
+    : undefined;
+}
+
+/**Gives the options a writable state at the default for every base property they have none for,
+ * so position, size, rotation, opacity and visible can always be changed and linked
+ * @param size of the definition, width and height default to it*/
+function with_base_options(
+  options: Record<string, unknown>,
+  size = DEFAULT_WIDGET_SIZE,
+): void {
+  for (const [key, property] of base_properties(size))
+    options[key] ??= state.ok_w<unknown>(property.default);
 }
 
 const is_record = (value: unknown): value is Record<string, unknown> =>
@@ -118,6 +149,8 @@ export function page_from_json(json: unknown): Option<CanvasPage> {
       if (!link.some) return none();
       options[key] = state.ok_w<unknown>(link.value);
     }
+    //Pages stored before a base property was added get it too
+    with_base_options(options, size_at(widget.widget));
     list.push({ widget: widget.widget, options });
   }
   return some({
@@ -127,12 +160,12 @@ export function page_from_json(json: unknown): Option<CanvasPage> {
   });
 }
 
-/**Every property of a widget made from the definition, position, size and rotation first, then those of the definition*/
+/**Every property of a widget made from the definition, position, size, rotation, opacity and visible first, then those of the definition*/
 export function widget_properties(
   definition: WidgetDefinition,
 ): [string, WidgetProperty][] {
   return [
-    ...geometry_properties(definition.size ?? DEFAULT_WIDGET_SIZE),
+    ...base_properties(definition.size ?? DEFAULT_WIDGET_SIZE),
     ...Object.entries<WidgetProperty>(definition.properties ?? {}),
   ];
 }

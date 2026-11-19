@@ -8,6 +8,11 @@ interface PropertyBase<T> {
   name: string;
   /**Explanation shown to the user*/
   description?: string;
+  /**Name of the section the property is shown in, properties of the same section are grouped,
+   * at the root of the properties editor when undefined or empty*/
+  section?: string;
+  /**False leaves the option without a link column chain in the properties editor, so it can not be linked, true when undefined*/
+  linkable?: boolean;
   /**Value of a new widget*/
   default: T;
 }
@@ -70,7 +75,7 @@ type PropertyFor<V> = [V] extends [boolean]
       : never;
 
 /**Properties of a widget, by option, typed by the options of the widget
- * Position, size and rotation are left out, canvas adds them to every widget*/
+ * The id, position, size, rotation, opacity and visible are left out, canvas adds them to every widget*/
 export type WidgetProperties<O> = {
   [K in Exclude<keyof O, keyof WidgetBaseOptions> & string]?: PropertyFor<
     OptionValue<O[K]>
@@ -80,12 +85,17 @@ export type WidgetProperties<O> = {
 /**Size of a widget made from a definition without a size*/
 export const DEFAULT_WIDGET_SIZE = { width: 100, height: 100 };
 
-/**Properties every widget has, in the order they are shown*/
-export function geometry_properties(size: {
+/**Section of the properties every widget has*/
+export const BASE_SECTION = "General";
+
+/**Properties every widget has, in the order they are shown, in the General section*/
+export function base_properties(size: {
   width: number;
   height: number;
 }): [string, WidgetProperty][] {
-  return [
+  const properties: [string, WidgetProperty][] = [
+    //Unique on the page, given by the page when empty or taken, see ids.ts
+    ["id", { kind: "text", name: "ID", default: "", linkable: false }],
     ["x", { kind: "number", name: "X", default: 0, unit: "px" }],
     ["y", { kind: "number", name: "Y", default: 0, unit: "px" }],
     [
@@ -114,12 +124,25 @@ export function geometry_properties(size: {
         kind: "number",
         name: "Rotation",
         default: 0,
-        min: 0,
-        max: 360,
         unit: "°",
       },
     ],
+    [
+      "opacity",
+      {
+        kind: "number",
+        name: "Opacity",
+        default: 1,
+        min: 0,
+        max: 1,
+        step: 0.05,
+        decimals: 2,
+      },
+    ],
+    ["visible", { kind: "boolean", name: "Visible", default: true }],
   ];
+  for (const [, property] of properties) property.section = BASE_SECTION;
+  return properties;
 }
 
 /**A value as text, objects as JSON*/

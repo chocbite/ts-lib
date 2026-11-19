@@ -200,6 +200,7 @@ describe("Links to depot states", () => {
         ],
       };
       const json: unknown = JSON.parse(await state.ok(page).to_json());
+      //The other base properties are saved too, at their defaults
       expect(json).toEqual({
         widgets: [
           {
@@ -208,6 +209,12 @@ describe("Links to depot states", () => {
               x: { $link: { kind: "depot", path: X, transforms } },
               text: { $link: { kind: "depot", path: TEXT } },
               y: 3,
+              id: "",
+              width: 100,
+              height: 100,
+              rotation: 0,
+              opacity: 1,
+              visible: true,
             },
           },
         ],
@@ -269,12 +276,12 @@ describe("Links to depot states", () => {
   it("show their path in the properties editor, and follow switching", () => {
     const text = state.ok_w<string | CanvasLink<string>>(canvas.link(TEXT));
     const editor = document.body.appendChild(
-      canvas.properties({ selected: canvas.widget(definition, { text }) }),
+      canvas.properties({ selected: [canvas.widget(definition, { text })] }),
     );
     const field = () =>
       [...editor.querySelectorAll("list-row")]
         .find(
-          (row) => row.querySelector("list-textfield")!.textContent === "Text",
+          (row) => row.querySelector("list-keyfield")!.textContent === "Text",
         )!
         .querySelector("list-nodefield")!;
     expect(field().querySelector("canvas-linkedvalue")!.textContent).toContain(

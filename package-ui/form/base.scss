@@ -47,8 +47,8 @@ $color_basic_yellow: var(--form-colors-basic-yellow);
 
 //Sizes
 $size_cornerRadius: 0.375rem;
-$size_height: var(--form-size-height);
-$size_touchHeight: var(--form-size-touchHeight);
+$size_height: 1.5rem;
+$size_touchHeight: 2rem;
 
 //Font
 $font_size: var(--form-font-size);
@@ -183,6 +183,19 @@ $touch_value_unit_font_height: max(
     $touch_unit_font_size
   ) +
   0.4rem;
+
+//A short grey line in place of the value text of an element without a value, the no-value attribute of value elements
+@mixin no-value-line {
+  content: "";
+  display: inline-block;
+  vertical-align: middle;
+  width: 1.2rem;
+  height: 0.125rem;
+  border-radius: 0.0625rem;
+  background-color: $color_text_unselected;
+  opacity: 0.6;
+  pointer-events: none;
+}
 
 @mixin value-font {
   color: $color_text;

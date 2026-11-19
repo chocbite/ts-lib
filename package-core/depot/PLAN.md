@@ -26,7 +26,7 @@ Every type, group and entry has an id, a name and a description, the name and de
 
 - Registration works like `settings`, one call per level: `depot.type`, `group.group`, `group.add`. Registering code gets a group, never a path, so it can be registered anywhere.
 - The depot uses `state` for everything that changes, the content of an entry and the children of a group. `state` is a special core part, so the depot imports it and registers the states type itself, `state` does not import the depot.
-- The content of an entry is a state, as content can change. `add` takes a `StateOrVal`, a fixed value never changes, see `state.as_state`.
+- The content of an entry is a state, as content can change. `add` takes a `StateOrVal`, a value that is not a state is wrapped in a read only state and never changes, see `state.as_state`.
 - Registering an id that exists in the group throws. Removing first is explicit.
 - Removing a group removes everything below it.
 - Registration also happens at runtime, like a feature adding states when activated and removing them when deactivated.

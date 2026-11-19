@@ -34,7 +34,7 @@ Functions that register a set of resources should take a group instead of a path
 
 ## Content
 
-`add` takes a fixed value or a state, see `StateOrVal` in `@chocbite/ts-lib/state`. `entry.value` is always a state: the given state, or a state of the fixed value. Use a state for content that changes.
+`add` takes a value or a state, see `StateOrVal` in `@chocbite/ts-lib/state`. `entry.value` is always a state: the given state, or a read only state of the value given, which never changes. Use a state for content that changes.
 
 For types of objects, like the widget definitions of canvas, the entry keeps the type of the content given to `add`, so code using the entry knows the specific content, like the options of one widget. For other types the entry has the content type of the type, so `add("speed", "Speed", "", 5)` on a number type gives a `DepotEntry<number>`.
 

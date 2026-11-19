@@ -6,12 +6,16 @@ import {
   type InputOptions,
 } from "#base";
 import type { StateOrVal } from "@chocbite/ts-lib/state";
+import "./widget.scss";
 
 /**Event dispatched on a widget when its position, size or rotation changes */
 export const WIDGET_TRANSFORM_EVENT = "widget_transform";
 
 /**Inputs every widget has, its place on the page*/
 const WIDGET = {
+  /**ID of the widget, unique on its page, named after the widget when the page gives it, like "Box-1"
+   * Used by the outline and the menus of canvas, the widget does not use it itself*/
+  id: input_key<StateOrVal<string>>(),
   /**Position of the left edge in page units, changed by moving the widget*/
   x: input_key<StateOrVal<number>>(),
   /**Position of the top edge in page units, changed by moving the widget*/
@@ -22,6 +26,10 @@ const WIDGET = {
   height: input_key<StateOrVal<number>>(),
   /**Rotation in degrees clockwise around the center, changed by rotating the widget*/
   rotation: input_key<StateOrVal<number>>(),
+  /**Opacity from 0 to 1, fully opaque until given*/
+  opacity: input_key<StateOrVal<number>>(),
+  /**Whether the widget is shown, visible until given, an editing viewport shows a widget that is not visible faintly*/
+  visible: input_key<StateOrVal<boolean>>(),
 };
 export type WidgetBaseOptions = BaseOptions & InputOptions<typeof WIDGET>;
 
@@ -59,6 +67,8 @@ export const WIDGET_CHANGE = Symbol("widget_change");
  *
  * Widgets can lay out their content at an original size, which is then scaled to the width and height of the widget,
  * by overriding original_size, without it the content is laid out at the size of the widget
+ *
+ * Opacity and visible are inputs too, changed in the properties editor
  *
  * WIDGET_TRANSFORM_EVENT is dispatched whenever position, size or rotation changes*/
 export abstract class WidgetBase extends Base {
@@ -107,6 +117,13 @@ export abstract class WidgetBase extends Base {
         this.#geometry[key] = value.value;
         this.#update();
       });
+    //An error shows the widget as it is without the input
+    this.set_input(WIDGET.opacity, options.opacity, (opacity) => {
+      this.style.opacity = opacity.ok ? String(opacity.value) : "";
+    });
+    this.set_input(WIDGET.visible, options.visible, (visible) => {
+      this.classList.toggle("canvas-invisible", visible.ok && !visible.value);
+    });
     return this;
   }
 

@@ -59,6 +59,54 @@ describe("Canvas module", () => {
     }
   });
 
+  it("gives every widget a writable state for every base property, at the default when not given", () => {
+    const group = canvas.widgets.group("basetest", "Base test", "");
+    try {
+      const definition = group.add("box", "Box", "", {
+        create: () => {
+          throw new Error("not made in this test");
+        },
+        size: { width: 30, height: 40 },
+      });
+      const values = (widget: CanvasWidget) =>
+        Object.fromEntries(
+          ["x", "y", "width", "height", "rotation", "opacity", "visible"].map(
+            (key) => {
+              const option = (
+                widget.options as Record<string, StateROSW<unknown> | undefined>
+              )[key];
+              return [
+                key,
+                option?.writable ? option.ok() : "no writable state",
+              ];
+            },
+          ),
+        );
+      const defaults = {
+        x: 0,
+        y: 0,
+        width: 30,
+        height: 40,
+        rotation: 0,
+        opacity: 1,
+        visible: true,
+      };
+      expect(values(canvas.widget(definition, {}))).toEqual(defaults);
+      expect(values(canvas.widget(definition, { x: 5, opacity: 0.5 }))).toEqual(
+        { ...defaults, x: 5, opacity: 0.5 },
+      );
+      //Loaded pages too, like pages stored before a base property was added
+      const loaded = canvas.page_from_json({
+        widgets: [{ widget: definition.path, options: { x: 5 } }],
+      });
+      if (!loaded.some) throw new Error("not loaded");
+      const [widget] = (loaded.value.widgets as StateROSW<CanvasWidget[]>).ok();
+      expect(values(widget)).toEqual({ ...defaults, x: 5 });
+    } finally {
+      group.remove();
+    }
+  });
+
   it("stores a page state with settings and loads it again", async () => {
     const group = settings_init("@test/canvas_page", "1.0.0", "Pages", "");
     const key = "@test/canvas_page/page";
@@ -161,7 +209,7 @@ describe("Canvas module", () => {
       expect([check, ...wrong]).toHaveLength(4);
     });
 
-    it("lists position, size and rotation first, then those of the definition", () => {
+    it("lists position, size, rotation, opacity and visible first, then those of the definition", () => {
       const names = canvas
         .widget_properties({
           create: () => {
@@ -172,13 +220,52 @@ describe("Canvas module", () => {
         })
         .map(([key, property]) => [key, property.default]);
       expect(names).toEqual([
+        ["id", ""],
         ["x", 0],
         ["y", 0],
         ["width", 30],
         ["height", 40],
         ["rotation", 0],
+        ["opacity", 1],
+        ["visible", true],
         ["label", ""],
       ]);
+    });
+
+    it("puts the base properties in the General section", () => {
+      const sections = canvas
+        .widget_properties({
+          create: () => {
+            throw new Error();
+          },
+          properties: { label: { kind: "text", name: "Label", default: "" } },
+        })
+        .map(([key, property]) => [key, property.section]);
+      expect(sections).toEqual([
+        ["id", "General"],
+        ["x", "General"],
+        ["y", "General"],
+        ["width", "General"],
+        ["height", "General"],
+        ["rotation", "General"],
+        ["opacity", "General"],
+        ["visible", "General"],
+        ["label", undefined],
+      ]);
+    });
+
+    it("has no limits on rotation, the transformer keeps it in a turn", () => {
+      const [, rotation] = canvas
+        .widget_properties({
+          create: () => {
+            throw new Error();
+          },
+          properties: {},
+        })
+        .find(([key]) => key === "rotation")!;
+      expect(rotation).toMatchObject({ kind: "number", unit: "°" });
+      expect(rotation).not.toHaveProperty("min");
+      expect(rotation).not.toHaveProperty("max");
     });
 
     it("makes a new widget with writable states at the defaults", async () => {
