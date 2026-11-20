@@ -1,0 +1,275 @@
+//Fills the element it is put in, the root node covers it, the drop indicator floats above
+composition-layout {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  user-select: none;
+
+  > composition-layoutsplit,
+  > composition-layouttabs {
+    position: absolute;
+    inset: 0;
+  }
+
+  //Where a dragged tab goes, a part of a group, a line in a tab bar, or a strip of the whole layout
+  > .indicator {
+    display: none;
+    position: absolute;
+    z-index: 10;
+    pointer-events: none;
+    box-sizing: border-box;
+    border-radius: 0.4rem;
+    border: 2px solid var(--composition-colors-shadowFocus);
+    background-color: color-mix(
+      in srgb,
+      var(--composition-colors-shadowFocus) 20%,
+      transparent
+    );
+
+    &.shown {
+      display: block;
+    }
+
+    .anim-all & {
+      transition:
+        left ease-out 0.08s,
+        top ease-out 0.08s,
+        width ease-out 0.08s,
+        height ease-out 0.08s;
+    }
+  }
+}
+
+//       _____ _____  _      _____ _______
+//      / ____|  __ \| |    |_   _|__   __|
+//     | (___ | |__) | |      | |    | |
+//      \___ \|  ___/| |      | |    | |
+//      ____) | |    | |____ _| |_   | |
+//     |_____/|_|    |______|_____|  |_|
+composition-layoutsplit {
+  $sizer: 0.4rem;
+  $sizer_touch: 1rem;
+
+  display: flex;
+  overflow: hidden;
+  box-sizing: border-box;
+
+  &.row {
+    flex-direction: row;
+  }
+  &.column {
+    flex-direction: column;
+  }
+
+  //Shares from flex-grow, set by the split, the smallest sizes are set from the contents
+  > composition-layoutsplit,
+  > composition-layouttabs {
+    flex: 1 1 0;
+  }
+
+  > .sizer {
+    flex: 0 0 $sizer;
+    position: relative;
+    touch-action: none;
+    background-color: var(--composition-colors-titlebar);
+
+    .touch & {
+      flex-basis: $sizer_touch;
+    }
+
+    //A thin line in the middle, wider and in the accent color when hovered or moved
+    &::after {
+      content: "";
+      position: absolute;
+      background-color: var(--composition-colors-border);
+    }
+
+    &:hover::after,
+    &.active::after {
+      background-color: var(--composition-colors-shadowFocus);
+    }
+  }
+
+  &.row > .sizer {
+    cursor: col-resize;
+    &::after {
+      top: 0;
+      bottom: 0;
+      left: calc(50% - 0.5px);
+      width: 1px;
+    }
+    &:hover::after,
+    &.active::after {
+      left: calc(50% - 1.5px);
+      width: 3px;
+    }
+  }
+
+  &.column > .sizer {
+    cursor: row-resize;
+    &::after {
+      left: 0;
+      right: 0;
+      top: calc(50% - 0.5px);
+      height: 1px;
+    }
+    &:hover::after,
+    &.active::after {
+      top: calc(50% - 1.5px);
+      height: 3px;
+    }
+  }
+}
+
+//      _______       ____   _____
+//     |__   __|/\   |  _ \ / ____|
+//        | |  /  \  | |_) | (___
+//        | | / /\ \ |  _ < \___ \
+//        | |/ ____ \| |_) |____) |
+//        |_/_/    \_\____/|_____/
+composition-layouttabs {
+  --titlebar-height: var(--composition-titlebar-height);
+  .touch & {
+    --titlebar-height: var(--composition-titlebar-height-touch);
+  }
+
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  background-color: var(--composition-colors-background);
+
+  //The line below the tabs is a shadow, so the active tab covers it and joins its content
+  > .bar {
+    display: flex;
+    flex-shrink: 0;
+    height: var(--titlebar-height);
+    overflow: hidden;
+    background-color: var(--composition-colors-titlebar);
+    box-shadow: inset 0 -1px 0 0 var(--composition-colors-border);
+  }
+
+  //Only the content of the active tab is in the document, it fills the group and scrolls by itself
+  > .body {
+    position: relative;
+    flex-grow: 1;
+
+    > * {
+      position: absolute;
+      inset: 0;
+      overflow: auto;
+      outline: none;
+    }
+  }
+}
+
+composition-layouttab {
+  display: flex;
+  align-items: center;
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 3rem;
+  max-width: 14rem;
+  padding-left: 0.6rem;
+  box-sizing: border-box;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+  color: var(--composition-colors-titlebarText);
+  border-right: 1px solid var(--composition-colors-border);
+  font-size: 0.9rem;
+
+  .touch & {
+    font-size: 1.1rem;
+  }
+
+  &:hover {
+    background-color: var(--composition-colors-titlebarHover);
+  }
+
+  &.selected {
+    background-color: var(--composition-colors-background);
+  }
+
+  //The active tab of the group with focus is marked in the accent color, the others in the border color
+  &.selected::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: var(--composition-colors-border);
+  }
+  composition-layouttabs:focus-within > .bar > &.selected::before {
+    background-color: var(--composition-colors-shadowFocus);
+  }
+
+  &:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--composition-colors-shadowFocus);
+  }
+
+  &.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+  }
+
+  > .icon {
+    display: flex;
+    flex-shrink: 0;
+    margin-right: 0.4rem;
+
+    > svg {
+      height: 1.1rem;
+      width: auto;
+      fill: var(--composition-colors-icons);
+
+      .touch & {
+        height: 1.5rem;
+      }
+    }
+  }
+
+  > .title {
+    flex-grow: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-right: 0.6rem;
+  }
+
+  //Shown on the active tab and when hovering, the space is kept so the tab does not change width
+  > .close {
+    flex-shrink: 0;
+    width: 1.4rem;
+    height: 1.4rem;
+    margin-right: 0.3rem;
+    margin-left: -0.3rem;
+    border-radius: 0.3rem;
+    line-height: 1.4rem;
+    text-align: center;
+    font-size: 1.1rem;
+    color: var(--composition-colors-icons);
+    visibility: hidden;
+
+    .touch & {
+      width: 2rem;
+      height: 2rem;
+      line-height: 2rem;
+      font-size: 1.5rem;
+    }
+
+    &:hover {
+      background-color: var(--composition-colors-titlebarCloseHover);
+      color: #ffffff;
+    }
+  }
+
+  &.selected > .close,
+  &:hover > .close,
+  .touch & > .close {
+    visibility: visible;
+  }
+}
