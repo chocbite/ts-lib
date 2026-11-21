@@ -331,39 +331,58 @@ describe("Keyboard from a state", () => {
   });
 });
 
-describe("Language picker", () => {
-  it("opens with the language key, keeps the keyboard open, and choosing a layout writes KEYBOARD_LANGUAGE", async () => {
+describe("Language list", () => {
+  const row_of = (keyboard: HTMLElement, label: string) =>
+    [...keyboard.querySelectorAll<HTMLElement>("list-row")].find(
+      (r) => (r as HTMLElement & { label: string }).label === label,
+    )!;
+
+  it("replaces the keys with the language key, at their height, and choosing a layout writes KEYBOARD_LANGUAGE and brings the keys back", async () => {
     KEYBOARD_LANGUAGE.write("de");
     const input = appendInput();
     input.focus();
     TEXT_KEYBOARD.open(input);
+    const height = TEXT_KEYBOARD.getBoundingClientRect().height;
     TEXT_KEYBOARD.execute_key(KeyboardSpecialKeys.Language);
-    const panel = document.querySelector("composition-panel")!;
-    expect(panel.textContent).toContain("Keyboard language");
-
-    //Pressing in the panel does not close the keyboard
-    panel.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
-    expect(TEXT_KEYBOARD.isConnected).toBe(true);
+    expect(TEXT_KEYBOARD.querySelector("onscreen-keyboard-layer")).toBeNull();
+    expect(TEXT_KEYBOARD.textContent).toContain("Keyboard language");
+    expect(document.querySelector("composition-panel")).toBeNull();
+    expect(
+      Math.abs(TEXT_KEYBOARD.getBoundingClientRect().height - height),
+    ).toBeLessThan(1);
 
     const auto = "Automatic, " + keyboard_layout_for(navigator.languages).name;
-    const row = [...panel.querySelectorAll<HTMLElement>("list-row")].find(
-      (r) => (r as HTMLElement & { label: string }).label === auto,
-    )!;
-    row.querySelector<HTMLElement>("list-keyfield")!.click();
+    row_of(TEXT_KEYBOARD, auto)
+      .querySelector<HTMLElement>("list-keyfield")!
+      .click();
     await Promise.resolve();
     expect(KEYBOARD_LANGUAGE.ok()).toBe("");
-    expect(panel.isConnected).toBe(false);
+    expect(TEXT_KEYBOARD.querySelector("list-container")).toBeNull();
+    expect(
+      TEXT_KEYBOARD.querySelector("onscreen-keyboard-layer"),
+    ).not.toBeNull();
     expect(TEXT_KEYBOARD.isConnected).toBe(true);
     expect(document.activeElement).toBe(input);
     TEXT_KEYBOARD.close();
   });
 
-  it("closes with the keyboard", () => {
+  it("goes back to the keys with the back key, and is gone when the keyboard opens again", () => {
     const input = appendInput();
     TEXT_KEYBOARD.open(input);
     TEXT_KEYBOARD.execute_key(KeyboardSpecialKeys.Language);
-    const panel = document.querySelector("composition-panel")!;
+    const back = [
+      ...TEXT_KEYBOARD.querySelectorAll<HTMLElement>("onscreen-keyboard-key"),
+    ].find((k) => k.textContent === "Back")!;
+    back.click();
+    expect(TEXT_KEYBOARD.querySelector("list-container")).toBeNull();
+
+    TEXT_KEYBOARD.execute_key(KeyboardSpecialKeys.Language);
     TEXT_KEYBOARD.close();
-    expect(panel.isConnected).toBe(false);
+    TEXT_KEYBOARD.open(input);
+    expect(TEXT_KEYBOARD.querySelector("list-container")).toBeNull();
+    expect(
+      TEXT_KEYBOARD.querySelector("onscreen-keyboard-layer"),
+    ).not.toBeNull();
+    TEXT_KEYBOARD.close();
   });
 });

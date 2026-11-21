@@ -25,20 +25,9 @@ export abstract class KeyboardBase extends Base {
     });
   }
 
-  /**Elements belonging to the keyboard outside it, like the list of languages*/
-  #parts = new Set<Element>();
-
-  /**Makes the element part of the keyboard, pressing or focusing it does not close the keyboard
-   * @returns a function removing it again*/
-  add_part(element: Element): () => void {
-    this.#parts.add(element);
-    return () => this.#parts.delete(element);
-  }
-
   /**Closes on a press or focus outside the keyboard and the edited element*/
   #listener = (e: Event) => {
     if (e.target === this || this.contains(e.target as Node)) return;
-    for (const part of this.#parts) if (part.contains(e.target as Node)) return;
     if (
       this.elem &&
       (e.target === this.elem || this.elem.contains(e.target as Node))

@@ -1,9 +1,6 @@
-import { comp, CompAnchor } from "#composition";
 import list from "#list";
-import { px_to_rem } from "#theme";
 import { ok } from "@chocbite/ts-lib/result";
 import state from "@chocbite/ts-lib/state";
-import type { KeyboardBase } from "./base";
 import {
   CLDR_CONTINENT_OF,
   CLDR_CONTINENTS,
@@ -15,6 +12,7 @@ import {
   keyboard_layout_auto,
   KEYBOARD_LAYOUTS,
 } from "./languages";
+import { list_scroll_to } from "./helpers";
 import { KEYBOARD_LANGUAGE } from "./settings";
 
 /**A row of the list of languages, a continent, a country or a layout*/
@@ -91,22 +89,24 @@ function home_of(layout: CldrLayoutInfo): string | undefined {
   return layout.territories.length === 1 ? layout.territories[0] : undefined;
 }
 
-/**Opens the list of keyboard languages in a panel above the keyboard, choosing one writes KEYBOARD_LANGUAGE and gives the focus back to the field
- * @returns a function closing the panel*/
-export function keyboard_language_picker(
-  keyboard: KeyboardBase,
-  field: HTMLElement,
-): () => void {
+/**The list of keyboard languages, choosing a layout writes KEYBOARD_LANGUAGE and calls the function
+ * The country of the layout in use is open*/
+export function keyboard_language_list(chosen: () => void): HTMLElement {
   const current = KEYBOARD_LAYOUT.ok();
-  const chosen = KEYBOARD_LANGUAGE.ok();
+  const language = KEYBOARD_LANGUAGE.ok();
   const { rows, all } = rows_of(home_of(current));
   const selected = state.ok_w(
     [...all.values()]
-      .filter((row) => row.layout === chosen)
+      .filter((row) => row.layout === language)
       .map((row) => row.key),
   );
-
-  const languages = list.container(
+  selected.sub((keys) => {
+    const row = all.get(keys.value[0]);
+    if (row?.layout === undefined) return;
+    KEYBOARD_LANGUAGE.write(row.layout);
+    chosen();
+  });
+  const container = list.container(
     {
       transform: (row: PickerRow) =>
         ok({
@@ -123,36 +123,12 @@ export function keyboard_language_picker(
     },
     { columns: {}, rows, selected },
   );
-  const content = comp.content({
-    title: "Keyboard language",
-    closable: true,
-    min_width: 16,
-    min_height: 10,
-  });
-  content.append(languages);
-
-  //Above the keyboard, as wide as fits up to 24rem
-  const view = field.ownerDocument.defaultView ?? window;
-  const top = px_to_rem(keyboard.getBoundingClientRect().top);
-  const page = px_to_rem(view.innerWidth);
-  const width = Math.min(24, page - 1);
-  const panel = comp.panel_container(field).panel(content, {
-    anchor: CompAnchor.BOT_LEFT,
-    x: (page - width) / 2,
-    y: top - 0.5,
-    width,
-    height: Math.max(Math.min(30, top - 1), 10),
-    auto_close: true,
-  });
-  const remove_part = keyboard.add_part(panel);
-  void panel.on_close().then(remove_part);
-
-  selected.sub((keys) => {
-    const row = all.get(keys.value[0]);
-    if (row?.layout === undefined) return;
-    KEYBOARD_LANGUAGE.write(row.layout);
-    panel.close();
-    field.focus();
-  });
-  return () => panel.close();
+  //Scrolled to the chosen layout, or the country of the browser while following it, once the rows are shown
+  const home = home_of(current);
+  const target =
+    language && home
+      ? current.name
+      : home && (CLDR_TERRITORY_NAMES[home] ?? home);
+  if (target) list_scroll_to(container, target);
+  return container;
 }

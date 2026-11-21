@@ -7,6 +7,8 @@ export const KeyboardSpecialKeys = {
   Right: "right",
   /**Opens the list of keyboard languages, choosing one writes KEYBOARD_LANGUAGE*/
   Language: "language",
+  /**Opens the Unicode characters by block, to type any character*/
+  Unicode: "unicode",
 } as const;
 export type KeyboardSpecialKeys =
   (typeof KeyboardSpecialKeys)[keyof typeof KeyboardSpecialKeys];

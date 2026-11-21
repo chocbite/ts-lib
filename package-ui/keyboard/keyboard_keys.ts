@@ -4,7 +4,13 @@ import { some } from "@chocbite/ts-lib/result";
 import state, { type StateOrValRES } from "@chocbite/ts-lib/state";
 import { KeyboardBase } from "./base";
 import "./keyboard_keys.scss";
-import { keyboard_language_picker } from "./picker";
+import { keyboard_language_list } from "./picker";
+import {
+  unicode_block_characters,
+  unicode_block_list,
+  UNICODE_FIRST_BLOCK,
+  type UnicodeBlock,
+} from "./unicode";
 import "./shared";
 import {
   KeyboardConfig,
@@ -22,8 +28,11 @@ const HOLD_MS = 400;
 const SLIDE_PX = 8;
 
 const COMBINING = /^\p{M}/u;
-/**The text showing what a key types, a combining mark on a dotted circle, alone it would sit on nothing*/
-const shown = (key: string) => (COMBINING.test(key) ? "◌" + key : key);
+/**The text showing what a key types, a combining mark on a dotted circle, alone it would sit on nothing, and a space other than the plain one as ␣*/
+//A space is shown as ␣, it would be an empty key
+const SPACE = /^\p{Z}$/u;
+const shown = (key: string) =>
+  COMBINING.test(key) ? "◌" + key : SPACE.test(key) && key !== " " ? "␣" : key;
 
 /**The keys a held key can type, in a row above it, the one under the pointer is typed when the key is let go*/
 class KeyboardHold extends Base {
@@ -299,7 +308,11 @@ export class Keyboard_Keys extends KeyboardBase {
   #pending = state.ok_w("");
   /**The dead key waiting for the next key, empty when none*/
   readonly pending = this.#pending.read_only;
-  #close_picker?: () => void;
+  /**The list of languages or the Unicode characters, shown in place of the keys while open*/
+  #view?: { kind: "language" | "unicode"; element: HTMLElement };
+  /**The Unicode block shown, and its page*/
+  #block: UnicodeBlock = UNICODE_FIRST_BLOCK;
+  #page = 0;
 
   /**@param config the layout, or a state of it to change the layout while the keyboard is in use*/
   constructor(config: StateOrValRES<KeyboardConfig>) {
@@ -344,6 +357,7 @@ export class Keyboard_Keys extends KeyboardBase {
   }
 
   #show(): void {
+    if (this.#view) return;
     const layer = this.#layers[this.#layer.ok()] ?? this.#layers["default"];
     if (layer && this.#container.firstChild !== layer)
       this.#container.replaceChildren(layer);
@@ -359,8 +373,139 @@ export class Keyboard_Keys extends KeyboardBase {
   close(): void {
     this.#dispatch_change();
     this.#pending.write("");
-    this.#close_picker?.();
+    this.#close_view();
     super.close();
+  }
+
+  /**Shows a view in place of the keys, as high as the keys so the page does not move,
+   * with a header of the title, controls and a back key, the key opening the view*/
+  #open_view(
+    kind: "language" | "unicode",
+    title: string | HTMLElement,
+    body: HTMLElement,
+    controls: HTMLElement[] = [],
+  ): void {
+    const layer = this.#container.firstElementChild as HTMLElement | null;
+    const view = document.createElement("div");
+    view.className = "keyboard-view";
+    if (layer) {
+      view.style.height = layer.offsetHeight + "px";
+      view.style.maxWidth = layer.style.maxWidth;
+    }
+    const header = view.appendChild(document.createElement("div"));
+    header.className = "keyboard-view-header";
+    if (typeof title === "string")
+      header.appendChild(document.createElement("span")).textContent = title;
+    else header.appendChild(title);
+    header.append(
+      ...controls,
+      new KeyboardKey(
+        this,
+        "Back",
+        kind === "language"
+          ? KeyboardSpecialKeys.Language
+          : KeyboardSpecialKeys.Unicode,
+        undefined,
+        false,
+        0,
+        0,
+        1,
+        1,
+      ),
+    );
+    view.appendChild(body);
+    this.#view = { kind, element: view };
+    this.#container.replaceChildren(view);
+  }
+
+  #close_view(): void {
+    if (!this.#view) return;
+    this.#view = undefined;
+    this.#show();
+  }
+
+  #open_languages(): void {
+    this.#open_view(
+      "language",
+      "Keyboard language",
+      keyboard_language_list(() => {
+        this.#close_view();
+        //The list takes the focus when a row is chosen, the keys type into the field again
+        this.elem?.focus();
+      }),
+    );
+  }
+
+  /**Shows the Unicode blocks, and the characters of the chosen one in pages of keys, which type them as they are*/
+  #open_unicode(): void {
+    const body = document.createElement("div");
+    body.className = "keyboard-unicode";
+    const grid = document.createElement("div");
+    grid.className = "keyboard-unicode-grid";
+    const page = document.createElement("span");
+    page.className = "keyboard-unicode-page";
+    const button = (text: string, by: number) => {
+      const element = document.createElement("div");
+      element.className = "keyboard-unicode-turn";
+      element.textContent = text;
+      element.onclick = () => show(this.#page + by);
+      return element;
+    };
+    const previous = button("◀", -1);
+    const next = button("▶", 1);
+    const heading = document.createElement("span");
+    const show = (to: number) => {
+      const characters = unicode_block_characters(this.#block);
+      //As many keys as fit the grid, at least 2.5rem wide and 2.25rem high
+      const rem = parseFloat(
+        getComputedStyle(document.documentElement).fontSize,
+      );
+      const gap = 0.3 * rem;
+      const cols = Math.max(
+        4,
+        Math.floor((grid.clientWidth + gap) / (2.5 * rem + gap)),
+      );
+      const rows = Math.max(
+        2,
+        Math.floor((grid.clientHeight + gap) / (2.25 * rem + gap)),
+      );
+      const per_page = cols * rows;
+      const pages = Math.max(1, Math.ceil(characters.length / per_page));
+      this.#page = Math.min(Math.max(to, 0), pages - 1);
+      page.textContent = `${this.#page + 1} / ${pages}`;
+      previous.toggleAttribute("disabled", this.#page === 0);
+      next.toggleAttribute("disabled", this.#page === pages - 1);
+      heading.textContent = this.#block.name;
+      grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+      grid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+      grid.replaceChildren(
+        ...characters
+          .slice(this.#page * per_page, (this.#page + 1) * per_page)
+          .map(
+            (char, i) =>
+              new KeyboardKey(
+                this,
+                shown(char),
+                char,
+                undefined,
+                false,
+                Math.floor(i / cols),
+                i % cols,
+                1,
+                1,
+              ),
+          ),
+      );
+    };
+    body.append(
+      unicode_block_list(this.#block, (block) => {
+        this.#block = block;
+        show(0);
+      }),
+      grid,
+    );
+    this.#open_view("unicode", heading, body, [previous, page, next]);
+    show(this.#page);
   }
 
   #dispatch_change(): void {
@@ -482,20 +627,25 @@ export class Keyboard_Keys extends KeyboardBase {
       return;
     }
     if (key === KeyboardSpecialKeys.Close) return this.close();
-    if (key === KeyboardSpecialKeys.Language) {
-      this.#close_picker?.();
-      const close = keyboard_language_picker(this, this.elem);
-      this.#close_picker = () => {
-        this.#close_picker = undefined;
-        close();
-      };
+    if (
+      key === KeyboardSpecialKeys.Language ||
+      key === KeyboardSpecialKeys.Unicode
+    ) {
+      const kind =
+        key === KeyboardSpecialKeys.Language ? "language" : "unicode";
+      const open = this.#view?.kind;
+      this.#close_view();
+      if (open !== kind)
+        if (kind === "language") this.#open_languages();
+        else this.#open_unicode();
       return;
     }
 
     const typing = !SPECIAL_KEYS.has(key);
     //A dead key waits for the next key, which types what the two make together, or both when they make nothing
-    //A layer without dead keys, like the symbols, types its keys as they are
+    //A layer without dead keys, like the symbols, and the Unicode characters type their keys as they are
     const dead =
+      this.#view?.kind !== "unicode" &&
       (this.#layer_configs[this.#layer.ok()] ?? this.#layer_configs.default)
         ?.dead_keys !== false;
     const pending = this.#pending.ok();

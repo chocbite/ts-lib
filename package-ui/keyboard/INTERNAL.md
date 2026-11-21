@@ -41,8 +41,23 @@ and look at the text keyboard on the keyboard dev page (`npm run dev`, page `ui/
 
 ### How the keyboard uses it
 
-`languages.ts` turns a layout into a keyboard configuration (`keyboard_layout_config`), picks the layout following the browser (`keyboard_layout_for`), and has `KEYBOARD_LAYOUT`, the layout of the `KEYBOARD_LANGUAGE` setting in `settings.ts`. `text.ts` makes the text keyboard from the state of the configuration, so it is built again when the language changes. `picker.ts` is the panel of the 🌐 key.
+`languages.ts` turns a layout into a keyboard configuration (`keyboard_layout_config`), picks the layout following the browser (`keyboard_layout_for`), and has `KEYBOARD_LAYOUT`, the layout of the `KEYBOARD_LANGUAGE` setting in `settings.ts`. `text.ts` makes the text keyboard from the state of the configuration, so it is built again when the language changes. `picker.ts` is the list of the 🌐 key, which `keyboard_keys.ts` shows in place of the keys.
 
 The grid of a layout is 60 columns, every key 4 wide, with the letter rows staggered like a real keyboard. A position without a key in a layer is a gap.
 
 There is no AltGr layer on the keyboard. The AltGr character of a key, and the letters the dead keys make with it, are what the key types when held (`hold` of the key), the AltGr character first so it is the hint in the corner. The shift layer gets the AltGr characters of the same positions too. The two symbol layers, `sym` and `sym2`, are the same for every layout, `SYMBOLS` in `languages.ts`, and have `dead_keys: false`.
+
+## The Unicode blocks and emoji, `unicode_blocks.ts` and `unicode_emoji.ts`
+
+`unicode_blocks.ts` and `unicode_emoji.ts` are generated too, by `scripts/unicode_blocks.ts` from `Blocks.txt` and `emoji/emoji-test.txt` of the Unicode Character Database, the version pinned as `VERSION` in the script. Run it from the repo root, it needs internet access:
+
+```
+node package-ui/keyboard/scripts/unicode_blocks.ts
+```
+
+- It writes every block as its name, first and last code point, and whether it is a script, so the picker can group the blocks into Symbols and Scripts. A block is a script when more than half of its characters belong to one script by the Script property of Node's own Unicode data, not `Common` or `Inherited`.
+- Blocks of characters that are not typed alone, or too many to page through, are left out by the `EXCLUDED` pattern, and blocks without a single typeable character by Node's Unicode version.
+- The characters themselves are not stored. `unicode.ts` lists the code points of a block when it is opened, and leaves out the ones the browser's own Unicode data calls control, format, surrogate, private use or unassigned (`/\p{C}/u`), so a block newer than the browser shows no characters. Keep `VERSION` at or below the Unicode version of Node, `node -p process.versions.unicode`, or the grouping of the new blocks is wrong.
+- The emoji are the fully qualified ones of `emoji-test.txt`, in its groups, subgroups and order, without the `Component` group and without the variants with a skin tone, which would add every hand and person 5 more times. Every subgroup is one string, the emoji separated by spaces, as an emoji can be several code points, like a flag or a family. Unlike the blocks they are not checked against the browser, an emoji newer than the browser or its font shows as a box or as its parts.
+- `unicode.ts` lists the emoji first, a group as a block with the emoji of all its subgroups, then the blocks.
+- `keyboard_keys.ts` shows the view of the Ω key in place of the keys, like the list of languages, with the block list of `unicode.ts` and a grid of keys as many as fit, paged.

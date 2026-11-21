@@ -196,11 +196,13 @@ function key_of(text: string, holds?: Holds): KeyboardKeyConfig | number {
 
 /**The rows of a layer of the grid, number row, three letter rows, and the bottom row
  * @param left the key left of the bottom letter row, shift or the page key of the symbols
- * @param sym the symbol key of the bottom row*/
+ * @param sym the symbol key of the bottom row
+ * @param right the key right of the bottom letter row, the same as the left key when not given*/
 function grid_of(
   rows: (KeyboardKeyConfig | number)[][],
   left: KeyboardKeyConfig | number,
   sym: KeyboardKeyConfig,
+  right?: KeyboardKeyConfig,
 ): KeyboardLayerConfig {
   const [number, top, middle, bottom] = [0, 1, 2, 3].map((i) => rows[i] ?? []);
   const pad = (keys: (KeyboardKeyConfig | number)[], count: number) => [
@@ -208,7 +210,8 @@ function grid_of(
     ...(Array(Math.max(count - keys.length, 0)).fill(KEY) as number[]),
   ];
   const bottom_keys = pad(bottom, 11);
-  const right = WIDTH - LEFT[3] - bottom_keys.length * KEY;
+  const right_cols = WIDTH - LEFT[3] - bottom_keys.length * KEY;
+  const right_key = right ?? (typeof left === "number" ? undefined : left);
   return {
     max_width: 80,
     key_cols: KEY,
@@ -239,13 +242,14 @@ function grid_of(
       [
         left,
         ...bottom_keys,
-        ...(typeof left === "number" || right < KEY
+        ...(right_key === undefined || right_cols < KEY
           ? []
-          : [{ ...left, cols: right }]),
+          : [{ ...right_key, cols: right_cols }]),
       ],
       [
         { ...sym, cols: 7 },
-        5,
+        //Ω, the usual sign for special characters, opens all Unicode characters
+        { text: "Ω", key: KeyboardSpecialKeys.Unicode, cols: 5 },
         { text: "Space", key: " ", cols: 28 },
         4,
         { text: "🡸", key: KeyboardSpecialKeys.Left },
