@@ -14,11 +14,12 @@ describe("Keyboard_DateTime", () => {
     const events: string[] = [];
     input.addEventListener("input", () => events.push("input"));
     input.addEventListener("change", () => events.push("change"));
-    const keyboard = new Keyboard_DateTime();
+    const keyboard = new Keyboard_DateTime("date");
 
     keyboard.open(input);
     const date = [...keyboard.querySelectorAll("button")].find(
-      (button) => button.textContent === "11" && !button.classList.contains("outside"),
+      (button) =>
+        button.textContent === "11" && !button.classList.contains("outside"),
     );
     date?.click();
 
@@ -30,7 +31,7 @@ describe("Keyboard_DateTime", () => {
     const input = appendInput("date", "2026-03-10");
     input.min = "2026-03-10";
     input.max = "2026-03-12";
-    const keyboard = new Keyboard_DateTime();
+    const keyboard = new Keyboard_DateTime("date");
 
     keyboard.open(input);
     const buttons = [...keyboard.querySelectorAll("button")];
@@ -63,7 +64,7 @@ function button(
 
 /**Text of the header showing the month or year*/
 function header(keyboard: Keyboard_DateTime): string | null | undefined {
-  return keyboard.querySelector(".keyboard-datetime-header strong")?.textContent;
+  return keyboard.querySelector(".keyboard-datetime-title")?.textContent;
 }
 
 function time_parts(keyboard: Keyboard_DateTime) {
@@ -89,7 +90,7 @@ function time_parts(keyboard: Keyboard_DateTime) {
 
 describe("Keyboard_DateTime date", () => {
   it("opens on the month of the value and marks the selected date", () => {
-    const keyboard = new Keyboard_DateTime();
+    const keyboard = new Keyboard_DateTime("date");
     keyboard.open(appendInput("date", "2020-05-17"));
     expect(header(keyboard)).toBe("May 2020");
     expect(keyboard.querySelector("button.selected")?.textContent).toBe("17");
@@ -97,7 +98,7 @@ describe("Keyboard_DateTime date", () => {
   });
 
   it("moves between months and years", () => {
-    const keyboard = new Keyboard_DateTime();
+    const keyboard = new Keyboard_DateTime("date");
     keyboard.open(appendInput("date", "2020-12-31"));
     button(keyboard, "›")?.click();
     expect(header(keyboard)).toBe("January 2021");
@@ -108,7 +109,7 @@ describe("Keyboard_DateTime date", () => {
   });
 
   it("shows 42 days starting on a sunday", () => {
-    const keyboard = new Keyboard_DateTime();
+    const keyboard = new Keyboard_DateTime("date");
     keyboard.open(appendInput("date", "2020-05-17"));
     const days = [
       ...keyboard.querySelectorAll(".keyboard-datetime-calendar button"),
@@ -125,7 +126,7 @@ describe("Keyboard_DateTime date", () => {
   it("closes without events when closed or when the selected date is clicked", () => {
     const input = appendInput("date", "2020-05-17");
     const events = record(input);
-    const keyboard = new Keyboard_DateTime();
+    const keyboard = new Keyboard_DateTime("date");
     keyboard.open(input);
     button(keyboard, "🗙")?.click();
     expect(keyboard.isConnected).toBe(false);
@@ -137,17 +138,25 @@ describe("Keyboard_DateTime date", () => {
   });
 
   it("does not open for inputs that are not date or time inputs", () => {
-    const keyboard = new Keyboard_DateTime();
+    const keyboard = new Keyboard_DateTime("date");
     keyboard.open(appendInput("text", "2020-05-17"));
     expect(keyboard.isConnected).toBe(false);
     keyboard.open(document.body.appendChild(document.createElement("div")));
     expect(keyboard.isConnected).toBe(false);
   });
+
+  it("does not open for inputs of another date or time type", () => {
+    const keyboard = new Keyboard_DateTime("date");
+    for (const type of ["datetime-local", "month", "time", "week"]) {
+      keyboard.open(appendInput(type, ""));
+      expect(keyboard.isConnected, type).toBe(false);
+    }
+  });
 });
 
 describe("Keyboard_DateTime month", () => {
   it("opens on the year of the value", () => {
-    const keyboard = new Keyboard_DateTime();
+    const keyboard = new Keyboard_DateTime("month");
     keyboard.open(appendInput("month", "2020-05"));
     expect(header(keyboard)).toBe("2020");
     expect(keyboard.querySelector("button.selected")?.textContent).toBe("May");
@@ -157,7 +166,7 @@ describe("Keyboard_DateTime month", () => {
   it("selects a month of the shown year and closes", () => {
     const input = appendInput("month", "");
     const events = record(input);
-    const keyboard = new Keyboard_DateTime();
+    const keyboard = new Keyboard_DateTime("month");
     keyboard.open(input);
     const year = new Date().getFullYear();
     expect(header(keyboard)).toBe(year.toString());
@@ -172,7 +181,7 @@ describe("Keyboard_DateTime month", () => {
 
 describe("Keyboard_DateTime week", () => {
   it("opens on the month of the value", () => {
-    const keyboard = new Keyboard_DateTime();
+    const keyboard = new Keyboard_DateTime("week");
     //Week 10 of 2020 is monday the 2nd to sunday the 8th of march
     keyboard.open(appendInput("week", "2020-W10"));
     expect(header(keyboard)).toBe("March 2020");
@@ -181,7 +190,7 @@ describe("Keyboard_DateTime week", () => {
   });
 
   it("opens on the month of a week 1 starting in the previous year", () => {
-    const keyboard = new Keyboard_DateTime();
+    const keyboard = new Keyboard_DateTime("week");
     //Week 1 of 2020 starts on monday the 30th of december 2019
     keyboard.open(appendInput("week", "2020-W01"));
     expect(header(keyboard)).toBe("December 2019");
@@ -192,7 +201,7 @@ describe("Keyboard_DateTime week", () => {
   it("selects a week and closes", () => {
     const input = appendInput("week", "");
     const events = record(input);
-    const keyboard = new Keyboard_DateTime();
+    const keyboard = new Keyboard_DateTime("week");
     keyboard.open(input);
     const weeks = [
       ...keyboard.querySelectorAll<HTMLButtonElement>(
@@ -214,7 +223,7 @@ describe("Keyboard_DateTime time", () => {
   it("shows the time of the value and submits the chosen time", () => {
     const input = appendInput("time", "14:30");
     const events = record(input);
-    const keyboard = new Keyboard_DateTime();
+    const keyboard = new Keyboard_DateTime("time");
     keyboard.open(input);
     let parts = time_parts(keyboard);
     expect(parts.hour_label).toBe("12-15");
@@ -237,7 +246,7 @@ describe("Keyboard_DateTime time", () => {
   });
 
   it("keeps the hour and minute groups within the day", () => {
-    const keyboard = new Keyboard_DateTime();
+    const keyboard = new Keyboard_DateTime("time");
     keyboard.open(appendInput("time", "00:00"));
     let parts = time_parts(keyboard);
     parts.hour_previous();
@@ -259,7 +268,7 @@ describe("Keyboard_DateTime time", () => {
   it("closes without change when not submitted", () => {
     const input = appendInput("time", "14:30");
     const events = record(input);
-    const keyboard = new Keyboard_DateTime();
+    const keyboard = new Keyboard_DateTime("time");
     keyboard.open(input);
     const parts = time_parts(keyboard);
     button(parts.hours, "13")?.click();
@@ -273,13 +282,16 @@ describe("Keyboard_DateTime datetime-local", () => {
   it("keeps the chosen date until the time is submitted", () => {
     const input = appendInput("datetime-local", "2020-05-17T08:15");
     const events = record(input);
-    const keyboard = new Keyboard_DateTime();
+    const keyboard = new Keyboard_DateTime("datetime-local");
     keyboard.open(input);
     expect(header(keyboard)).toBe("May 2020");
     let parts = time_parts(keyboard);
     expect(parts.selected(parts.hours)).toBe("08");
     expect(parts.selected(parts.minutes)).toBe("15");
-    button(keyboard.querySelector(".keyboard-datetime-calendar")!, "20")?.click();
+    button(
+      keyboard.querySelector(".keyboard-datetime-calendar")!,
+      "20",
+    )?.click();
     expect(keyboard.isConnected).toBe(true);
     expect(input.value).toBe("2020-05-17T08:15");
     expect(
@@ -298,12 +310,186 @@ describe("Keyboard_DateTime datetime-local", () => {
     const input = appendInput("datetime-local", "2020-05-17T08:15");
     input.max = "2020-05-17T08:30";
     const events = record(input);
-    const keyboard = new Keyboard_DateTime();
+    const keyboard = new Keyboard_DateTime("datetime-local");
     keyboard.open(input);
     const parts = time_parts(keyboard);
     button(parts.hours, "09")?.click();
     button(keyboard, "Submit")?.click();
     expect(input.value).toBe("2020-05-17T08:15");
     expect(events).toEqual([]);
+  });
+});
+
+describe("Keyboard_DateTime updates", () => {
+  it("keeps its buttons when moving between months and choosing a time", () => {
+    const keyboard = new Keyboard_DateTime("datetime-local");
+    keyboard.open(appendInput("datetime-local", "2020-05-17T08:15"));
+    const days = [
+      ...keyboard.querySelectorAll(".keyboard-datetime-calendar button"),
+    ];
+    const hours = [
+      ...keyboard.querySelectorAll(".keyboard-datetime-time-choices button"),
+    ];
+    button(keyboard, "›")?.click();
+    expect(header(keyboard)).toBe("June 2020");
+    button(time_parts(keyboard).hours, "09")?.click();
+    time_parts(keyboard).hour_next();
+    expect(time_parts(keyboard).hour_label).toBe("12-15");
+    expect(days.every((day) => day.isConnected)).toBe(true);
+    expect(hours.every((hour) => hour.isConnected)).toBe(true);
+    //June 2020 starts on a monday, so the calendar starts on sunday the 31st of may
+    expect(days[0].textContent).toBe("31");
+    expect(days[1].textContent).toBe("1");
+    expect(hours[0].textContent).toBe("12");
+    keyboard.close();
+  });
+});
+
+/**The year layer, its title, the years and its previous and next*/
+function year_layer(keyboard: Keyboard_DateTime) {
+  const layer = keyboard.querySelector<HTMLElement>(
+    ".keyboard-datetime-year-layer",
+  )!;
+  return {
+    shown: () => !layer.classList.contains("hidden"),
+    title: layer.querySelector<HTMLButtonElement>(".keyboard-datetime-title")!,
+    years: [
+      ...layer.querySelectorAll<HTMLButtonElement>(
+        ".keyboard-datetime-years button",
+      ),
+    ],
+    previous: () => button(layer, "‹")?.click(),
+    next: () => button(layer, "›")?.click(),
+  };
+}
+
+describe("Keyboard_DateTime years", () => {
+  it("opens from the title, pages by 12 years and shows the chosen year on the same month", () => {
+    const keyboard = new Keyboard_DateTime("date");
+    keyboard.open(appendInput("date", "2026-05-17"));
+    const layer = year_layer(keyboard);
+    expect(layer.shown()).toBe(false);
+    keyboard
+      .querySelector<HTMLButtonElement>(".keyboard-datetime-title")!
+      .click();
+    expect(layer.shown()).toBe(true);
+    expect(layer.title.textContent).toBe("2016-2027");
+    expect(layer.years).toHaveLength(12);
+    expect(
+      layer.years.find((y) => y.classList.contains("selected"))?.textContent,
+    ).toBe("2026");
+    const days = keyboard.querySelector(".keyboard-datetime-calendar button");
+    layer.previous();
+    expect(layer.title.textContent).toBe("2004-2015");
+    expect(layer.years.some((y) => y.classList.contains("selected"))).toBe(
+      false,
+    );
+    button(
+      keyboard.querySelector(".keyboard-datetime-years")!,
+      "2010",
+    )!.click();
+    expect(layer.shown()).toBe(false);
+    expect(header(keyboard)).toBe("May 2010");
+    expect(keyboard.querySelector(".keyboard-datetime-calendar button")).toBe(
+      days,
+    );
+    keyboard.close();
+  });
+
+  it("goes back from its title, and is closed when opened again", () => {
+    const input = appendInput("month", "2026-05");
+    const keyboard = new Keyboard_DateTime("month");
+    keyboard.open(input);
+    const layer = year_layer(keyboard);
+    keyboard
+      .querySelector<HTMLButtonElement>(".keyboard-datetime-title")!
+      .click();
+    layer.title.click();
+    expect(layer.shown()).toBe(false);
+    expect(header(keyboard)).toBe("2026");
+    keyboard
+      .querySelector<HTMLButtonElement>(".keyboard-datetime-title")!
+      .click();
+    keyboard.close();
+    keyboard.open(input);
+    expect(layer.shown()).toBe(false);
+    keyboard.close();
+  });
+
+  it("disables the years outside the min and max of the input", () => {
+    const input = appendInput("week", "2026-W10");
+    input.min = "2020-W01";
+    input.max = "2026-W30";
+    const keyboard = new Keyboard_DateTime("week");
+    keyboard.open(input);
+    keyboard
+      .querySelector<HTMLButtonElement>(".keyboard-datetime-title")!
+      .click();
+    const disabled = year_layer(keyboard)
+      .years.filter((y) => y.disabled)
+      .map((y) => y.textContent);
+    expect(disabled).toEqual(["2016", "2017", "2018", "2019", "2027"]);
+    keyboard.close();
+  });
+
+  it("is not in the time keyboard", () => {
+    const keyboard = new Keyboard_DateTime("time");
+    keyboard.open(appendInput("time", "14:30"));
+    expect(keyboard.querySelector(".keyboard-datetime-year-layer")).toBeNull();
+    keyboard.close();
+  });
+});
+
+describe("Keyboard_DateTime datetime-local tabs", () => {
+  const tabs = (keyboard: Keyboard_DateTime) => {
+    const local = keyboard.querySelector(".keyboard-datetime-local")!;
+    const [date, time] = keyboard.querySelectorAll<HTMLButtonElement>(
+      ".keyboard-datetime-tabs button",
+    );
+    return {
+      date,
+      time,
+      shown: () => (local.classList.contains("tab-time") ? "time" : "date"),
+    };
+  };
+
+  it("switch between the date and the time, and show what is chosen", () => {
+    const keyboard = new Keyboard_DateTime("datetime-local");
+    keyboard.open(appendInput("datetime-local", "2020-05-17T08:15"));
+    let tab = tabs(keyboard);
+    expect(tab.shown()).toBe("date");
+    expect(tab.date.textContent).toBe("17 May 2020");
+    expect(tab.time.textContent).toBe("08:15");
+    expect(tab.date.classList.contains("selected")).toBe(true);
+    tab.time.click();
+    expect(tab.shown()).toBe("time");
+    expect(tab.time.classList.contains("selected")).toBe(true);
+    button(time_parts(keyboard).hours, "09")!.click();
+    expect(tab.time.textContent).toBe("09:15");
+    tab.date.click();
+    //Choosing a day goes on to the time
+    button(
+      keyboard.querySelector(".keyboard-datetime-calendar")!,
+      "20",
+    )!.click();
+    expect(tab.date.textContent).toBe("20 May 2020");
+    expect(tab.shown()).toBe("time");
+    keyboard.close();
+    keyboard.open(appendInput("datetime-local", ""));
+    tab = tabs(keyboard);
+    expect(tab.shown()).toBe("date");
+    expect(tab.date.textContent).toBe("Date");
+    expect(tab.time.textContent).toBe("00:00");
+    keyboard.close();
+  });
+
+  it("are only in the datetime-local keyboard", () => {
+    for (const type of ["date", "month", "time", "week"] as const) {
+      const keyboard = new Keyboard_DateTime(type);
+      expect(
+        keyboard.querySelector(".keyboard-datetime-tabs"),
+        type,
+      ).toBeNull();
+    }
   });
 });

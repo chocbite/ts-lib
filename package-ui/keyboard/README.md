@@ -58,7 +58,7 @@ import { KeyboardType, keyboard_open } from "@chocbite/ts-lib-ui/keyboard";
 const close = keyboard_open(input, KeyboardType.NumberRationalPositive);
 ```
 
-**`keyboard_open(element, mode)`** opens a keyboard for the element, whether the setting is on or not, and returns a function that closes it. `mode` is a `KeyboardType` (`Text`, `Email`, `Color`, `Date`, `DateTimeLocal`, `Month`, `Time`, `Week`, `NumberWhole`, `NumberHex`, `NumberInteger`, `NumberRationalPositive`, `NumberRational`, `Phone`), a layout like below, or a keyboard from `keyboard_create`.
+**`keyboard_open(element, mode)`** opens a keyboard for the element, whether the setting is on or not, and returns a function that closes it. `mode` is a `KeyboardType` (`Text`, `Email`, `Color`, `Date`, `DateTimeLocal`, `Month`, `Time`, `Week`, `NumberWhole`, `NumberHex`, `NumberInteger`, `NumberRationalPositive`, `NumberRational`, `Phone`), a layout like below, or a keyboard from `keyboard_create`. `Color` only opens for an input of type `color`, and the date and time types only for an input of their own type, `Date` for `date`, `DateTimeLocal` for `datetime-local`, `Month` for `month`, `Time` for `time` and `Week` for `week`, as the value they write must fit the input.
 
 ## Own layouts
 
@@ -93,3 +93,11 @@ A key acts like a key on a real keyboard: the field gets `keydown`, `beforeinput
 ## Look
 
 The keyboards sit in a grey tray at the bottom of the screen, with white keys that type, darker special keys (backspace, shift, close and the other keys given as `key` from `KeyboardSpecialKeys` or `layer:`), and the accent color on Enter, an active layer like shift, and the selected day or time. The colors are the theme variables of the `keyboard` group: `background` (the tray), `key`, `key_special`, `keytext`, `active` (a pressed key), `accent`, `accent_text`, `border` and `shadow`. Special keys carry a `special` attribute with the name of the key, or `layer` for a layer switch. Dead keys carry a `dead` attribute, and `active="true"` while they wait for the next key. A key with `hold` carries a `hint` attribute with the first of them, shown in its corner, and the row above a held key is an `onscreen-keyboard-hold` element, the chosen key in it with `active="true"`.
+
+**Making room.** The keyboard never covers the field it types in, it moves the field up until it is above the keyboard, but never so far that the top of the field leaves the screen, and again when the keyboard changes height. It first scrolls the scroll containers the field is in, then:
+
+- A field in a fixed layer, like a prompt or a drop down, moves with its outermost fixed ancestor, by a `translateY` added to its `transform`.
+- A field in a page that scrolls is scrolled, with an invisible element added after the end of the page when it is too short.
+- Otherwise the whole page moves, by a `translateY` added to the `transform` of `<html>`, with the keyboard moved back to the bottom of the screen.
+
+Closing the keyboard puts the transforms back and removes the added element, the scroll is kept, so the field stays where it is.

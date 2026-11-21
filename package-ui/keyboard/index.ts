@@ -3,7 +3,7 @@ import type { StateOrValRES } from "@chocbite/ts-lib/state";
 import { KeyboardBase } from "./base";
 import { keyboard_type } from "./helpers";
 import { Keyboard_Color } from "./keyboard_color";
-import { DATETIME_KEYBOARD } from "./keyboard_datetime";
+import { Keyboard_DateTime } from "./keyboard_datetime";
 import { Keyboard_Keys } from "./keyboard_keys";
 import {
   NUMBER_HEX_KEYBOARD,
@@ -38,11 +38,11 @@ const KEYBOARDS: Partial<Record<KeyboardType, KeyboardBase>> = {
   [KeyboardType.Text]: TEXT_KEYBOARD,
   [KeyboardType.Email]: EMAIL_KEYBOARD,
   [KeyboardType.Color]: new Keyboard_Color(),
-  [KeyboardType.Date]: DATETIME_KEYBOARD,
-  [KeyboardType.DateTimeLocal]: DATETIME_KEYBOARD,
-  [KeyboardType.Month]: DATETIME_KEYBOARD,
-  [KeyboardType.Time]: DATETIME_KEYBOARD,
-  [KeyboardType.Week]: DATETIME_KEYBOARD,
+  [KeyboardType.Date]: new Keyboard_DateTime("date"),
+  [KeyboardType.DateTimeLocal]: new Keyboard_DateTime("datetime-local"),
+  [KeyboardType.Month]: new Keyboard_DateTime("month"),
+  [KeyboardType.Time]: new Keyboard_DateTime("time"),
+  [KeyboardType.Week]: new Keyboard_DateTime("week"),
   [KeyboardType.NumberWhole]: NUMBER_WHOLE_KEYBOARD,
   [KeyboardType.NumberHex]: NUMBER_HEX_KEYBOARD,
   [KeyboardType.NumberInteger]: NUMBER_INTEGER_KEYBOARD,

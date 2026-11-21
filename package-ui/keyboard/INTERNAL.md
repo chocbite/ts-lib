@@ -21,7 +21,7 @@ npm run typecheck
 npm run vitest -- run --project ui keyboard
 ```
 
-and look at the text keyboard on the keyboard dev page (`npm run dev`, page `ui/keyboard`), whose last section has the old text keyboard to compare with.
+and look at the text keyboard on the keyboard dev page (`npm run dev`, page `ui/keyboard`).
 
 ### Where the data comes from
 
