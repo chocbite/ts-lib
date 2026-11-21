@@ -793,7 +793,7 @@ function sel_list(
 {
   const sec = section(
     "Selection with sub rows",
-    "The keyboard works in the key field here. Single has no radio buttons, the key field and a click on the row are enough. Arrows only move the focus, space selects or toggles, shift+arrows extend (multi), enter opens and closes. The row menu has open or close in front of the select lines. Closing a row hides its selected sub rows but keeps them in the state, opening shows them selected again. The buttons write the state like app code, keys of hidden sub rows show once their row is opened",
+    "The keyboard works in the key field here. Single has no radio buttons, the key field and a click on the row are enough. Arrows only move the focus, space selects or toggles, shift+arrows extend (multi), enter opens and closes. The row menu has open or close in front of the select lines. Row 2 can not be selected but has sub rows, a click on it or space opens and closes it without a warning, a double click leaves it open, its checkbox (multi) still warns. Closing a row hides its selected sub rows but keeps them in the state, opening shows them selected again. The buttons write the state like app code, keys of hidden sub rows show once their row is opened",
   );
   const r = row(sec);
   for (const mode of ["single", "multi"] as const) {

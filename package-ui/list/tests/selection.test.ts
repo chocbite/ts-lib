@@ -1035,3 +1035,64 @@ describe("List selection of a row that can not be selected", () => {
     expect(warning(container)).toBe("Not selectable");
   });
 });
+
+describe("List selection of a row that can only be opened", () => {
+  const warning = (container: HTMLElement) =>
+    container.querySelector<HTMLInputElement>("input.list-warn")
+      ?.validationMessage ?? "";
+  /**A folder that can not be selected, with a selectable sub row */
+  const folder = () =>
+    create(
+      [{ ...item(1, [item(10)]), selectable: false }],
+      { mode: "single" },
+      true,
+    );
+  const click_count = (element: HTMLElement, detail: number) =>
+    element.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true, detail }),
+    );
+
+  it("opens and closes with a click on the row, without a warning", () => {
+    const container = folder();
+    const row = rows_of(container)[0];
+    click(cell(row));
+    expect(row.open).toBe(true);
+    expect(warning(container)).toBe("");
+    click(cell(row));
+    expect(row.open).toBe(false);
+    expect(ids(container)).toEqual([]);
+  });
+
+  it("stays open after a double click, the second click of it is ignored", () => {
+    const container = folder();
+    const row = rows_of(container)[0];
+    click_count(cell(row), 1);
+    click_count(cell(row), 2);
+    expect(row.open).toBe(true);
+    //A later single click closes it again
+    click_count(cell(row), 1);
+    expect(row.open).toBe(false);
+  });
+
+  it("opens and closes with space in its key field, without a warning", () => {
+    const container = folder();
+    const row = rows_of(container)[0];
+    key(key_field(row), " ");
+    expect(row.open).toBe(true);
+    key(key_field(row), " ");
+    expect(row.open).toBe(false);
+    expect(warning(container)).toBe("");
+  });
+
+  it("still warns for a click on its checkbox", () => {
+    const container = create(
+      [{ ...item(1, [item(10)]), selectable: false }],
+      { mode: "multi" },
+      true,
+    );
+    const row = rows_of(container)[0];
+    click(check(row));
+    expect(row.open).toBe(false);
+    expect(warning(container)).toBe("Not selectable");
+  });
+});

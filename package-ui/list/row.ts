@@ -251,7 +251,9 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     }
     if (!selection) return false;
     if (e.key === " " && this.selection_key === undefined) {
-      selection.on_error?.(this, not_selectable());
+      //A row that can only be opened, like a folder of selectable rows, opens and closes instead
+      if (this.openable) this.open = !this.open;
+      else selection.on_error?.(this, not_selectable());
       return true;
     }
     return selection.key_down(this.selection_key, e);
@@ -486,7 +488,11 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
       this.#focus_after_click();
       if (this.selection_key !== undefined)
         selection.click(this.selection_key, e);
-      else selection.on_error?.(this, not_selectable());
+      //A row that can only be opened, like a folder of selectable rows, opens and closes instead
+      //Only on the first click of a double click, so a double click opens a folder and leaves it open
+      else if (this.openable) {
+        if (e.detail <= 1) this.open = !this.open;
+      } else selection.on_error?.(this, not_selectable());
     };
     //Shift click would select text between the rows
     this.#field_box.onmousedown = (e) => {
