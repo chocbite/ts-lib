@@ -7,13 +7,9 @@ composition-workspace {
   overflow: hidden;
 }
 
-//The layout of a panel fills it, with one tab the panel title bar shows it instead of the tab bar
+//The layout of a panel fills it
 composition-workspacepanel {
   position: absolute;
   inset: 0;
   overflow: hidden;
-
-  &.single composition-layouttabs > .bar {
-    display: none;
-  }
 }

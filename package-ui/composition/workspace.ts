@@ -23,22 +23,19 @@ import {
 } from "./content";
 import {
   content_closable,
-  drag_content,
-  drop_content,
   Layout,
+  layout_tabs,
   LAYOUT_CHANGED,
   OWNER_CAN_EMPTY,
   OWNER_CAN_POPOUT,
   OWNER_EMPTY,
   OWNER_POPOUT,
-  type DropTarget,
   type LayoutNode,
   type LayoutOpenOptions,
   type LayoutOwner,
-  type LayoutTabs,
 } from "./layout";
 import { panel_container, type PanelContainer } from "./container";
-import { CONTENT_PANEL_MOVED, type Panel } from "./panel";
+import type { Panel } from "./panel";
 import "./workspace.scss";
 
 //      _____       _______
@@ -104,8 +101,7 @@ const SHOWN = {
 
 /**Content of a panel of a workspace, the layout of the panel
  * The panel shows the title and icon of the shown tab, of the group worked in last, and can be closed when every content
- * in it can be closed, closing it closes them. With one tab the tab bar is hidden, the panel title bar shows it,
- * moving the panel then drags the tab, dropping it in a layout puts it there and the panel goes away*/
+ * in it can be closed, closing it closes them*/
 class WorkspacePanelContent extends ContentBase {
   static element_name() {
     return "workspacepanel";
@@ -120,8 +116,6 @@ class WorkspacePanelContent extends ContentBase {
   readonly #closable = state.ok_w(false);
   /**Content whose title and icon are shown*/
   #shown?: ContentBase;
-  /**Where the only tab goes when the panel is let go*/
-  #target?: DropTarget;
 
   constructor(layout: Layout) {
     super();
@@ -165,30 +159,12 @@ class WorkspacePanelContent extends ContentBase {
       );
     }
     const contents = this.layout.contents();
-    const root = this.layout.root_node();
     const owner = this.layout.owner;
     this.#closable.set_ok(
       contents.length > 0 &&
         contents.every(content_closable) &&
         (owner?.[OWNER_CAN_EMPTY](this.layout) ?? false),
     );
-    this.classList.toggle(
-      "single",
-      contents.length === 1 && !!root && !("children" in root),
-    );
-  }
-
-  /**With one tab, moving the panel drags the tab, the panel itself is skipped when finding where it goes*/
-  [CONTENT_PANEL_MOVED](e: PointerEvent, done: boolean): void {
-    const contents = this.layout.contents();
-    const panel = this.closest("composition-panel");
-    if (contents.length !== 1 || !panel) return;
-    const content = contents[0];
-    if (done) {
-      const target = this.#target;
-      this.#target = undefined;
-      drop_content(content, target);
-    } else this.#target = drag_content(content, e.clientX, e.clientY, panel);
   }
 }
 define_element(WorkspacePanelContent);
@@ -354,7 +330,8 @@ class Workspace extends Base implements LayoutOwner {
     return this.#panels_state()?.writable ?? false;
   }
 
-  [OWNER_POPOUT](_layout: Layout, node: LayoutTabs, rect: DOMRect): void {
+  /**The new panel has its tabs at the bottom, its title bar is at the top*/
+  [OWNER_POPOUT](_layout: Layout, content: ContentBase, rect: DOMRect): void {
     const panels = this.#panels_state();
     if (!panels) return;
     const container = this.container;
@@ -373,20 +350,23 @@ class Workspace extends Base implements LayoutOwner {
     write(
       panels,
       state.a.write.push(
-        workspace_panel(node, {
-          x: clamp(
-            px_to_rem(rect.left - origin.left) + POPOUT_OFFSET,
-            0,
-            Math.max(0, area.width - width),
-          ),
-          y: clamp(
-            px_to_rem(rect.top - origin.top) + POPOUT_OFFSET,
-            0,
-            Math.max(0, area.height - height),
-          ),
-          width,
-          height,
-        }),
+        workspace_panel(
+          layout_tabs([content], { active: content, side: "bottom" }),
+          {
+            x: clamp(
+              px_to_rem(rect.left - origin.left) + POPOUT_OFFSET,
+              0,
+              Math.max(0, area.width - width),
+            ),
+            y: clamp(
+              px_to_rem(rect.top - origin.top) + POPOUT_OFFSET,
+              0,
+              Math.max(0, area.height - height),
+            ),
+            width,
+            height,
+          },
+        ),
       ),
     );
   }

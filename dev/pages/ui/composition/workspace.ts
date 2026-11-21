@@ -58,7 +58,7 @@ const describe = (node: LayoutNode, depth = 0): string => {
 {
   const sec = section(
     "Workspace",
-    "Right click a tab and Pop out to put it in a panel, a tab alone in the main layout has no Pop out. Drag tabs between the main layout and the panels, and between panels, a panel is removed when its last tab leaves. The title bar of a panel shows the shown tab of the group worked in last, and moves the panel. With one tab the tab bar is hidden, moving the panel over a layout then shows where the tab goes, letting go there puts it in the layout. The close button shows when every tab in the panel can be closed, Terminal can not, and closes them all. The panels are in the panel container of the page, like all panels, so they stay where they are when the page scrolls, the starting panel is placed over the box when the page loads. The text below follows the states of the workspace, the panels with their place and size",
+    "Right click a tab and Pop out to put it in a panel, a tab alone in the main layout has no Pop out. Drag tabs between the main layout and the panels, and between panels, a panel is removed when its last tab leaves. The title bar of a panel shows the shown tab of the group worked in last, and moves the panel. A new panel has its tabs at the bottom. The close button shows when every tab in the panel can be closed, Terminal can not, and closes them all. The panels are in the panel container of the page, like all panels, so they stay where they are when the page scrolls, the starting panel is placed over the box when the page loads. The text below follows the states of the workspace, the panels with their place and size",
   );
   let count = 0;
   const root = state.ok_w<LayoutNode>(
@@ -100,13 +100,16 @@ const describe = (node: LayoutNode, depth = 0): string => {
   });
   const panels = state.ok_w<WorkspacePanel[]>([
     comp.workspace_panel(
-      comp.layout_tabs([
-        demo(
-          { title: "Terminal", icon: material_terminal_rounded },
-          "Terminal, a panel from the start",
-        ),
-        demo({ title: "Output", closable: true }, "Output"),
-      ]),
+      comp.layout_tabs(
+        [
+          demo(
+            { title: "Terminal", icon: material_terminal_rounded },
+            "Terminal, a panel from the start",
+          ),
+          demo({ title: "Output", closable: true }, "Output"),
+        ],
+        { side: "bottom" },
+      ),
       { ...at(area, 30, 12), width: 24, height: 12 },
     ),
   ]);

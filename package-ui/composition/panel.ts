@@ -88,16 +88,6 @@ export const HOST_LAYER = Symbol("host_layer");
 export const HOST_RAISE = Symbol("host_raise");
 export const HOST_REMOVE = Symbol("host_remove");
 
-/**Called on the content while the user moves its panel by the title bar, done when let go, internal to this module*/
-export const CONTENT_PANEL_MOVED = Symbol("content_panel_moved");
-interface MovedContent {
-  [CONTENT_PANEL_MOVED](e: PointerEvent, done: boolean): void;
-}
-const moved = (content: ContentBase, e: PointerEvent, done: boolean) => {
-  if (CONTENT_PANEL_MOVED in content)
-    (content as ContentBase & MovedContent)[CONTENT_PANEL_MOVED](e, done);
-};
-
 /**The container of a panel, as the panel sees it*/
 export interface PanelHost {
   /**Width and height in rem, from one measurement*/
@@ -488,22 +478,19 @@ class Panel extends Base {
     titlebar.classList.add("moving");
     this.#moving = true;
     const start = this.#corner();
-    titlebar.onpointermove = (ev) => {
+    titlebar.onpointermove = (ev) =>
       this.#move_to(
         start.left + px_to_rem(ev.clientX - e.clientX),
         start.top + px_to_rem(ev.clientY - e.clientY),
         start.width,
         start.height,
       );
-      moved(this.#content, ev, false);
-    };
     titlebar.onpointerup = (ev) => {
       titlebar.releasePointerCapture(ev.pointerId);
       titlebar.classList.remove("moving");
       this.#moving = false;
       titlebar.onpointermove = null;
       titlebar.onpointerup = null;
-      moved(this.#content, ev, true);
     };
   }
 

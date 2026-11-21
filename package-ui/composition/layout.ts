@@ -134,8 +134,8 @@ export const OWNER_CAN_EMPTY = Symbol("owner_can_empty");
 export interface LayoutOwner {
   /**Whether the owner can take popped out tabs right now*/
   [OWNER_CAN_POPOUT](): boolean;
-  /**Takes a tab group the layout popped out, already taken out of the layout, rect is where its group was on the page*/
-  [OWNER_POPOUT](layout: Layout, node: LayoutTabs, rect: DOMRect): void;
+  /**Takes content the layout popped out, already taken out of the layout, rect is where its group was on the page*/
+  [OWNER_POPOUT](layout: Layout, content: ContentBase, rect: DOMRect): void;
   /**Whether the last tab of the layout can leave it*/
   [OWNER_CAN_EMPTY](layout: Layout): boolean;
   /**The tree of the layout became an empty tab group, like a panel whose last tab was dragged out*/
@@ -242,11 +242,7 @@ function popout(layout: Layout, group: TabsElement, content: ContentBase) {
   if (!owner) return;
   const rect = group.getBoundingClientRect();
   take_out(layout, group.node, content);
-  owner[OWNER_POPOUT](
-    layout,
-    layout_tabs([content], { active: content }),
-    rect,
-  );
+  owner[OWNER_POPOUT](layout, content, rect);
   TABS.get(content)?.focus();
 }
 
@@ -329,7 +325,7 @@ function can_split(layout: Layout, node: LayoutNode): boolean {
 }
 
 /**Where a dragged tab goes, into a tab bar at an index, a side of a group, or a side of the whole layout*/
-export type DropTarget = { layout: Layout; rect?: DOMRect } & (
+type DropTarget = { layout: Layout; rect?: DOMRect } & (
   | { group: LayoutTabs; index: number }
   | { node: LayoutNode; side: LayoutSide }
   | { root: true; side: LayoutSide }
@@ -1145,32 +1141,10 @@ function near_side(
   return distance < part ? side : undefined;
 }
 
-/**Where the content would go when dropped at the point, shown by the indicator, for a panel moved by its title bar
- * dragging its only content, skip is the panel, internal to this module*/
-export function drag_content(
-  content: ContentBase,
-  x: number,
-  y: number,
-  skip: Element,
-): DropTarget | undefined {
-  const tab = TABS.get(content);
-  const target = tab && find_target(tab, x, y, skip);
-  show_indicator(target);
-  return target;
-}
-
-/**Drops the content where drag_content found, nothing without a target, internal to this module*/
-export function drop_content(
-  content: ContentBase,
-  target: DropTarget | undefined,
-): void {
-  show_indicator(undefined);
-  if (target) move_content(content, target);
-}
-
 /**Whether the user can close the content shown by a layout, internal to this module*/
 export function content_closable(content: ContentBase): boolean {
-  return TABS.get(content)?.closable ?? false;
+  const tab = TABS.get(content);
+  return !!tab?.closable && !!tab.group_element()?.node.tabs.writable;
 }
 
 /**Finds where the tab would go when dropped at the point, nothing where dropping changes nothing or is not allowed*/
@@ -1178,12 +1152,8 @@ function find_target(
   tab: LayoutTab,
   x: number,
   y: number,
-  skip?: Element,
 ): DropTarget | undefined {
-  const doc = tab.ownerDocument;
-  const element = skip
-    ? doc.elementsFromPoint(x, y).find((e) => !skip.contains(e))
-    : doc.elementFromPoint(x, y);
+  const element = tab.ownerDocument.elementFromPoint(x, y);
   const layout = element?.closest<Layout>("composition-layout");
   if (!element || !layout) return;
   const from = tab.group_element();
