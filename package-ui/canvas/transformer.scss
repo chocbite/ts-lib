@@ -201,4 +201,9 @@ canvas-transformer {
   &.no-rotate > .rotate {
     display: none;
   }
+
+  //The edges of a widget that scrolls let presses through to its scrollbars
+  &[scrolls] > .side {
+    pointer-events: none;
+  }
 }

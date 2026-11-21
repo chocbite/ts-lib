@@ -1,6 +1,6 @@
 import depot from "@chocbite/ts-lib/depot";
 import { err_nice, type ResultNice } from "@chocbite/ts-lib/result";
-import type { State } from "@chocbite/ts-lib/state";
+import state, { type State, type StateREAW } from "@chocbite/ts-lib/state";
 import { WIDGETS, type CanvasWidget } from "./data";
 
 /**Errors of widget ids*/
@@ -69,3 +69,21 @@ export function id_taken(
 /**The error for an id that is taken*/
 export const id_taken_error = (id: string): ResultNice<never> =>
   err_nice(id_errors.TAKEN, `The ID ${id} is used by another widget`);
+
+/**The id state of the widget, refusing an id another widget of its level has, so the page does not give it a new one
+ * @param widgets the widgets of the level of the widget now, undefined when they are not known, which refuses nothing*/
+export function refuse_taken_ids(
+  widget: CanvasWidget,
+  value: State<unknown, any, any>,
+  widgets: () => readonly CanvasWidget[] | undefined,
+): State<unknown, any, any> {
+  if (!value.writable) return value;
+  return state.proxy.reaw(value as StateREAW<unknown>, undefined, {
+    write: (id, source) => {
+      const level = widgets();
+      return typeof id === "string" && level && id_taken(level, widget, id)
+        ? Promise.resolve(id_taken_error(id))
+        : source.write(id);
+    },
+  });
+}

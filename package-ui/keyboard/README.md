@@ -21,6 +21,8 @@ The layout comes from the field:
 | `date`, `datetime-local`, `month`, `time`, `week`        | date and time keyboard                           |
 | `number`                                                 | numbers, see below                               |
 
+The color keyboard has a hue square and hue, red, green and blue sliders. A color input with a `data-alpha` attribute, the alpha from 0 to 1, gets an alpha slider too, which writes the attribute and sends input and change like the other sliders, as the value of a color input has no alpha. The color input of the form with `alpha` on has it.
+
 A number input gets a keyboard without a minus when its `min` is 0 or more, and with a decimal point when its `step` is `any` or not a whole number.
 
 Disabled, read only and hidden inputs, buttons, checkboxes, radio buttons, ranges and file inputs get no keyboard. Give a field `data-keyboard-manual="true"` to keep the keyboard from opening for it, and open one yourself.

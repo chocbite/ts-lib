@@ -8,8 +8,9 @@ form-colorinput {
   padding: 0.1875rem;
   min-width: min-content;
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.3rem;
   -webkit-user-select: none;
   user-select: none;
   outline: none;
@@ -40,23 +41,46 @@ form-colorinput {
     );
   }
 
-  > input {
-    outline: none;
-    appearance: none;
-    width: 100%;
-    height: 100%;
-    border: none;
-    padding: 0;
-    background: none;
-    cursor: pointer;
+  //The color over a checkerboard, so alpha shows, the native input on top opens the picker of the browser
+  > .swatch {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 2rem;
+    border-radius: 0.2rem;
+    overflow: hidden;
+    background-color: #ffffff;
+    background-image:
+      linear-gradient(45deg, #c8c8c8 25%, transparent 25%, transparent 75%, #c8c8c8 75%),
+      linear-gradient(45deg, #c8c8c8 25%, transparent 25%, transparent 75%, #c8c8c8 75%);
+    background-size: 0.5rem 0.5rem;
+    background-position:
+      0 0,
+      0.25rem 0.25rem;
 
-    &::-webkit-color-swatch-wrapper {
+    > div {
+      position: absolute;
+      inset: 0;
+    }
+
+    > input {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      margin: 0;
       padding: 0;
-    }
-
-    &::-webkit-color-swatch {
       border: none;
-      border-radius: 0.2rem;
+      opacity: 0;
+      cursor: pointer;
     }
+  }
+
+  //Alpha in percent, beside the swatch
+  > input.alpha {
+    flex: 0 0 4rem;
+    margin: 0;
+    min-width: 0;
+    accent-color: base.$color_accent;
+    cursor: pointer;
   }
 }

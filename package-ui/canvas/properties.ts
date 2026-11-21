@@ -36,6 +36,8 @@ export interface TextProperty extends PropertyBase<string> {
 /**A color, as a CSS color string*/
 export interface ColorProperty extends PropertyBase<string> {
   kind: "color";
+  /**True lets the user set the alpha, the color is then written like #ff880080, transparent shows as no alpha*/
+  alpha?: boolean;
 }
 
 /**On or off*/

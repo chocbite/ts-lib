@@ -7,7 +7,7 @@ import {
   type Option,
   type ResultNice,
 } from "@chocbite/ts-lib/result";
-import state, { type StateOrVal } from "@chocbite/ts-lib/state";
+import state, { type StateOrVal, type StateROS } from "@chocbite/ts-lib/state";
 import {
   is_link_json,
   link_from_json,
@@ -66,10 +66,14 @@ export interface CanvasWidget<O extends WidgetBaseOptions = WidgetBaseOptions> {
 
 /**A page of widgets, data that any number of viewports show at once*/
 export interface CanvasPage {
+  /**ID of the page, shown in the properties editor, empty when undefined*/
+  readonly id?: StateOrVal<string>;
   /**Width of the page in page units, 1920 when undefined*/
   readonly width?: StateOrVal<number>;
   /**Height of the page in page units, 1080 when undefined*/
   readonly height?: StateOrVal<number>;
+  /**Background of the page, a CSS color, the page background of the theme when undefined*/
+  readonly background?: StateOrVal<string>;
   /**Widgets on the page, the last is drawn on top
    * Change it with the array helpers or write instructions of the state, so viewports touch only the widgets that changed*/
   readonly widgets?: StateOrVal<readonly CanvasWidget[]>;
@@ -123,39 +127,84 @@ function with_base_options(
 const is_record = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/**Builds a page from its JSON, like the JSON a settings group stores for a page state, with a writable state for every value,
- * so the page can be changed and stored again, and a link for every saved link. Gives none when the JSON is not a page
- * Made to be the check of get of a settings group:
- * group.get("page", empty_page, canvas.page_from_json)*/
-export function page_from_json(json: unknown): Option<CanvasPage> {
-  if (!is_record(json)) return none();
-  const { width, height, widgets } = json;
-  if (width !== undefined && typeof width !== "number") return none();
-  if (height !== undefined && typeof height !== "number") return none();
-  if (widgets !== undefined && !Array.isArray(widgets)) return none();
+/**Path of the group widget, a widget whose content is a page of widgets of its own, see group_widget.ts
+ * Its widgets option holds the widgets of its content, which are saved, loaded and copied with it*/
+export const GROUP = "/widgets/canvas/group";
+
+/**Widgets from their JSON, a writable state for every value and a link for every saved link, the widgets of groups too,
+ * undefined when the JSON is not widgets*/
+function widgets_from_json(json: unknown[]): CanvasWidget[] | undefined {
   const list: CanvasWidget[] = [];
-  for (const widget of (widgets ?? []) as unknown[]) {
-    if (!is_record(widget) || typeof widget.widget !== "string") return none();
+  for (const widget of json) {
+    if (!is_record(widget) || typeof widget.widget !== "string")
+      return undefined;
     if (widget.options !== undefined && !is_record(widget.options))
-      return none();
+      return undefined;
     const options: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(widget.options ?? {})) {
       if (value === undefined) continue;
+      if (widget.widget === GROUP && key === "widgets") {
+        if (!Array.isArray(value)) return undefined;
+        const inside = widgets_from_json(value as unknown[]);
+        if (!inside) return undefined;
+        options[key] = state.ok_w<CanvasWidget[]>(inside);
+        continue;
+      }
       if (!is_link_json(value)) {
         options[key] = state.ok_w<unknown>(value);
         continue;
       }
       const link = link_from_json(value);
-      if (!link.some) return none();
+      if (!link.some) return undefined;
       options[key] = state.ok_w<unknown>(link.value);
     }
     //Pages stored before a base property was added get it too
     with_base_options(options, size_at(widget.widget));
     list.push({ widget: widget.widget, options });
   }
+  return list;
+}
+
+/**The JSON of a widget as its options are now, the way a page saves it, the widgets of a group too, links as their $link objects
+ * An option whose state has no value now is left out*/
+export function widget_to_json(widget: CanvasWidget): {
+  widget: string;
+  options: Record<string, unknown>;
+} {
+  const options: Record<string, unknown> = {};
+  for (const [key, option] of Object.entries(
+    widget.options as Record<string, StateROS<unknown> | undefined>,
+  )) {
+    const now = option?.rsync ? option.get() : undefined;
+    if (!now?.ok || now.value === undefined) continue;
+    options[key] =
+      widget.widget === GROUP && key === "widgets"
+        ? (now.value as CanvasWidget[]).map(widget_to_json)
+        : (JSON.parse(JSON.stringify(now.value)) as unknown);
+  }
+  return { widget: widget.widget, options };
+}
+
+/**Builds a page from its JSON, like the JSON a settings group stores for a page state, with a writable state for every value,
+ * so the page can be changed and stored again, and a link for every saved link. Gives none when the JSON is not a page
+ * Made to be the check of get of a settings group:
+ * group.get("page", empty_page, canvas.page_from_json)*/
+export function page_from_json(json: unknown): Option<CanvasPage> {
+  if (!is_record(json)) return none();
+  const { id, width, height, background, widgets } = json;
+  if (id !== undefined && typeof id !== "string") return none();
+  if (background !== undefined && typeof background !== "string") return none();
+  if (width !== undefined && typeof width !== "number") return none();
+  if (height !== undefined && typeof height !== "number") return none();
+  if (widgets !== undefined && !Array.isArray(widgets)) return none();
+  const list = widgets_from_json((widgets ?? []) as unknown[]);
+  if (!list) return none();
+  //Every value a writable state, so the properties editor can change it, white for pages saved without a background
   return some({
+    id: state.ok_w(id ?? ""),
     width: state.ok_w(width ?? 1920),
     height: state.ok_w(height ?? 1080),
+    background: state.ok_w(background ?? "#ffffff"),
     widgets: state.ok_w(list),
   });
 }

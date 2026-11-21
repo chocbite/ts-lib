@@ -1,0 +1,16 @@
+//The content of a group is a page of its own, cut off at the size of the group
+canvas-groupwidget {
+  display: block;
+  overflow: hidden;
+
+  &[display="scroll"] {
+    overflow: auto;
+  }
+
+  > canvas-page {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform-origin: 0 0;
+  }
+}

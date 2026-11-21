@@ -17,6 +17,7 @@ import state, {
 import {
   widget_properties,
   WIDGETS,
+  type CanvasPage,
   type CanvasWidget,
   type WidgetDefinition,
 } from "./data";
@@ -27,7 +28,7 @@ import {
   transform_group,
   wrap_angle,
 } from "./group";
-import { id_taken, id_taken_error } from "./ids";
+import { refuse_taken_ids } from "./ids";
 import {
   CanvasLink,
   option_value_state,
@@ -52,7 +53,47 @@ const PROPERTIES = {
   /**The selected widgets, give the selection state of the viewports to follow the selection
    * One widget shows its properties, several the properties they all have, the editor only reads it*/
   selected: input_key<StateOrVal<readonly CanvasWidget[]>>(),
+  /**The page of the widgets, its properties are shown while nothing is selected, the editor writes the states of it*/
+  page: input_key<StateOrVal<CanvasPage | undefined>>(),
 };
+
+/**Properties of the page, shown while nothing is selected
+ * The values of a page are not resolved like the options of widgets, so they can not be linked*/
+const PAGE_PROPERTIES: [string, WidgetProperty][] = [
+  ["id", { kind: "text", name: "ID", default: "", linkable: false }],
+  [
+    "width",
+    {
+      kind: "number",
+      name: "Width",
+      default: 1920,
+      min: 1,
+      unit: "px",
+      linkable: false,
+    },
+  ],
+  [
+    "height",
+    {
+      kind: "number",
+      name: "Height",
+      default: 1080,
+      min: 1,
+      unit: "px",
+      linkable: false,
+    },
+  ],
+  [
+    "background",
+    {
+      kind: "color",
+      name: "Background",
+      default: "#ffffff",
+      alpha: true,
+      linkable: false,
+    },
+  ],
+];
 export type CanvasPropertiesOptions = BaseOptions &
   InputOptions<typeof PROPERTIES>;
 
@@ -83,22 +124,6 @@ interface SectionRow {
 
 type EditorRow = PropertyRow | SectionRow;
 const is_section = (row: EditorRow): row is SectionRow => "rows" in row;
-
-/**The id state of the widget, refusing an id used by another widget of the page, so the page does not give it a new one*/
-function refuse_taken_ids(
-  widget: CanvasWidget,
-  value: State<unknown, any, any>,
-): State<unknown, any, any> {
-  if (!value.writable) return value;
-  return state.proxy.reaw(value as StateREAW<unknown>, undefined, {
-    write: (id, source) => {
-      const widgets = page_widgets_of(widget);
-      return typeof id === "string" && widgets && id_taken(widgets, widget, id)
-        ? Promise.resolve(id_taken_error(id))
-        : source.write(id);
-    },
-  });
-}
 
 /**Writes the value to every option, the first error when one refuses it*/
 async function write_all(
@@ -222,6 +247,8 @@ class PropertiesEditor extends Base {
             }),
             link: list.column({
               title: "Link",
+              //As wide as the link icon needs, also when it is bigger in touch mode, so it does not take width from the values
+              fixed_width: "min",
               field_gen: () => new LinkField(),
               field_apply: (field, row: EditorRow) =>
                 is_section(row) || row.box
@@ -241,10 +268,33 @@ class PropertiesEditor extends Base {
 
   set(options: CanvasPropertiesOptions): this {
     super.set(options);
-    this.set_input(PROPERTIES.selected, options.selected, (selected) =>
-      this.#show(selected.ok ? selected.value : []),
-    );
+    this.set_input(PROPERTIES.page, options.page, (page) => {
+      this.#page = page.ok ? page.value : undefined;
+      if (!this.#selected.length) this.#show(this.#selected);
+    });
+    this.set_input(PROPERTIES.selected, options.selected, (selected) => {
+      this.#selected = selected.ok ? selected.value : [];
+      this.#show(this.#selected);
+    });
     return this;
+  }
+
+  #page: CanvasPage | undefined;
+  #selected: readonly CanvasWidget[] = [];
+
+  /**Shows the properties of the page, its values as they are given, a value that is not a writable state is only shown*/
+  #show_page(page: CanvasPage) {
+    this.#title.textContent = "Page";
+    const options: Record<string, OptionState<unknown> | undefined> = {};
+    for (const [key] of PAGE_PROPERTIES) {
+      const value = page[key as keyof CanvasPage];
+      if (value !== undefined)
+        options[key] = (
+          state.is.state(value) ? value : state.ok(value)
+        ) as OptionState<unknown>;
+    }
+    //The page as a widget with its values as options, so its rows work like those of a widget
+    this.#follow([{ widget: "", options }], PAGE_PROPERTIES);
   }
 
   protected disconnectedCallback(): void {
@@ -272,7 +322,11 @@ class PropertiesEditor extends Base {
       const value = option_value_state(option);
       return property_field(
         property,
-        row.key === "id" ? refuse_taken_ids(row.widgets[0], value) : value,
+        row.key === "id"
+          ? refuse_taken_ids(row.widgets[0], value, () =>
+              page_widgets_of(row.widgets[0]),
+            )
+          : value,
       );
     }
     const writable = options.every((option) => option?.writable);
@@ -317,6 +371,7 @@ class PropertiesEditor extends Base {
     this.#detach_box();
     this.#set_rows([]);
     if (widgets.length === 0) {
+      if (this.#page) return this.#show_page(this.#page);
       this.#title.textContent = "Nothing selected";
       return;
     }

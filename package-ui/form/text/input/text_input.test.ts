@@ -348,3 +348,15 @@ describe("Text input state", () => {
     expect(input.value).toBe("second");
   });
 });
+
+describe("Text input look", () => {
+  it("aligns its text left, also inside an element that centers text", () => {
+    const parent = document.body.appendChild(document.createElement("div"));
+    parent.style.textAlign = "center";
+    const element = parent.appendChild(form_text_input({ value: "text" }));
+    expect(getComputedStyle(element.querySelector("input")!).textAlign).toBe(
+      "start",
+    );
+    parent.remove();
+  });
+});

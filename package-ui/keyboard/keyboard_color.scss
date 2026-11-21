@@ -35,8 +35,12 @@ onscreen-keyboard-keyboard-color {
       }
       > .keyboard-color-sliders {
         display: grid;
-        grid-template-columns: repeat(4, 1fr);
+        grid-auto-flow: column;
+        grid-auto-columns: 1fr;
         gap: 0.35rem;
+        > label[hidden] {
+          display: none;
+        }
         > label {
           display: grid;
           grid-template-rows: 1rem 1fr;
@@ -60,7 +64,27 @@ onscreen-keyboard-keyboard-color {
       gap: 0.6rem;
       align-items: center;
       margin-top: 0.8rem;
+      //The color over a checkerboard, so alpha shows
       > .keyboard-color-preview {
+        background-image:
+          linear-gradient(
+            45deg,
+            #c8c8c8 25%,
+            transparent 25%,
+            transparent 75%,
+            #c8c8c8 75%
+          ),
+          linear-gradient(
+            45deg,
+            #c8c8c8 25%,
+            transparent 25%,
+            transparent 75%,
+            #c8c8c8 75%
+          );
+        background-size: 0.5rem 0.5rem;
+        background-position:
+          0 0,
+          0.25rem 0.25rem;
         aspect-ratio: 1;
         border-radius: tray.$radius;
         box-shadow: inset 0 0 0 1px var(--keyboard-colors-border);

@@ -86,7 +86,7 @@ Prompts made with `prompts.form` of `@chocbite/ts-lib-ui/prompts` are a group in
 | `form.password`               | string               | `filter`                                                                          |
 | `form.toggle_button`          | one of `selections`  | `selections`                                                                      |
 | `form.dropdown`               | one of `selections`  | `selections`, `default`, `default_icon`                                           |
-| `form.color`                  | hex color string     | `live`                                                                            |
+| `form.color`                  | hex color string     | `live`, `alpha`                                                                   |
 | `form.date_time`              | Date, string, number | `mode` (at creation, decides the value), `type`, `precision`                      |
 | `form.ip`                     | `IPAddress`          | `type`                                                                            |
 | `form.text`                   | none, a label        | `text`, `size`                                                                    |
@@ -101,6 +101,8 @@ Limits of 0, like `max_length: 0`, mean no limit. Every option of the elements i
 The elements are flat. Fields that take input (text, numbers, dropdowns) are white with a faint border that darkens on hover and gets a ring with focus, buttons are filled grey, and what is on or selected (a switch that is on, the selected option, a toggled button) uses one accent color. Shadows are only on things floating above the page, the open dropdown and the switch knob. Lamps and progress bars are read only and have no hover.
 
 All of it comes from the theme variables of the `form` group: `form.colors.accent` (`normal`, `hover`, `text`), `form.colors.button` (`normal`, `hover`, `active`), `form.colors.background`, `form.colors.border` (`normal`, `hover`), `form.colors.focus`, `form.colors.shadow` and `form.size.height` (1.6rem, `touchHeight` 2rem in touch mode). A `color` option (`FormColors`) fills a button, lamp or switch with that color instead.
+
+The color input shows its color on a checkerboard, so a color with alpha shows as one. Its value is a hex color like `#ff8800`. With `alpha` it has an alpha slider beside the swatch and writes colors like `#ff880080`, taking `#rgb`, `#rrggbb`, `#rrggbbaa` and `transparent`. The color picker of the browser has no alpha, it only picks the color and the alpha is kept. The native color input inside has the alpha as `data-alpha`, from 0 to 1, which the color keyboard of `@chocbite/ts-lib-ui/keyboard` shows and changes. Without `alpha` a value with alpha is still shown with it, but a picked color is written without.
 
 An element without a value has the `no-value` attribute, and these elements show it, so it is never taken for a value: text and number inputs a short grey line where the value would be, hidden while typing, the color input a muted rainbow, the switch its knob in the middle on a lighter track, a press turns it on. Dropdowns ask to select something. Other elements have the attribute without a look of their own yet.
 

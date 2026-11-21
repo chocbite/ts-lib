@@ -1,7 +1,12 @@
 import { AccessTypes } from "#base";
 import ctm, { type ContextMenuLine } from "#context_menu";
 import state, { type State } from "@chocbite/ts-lib/state";
-import { page_from_json, type CanvasPage, type CanvasWidget } from "./data";
+import {
+  page_from_json,
+  widget_to_json,
+  type CanvasPage,
+  type CanvasWidget,
+} from "./data";
 import { group_bounds } from "./group";
 import { remove_widgets } from "./order";
 
@@ -33,18 +38,11 @@ const value_now = (option: State<unknown> | undefined): unknown => {
  * Options are read as they are now, an option without a value now is left out*/
 export function copy_widgets(widgets: readonly CanvasWidget[]): string {
   if (!widgets.length) return copied_text;
-  const json = widgets.map((widget) => {
-    const options: Record<string, unknown> = {};
-    for (const [key, option] of Object.entries(
-      widget.options as Record<string, State<unknown> | undefined>,
-    )) {
-      const value = value_now(option);
-      if (value !== undefined) options[key] = value;
-    }
-    return { widget: widget.widget, options };
+  //Groups with their widgets, links as their $link objects, like when a page is saved
+  copied_text = JSON.stringify({
+    format: FORMAT,
+    widgets: widgets.map(widget_to_json),
   });
-  //Through JSON, so links become their $link objects, like when a page is saved
-  copied_text = JSON.stringify({ format: FORMAT, widgets: json });
   copied = (JSON.parse(copied_text) as { widgets: unknown[] }).widgets;
   pastes = 1;
   return copied_text;

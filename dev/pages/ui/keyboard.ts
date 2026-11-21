@@ -174,6 +174,13 @@ function status(parent: HTMLElement): HTMLElement {
     "data-keyboard-manual": "true",
     value: "#ff8800",
   });
+  //data-alpha gives the color keyboard an alpha slider, like the color input of the form with alpha on sets it
+  const color_alpha = input(fields, "Color field with data-alpha", {
+    type: "color",
+    "data-keyboard-manual": "true",
+    "data-alpha": "0.5",
+    value: "#2980b9",
+  });
   let close = () => {};
   const open = (element: HTMLInputElement, type: KeyboardType) => () => {
     close();
@@ -194,6 +201,7 @@ function status(parent: HTMLElement): HTMLElement {
             ].includes(type as never)
           ? open(date, type)
           : open(text, type);
+  buttons["Color with alpha"] = open(color_alpha, KeyboardType.Color);
   buttons["Close (returned function)"] = () => close();
   controls(sec, buttons);
 }

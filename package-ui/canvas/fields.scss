@@ -5,6 +5,8 @@ canvas-linkfield {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  //The column is as wide as the field, so the padding keeps the icon off the column edges
+  padding-inline: 0.4rem;
 
   &::before {
     @include icons.material-symbols-rounded;
@@ -12,6 +14,10 @@ canvas-linkfield {
     line-height: 1;
     content: "add_link";
     opacity: 0.35;
+
+    .touch & {
+      font-size: 1.8rem;
+    }
   }
   &.linked::before {
     content: "link";

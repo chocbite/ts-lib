@@ -171,6 +171,18 @@ const WIDTH = { width: "18rem" };
   box(r, "5rem", { width: "5rem" }).appendChild(
     form.color({ value: "#ff8800" }),
   );
+  //Alpha, the slider beside the swatch, the on-screen color keyboard has an alpha slider for it too
+  const with_alpha = state.ok_w("#2980b980");
+  const ra = spaced_row(sec);
+  const alpha_box = box(ra, "alpha", WIDTH);
+  alpha_box.appendChild(form.color({ value: with_alpha, alpha: true }));
+  readout(alpha_box, "state", with_alpha);
+  box(ra, "alpha, transparent", WIDTH).appendChild(
+    form.color({ value: "transparent", alpha: true }),
+  );
+  box(ra, "a value with alpha, alpha off", WIDTH).appendChild(
+    form.color({ value: "#2980b980" }),
+  );
 }
 
 //      _____       _______ ______   _______ _____ __  __ ______
@@ -213,7 +225,11 @@ const WIDTH = { width: "18rem" };
   const p = spaced_row(sec);
   for (const precision of Object.values(FormDateTimePrecision))
     box(p, "precision " + precision, WIDTH).appendChild(
-      form.date_time({ mode: FormDateTimeMode.DATE, precision, value: precise }),
+      form.date_time({
+        mode: FormDateTimeMode.DATE,
+        precision,
+        value: precise,
+      }),
     );
   const m = spaced_row(sec);
   for (const width of ["8rem", "32rem"])

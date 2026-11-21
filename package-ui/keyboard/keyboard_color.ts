@@ -75,7 +75,7 @@ export class Keyboard_Color extends KeyboardBase {
   #square: HTMLDivElement;
   #marker: HTMLDivElement;
   #preview: HTMLOutputElement;
-  #sliders: Record<"hue" | keyof RGB, HTMLInputElement>;
+  #sliders: Record<"hue" | keyof RGB | "alpha", HTMLInputElement>;
   #hsv: HSV = { hue: 0, saturation: 0, value: 0 };
   #rgb: RGB = { red: 0, green: 0, blue: 0 };
   /**Set while the keyboard dispatches input, so its own writes are not read back, a grey would lose the hue*/
@@ -104,6 +104,7 @@ export class Keyboard_Color extends KeyboardBase {
       red: this.#make_slider(sliders, "Red", 255),
       green: this.#make_slider(sliders, "Green", 255),
       blue: this.#make_slider(sliders, "Blue", 255),
+      alpha: this.#make_slider(sliders, "Alpha", 100),
     };
 
     const controls = container.appendChild(document.createElement("div"));
@@ -147,6 +148,7 @@ export class Keyboard_Color extends KeyboardBase {
     slider.max = max.toString();
     slider.ariaLabel = label;
     slider.addEventListener("input", () => {
+      if (label === "Alpha") return this.#write_alpha();
       if (label === "Hue") this.#hsv.hue = Number(slider.value);
       else {
         this.#rgb[label.toLowerCase() as keyof RGB] = Number(slider.value);
@@ -154,7 +156,9 @@ export class Keyboard_Color extends KeyboardBase {
       }
       this.#write_color();
     });
-    slider.addEventListener("change", () => this.#write_color(true));
+    slider.addEventListener("change", () =>
+      label === "Alpha" ? this.#write_alpha(true) : this.#write_color(true),
+    );
     return slider;
   }
 
@@ -206,6 +210,23 @@ export class Keyboard_Color extends KeyboardBase {
     if (commit) this.#commit();
   }
 
+  /**Writes the alpha to data-alpha of the input, which an input with alpha has, like the color input of the form with alpha on,
+   * the value of a color input has no alpha*/
+  #write_alpha(commit = false): void {
+    const input = this.#input;
+    if (!input || input.dataset.alpha === undefined) return;
+    const alpha = String(Number(this.#sliders.alpha.value) / 100);
+    if (input.dataset.alpha !== alpha) {
+      input.dataset.alpha = alpha;
+      this.#sync_controls(input.value);
+      this.#uncommitted = true;
+      this.#writing = true;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      this.#writing = false;
+    }
+    if (commit) this.#commit();
+  }
+
   /**Emits change when values were written since the last change*/
   #commit(): void {
     if (this.#input && this.#uncommitted)
@@ -232,7 +253,16 @@ export class Keyboard_Color extends KeyboardBase {
     this.#sliders.green.value = this.#rgb.green.toString();
     this.#sliders.blue.value = this.#rgb.blue.toString();
     this.#hex.value = color;
-    this.#preview.style.backgroundColor = color;
+    //Alpha only for inputs with data-alpha, the preview shows it over a checkerboard
+    const alpha = this.#input?.dataset.alpha;
+    const alpha_label = this.#sliders.alpha.parentElement!;
+    alpha_label.hidden = alpha === undefined;
+    if (alpha !== undefined)
+      this.#sliders.alpha.value = Math.round(Number(alpha) * 100).toString();
+    const byte = Math.round(Number(alpha ?? 1) * 255);
+    const with_alpha = color + byte.toString(16).padStart(2, "0");
+    this.#preview.style.backgroundColor = with_alpha;
+    if (alpha !== undefined) this.#hex.value = with_alpha;
   }
 }
 define_element(Keyboard_Color);

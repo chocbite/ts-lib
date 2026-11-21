@@ -18,6 +18,7 @@ import {
   WIDGET_CHANGEABLE,
   WIDGET_GEOMETRY,
   WIDGET_TRANSFORM_EVENT,
+  scrolls,
   type WidgetBase,
   type WidgetGeometry,
 } from "./widget";
@@ -26,12 +27,10 @@ import {
 const MIN_SIZE = 1;
 const GROUP = Symbol("group");
 
-/**Grid positions and sizes snap to, and the finer grid used while alt is held */
+/**Grid positions and sizes snap to, unless alt is held */
 const SNAP_GRID = 5;
-const SNAP_GRID_FINE = 1;
-/**Angle in degrees rotation snaps to, and the finer angle used while alt is held */
+/**Angle in degrees rotation snaps to, unless alt is held */
 const SNAP_ANGLE = 15;
-const SNAP_ANGLE_FINE = 5;
 
 /**Rounds the value to the nearest multiple of step, a step of 0 returns the value unchanged */
 function snap(value: number, step: number): number {
@@ -60,13 +59,10 @@ type Action =
 interface Drag {
   action: Action;
   pointer_id: number;
-  /**Client position of the origin of the view, which is what offset is relative to */
-  origin_x: number;
-  origin_y: number;
-  /**Point on the page that was pressed */
+  /**Point of the level that was pressed, in its units */
   page_x: number;
   page_y: number;
-  /**Angle from the center of the box to the point that was pressed, used for rotation */
+  /**Angle from the center of the box to the point that was pressed, in the level, used for rotation */
   angle: number;
   /**Geometry of every widget when the drag started, for several widgets*/
   starts: WidgetGeometry[];
@@ -88,7 +84,8 @@ interface Drag {
  * The center handle and the outline itself move the widget, the inside of the outline is left to the widgets below
  *
  * Position and size snap to a 5px grid and rotation to 15 degrees
- * Holding alt snaps to a 1px grid and 5 degrees instead, holding shift disables snapping
+ * Holding alt disables snapping
+ * While resizing, holding ctrl keeps the ratio of width and height, holding shift resizes around the center
  *
  * Resize and rotate cursors follow the rotation of the widget in 45 degree steps
  *
@@ -120,9 +117,16 @@ export class Transformer extends Base {
       this.attach_state_to_symbol(GROUP, group.rotation, () => this.#update());
     else this.detach_state_from_symbol(GROUP);
   }
-  #offset_x: number = 0;
-  #offset_y: number = 0;
-  #scale: number = 1;
+  /**Maps the level the widgets are on to viewport pixels*/
+  #matrix = new DOMMatrix();
+  /**The scale of the matrix, which scales evenly*/
+  get #scale(): number {
+    return Math.hypot(this.#matrix.a, this.#matrix.b);
+  }
+  /**The rotation of the matrix in degrees*/
+  get #turn(): number {
+    return (Math.atan2(this.#matrix.b, this.#matrix.a) * 180) / Math.PI;
+  }
   #actions = new Map<Element, Action>();
   #drag: Drag | undefined;
 
@@ -205,12 +209,11 @@ export class Transformer extends Base {
     return this.#drag !== undefined;
   }
 
-  /**Sets how page units map to viewport pixels, viewport = offset + page * scale
+  /**Sets how the level the widgets are on maps to viewport pixels, a matrix that moves, turns and scales evenly,
+   * like the view of a viewport, and for the content of groups the groups it is in
    * During a drag the widget is moved so the grabbed point stays under the pointer */
-  view(offset_x: number, offset_y: number, scale: number) {
-    this.#offset_x = offset_x;
-    this.#offset_y = offset_y;
-    this.#scale = scale;
+  view(matrix: DOMMatrix) {
+    this.#matrix = matrix;
     this.#update();
     if (this.#drag?.last) this.#apply_drag(this.#drag, this.#drag.last);
   }
@@ -227,9 +230,14 @@ export class Transformer extends Base {
     this.hidden = !frame;
     if (!frame) return;
     const scale = this.#scale;
-    const { x, y, width, height, rotation } = frame;
-    this.style.left = this.#offset_x + x * scale + "px";
-    this.style.top = this.#offset_y + y * scale + "px";
+    const { x, y, width, height } = frame;
+    //Turned with the level too, around its center
+    const rotation = frame.rotation + this.#turn;
+    const center = this.#matrix.transformPoint(
+      new DOMPoint(x + width / 2, y + height / 2),
+    );
+    this.style.left = center.x - (width * scale) / 2 + "px";
+    this.style.top = center.y - (height * scale) / 2 + "px";
     this.style.width = width * scale + "px";
     this.style.height = height * scale + "px";
     this.style.transform = `rotate(${rotation}deg)`;
@@ -248,6 +256,9 @@ export class Transformer extends Base {
         ? !changeable("x", "y", "rotation")
         : !changeable("rotation"),
     );
+    //The edges of a widget that scrolls let presses through to its scrollbars, the center handle still moves it
+    const single = this.#widgets.length === 1 ? this.#widgets[0] : undefined;
+    this.toggleAttribute("scrolls", single !== undefined && scrolls(single));
     //Cursors only exist in 45 degree steps repeating every 180 degrees, the stylesheet picks the cursors from the closest step
     const half_turn = ((rotation % 180) + 180) % 180;
     this.setAttribute("cursor-step", String(Math.round(half_turn / 45) % 4));
@@ -258,22 +269,17 @@ export class Transformer extends Base {
     if (!frame || this.#drag) return;
     e.preventDefault();
     e.stopPropagation();
-    //The bounding box of the rotated outline is centered on the center of the frame
-    const rect = this.getBoundingClientRect();
-    const center_x = rect.left + rect.width / 2;
-    const center_y = rect.top + rect.height / 2;
-    const scale = this.#scale;
     const { x, y, width, height, rotation } = frame;
-    const origin_x = center_x - this.#offset_x - (x + width / 2) * scale;
-    const origin_y = center_y - this.#offset_y - (y + height / 2) * scale;
+    const pressed = this.#to_level(e);
     this.#drag = {
       action,
       pointer_id: e.pointerId,
-      origin_x,
-      origin_y,
-      page_x: (e.clientX - origin_x - this.#offset_x) / scale,
-      page_y: (e.clientY - origin_y - this.#offset_y) / scale,
-      angle: Math.atan2(e.clientY - center_y, e.clientX - center_x),
+      page_x: pressed.x,
+      page_y: pressed.y,
+      angle: Math.atan2(
+        pressed.y - (y + height / 2),
+        pressed.x - (x + width / 2),
+      ),
       last: undefined,
       starts: this.#widgets.map((widget) => ({ ...widget[WIDGET_GEOMETRY] })),
       x,
@@ -353,17 +359,28 @@ export class Transformer extends Base {
     this.#update();
   }
 
+  /**The point of the level under the pointer, through the matrix of the view*/
+  #to_level(e: { clientX: number; clientY: number }): DOMPoint {
+    const parent = this.parentElement?.getBoundingClientRect();
+    return this.#matrix
+      .inverse()
+      .transformPoint(
+        new DOMPoint(
+          e.clientX - (parent?.left ?? 0),
+          e.clientY - (parent?.top ?? 0),
+        ),
+      );
+  }
+
   /**Updates the widgets from the pointer event and the current view */
   #apply_drag(drag: Drag, e: PointerEvent) {
-    const scale = this.#scale;
     //A viewport without a size has a scale of 0, which has no page position
-    if (!this.#widgets.length || scale <= 0) return;
-    const view_x = drag.origin_x + this.#offset_x;
-    const view_y = drag.origin_y + this.#offset_y;
-    //Pointer movement in page units
-    const delta_x = (e.clientX - view_x) / scale - drag.page_x;
-    const delta_y = (e.clientY - view_y) / scale - drag.page_y;
-    const grid = e.shiftKey ? 0 : e.altKey ? SNAP_GRID_FINE : SNAP_GRID;
+    if (!this.#widgets.length || this.#scale <= 0) return;
+    //Pointer movement in units of the level
+    const now = this.#to_level(e);
+    const delta_x = now.x - drag.page_x;
+    const delta_y = now.y - drag.page_y;
+    const grid = e.altKey ? 0 : SNAP_GRID;
     const action = drag.action;
     switch (action.type) {
       case "move":
@@ -379,15 +396,43 @@ export class Transformer extends Base {
         //Pointer movement in the unrotated frame of the widget
         const local_x = delta_x * cos + delta_y * sin;
         const local_y = delta_y * cos - delta_x * sin;
-        const width = action.x
-          ? Math.max(MIN_SIZE, snap(drag.width + action.x * local_x, grid))
+        //Around the center both opposite edges move, so the size changes twice the pointer movement
+        const around_center = e.shiftKey;
+        const growth = around_center ? 2 : 1;
+        let width = action.x
+          ? Math.max(
+              MIN_SIZE,
+              snap(drag.width + action.x * local_x * growth, grid),
+            )
           : drag.width;
-        const height = action.y
-          ? Math.max(MIN_SIZE, snap(drag.height + action.y * local_y, grid))
+        let height = action.y
+          ? Math.max(
+              MIN_SIZE,
+              snap(drag.height + action.y * local_y * growth, grid),
+            )
           : drag.height;
-        //Move the center by half the size change, so the opposite corner or side stays in place
-        const shift_x = (action.x * (width - drag.width)) / 2;
-        const shift_y = (action.y * (height - drag.height)) / 2;
+        if (e.ctrlKey && drag.width > 0 && drag.height > 0) {
+          //Keeps the ratio by the axis that changed most, only that axis is on the grid
+          const scale_x = width / drag.width;
+          const scale_y = height / drag.height;
+          const by_x = action.x
+            ? !action.y || Math.abs(scale_x - 1) >= Math.abs(scale_y - 1)
+            : false;
+          const scale = Math.max(
+            by_x ? scale_x : scale_y,
+            MIN_SIZE / Math.min(drag.width, drag.height),
+          );
+          width = drag.width * scale;
+          height = drag.height * scale;
+        }
+        //Move the center by half the size change, so the opposite corner or side stays in place,
+        //an axis without a handle grows around its middle
+        const shift_x = around_center
+          ? 0
+          : (action.x * (width - drag.width)) / 2;
+        const shift_y = around_center
+          ? 0
+          : (action.y * (height - drag.height)) / 2;
         const center_x =
           drag.x + drag.width / 2 + shift_x * cos - shift_y * sin;
         const center_y =
@@ -401,13 +446,13 @@ export class Transformer extends Base {
         break;
       }
       case "rotate": {
-        const now = Math.atan2(
-          e.clientY - (view_y + (drag.y + drag.height / 2) * scale),
-          e.clientX - (view_x + (drag.x + drag.width / 2) * scale),
+        const angle = Math.atan2(
+          now.y - (drag.y + drag.height / 2),
+          now.x - (drag.x + drag.width / 2),
         );
         const rotation = snap(
-          drag.rotation + ((now - drag.angle) * 180) / Math.PI,
-          e.shiftKey ? 0 : e.altKey ? SNAP_ANGLE_FINE : SNAP_ANGLE,
+          drag.rotation + ((angle - drag.angle) * 180) / Math.PI,
+          e.altKey ? 0 : SNAP_ANGLE,
         );
         this.#change(drag, { rotation });
         break;
