@@ -5,6 +5,7 @@ import {
   input_key,
   type BaseOptions,
   type InputOf,
+  type InputOptions,
 } from "#base";
 import ctm, { type ContextMenuLines } from "#context_menu";
 import {
@@ -14,6 +15,11 @@ import {
 } from "#icons";
 import type { SVGFunc } from "#svg";
 import { rem_to_px } from "#theme";
+import state, {
+  type StateArrayRead,
+  type StateOrValROS,
+  type StateROS,
+} from "@chocbite/ts-lib/state";
 import {
   CONTENT_CLOSED,
   CONTENT_CREATE,
@@ -26,6 +32,12 @@ import {
 import "./layout.scss";
 import { TITLEBAR_HEIGHT_TOUCH } from "./panel";
 
+//      _____       _______
+//     |  __ \   /\|__   __|/\
+//     | |  | | /  \  | |  /  \
+//     | |  | |/ /\ \ | | / /\ \
+//     | |__| / ____ \| |/ ____ \
+//     |_____/_/    \_\_/_/    \_\
 /**Where content goes, relative to a tab group or the whole layout*/
 export const LayoutSide = {
   /**As a tab in the group*/
@@ -40,24 +52,53 @@ export type LayoutSide = (typeof LayoutSide)[keyof typeof LayoutSide];
 /**Direction a split puts its children in, row is side by side, column is above each other*/
 export type LayoutDirection = "row" | "column";
 
-/**A tab group in the layout a layout starts with*/
-export interface LayoutTabsInit {
-  /**Content shown as tabs, in order*/
-  tabs: ContentBase[];
-  /**Index of the tab shown, the first by default*/
-  active?: number;
-  /**Share of the space of the split it is in, 1 by default*/
-  size?: number;
+/**A tab group of a layout, the layout writes its states when the user changes it, a read only state locks that part*/
+export interface LayoutTabs {
+  /**Contents shown as tabs, in order, written with array instructions*/
+  readonly tabs: StateROS<ContentBase[]>;
+  /**Content of the shown tab, the first tab is shown when it is not among the tabs*/
+  readonly active: StateROS<ContentBase | undefined>;
+  /**Share of the space of the split it is in*/
+  readonly size: StateROS<number>;
 }
-/**A split in the layout a layout starts with*/
-export interface LayoutSplitInit {
-  split: LayoutDirection;
-  children: LayoutInit[];
-  /**Share of the space of the split it is in, 1 by default*/
-  size?: number;
+/**A split of a layout, its children side by side or above each other*/
+export interface LayoutSplit {
+  /**Direction of the children, never changes*/
+  readonly direction: LayoutDirection;
+  /**Splits and tab groups in the split, written with array instructions*/
+  readonly children: StateROS<LayoutNode[]>;
+  /**Share of the space of the split it is in*/
+  readonly size: StateROS<number>;
 }
-/**The tree of splits and tab groups a layout starts with*/
-export type LayoutInit = LayoutTabsInit | LayoutSplitInit;
+/**A node of a layout, a split or a tab group*/
+export type LayoutNode = LayoutTabs | LayoutSplit;
+
+const is_split = (node: LayoutNode): node is LayoutSplit => "children" in node;
+
+/**A tab group with writable states, starting with the given contents*/
+export function layout_tabs(
+  tabs: ContentBase[] = [],
+  options: { active?: ContentBase; size?: number } = {},
+): LayoutTabs {
+  return {
+    tabs: state.ok_w(tabs),
+    active: state.ok_w<ContentBase | undefined>(options.active),
+    size: state.ok_w(options.size ?? 1),
+  };
+}
+
+/**A split with writable states, starting with the given children*/
+export function layout_split(
+  direction: LayoutDirection,
+  children: LayoutNode[],
+  size = 1,
+): LayoutSplit {
+  return {
+    direction,
+    children: state.ok_w(children),
+    size: state.ok_w(size),
+  };
+}
 
 /**Where layout.open puts the content*/
 export interface LayoutOpenOptions {
@@ -83,23 +124,196 @@ const ROOT_EDGE = 1.2;
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(value, max));
 
-//      _   _  ____  _____  ______
-//     | \ | |/ __ \|  __ \|  ____|
-//     |  \| | |  | | |  | | |__
-//     | . ` | |  | | |  | |  __|
-//     | |\  | |__| | |__| | |____
-//     |_| \_|\____/|_____/|______|
-/**What holds a node, a split or the layout itself*/
-interface NodeParent {
-  replace_node(old: LayoutNode, node: LayoutNode): void;
-  remove_node(node: LayoutNode): void;
-  update_min(): void;
+/**Writes the state when it is writable, writes of local states apply at once*/
+function write(target: StateROS<unknown>, value: unknown): void {
+  if (target.writable)
+    void (target as unknown as { write(v: unknown): unknown }).write(value);
 }
-const parent_of = (node: LayoutNode) =>
-  node.parentElement as (NodeParent & HTMLElement) | null;
 
-/**A split or a tab group*/
-abstract class LayoutNode extends Base {
+//               _____ _______ _____ ____  _   _  _____
+//         /\   / ____|__   __|_   _/ __ \| \ | |/ ____|
+//        /  \ | |       | |    | || |  | |  \| | (___
+//       / /\ \| |       | |    | || |  | | . ` |\___ \
+//      / ____ \ |____   | |   _| || |__| | |\  |____) |
+//     /_/    \_\_____|  |_|  |_____\____/|_| \_|_____/
+//Changes are made to the data, the elements follow the states, so a layout shows what its states give back
+/**The tab group holding the content, searched from the node*/
+function group_of(
+  node: LayoutNode,
+  content: ContentBase,
+): LayoutTabs | undefined {
+  if (!is_split(node))
+    return node.tabs.ok().includes(content) ? node : undefined;
+  for (const child of node.children.ok()) {
+    const found = group_of(child, content);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/**The first tab group, searched from the node*/
+function first_group(node: LayoutNode): LayoutTabs | undefined {
+  if (!is_split(node)) return node;
+  for (const child of node.children.ok()) {
+    const found = first_group(child);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/**Takes the content out of the group, a group left empty leaves its split*/
+function take_out(layout: Layout, group: LayoutTabs, content: ContentBase) {
+  const tabs = group.tabs.ok();
+  const index = tabs.indexOf(content);
+  if (index === -1) return;
+  const next = tabs[index + 1] ?? tabs[index - 1];
+  const last = tabs.length === 1;
+  write(group.tabs, state.a.write.splice(index, 1));
+  if (group.active.ok() === content) write(group.active, next);
+  if (last) remove_node(layout, group);
+}
+
+/**Removes the node from its split, a split left with one node is replaced by it, the root stays*/
+function remove_node(layout: Layout, node: LayoutNode): void {
+  const parent = layout.parent_of(node);
+  if (!parent?.children.writable) return;
+  const index = parent.children.ok().indexOf(node);
+  write(parent.children, state.a.write.splice(index, 1));
+  const left = parent.children.ok();
+  if (left.length === 1) replace_node(layout, parent, left[0]);
+  else if (left.length === 0) remove_node(layout, parent);
+}
+
+/**Puts the node in the place of old, a split in the same direction as its new parent gives its children to it*/
+function replace_node(layout: Layout, old: LayoutNode, node: LayoutNode) {
+  const size = old.size.ok();
+  const parent = layout.parent_of(old);
+  if (!parent) {
+    write(node.size, 1);
+    return layout.write_root(node);
+  }
+  const index = parent.children.ok().indexOf(old);
+  if (is_split(node) && node.direction === parent.direction) {
+    const children = [...node.children.ok()];
+    const total = children.reduce((sum, c) => sum + c.size.ok(), 0);
+    for (const child of children)
+      write(child.size, (size * child.size.ok()) / total);
+    write(parent.children, state.a.write.splice(index, 1, ...children));
+    return;
+  }
+  write(node.size, size);
+  write(parent.children, state.a.write.change(index, node));
+}
+
+/**Puts a new group with the content at the side of the node, in the split of the node when it has the same direction*/
+function insert_beside(
+  layout: Layout,
+  node: LayoutNode,
+  side: LayoutSide,
+  content: ContentBase,
+): void {
+  const direction: LayoutDirection =
+    side === LayoutSide.LEFT || side === LayoutSide.RIGHT ? "row" : "column";
+  const after = side === LayoutSide.RIGHT || side === LayoutSide.BOTTOM;
+  const parent = layout.parent_of(node);
+  if (parent && parent.direction === direction) {
+    const half = node.size.ok() / 2;
+    const index = parent.children.ok().indexOf(node);
+    write(node.size, half);
+    write(
+      parent.children,
+      state.a.write.splice(
+        after ? index + 1 : index,
+        0,
+        layout_tabs([content], { active: content, size: half }),
+      ),
+    );
+    return;
+  }
+  const group = layout_tabs([content], { active: content });
+  const split = layout_split(
+    direction,
+    after ? [node, group] : [group, node],
+    node.size.ok(),
+  );
+  if (parent)
+    write(
+      parent.children,
+      state.a.write.change(parent.children.ok().indexOf(node), split),
+    );
+  else layout.write_root(split);
+  write(node.size, 1);
+}
+
+/**Whether new nodes can be put beside the node, its split or the root can be written*/
+function can_split(layout: Layout, node: LayoutNode): boolean {
+  const parent = layout.parent_of(node);
+  return parent ? parent.children.writable : layout.root_writable();
+}
+
+/**Where a dragged tab goes, into a tab bar at an index, a side of a group, or a side of the whole layout*/
+type DropTarget = { layout: Layout; rect?: DOMRect } & (
+  | { group: LayoutTabs; index: number }
+  | { node: LayoutNode; side: LayoutSide }
+  | { root: true; side: LayoutSide }
+);
+
+/**Moves the content to the target, the group it leaves is removed when empty*/
+function move_content(content: ContentBase, target: DropTarget): void {
+  const from = TABS.get(content)?.group_element();
+  const source = from?.node;
+  const source_layout = from?.layout();
+  const take = () => {
+    if (source && source_layout) take_out(source_layout, source, content);
+  };
+  if ("group" in target) {
+    const { group, index } = target;
+    if (source === group) {
+      const at = group.tabs.ok().indexOf(content);
+      write(
+        group.tabs,
+        state.a.write.move(at, index > at ? index - 1 : index, 1),
+      );
+    } else {
+      take();
+      write(group.tabs, state.a.write.splice(index, 0, content));
+    }
+    write(group.active, content);
+  } else if ("node" in target && target.side === LayoutSide.CENTER) {
+    take();
+    const group = target.node as LayoutTabs;
+    write(group.tabs, state.a.write.push(content));
+    write(group.active, content);
+  } else {
+    take();
+    //The root is read after the content left, leaving can change it
+    const node = "root" in target ? target.layout.root_node() : target.node;
+    if (node) insert_beside(target.layout, node, target.side, content);
+  }
+  TABS.get(content)?.focus();
+}
+
+//      _   _  ____  _____  ______  _____
+//     | \ | |/ __ \|  __ \|  ____|/ ____|
+//     |  \| | |  | | |  | | |__  | (___
+//     | . ` | |  | | |  | |  __|  \___ \
+//     | |\  | |__| | |__| | |____ ____) |
+//     |_| \_|\____/|_____/|______|_____/
+/**The element showing each node, a node is shown in one place at a time, so its element is moved with it*/
+const ELEMENTS = new WeakMap<LayoutNode, NodeElement>();
+function element_of(node: LayoutNode): NodeElement {
+  let element = ELEMENTS.get(node);
+  if (!element) {
+    element = is_split(node)
+      ? SplitElement.create({}, node)
+      : TabsElement.create({}, node);
+    ELEMENTS.set(node, element);
+  }
+  return element;
+}
+
+/**Element of a split or a tab group, its share of the space follows the size state of the node*/
+abstract class NodeElement extends Base {
   static element_name() {
     return "@abstract@";
   }
@@ -107,28 +321,34 @@ abstract class LayoutNode extends Base {
     return "composition";
   }
 
+  readonly node: LayoutNode;
   /**Smallest size in rem, from the contents inside*/
   min_width = 0;
   min_height = 0;
 
-  /**Share of the space of the split it is in*/
-  grow(): number {
-    return Number(this.style.flexGrow) || 1;
+  constructor(node: LayoutNode) {
+    super();
+    this.node = node;
+    this.attach_state(node.size, (size) => {
+      this.style.flexGrow = String(size.value);
+    });
   }
-  set_grow(grow: number): void {
-    this.style.flexGrow = String(grow);
+
+  layout(): Layout | null {
+    return this.closest<Layout>("composition-layout");
   }
 
   abstract update_min(): void;
 
-  /**Sets the smallest size, and tells the parent when it changed*/
+  /**Sets the smallest size, and tells the split it is in when it changed*/
   protected publish_min(width: number, height: number): void {
     if (width === this.min_width && height === this.min_height) return;
     this.min_width = width;
     this.min_height = height;
     this.style.minWidth = width + "rem";
     this.style.minHeight = height + "rem";
-    parent_of(this)?.update_min();
+    const parent = this.parentElement;
+    if (parent instanceof SplitElement) parent.update_min();
   }
 }
 
@@ -138,80 +358,97 @@ abstract class LayoutNode extends Base {
 //      \___ \|  ___/| |      | |    | |
 //      ____) | |    | |____ _| |_   | |
 //     |_____/|_|    |______|_____|  |_|
-/**Children side by side or above each other, with sizers between them*/
-class LayoutSplit extends LayoutNode implements NodeParent {
+/**Children side by side or above each other, with a sizer between each two*/
+class SplitElement extends NodeElement {
   static element_name() {
     return "layoutsplit";
   }
 
-  readonly direction: LayoutDirection;
+  declare readonly node: LayoutSplit;
+  /**Elements of the children, in order, the DOM has a sizer between each two*/
+  #children: NodeElement[] = [];
 
-  constructor(direction: LayoutDirection) {
-    super();
-    this.direction = direction;
-    this.classList.add(direction);
+  constructor(node: LayoutSplit) {
+    super(node);
+    this.classList.add(node.direction);
+    this.attach_state(node.children, (children) => this.#apply(children.value));
   }
 
-  nodes(): LayoutNode[] {
-    return [...this.children].filter((c) => c instanceof LayoutNode);
-  }
-
-  /**Puts the node at the index among the nodes, with a sizer between it and its neighbor*/
-  insert_node(node: LayoutNode, index: number, grow: number): void {
-    const ref = this.nodes()[index];
-    node.set_grow(grow);
-    if (ref) {
-      this.insertBefore(node, ref);
-      this.insertBefore(this.#sizer(), ref);
-    } else {
-      if (this.nodes().length) this.appendChild(this.#sizer());
-      this.appendChild(node);
+  /**Applies only the changes the array write carries*/
+  #apply(children: StateArrayRead<LayoutNode>): void {
+    for (const change of state.a.read(children)) {
+      switch (change.type) {
+        case "fresh":
+          this.#remove(0, this.#children.length);
+          this.#insert(0, change.items);
+          break;
+        case "added":
+          this.#insert(change.index, change.items);
+          break;
+        case "removed":
+          this.#remove(change.index, change.items.length);
+          break;
+        case "changed":
+          this.#remove(change.index, change.items.length);
+          this.#insert(change.index, change.items);
+          break;
+        case "moved": {
+          const moved = this.#children.slice(
+            change.from_index,
+            change.from_index + change.items.length,
+          );
+          this.#remove(change.from_index, change.items.length);
+          this.#insert(
+            change.to_index,
+            moved.map((e) => e.node),
+          );
+        }
+      }
     }
     this.update_min();
   }
 
-  /**Removes the node with a sizer next to it, a split left with one node is replaced by that node*/
-  remove_node(node: LayoutNode): void {
-    const next = node.nextElementSibling;
-    const prev = node.previousElementSibling;
-    if (next?.classList.contains("sizer")) next.remove();
-    else if (prev?.classList.contains("sizer")) prev.remove();
-    node.remove();
-    const nodes = this.nodes();
-    const only = nodes[0];
-    if (nodes.length === 1 && only) parent_of(this)?.replace_node(this, only);
-    else if (nodes.length === 0) parent_of(this)?.remove_node(this);
-    else this.update_min();
+  #insert(index: number, nodes: readonly LayoutNode[]): void {
+    const elements = nodes.map(element_of);
+    const ref = this.#children[index] ?? null;
+    for (const element of elements) this.insertBefore(element, ref);
+    this.#children.splice(index, 0, ...elements);
+    this.#fix_sizers();
   }
 
-  /**Puts the node in the place of old, a split in the same direction gives its nodes to this split instead*/
-  replace_node(old: LayoutNode, node: LayoutNode): void {
-    const grow = old.grow();
-    this.replaceChild(node, old);
-    node.set_grow(grow);
-    if (node instanceof LayoutSplit && node.direction === this.direction) {
-      const nodes = node.nodes();
-      const total = nodes.reduce((sum, n) => sum + n.grow(), 0);
-      nodes.forEach((n, i) => {
-        if (i) this.insertBefore(this.#sizer(), node);
-        n.set_grow((grow * n.grow()) / total);
-        this.insertBefore(n, node);
-      });
-      node.remove();
+  #remove(index: number, count: number): void {
+    for (const element of this.#children.splice(index, count))
+      //An element already moved elsewhere by the same change stays there
+      if (element.parentElement === this) element.remove();
+    this.#fix_sizers();
+  }
+
+  /**Puts one sizer between each two children and removes the others, a split has only a few children*/
+  #fix_sizers(): void {
+    let prev: Element | null = null;
+    for (const child of [...this.children]) {
+      if (child.classList.contains("sizer")) {
+        if (!(prev instanceof NodeElement)) {
+          child.remove();
+          continue;
+        }
+      } else if (prev instanceof NodeElement)
+        this.insertBefore(this.#sizer(), child);
+      prev = child;
     }
-    this.update_min();
+    if (this.lastElementChild?.classList.contains("sizer"))
+      this.lastElementChild.remove();
   }
 
   update_min(): void {
-    const nodes = this.nodes();
-    const sizers = Math.max(0, nodes.length - 1) * SIZER_TOUCH;
-    const along = (n: LayoutNode) =>
-      this.direction === "row" ? n.min_width : n.min_height;
-    const across = (n: LayoutNode) =>
-      this.direction === "row" ? n.min_height : n.min_width;
-    const sum = nodes.reduce((s, n) => s + along(n), sizers);
-    const max = nodes.reduce((m, n) => Math.max(m, across(n)), 0);
-    if (this.direction === "row") this.publish_min(sum, max);
+    const children = this.#children;
+    const sizers = Math.max(0, children.length - 1) * SIZER_TOUCH;
+    const row = this.node.direction === "row";
+    const along = (e: NodeElement) => (row ? e.min_width : e.min_height);
+    const across = (e: NodeElement) => (row ? e.min_height : e.min_width);
+    const sum = children.reduce((s, e) => s + along(e), sizers);
+    const max = children.reduce((m, e) => Math.max(m, across(e)), 0);
+    if (row) this.publish_min(sum, max);
     else this.publish_min(max, sum);
   }
 
@@ -222,15 +459,17 @@ class LayoutSplit extends LayoutNode implements NodeParent {
     return sizer;
   }
 
-  /**Moves the sizer, the two nodes beside it share their space, never below their smallest size*/
+  /**Moves the sizer, the two children beside it share their space, never below their smallest size,
+   * the sizes are written when the sizer is let go*/
   #size_start(e: PointerEvent, sizer: HTMLDivElement): void {
     if (e.button !== 0) return;
+    const a = sizer.previousElementSibling;
+    const b = sizer.nextElementSibling;
+    if (!(a instanceof NodeElement) || !(b instanceof NodeElement)) return;
+    if (!a.node.size.writable || !b.node.size.writable) return;
     e.preventDefault();
-    const a = sizer.previousElementSibling as LayoutNode | null;
-    const b = sizer.nextElementSibling as LayoutNode | null;
-    if (!a || !b) return;
-    const row = this.direction === "row";
-    const length = (n: LayoutNode) => {
+    const row = this.node.direction === "row";
+    const length = (n: NodeElement) => {
       const rect = n.getBoundingClientRect();
       return row ? rect.width : rect.height;
     };
@@ -238,26 +477,27 @@ class LayoutSplit extends LayoutNode implements NodeParent {
     const total = la + length(b);
     const min_a = rem_to_px(row ? a.min_width : a.min_height);
     const min_b = rem_to_px(row ? b.min_width : b.min_height);
-    const grow = a.grow() + b.grow();
+    const grow = a.node.size.ok() + b.node.size.ok();
+    let grow_a = a.node.size.ok();
     sizer.setPointerCapture(e.pointerId);
     sizer.classList.add("active");
     sizer.onpointermove = (ev) => {
       if (min_a > total - min_b) return;
       const moved = row ? ev.clientX - e.clientX : ev.clientY - e.clientY;
       const size = clamp(la + moved, min_a, total - min_b);
-      a.set_grow((grow * size) / total);
-      b.set_grow((grow * (total - size)) / total);
+      grow_a = (grow * size) / total;
+      a.style.flexGrow = String(grow_a);
+      b.style.flexGrow = String(grow - grow_a);
     };
     sizer.onpointerup = sizer.onpointercancel = () => {
-      sizer.releasePointerCapture(e.pointerId);
       sizer.classList.remove("active");
-      sizer.onpointermove = null;
-      sizer.onpointerup = null;
-      sizer.onpointercancel = null;
+      sizer.onpointermove = sizer.onpointerup = sizer.onpointercancel = null;
+      write(a.node.size, grow_a);
+      write(b.node.size, grow - grow_a);
     };
   }
 }
-define_element(LayoutSplit);
+define_element(SplitElement);
 
 //      _______       ____   _____
 //     |__   __|/\   |  _ \ / ____|
@@ -265,74 +505,88 @@ define_element(LayoutSplit);
 //        | | / /\ \ |  _ < \___ \
 //        | |/ ____ \| |_) |____) |
 //        |_/_/    \_\____/|_____/
-/**A tab bar and the content of the active tab, the other contents are not in the document*/
-class LayoutTabs extends LayoutNode {
+/**A tab bar and the content of the shown tab, the other contents are not in the document*/
+class TabsElement extends NodeElement {
   static element_name() {
     return "layouttabs";
   }
 
+  declare readonly node: LayoutTabs;
   readonly bar = this.appendChild(document.createElement("div"));
   readonly body = this.appendChild(document.createElement("div"));
-  #active?: LayoutTab;
+  /**Tabs in order, a tab moved to another group is no longer a child of the bar*/
+  #tabs: LayoutTab[] = [];
 
-  constructor() {
-    super();
+  constructor(node: LayoutTabs) {
+    super(node);
     this.bar.className = "bar";
     this.body.className = "body";
-    this.update_min();
+    this.attach_state(node.tabs, (tabs) => this.#apply(tabs.value));
+    this.attach_state(node.active, () => this.#show_active());
   }
 
-  tabs(): LayoutTab[] {
-    return [...this.bar.children] as LayoutTab[];
-  }
-
-  get active_tab(): LayoutTab | undefined {
-    return this.#active;
-  }
-
-  /**Adds the tab at the index, at the end when not given*/
-  add_tab(tab: LayoutTab, index?: number, activate = true): void {
-    this.bar.insertBefore(
-      tab,
-      index === undefined ? null : (this.tabs()[index] ?? null),
-    );
-    if (activate || !this.#active) this.activate(tab);
-    this.update_min();
-  }
-
-  /**Moves a tab of this group, the index counts the tabs with the tab still at its place*/
-  move_tab(tab: LayoutTab, index: number): void {
-    this.bar.insertBefore(tab, this.tabs()[index] ?? null);
-  }
-
-  /**Removes the tab, a group left empty removes itself, except the last group of the layout*/
-  remove_tab(tab: LayoutTab): void {
-    const tabs = this.tabs();
-    const index = tabs.indexOf(tab);
-    tab.remove();
-    if (this.#active === tab) {
-      this.#active = undefined;
-      tab.content.remove();
-      tab.set_selected(false);
-      const next = tabs[index + 1] ?? tabs[index - 1];
-      if (next) this.activate(next);
+  /**Applies only the changes the array write carries*/
+  #apply(contents: StateArrayRead<ContentBase>): void {
+    for (const change of state.a.read(contents)) {
+      switch (change.type) {
+        case "fresh":
+          this.#remove(0, this.#tabs.length);
+          this.#insert(0, change.items);
+          break;
+        case "added":
+          this.#insert(change.index, change.items);
+          break;
+        case "removed":
+          this.#remove(change.index, change.items.length);
+          break;
+        case "changed":
+          this.#remove(change.index, change.items.length);
+          this.#insert(change.index, change.items);
+          break;
+        case "moved": {
+          const moved = this.#tabs.splice(
+            change.from_index,
+            change.items.length,
+          );
+          this.#tabs.splice(change.to_index, 0, ...moved);
+          const ref = this.#tabs[change.to_index + moved.length] ?? null;
+          for (const tab of moved) this.bar.insertBefore(tab, ref);
+        }
+      }
     }
-    const parent = parent_of(this);
-    if (tabs.length === 1 && parent instanceof LayoutSplit)
-      parent.remove_node(this);
-    else this.update_min();
+    this.#show_active();
+    this.update_min();
   }
 
-  activate(tab: LayoutTab): void {
-    if (this.#active === tab) return;
-    this.#active?.set_selected(false);
-    this.#active = tab;
-    tab.set_selected(true);
-    this.body.replaceChildren(tab.content);
+  #insert(index: number, contents: readonly ContentBase[]): void {
+    const tabs = contents.map(tab_of);
+    const ref = this.#tabs[index] ?? null;
+    for (const tab of tabs) this.bar.insertBefore(tab, ref);
+    this.#tabs.splice(index, 0, ...tabs);
+  }
+
+  #remove(index: number, count: number): void {
+    for (const tab of this.#tabs.splice(index, count)) {
+      //A tab already moved to another group stays there
+      if (tab.parentElement !== this.bar) continue;
+      tab.remove();
+      tab.set_selected(false);
+      if (tab.content.parentElement === this.body) tab.content.remove();
+    }
+  }
+
+  /**Shows the content of the active tab, the first tab when the active content is not a tab here*/
+  #show_active(): void {
+    const active = this.node.active.ok();
+    const shown = this.#tabs.find((t) => t.content === active) ?? this.#tabs[0];
+    for (const tab of this.#tabs) tab.set_selected(tab === shown);
+    if (!shown) this.body.replaceChildren();
+    else if (this.body.firstChild !== shown.content)
+      this.body.replaceChildren(shown.content);
   }
 
   update_min(): void {
-    const tabs = this.tabs();
+    const tabs = this.#tabs;
     this.publish_min(
       tabs.reduce((m, t) => Math.max(m, t.min_width), MIN_WIDTH),
       tabs.reduce((m, t) => Math.max(m, t.min_height), MIN_HEIGHT) +
@@ -340,7 +594,7 @@ class LayoutTabs extends LayoutNode {
     );
   }
 }
-define_element(LayoutTabs);
+define_element(TabsElement);
 
 //      _______       ____
 //     |__   __|/\   |  _ \
@@ -357,15 +611,26 @@ const TAB_CONTENT = {
   min_height: input_key<InputOf<typeof CONTENT_CREATE.min_height>>(),
 };
 
-/**The tab of every content in a layout*/
+/**The tab of every content shown by a layout, a content is in one place at a time, so its tab is moved with it*/
 const TABS = new WeakMap<ContentBase, LayoutTab>();
+function tab_of(content: ContentBase): LayoutTab {
+  let tab = TABS.get(content);
+  if (!tab) {
+    tab = LayoutTab.create({}, content);
+    TABS.set(content, tab);
+  }
+  return tab;
+}
 
-/**Closes content in a layout, its tab goes with it*/
+/**Closes content shown by a layout, it is taken out of its group*/
 const LAYOUT_HOST: ContentHost = {
   [HOST_CLOSE_CONTENT](content: ContentBase): void {
-    const tab = TABS.get(content);
-    if (!tab) return;
-    tab.group()?.remove_tab(tab);
+    const group = TABS.get(content)?.group_element();
+    const layout = group?.layout();
+    if (group && layout) {
+      if (!group.node.tabs.writable) return;
+      take_out(layout, group.node, content);
+    }
     TABS.delete(content);
     content[CONTENT_HOST] = undefined;
     content.remove();
@@ -373,7 +638,7 @@ const LAYOUT_HOST: ContentHost = {
   },
 };
 
-/**Tab of one content, follows its title, icon, close button and smallest size, moves with the content*/
+/**Tab of one content, follows its title, icon, close button and smallest size*/
 class LayoutTab extends Base {
   static element_name() {
     return "layouttab";
@@ -395,7 +660,6 @@ class LayoutTab extends Base {
     super();
     this.content = content;
     content[CONTENT_HOST] = LAYOUT_HOST;
-    TABS.set(content, this);
     this.tabIndex = -1;
     this.#icon.className = "icon";
     this.#title.className = "title";
@@ -439,18 +703,18 @@ class LayoutTab extends Base {
     });
     this.set_input(TAB_CONTENT.min_width, content.content_min_width, (w) => {
       this.min_width = w.ok ? w.value : 0;
-      this.group()?.update_min();
+      this.group_element()?.update_min();
     });
     this.set_input(TAB_CONTENT.min_height, content.content_min_height, (h) => {
       this.min_height = h.ok ? h.value : 0;
-      this.group()?.update_min();
+      this.group_element()?.update_min();
     });
   }
 
-  /**Group the tab is in*/
-  group(): LayoutTabs | undefined {
+  /**Element of the group the tab is in*/
+  group_element(): TabsElement | undefined {
     const group = this.parentElement?.parentElement;
-    return group instanceof LayoutTabs ? group : undefined;
+    return group instanceof TabsElement ? group : undefined;
   }
 
   set_selected(selected: boolean): void {
@@ -466,8 +730,9 @@ class LayoutTab extends Base {
 
   #lines(): ContextMenuLines {
     const lines: ContextMenuLines = [];
-    const group = this.group();
-    if (this.#closable)
+    const group = this.group_element();
+    const layout = group?.layout();
+    if (this.#closable && group?.node.tabs.writable)
       lines.push(
         ctm.line({
           text: "Close",
@@ -475,30 +740,37 @@ class LayoutTab extends Base {
           on_click: () => this.content.content_close(),
         }),
       );
-    if (group && group.tabs().length > 1)
+    if (
+      group &&
+      layout &&
+      group.node.tabs.writable &&
+      group.node.tabs.ok().length > 1 &&
+      can_split(layout, group.node)
+    ) {
+      const split = (side: LayoutSide) => () =>
+        move_content(this.content, { layout, node: group.node, side });
       lines.push(
         ctm.line({
           text: "Split right",
           icon: material_vertical_split_rounded,
-          on_click: () =>
-            move_tab(this, { node: group, side: LayoutSide.RIGHT }),
+          on_click: split(LayoutSide.RIGHT),
         }),
         ctm.line({
           text: "Split down",
           icon: material_horizontal_split_rounded,
-          on_click: () =>
-            move_tab(this, { node: group, side: LayoutSide.BOTTOM }),
+          on_click: split(LayoutSide.BOTTOM),
         }),
       );
+    }
     return lines;
   }
 
   #key(e: KeyboardEvent): void {
-    const group = this.group();
+    const group = this.group_element();
     if (!group) return;
-    const tabs = group.tabs();
-    const index = tabs.indexOf(this);
-    let next: LayoutTab | undefined;
+    const tabs = group.node.tabs.ok();
+    const index = tabs.indexOf(this.content);
+    let next: ContentBase | undefined;
     if (e.key === "ArrowLeft") next = tabs[index - 1] ?? tabs.at(-1);
     else if (e.key === "ArrowRight") next = tabs[index + 1] ?? tabs[0];
     else if (e.key === "Home") next = tabs[0];
@@ -511,13 +783,13 @@ class LayoutTab extends Base {
     e.preventDefault();
     e.stopPropagation();
     if (!next) return;
-    group.activate(next);
-    next.focus();
+    write(group.node.active, next);
+    TABS.get(next)?.focus();
   }
 
   /**Shows the tab, a middle press closes it, and moving the pointer far enough drags it*/
   #press(e: PointerEvent): void {
-    const group = this.group();
+    const group = this.group_element();
     if (!group) return;
     if (e.button === 1) {
       e.preventDefault();
@@ -525,7 +797,9 @@ class LayoutTab extends Base {
       return;
     }
     if (e.button !== 0) return;
-    group.activate(this);
+    write(group.node.active, this.content);
+    //A read only tabs state locks the tabs in the group
+    if (!group.node.tabs.writable) return;
     const doc = this.ownerDocument;
     let target: DropTarget | undefined;
     this.setPointerCapture(e.pointerId);
@@ -563,7 +837,7 @@ class LayoutTab extends Base {
     this.onpointerup = () => {
       const drop = this.#dragging ? target : undefined;
       end();
-      if (drop) move_tab(this, drop);
+      if (drop) move_content(this.content, drop);
     };
     this.onpointercancel = () => {
       target = undefined;
@@ -579,28 +853,15 @@ define_element(LayoutTab);
 //     | |  | |  _  /   / /\ \| | |_ |
 //     | |__| | | \ \  / ____ \ |__| |
 //     |_____/|_|  \_\/_/    \_\_____|
-/**Where a dragged tab goes, into a tab bar at an index, or a side of a node, or a side of the whole layout*/
-type DropTarget =
-  | { group: LayoutTabs; index: number; rect?: DOMRect }
-  | { node: LayoutNode; side: LayoutSide; rect?: DOMRect }
-  | { layout: Layout; side: LayoutSide; rect?: DOMRect };
-
 /**The layout showing the drop indicator*/
 let indicated: Layout | undefined;
 function show_indicator(target: DropTarget | undefined): void {
-  const layout =
-    target &&
-    ("layout" in target
-      ? target.layout
-      : ("group" in target ? target.group : target.node).closest<Layout>(
-          "composition-layout",
-        ));
-  if (indicated && indicated !== layout) indicated.indicate(undefined);
-  indicated = layout ?? undefined;
+  if (indicated && indicated !== target?.layout) indicated.indicate(undefined);
+  indicated = target?.layout;
   indicated?.indicate(target?.rect);
 }
 
-/**Part of the rect at the side, half of it, or a quarter for a whole layout*/
+/**Part of the rect at the side*/
 function side_rect(rect: DOMRect, side: LayoutSide, part: number): DOMRect {
   const { x, y, width: w, height: h } = rect;
   switch (side) {
@@ -634,7 +895,7 @@ function near_side(
   return distance < part ? side : undefined;
 }
 
-/**Finds where the tab would go when dropped at the point, nothing where dropping changes nothing*/
+/**Finds where the tab would go when dropped at the point, nothing where dropping changes nothing or is not allowed*/
 function find_target(
   tab: LayoutTab,
   x: number,
@@ -643,13 +904,20 @@ function find_target(
   const element = tab.ownerDocument.elementFromPoint(x, y);
   const layout = element?.closest<Layout>("composition-layout");
   if (!element || !layout) return;
-  const source = tab.group();
+  const from = tab.group_element();
+  const source = from?.node;
   const alone = (group: LayoutTabs) =>
-    source === group && group.tabs().length === 1;
+    source === group && group.tabs.ok().length === 1;
+  //The last tab of a group in a read only split can not leave, the empty group could not be removed
+  const source_layout = from?.layout();
+  if (source && source_layout && alone(source)) {
+    const parent = source_layout.parent_of(source);
+    if (parent && !parent.children.writable) return;
+  }
 
   //Along the edges of a layout with splits, the whole layout is split
-  const root = layout.root;
-  if (root instanceof LayoutSplit) {
+  const root = layout.root_node();
+  if (root && is_split(root) && layout.root_writable()) {
     const rect = layout.getBoundingClientRect();
     const edge = rem_to_px(ROOT_EDGE);
     const side = near_side(
@@ -658,85 +926,48 @@ function find_target(
       y,
       Math.min(edge / rect.width, edge / rect.height),
     );
-    if (side) return { layout, side, rect: side_rect(rect, side, 0.25) };
+    if (side)
+      return { layout, root: true, side, rect: side_rect(rect, side, 0.25) };
   }
 
-  const group = element.closest<LayoutTabs>("composition-layouttabs");
-  if (!group || group.closest("composition-layout") !== layout) return;
+  const group_element = element.closest<TabsElement>("composition-layouttabs");
+  if (!group_element || group_element.layout() !== layout) return;
+  const group = group_element.node;
 
   //Over the tab bar, the tab goes between the tabs
-  const bar = group.bar.getBoundingClientRect();
+  const bar = group_element.bar.getBoundingClientRect();
   if (y < bar.bottom) {
-    if (alone(group)) return;
-    const tabs = group.tabs();
-    let index = tabs.findIndex((t) => {
-      const r = t.getBoundingClientRect();
-      return x < r.left + r.width / 2;
+    if (alone(group) || !group.tabs.writable) return;
+    const contents = group.tabs.ok();
+    let index = contents.findIndex((content) => {
+      const r = TABS.get(content)?.getBoundingClientRect();
+      return r && x < r.left + r.width / 2;
     });
-    if (index === -1) index = tabs.length;
+    if (index === -1) index = contents.length;
     if (source === group) {
-      const at = tabs.indexOf(tab);
+      const at = contents.indexOf(tab.content);
       if (index === at || index === at + 1) return;
     }
-    const before = tabs[index]?.getBoundingClientRect();
-    const after = tabs.at(-1)?.getBoundingClientRect();
-    const line = before ? before.left : (after?.right ?? bar.left);
+    const before = contents[index];
+    const after = contents.at(-1);
+    const line = before
+      ? TABS.get(before)?.getBoundingClientRect().left
+      : after && TABS.get(after)?.getBoundingClientRect().right;
     return {
+      layout,
       group,
       index,
-      rect: new DOMRect(line - 1.5, bar.top, 3, bar.height),
+      rect: new DOMRect((line ?? bar.left) - 1.5, bar.top, 3, bar.height),
     };
   }
 
   //Over the content, near an edge splits the group, in the middle joins it
-  const body = group.body.getBoundingClientRect();
+  const body = group_element.body.getBoundingClientRect();
   const side = near_side(body, x, y, EDGE_PART) ?? LayoutSide.CENTER;
-  if (side === LayoutSide.CENTER ? source === group : alone(group)) return;
-  return { node: group, side, rect: side_rect(body, side, 0.5) };
-}
-
-/**Puts a new group with the tab at the side of the node*/
-function insert_beside(node: LayoutNode, side: LayoutSide, tab: LayoutTab) {
-  const group = LayoutTabs.create();
-  group.add_tab(tab);
-  const direction: LayoutDirection =
-    side === LayoutSide.LEFT || side === LayoutSide.RIGHT ? "row" : "column";
-  const after = side === LayoutSide.RIGHT || side === LayoutSide.BOTTOM;
-  const parent = parent_of(node);
-  if (!parent) return;
-  if (parent instanceof LayoutSplit && parent.direction === direction) {
-    //Takes half the space of the node, in the split the node is in
-    const grow = node.grow() / 2;
-    node.set_grow(grow);
-    const index = parent.nodes().indexOf(node);
-    parent.insert_node(group, after ? index + 1 : index, grow);
-    return;
-  }
-  const split = LayoutSplit.create({}, direction);
-  parent.replace_node(node, split);
-  split.insert_node(node, 0, 1);
-  split.insert_node(group, after ? 1 : 0, 1);
-}
-
-/**Moves the tab with its content to the target, the group it leaves removes itself when empty*/
-function move_tab(tab: LayoutTab, target: DropTarget): void {
-  const source = tab.group();
-  if ("group" in target) {
-    if (source === target.group) target.group.move_tab(tab, target.index);
-    else {
-      source?.remove_tab(tab);
-      target.group.add_tab(tab, target.index);
-    }
-  } else if ("node" in target && target.side === LayoutSide.CENTER) {
-    source?.remove_tab(tab);
-    (target.node as LayoutTabs).add_tab(tab);
-  } else {
-    source?.remove_tab(tab);
-    //The root is found after the tab left, leaving can change it
-    const node = "layout" in target ? target.layout.root : target.node;
-    insert_beside(node, target.side, tab);
-  }
-  tab.focus();
+  if (side === LayoutSide.CENTER) {
+    if (source === group || !group.tabs.writable) return;
+  } else if (alone(group) || !can_split(layout, group)) return;
+  return { layout, node: group, side, rect: side_rect(body, side, 0.5) };
 }
 
 //      _           __     ______  _    _ _______
@@ -745,24 +976,17 @@ function move_tab(tab: LayoutTab, target: DropTarget): void {
 //     | |      / /\ \\   /| |  | | |  | |  | |
 //     | |____ / ____ \| | | |__| | |__| |  | |
 //     |______/_/    \_\_|  \____/ \____/   |_|
-/**Builds the node of the description, with tabs for its contents*/
-function build(init: LayoutInit): LayoutNode {
-  if ("tabs" in init) {
-    const group = LayoutTabs.create();
-    for (const content of init.tabs)
-      group.add_tab(LayoutTab.create({}, content), undefined, false);
-    const active = group.tabs()[init.active ?? 0];
-    if (active) group.activate(active);
-    return group;
-  }
-  const split = LayoutSplit.create({}, init.split);
-  for (const child of init.children)
-    split.insert_node(build(child), Infinity, child.size ?? 1);
-  return split;
-}
+/**Inputs of the layout*/
+const LAYOUT = {
+  /**The top node, a split or a tab group, the nodes hold states of their own, see layout_tabs and layout_split
+   * Not given the layout starts with an empty tab group, an initial value is where it starts and the layout keeps the changes itself,
+   * a writable state is written when the root changes, a read only state keeps the root, so the layout can not be split at its top*/
+  root: input_key<StateOrValROS<LayoutNode>>(),
+};
+export type LayoutOptions = BaseOptions & InputOptions<typeof LAYOUT>;
 
 /**Contents in tab groups, side by side and above each other, the user drags the tabs around*/
-class Layout extends Base implements NodeParent {
+class Layout extends Base {
   static element_name() {
     return "layout";
   }
@@ -770,51 +994,102 @@ class Layout extends Base implements NodeParent {
     return "composition";
   }
 
-  #root: LayoutNode;
-  #indicator = document.createElement("div");
+  /**The root when it is not a state*/
+  #root?: LayoutNode;
+  #root_element?: NodeElement;
+  #indicator = this.appendChild(document.createElement("div"));
+  /**Group the user worked in last*/
   #last?: LayoutTabs;
 
-  /**@param init the tree of splits and tab groups the layout starts with*/
-  constructor(init: LayoutInit) {
+  constructor() {
     super();
-    this.#root = this.appendChild(build(init));
     this.#indicator.className = "indicator";
-    this.appendChild(this.#indicator);
     this.addEventListener("focusin", (e) => {
       const group = (e.target as Element).closest("composition-layouttabs");
-      if (group instanceof LayoutTabs) this.#last = group;
+      if (group instanceof TabsElement && group.layout() === this)
+        this.#last = group.node;
     });
   }
 
-  /**The top node, a split or a group*/
-  get root(): LayoutNode {
-    return this.#root;
+  [CREATE](options: LayoutOptions): void {
+    super[CREATE](options);
+    if (options.root === undefined) this.#show_root(layout_tabs());
   }
 
-  /**All contents in the layout*/
-  get contents(): ContentBase[] {
-    return [...this.querySelectorAll("composition-layouttab")]
-      .filter((tab) => tab.closest("composition-layout") === this)
-      .map((tab) => (tab as LayoutTab).content);
+  set(options: LayoutOptions): this {
+    super.set(options);
+    this.set_input(LAYOUT.root, options.root, (root) => {
+      this.#root = state.is.state(options.root) ? undefined : root.value;
+      this.#show_root(root.value);
+    });
+    return this;
+  }
+
+  /**The top node*/
+  root_node(): LayoutNode | undefined {
+    return this.input_state(LAYOUT.root)?.ok() ?? this.#root;
+  }
+
+  /**Whether the root can be replaced, it is not a read only state*/
+  root_writable(): boolean {
+    return this.input_state(LAYOUT.root)?.writable ?? true;
+  }
+
+  /**Replaces the root, writes the state, or keeps it for an initial value*/
+  write_root(node: LayoutNode): void {
+    const root = this.input_state(LAYOUT.root);
+    if (root) return write(root, node);
+    this.#root = node;
+    this.#show_root(node);
+  }
+
+  /**The split holding the node, undefined for the root*/
+  parent_of(node: LayoutNode): LayoutSplit | undefined {
+    const find = (split: LayoutNode): LayoutSplit | undefined => {
+      if (!is_split(split)) return undefined;
+      for (const child of split.children.ok())
+        if (child === node) return split;
+        else {
+          const found = find(child);
+          if (found) return found;
+        }
+      return undefined;
+    };
+    const root = this.root_node();
+    return root && find(root);
   }
 
   /**Opens content in the layout, content already in it is shown*/
   open(content: ContentBase, options: LayoutOpenOptions = {}): void {
-    const open = TABS.get(content);
+    const root = this.root_node();
+    if (!root) return;
+    const open = group_of(root, content);
     if (open) {
-      open.group()?.activate(open);
+      write(open.active, content);
       return;
     }
-    const tab = LayoutTab.create({}, content);
-    const beside = options.beside && TABS.get(options.beside)?.group();
-    const last = this.#last?.closest("composition-layout") === this;
-    const group =
-      beside ??
-      (last ? this.#last : undefined) ??
-      (this.querySelector("composition-layouttabs") as LayoutTabs);
+    const beside = options.beside && group_of(root, options.beside);
+    const last =
+      this.#last && (this.#last === root || this.parent_of(this.#last))
+        ? this.#last
+        : undefined;
+    const group = beside || last || first_group(root);
+    if (!group) return;
     const side = options.side ?? LayoutSide.CENTER;
-    if (side === LayoutSide.CENTER) group.add_tab(tab);
-    else insert_beside(group, side, tab);
+    if (side !== LayoutSide.CENTER)
+      return insert_beside(this, group, side, content);
+    write(group.tabs, state.a.write.push(content));
+    write(group.active, content);
+  }
+
+  /**All contents in the layout*/
+  contents(): ContentBase[] {
+    const collect = (node: LayoutNode): ContentBase[] =>
+      is_split(node)
+        ? node.children.ok().flatMap(collect)
+        : [...node.tabs.ok()];
+    const root = this.root_node();
+    return root ? collect(root) : [];
   }
 
   /**Shows where a dragged tab goes, the rect is in the coordinates of the page*/
@@ -830,29 +1105,20 @@ class Layout extends Base implements NodeParent {
     });
   }
 
-  replace_node(old: LayoutNode, node: LayoutNode): void {
-    if (old !== this.#root) return;
-    this.replaceChild(node, old);
-    node.set_grow(1);
-    this.#root = node;
+  #show_root(node: LayoutNode): void {
+    const element = element_of(node);
+    if (this.#root_element === element) return;
+    if (this.#root_element?.parentElement === this) this.#root_element.remove();
+    this.#root_element = element;
+    this.insertBefore(element, this.#indicator);
   }
-
-  /**Only reached when the root split ends up empty, the layout then gets an empty group*/
-  remove_node(node: LayoutNode): void {
-    if (node === this.#root) this.replace_node(node, LayoutTabs.create());
-  }
-
-  update_min(): void {}
 }
 define_element(Layout);
 
 export type { Layout };
 
 /**Creates a layout of tab groups, side by side and above each other, the user drags the tabs around
- * @param init the tree of splits and tab groups it starts with*/
-export function layout(
-  init: LayoutInit = { tabs: [] },
-  options: BaseOptions = {},
-): Layout {
-  return Layout.create(options, init);
+ * The structure is the root input, nodes made with layout_split and layout_tabs, each holding states the layout writes*/
+export function layout(options: LayoutOptions = {}): Layout {
+  return Layout.create(options);
 }

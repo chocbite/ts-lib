@@ -3,10 +3,11 @@ export {
   LayoutSide,
   type Layout,
   type LayoutDirection,
-  type LayoutInit,
+  type LayoutNode,
   type LayoutOpenOptions,
-  type LayoutSplitInit,
-  type LayoutTabsInit,
+  type LayoutOptions,
+  type LayoutSplit,
+  type LayoutTabs,
 } from "./layout";
 export type { Panel, PanelOptions } from "./panel";
 export { CompAnchor, type CompPosition } from "./shared";
@@ -17,13 +18,15 @@ import {
 } from "./customization";
 import { panel, panel_container } from "./container";
 import { content } from "./content";
-import { layout } from "./layout";
+import { layout, layout_split, layout_tabs } from "./layout";
 import { get_element_anchor_position } from "./shared";
 import { topbar, topbar_button, topbar_label } from "./topbar";
 
 export const comp = {
   content,
   layout,
+  layout_split,
+  layout_tabs,
   panel,
   panel_container,
   topbar,

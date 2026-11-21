@@ -2,6 +2,7 @@ import {
   comp,
   LayoutSide,
   type ContentCreateOptions,
+  type LayoutNode,
 } from "@chocbite/ts-lib-ui/composition";
 import ctm from "@chocbite/ts-lib-ui/context_menu";
 import {
@@ -10,17 +11,38 @@ import {
   material_settings_rounded,
   material_terminal_rounded,
 } from "@chocbite/ts-lib-ui/icons";
+import { ok } from "@chocbite/ts-lib/result";
 import state from "@chocbite/ts-lib/state";
 import { box, controls, demo_error, section } from "../../../helpers";
+
+/**Names of the demo contents, for the text of the tree*/
+const NAMES = new WeakMap<object, string>();
 
 /**Content with a text saying what it is, the text repeated so scrolling can be tried*/
 const demo = (options: ContentCreateOptions, text: string, lines = 1) => {
   const c = comp.content(options);
+  NAMES.set(c, typeof options.title === "string" ? options.title : text);
   c.style.padding = "1rem";
   c.style.boxSizing = "border-box";
   for (let i = 0; i < lines; i++)
     c.appendChild(document.createElement("p")).textContent = text;
   return c;
+};
+
+/**The tree of the layout as text, from the states of its nodes*/
+const describe = (node: LayoutNode, depth = 0): string => {
+  const pad = "  ".repeat(depth);
+  const size = node.size.ok().toFixed(2);
+  if ("children" in node)
+    return `${pad}${node.direction} ${size}\n${node.children
+      .ok()
+      .map((c) => describe(c, depth + 1))
+      .join("\n")}`;
+  const active = node.active.ok();
+  return `${pad}tabs ${size}: ${node.tabs
+    .ok()
+    .map((c) => (c === active ? "*" : "") + (NAMES.get(c) ?? "?"))
+    .join(" | ")}`;
 };
 
 //      _           __     ______  _    _ _______
@@ -32,7 +54,7 @@ const demo = (options: ContentCreateOptions, text: string, lines = 1) => {
 {
   const sec = section(
     "Layout",
-    "Drag a tab: onto a tab bar to put it between the tabs, onto the middle of a group to add it there, onto an edge of a group to split the group, onto the outer edge of the layout to split the whole layout. Escape while dragging cancels. A group left empty disappears, a split left with one group gives its space back. Drag the lines between groups to size them, a group never gets smaller than its contents' min width, Wide has min width 24rem. Middle click or × closes closable tabs, right click a tab for Close, Split right and Split down. Arrow keys move between the tabs of a group, Enter goes into the content. The active tab of the group with focus is marked blue",
+    "Drag a tab: onto a tab bar to put it between the tabs, onto the middle of a group to add it there, onto an edge of a group to split the group, onto the outer edge of the layout to split the whole layout. Escape while dragging cancels. A group left empty disappears, a split left with one group gives its space back. Drag the lines between groups to size them, a group never gets smaller than its contents' min width, Wide has min width 24rem. Middle click or × closes closable tabs, right click a tab for Close, Split right and Split down. Arrow keys move between the tabs of a group, Enter goes into the content. The layout is a tree of states, the text below follows them, it changes only when the layout writes them",
   );
   const title = state.from_w("Renamed by state");
   let count = 0;
@@ -44,25 +66,24 @@ const demo = (options: ContentCreateOptions, text: string, lines = 1) => {
   files.set({
     context_menu: () => [ctm.line({ text: "Files menu line" })],
   });
-  const layout = comp.layout({
-    split: "row",
-    children: [
-      { tabs: [files], size: 1 },
-      {
-        split: "column",
-        size: 3,
-        children: [
-          {
-            tabs: [
-              demo(
-                {
-                  title: "Readme.md",
-                  icon: material_description_rounded,
-                  closable: true,
-                },
-                "Readme, closable",
-                40,
-              ),
+  const readme = demo(
+    {
+      title: "Readme.md",
+      icon: material_description_rounded,
+      closable: true,
+    },
+    "Readme, closable",
+    40,
+  );
+  const root = state.ok_w<LayoutNode>(
+    comp.layout_split("row", [
+      comp.layout_tabs([files]),
+      comp.layout_split(
+        "column",
+        [
+          comp.layout_tabs(
+            [
+              readme,
               demo(
                 { title, icon: material_description_rounded, closable: true },
                 "The title is a state, change it with the buttons",
@@ -72,28 +93,28 @@ const demo = (options: ContentCreateOptions, text: string, lines = 1) => {
                 "Min width 24rem, the group and the splits around it keep at least that",
               ),
             ],
-            size: 3,
-          },
-          {
-            tabs: [
-              demo(
-                { title: "Terminal", icon: material_terminal_rounded },
-                "Terminal, not closable",
-              ),
-              demo(
-                {
-                  title: "Settings",
-                  icon: material_settings_rounded,
-                  closable: true,
-                },
-                "Settings",
-              ),
-            ],
-          },
+            { size: 3 },
+          ),
+          comp.layout_tabs([
+            demo(
+              { title: "Terminal", icon: material_terminal_rounded },
+              "Terminal, not closable",
+            ),
+            demo(
+              {
+                title: "Settings",
+                icon: material_settings_rounded,
+                closable: true,
+              },
+              "Settings",
+            ),
+          ]),
         ],
-      },
-    ],
-  });
+        3,
+      ),
+    ]),
+  );
+  const layout = comp.layout({ root });
   controls(sec, {
     "Open new": () =>
       layout.open(
@@ -110,7 +131,7 @@ const demo = (options: ContentCreateOptions, text: string, lines = 1) => {
         ),
         { beside: files, side: LayoutSide.RIGHT },
       ),
-    "Show Files": () => layout.open(files),
+    "Show Readme": () => layout.open(readme),
     Rename: () => title.set_ok(`Renamed ${++count}`),
     "Title error": () => title.set_err(demo_error("No title")),
   });
@@ -120,22 +141,76 @@ const demo = (options: ContentCreateOptions, text: string, lines = 1) => {
     height: "30rem",
     border: "1px solid #8884",
   }).appendChild(layout);
+  const tree = sec.appendChild(document.createElement("pre"));
+  const show = () => (tree.textContent = describe(root.ok()));
+  show();
+  state.v.viewer(root, show);
 }
 
+//      _      ____   _____ _  ________ _____
+//     | |    / __ \ / ____| |/ /  ____|  __ \
+//     | |   | |  | | |    | ' /| |__  | |  | |
+//     | |   | |  | | |    |  < |  __| | |  | |
+//     | |___| |__| | |____| . \| |____| |__| |
+//     |______\____/ \_____|_|\_\______|_____/
+{
+  section(
+    "Locked parts",
+    "Read only states lock parts of a layout. Left: the tabs are a read only state, they can not be dragged, closed or reordered, and nothing can be dropped into the group, switching tabs still works. Right: the split is read only, tabs move between the two groups but no group can be added or removed, so the last tab of a group can not leave it",
+  );
+  const r = document.querySelector("section:last-of-type")!;
+  const row = r.appendChild(document.createElement("div"));
+  row.style.cssText = "display:flex;gap:1rem;flex-wrap:wrap";
+  const tabs = (name: string) =>
+    [1, 2, 3].map((i) =>
+      demo({ title: `${name} ${i}`, closable: true }, `${name} ${i}`),
+    );
+  box(row, "Read only tabs", { width: "28rem", height: "14rem" }).appendChild(
+    comp.layout({
+      root: {
+        tabs: state.ros(ok(tabs("Locked"))),
+        active: state.ok_w<undefined | ReturnType<typeof demo>>(undefined),
+        size: state.ok_w(1),
+      },
+    }),
+  );
+  box(row, "Read only split", {
+    width: "28rem",
+    height: "14rem",
+  }).appendChild(
+    comp.layout({
+      root: {
+        direction: "row",
+        children: state.ros(
+          ok([comp.layout_tabs(tabs("A")), comp.layout_tabs(tabs("B"))]),
+        ),
+        size: state.ok_w(1),
+      },
+    }),
+  );
+}
+
+//      _______          ______
+//     |__   __\ \        / / __ \
+//        | |   \ \  /\  / / |  | |
+//        | |    \ \/  \/ /| |  | |
+//        | |     \  /\  / | |__| |
+//        |_|      \/  \/   \____/
 {
   const sec = section(
     "Two layouts",
-    "Tabs can be dragged from one layout to the other",
+    "Tabs can be dragged from one layout to the other, each layout keeps its own initial root",
   );
   const make = (name: string) =>
     comp.layout({
-      tabs: [1, 2, 3].map((i) =>
-        demo({ title: `${name} ${i}`, closable: true }, `${name} ${i}`),
+      root: comp.layout_tabs(
+        [1, 2, 3].map((i) =>
+          demo({ title: `${name} ${i}`, closable: true }, `${name} ${i}`),
+        ),
       ),
     });
-  const r = document.createElement("div");
+  const r = sec.appendChild(document.createElement("div"));
   r.style.cssText = "display:flex;gap:1rem;flex-wrap:wrap";
-  sec.appendChild(r);
   box(r, "Left", { width: "28rem", height: "16rem" }).appendChild(make("Left"));
   box(r, "Right", { width: "28rem", height: "16rem" }).appendChild(
     make("Right"),
