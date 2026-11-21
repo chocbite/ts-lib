@@ -1,9 +1,10 @@
 import { Base, define_element } from "#base";
 import { get_cursor_position, set_cursor_position } from "#selection";
 import { some } from "@chocbite/ts-lib/result";
-import state from "@chocbite/ts-lib/state";
+import state, { type StateOrValRES } from "@chocbite/ts-lib/state";
 import { KeyboardBase } from "./base";
 import "./keyboard_keys.scss";
+import { keyboard_language_picker } from "./picker";
 import "./shared";
 import {
   KeyboardConfig,
@@ -14,6 +15,76 @@ import {
 const SPECIAL_KEYS: ReadonlySet<string> = new Set(
   Object.values(KeyboardSpecialKeys),
 );
+
+/**How long a key is held before the keys it can type when held are shown*/
+const HOLD_MS = 400;
+/**How far a held key is slid before the key under the pointer is chosen instead of the first*/
+const SLIDE_PX = 8;
+
+const COMBINING = /^\p{M}/u;
+/**The text showing what a key types, a combining mark on a dotted circle, alone it would sit on nothing*/
+const shown = (key: string) => (COMBINING.test(key) ? "◌" + key : key);
+
+/**The keys a held key can type, in a row above it, the one under the pointer is typed when the key is let go*/
+class KeyboardHold extends Base {
+  static element_name(): string {
+    return "hold";
+  }
+
+  static element_name_space(): string {
+    return "onscreen-keyboard";
+  }
+
+  #items: HTMLElement[];
+  #keys: readonly string[];
+  #chosen = 0;
+
+  constructor(
+    keyboard: HTMLElement,
+    key: HTMLElement,
+    keys: readonly string[],
+  ) {
+    super();
+    this.#keys = keys;
+    const key_rect = key.getBoundingClientRect();
+    this.style.gridTemplateColumns = `repeat(${keys.length}, ${key_rect.width}px)`;
+    this.style.height = key_rect.height + "px";
+    this.#items = keys.map((k) => {
+      const item = this.appendChild(document.createElement("div"));
+      item.textContent = shown(k);
+      return item;
+    });
+    keyboard.appendChild(this);
+    const board = keyboard.getBoundingClientRect();
+    const width = this.getBoundingClientRect().width;
+    //The first key is right above the held key, so letting go without sliding types it, the hint in the corner
+    const padding = parseFloat(getComputedStyle(this).paddingLeft) || 0;
+    const left = key_rect.left - board.left - padding;
+    this.style.left = Math.max(0, Math.min(left, board.width - width)) + "px";
+    this.style.bottom = board.bottom - key_rect.top + 4 + "px";
+    this.#mark(0);
+  }
+
+  #mark(index: number): void {
+    this.#items[this.#chosen]?.removeAttribute("active");
+    this.#chosen = index;
+    this.#items[index]?.setAttribute("active", "true");
+  }
+
+  /**Chooses the key at the horizontal position of the pointer, the first or last when the pointer is beyond them*/
+  track(x: number): void {
+    const index = this.#items.findIndex(
+      (item) => x < item.getBoundingClientRect().right,
+    );
+    this.#mark(index === -1 ? this.#items.length - 1 : index);
+  }
+
+  /**The key under the pointer*/
+  get chosen(): string {
+    return this.#keys[this.#chosen];
+  }
+}
+define_element(KeyboardHold);
 
 class KeyboardKey extends Base {
   static element_name(): string {
@@ -28,6 +99,8 @@ class KeyboardKey extends Base {
     keyboard: Keyboard_Keys,
     text: string,
     key: string,
+    hold: readonly string[] | undefined,
+    dead: boolean,
     ri: number,
     col_count: number,
     rows: number,
@@ -40,16 +113,77 @@ class KeyboardKey extends Base {
     this.style.gridColumn = (col_count + 1).toString();
     this.style.gridRowEnd = `${ri + 1 + rows}`;
     this.style.gridColumnEnd = `${col_count + 1 + cols}`;
-    this.onclick = () => keyboard.execute_key(key);
+    if (hold?.length) this.#holdable(keyboard, key, hold);
+    else this.onclick = () => keyboard.execute_key(key);
     //Special and layer keys look different from the keys that type
     if (SPECIAL_KEYS.has(key)) this.setAttribute("special", key);
     else if (key.startsWith("layer:")) this.setAttribute("special", "layer");
+    //A dead key shows that it is waiting for the next key
+    if (dead) {
+      this.setAttribute("dead", "");
+      this.attach_state_ROA_to_attribute_map("active", keyboard.pending, (v) =>
+        some(v === key ? "true" : "false"),
+      );
+    }
     if (key.includes("layer")) {
       const layer_name = key.split(":")[1];
       this.attach_state_ROA_to_attribute_map("active", keyboard.layer, (v) =>
         some(v === layer_name ? "true" : "false"),
       );
     }
+  }
+
+  /**A tap types the key, holding it shows what else it types, which is typed by letting go over it*/
+  #holdable(
+    keyboard: Keyboard_Keys,
+    key: string,
+    hold: readonly string[],
+  ): void {
+    this.setAttribute("hint", shown(hold[0]));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let popup: KeyboardHold | undefined;
+    let held = false;
+    let start = 0;
+    let sliding = false;
+    const stop = () => {
+      clearTimeout(timer);
+      timer = undefined;
+      popup?.remove();
+      popup = undefined;
+    };
+    this.onpointerdown = (e) => {
+      if (e.button !== 0) return;
+      stop();
+      held = false;
+      //The moves while held come to the key, also outside it, a pointer that is no longer down cannot be captured
+      try {
+        this.setPointerCapture(e.pointerId);
+      } catch {
+        /* empty */
+      }
+      start = e.clientX;
+      sliding = false;
+      timer = setTimeout(() => {
+        held = true;
+        popup = new KeyboardHold(keyboard, this, hold);
+      }, HOLD_MS);
+    };
+    //The first key stays chosen until the pointer slides, so a finger shaking a little still types the hint
+    this.onpointermove = (e) => {
+      if (!popup) return;
+      sliding ||= Math.abs(e.clientX - start) > SLIDE_PX;
+      if (sliding) popup.track(e.clientX);
+    };
+    this.onpointerup = () => {
+      const chosen = popup?.chosen;
+      stop();
+      if (chosen) keyboard.execute_key(chosen);
+    };
+    this.onpointercancel = stop;
+    this.onclick = () => {
+      if (held) held = false;
+      else keyboard.execute_key(key);
+    };
   }
 }
 define_element(KeyboardKey);
@@ -89,6 +223,8 @@ class KeyboardLayer extends Base {
             keyboard,
             text,
             k.key ?? text,
+            k.hold,
+            config.dead_keys !== false && keyboard.is_dead(k.key ?? text),
             ri,
             col_count,
             rows,
@@ -154,26 +290,63 @@ export class Keyboard_Keys extends KeyboardBase {
   #layer = state.ok_w("default");
   readonly layer = this.#layer.read_only;
   #changed = false;
+  #container = this.appendChild(document.createElement("div"));
+  #config?: KeyboardConfig;
+  #layers: Record<string, KeyboardLayer> = {};
+  #layer_configs: Record<string, KeyboardLayerConfig> = {};
+  #dead_keys: { readonly [keys: string]: string } = {};
+  #dead_starts = new Set<string>();
+  #pending = state.ok_w("");
+  /**The dead key waiting for the next key, empty when none*/
+  readonly pending = this.#pending.read_only;
+  #close_picker?: () => void;
 
-  constructor(config: KeyboardConfig) {
+  /**@param config the layout, or a state of it to change the layout while the keyboard is in use*/
+  constructor(config: StateOrValRES<KeyboardConfig>) {
     super();
-    const container = this.appendChild(document.createElement("div"));
     this.addEventListener("mousedown", (e) => e.preventDefault());
-
+    //Holding a key on a touch screen would open the context menu
+    this.addEventListener("contextmenu", (e) => e.preventDefault());
     this.classList.add("keyboard");
-    const layer_map: Record<string, KeyboardLayer> = {};
-    [
-      ["default", config.default] as [string, KeyboardLayerConfig],
-      ...(config.layers ? Object.entries(config.layers) : []),
-    ].forEach((l) => {
-      const [layer_name, layer_config] = l;
-      const layer = new KeyboardLayer(this, layer_config);
-      layer_map[layer_name] = layer;
-    });
 
-    this.attach_state(this.#layer, (v) => {
-      container.replaceChildren(layer_map[v.value] ?? layer_map["default"]);
-    });
+    this.attach_state(this.#layer, () => this.#show());
+    if (state.is.state_of(config))
+      this.attach_state(config, (v) => {
+        if (v.ok) this.#build(v.value);
+      });
+    else this.#build(config);
+  }
+
+  /**Whether the key is a dead key of the layout, it types nothing until the next key*/
+  is_dead(key: string): boolean {
+    return this.#dead_starts.has(key);
+  }
+
+  #build(config: KeyboardConfig): void {
+    if (config === this.#config) return;
+    this.#config = config;
+    this.#pending.write("");
+    this.#dead_keys = config.dead_keys ?? {};
+    this.#dead_starts = new Set(
+      Object.keys(this.#dead_keys)
+        .map((keys) => [...keys])
+        .filter((keys) => keys.length > 1)
+        .map((keys) => keys.slice(0, -1).join("")),
+    );
+    this.#layers = {};
+    this.#layer_configs = {
+      ...config.layers,
+      default: config.default,
+    };
+    for (const [name, layer] of Object.entries(this.#layer_configs))
+      this.#layers[name] = new KeyboardLayer(this, layer);
+    this.#show();
+  }
+
+  #show(): void {
+    const layer = this.#layers[this.#layer.ok()] ?? this.#layers["default"];
+    if (layer && this.#container.firstChild !== layer)
+      this.#container.replaceChildren(layer);
   }
 
   open(element: HTMLElement): void {
@@ -185,6 +358,8 @@ export class Keyboard_Keys extends KeyboardBase {
 
   close(): void {
     this.#dispatch_change();
+    this.#pending.write("");
+    this.#close_picker?.();
     super.close();
   }
 
@@ -307,6 +482,32 @@ export class Keyboard_Keys extends KeyboardBase {
       return;
     }
     if (key === KeyboardSpecialKeys.Close) return this.close();
+    if (key === KeyboardSpecialKeys.Language) {
+      this.#close_picker?.();
+      const close = keyboard_language_picker(this, this.elem);
+      this.#close_picker = () => {
+        this.#close_picker = undefined;
+        close();
+      };
+      return;
+    }
+
+    const typing = !SPECIAL_KEYS.has(key);
+    //A dead key waits for the next key, which types what the two make together, or both when they make nothing
+    //A layer without dead keys, like the symbols, types its keys as they are
+    const dead =
+      (this.#layer_configs[this.#layer.ok()] ?? this.#layer_configs.default)
+        ?.dead_keys !== false;
+    const pending = this.#pending.ok();
+    if (pending) {
+      this.#pending.write("");
+      if (typing)
+        key = (dead && this.#dead_keys[pending + key]) || pending + key;
+      else if (key === KeyboardSpecialKeys.Backspace) return;
+    } else if (typing && dead && this.#dead_starts.has(key)) {
+      this.#pending.write(key);
+      return;
+    }
 
     const special_keys: Partial<
       Record<KeyboardSpecialKeys, KeyboardEventInit>
@@ -323,7 +524,7 @@ export class Keyboard_Keys extends KeyboardBase {
     };
 
     if (this.#dis_keydown(opts)) {
-      if (key.length === 1) {
+      if (typing) {
         this.#dis_keypress(opts);
         this.#edit(key, "insertText");
       } else if (key === KeyboardSpecialKeys.Backspace)

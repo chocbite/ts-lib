@@ -1,4 +1,6 @@
 import {
+  KEYBOARD_LANGUAGE,
+  KEYBOARD_LAYOUT,
   keyboard_create,
   keyboard_open,
   KeyboardType,
@@ -43,7 +45,8 @@ function status(parent: HTMLElement): HTMLElement {
   });
   const line = status(sec);
   VIRTUAL_KEYBOARD.sub((v) => {
-    line.textContent = "VIRTUAL_KEYBOARD: " + (v.ok ? String(v.value) : "error");
+    line.textContent =
+      "VIRTUAL_KEYBOARD: " + (v.ok ? String(v.value) : "error");
   }, true);
 }
 
@@ -108,7 +111,8 @@ function status(parent: HTMLElement): HTMLElement {
   for (const field of all) {
     const show = (e: Event) => {
       const value =
-        field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement
+        field instanceof HTMLInputElement ||
+        field instanceof HTMLTextAreaElement
           ? field.value
           : field.textContent;
       log.textContent = `${e.type} ${JSON.stringify(value)}`;
@@ -219,7 +223,12 @@ function status(parent: HTMLElement): HTMLElement {
     default: {
       max_width: 30,
       keys: [
-        [{ text: "A" }, { text: "B" }, { text: "C" }, { text: "⌫", key: "backspace" }],
+        [
+          { text: "A" },
+          { text: "B" },
+          { text: "C" },
+          { text: "⌫", key: "backspace" },
+        ],
         [{ text: "D", cols: 2 }, 1, { text: "Tall", key: "!", rows: 2 }],
         [{ text: "123", key: "layer:numbers", cols: 3 }],
         [{ text: "Close", key: "close", cols: 4 }],
@@ -229,8 +238,18 @@ function status(parent: HTMLElement): HTMLElement {
       numbers: {
         max_width: 30,
         keys: [
-          [{ text: "1" }, { text: "2" }, { text: "3" }, { text: "⌫", key: "backspace" }],
-          [{ text: "4" }, { text: "5" }, { text: "6" }, { text: "⏎", key: "enter" }],
+          [
+            { text: "1" },
+            { text: "2" },
+            { text: "3" },
+            { text: "⌫", key: "backspace" },
+          ],
+          [
+            { text: "4" },
+            { text: "5" },
+            { text: "6" },
+            { text: "⏎", key: "enter" },
+          ],
           [{ text: "ABC", key: "layer:numbers", cols: 4 }],
         ],
       },
@@ -275,4 +294,104 @@ function status(parent: HTMLElement): HTMLElement {
     type: "number",
     value: "0",
   });
+}
+
+//     _                _   _  _____ _    _  _____ ______  _____
+//    | |        /\    | \ | |/ ____| |  | |/ ____|  ____|/ ____|
+//    | |       /  \   |  \| | |  __| |  | | (___ | |__  | (___
+//    | |      / /\ \  | . ` | | |_ | |  | |\___ \|  __|  \___ \
+//    | |____ / ____ \ | |\  | |__| | |__| |____) | |____ ____) |
+//    |______/_/    \_\|_| \_|\_____|\____/|_____/|______|_____/
+{
+  const sec = section(
+    "Languages",
+    "The text keyboard has the layout of KEYBOARD_LANGUAGE, or of the browser when it is empty. Switch with the buttons, or with the globe key on the keyboard, which opens the list by continent and country. Try the dead keys: ´ then e is é, ¨ then u is ü on Danish. Hold a key for its AltGr character and accented letters, like 2 for @ and e for é è ê ë on Danish, slide to one and let go. The Sym key has two pages of symbols. Look at the staggered rows, and scripts like Hindi (combining marks on a dotted circle) and Arabic",
+  );
+  const line = status(sec);
+  KEYBOARD_LAYOUT.sub((v) => {
+    line.textContent = `KEYBOARD_LANGUAGE: ${JSON.stringify(KEYBOARD_LANGUAGE.ok())}, KEYBOARD_LAYOUT: ${v.value.id} (${v.value.name})`;
+  }, true);
+  const target = input(row(sec), "Text keyboard", {
+    type: "text",
+    "data-keyboard-manual": "true",
+    placeholder: "Click to open",
+  });
+  target.addEventListener("click", () =>
+    keyboard_open(target, KeyboardType.Text),
+  );
+  const buttons: { [text: string]: () => void } = {
+    "Browser (empty)": () => void KEYBOARD_LANGUAGE.write(""),
+  };
+  for (const id of [
+    "da",
+    "nb",
+    "sv",
+    "de",
+    "de-CH",
+    "fr",
+    "en",
+    "en-GB",
+    "en-dvorak",
+    "es",
+    "pl",
+    "ru",
+    "el",
+    "hi",
+    "ar",
+    "he",
+  ])
+    buttons[id] = () => void KEYBOARD_LANGUAGE.write(id);
+  controls(sec, buttons);
+}
+
+//      ____  _      _____    _______ ________   _________
+//     / __ \| |    |  __ \  |__   __|  ____\ \ / /__   __|
+//    | |  | | |    | |  | |    | |  | |__   \ V /   | |
+//    | |  | | |    | |  | |    | |  |  __|   > <    | |
+//    | |__| | |____| |__| |    | |  | |____ / . \   | |
+//     \____/|______|_____/     |_|  |______/_/ \_\  |_|
+//A copy of the text keyboard from before the languages, to compare the new layouts with, remove when they are done
+{
+  const sec = section(
+    "Old text keyboard",
+    "The text keyboard as it was before the languages, frozen as a custom keyboard. Compare it with the Languages section above: key sizes, which characters are where, and the shift and Sym layers",
+  );
+  type Key = { text: string; key?: string; cols?: number };
+  const chars = (s: string): Key[] => s.split("").map((text) => ({ text }));
+  const bottom: (Key | number)[] = [
+    { text: "Sym", key: "layer:sym", cols: 5 },
+    6,
+    { text: "Space", key: " ", cols: 20 },
+    { text: "🡸", key: "left" },
+    { text: "🡺", key: "right" },
+    { text: "🗙", key: "close", cols: 5 },
+  ];
+  const layer = (top: string, d: string, c: string, b: string) => ({
+    max_width: 60,
+    key_cols: 4,
+    keys: [
+      [...chars(top), { text: "⌫", key: "backspace" }],
+      [2, ...chars(d)],
+      [
+        { text: "Esc", key: "escape", cols: 3 },
+        ...chars(c),
+        { text: "⏎", key: "enter", cols: 5 },
+      ],
+      [{ text: "⇧", key: "layer:shift", cols: 5 }, ...chars(b)],
+      bottom,
+    ],
+  });
+  const old_text = keyboard_create({
+    default: layer("1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm,."),
+    layers: {
+      shift: layer("1234567890", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM;:"),
+      sym: layer('!"#¤%&/()=', "+@£$€?{[]}", "-_½§¨^~'*", "<>|\\°`¶"),
+    },
+  });
+  const target = input(row(sec), "Old text keyboard", {
+    type: "text",
+    "data-keyboard-manual": "true",
+    placeholder: "Click to open",
+  });
+  target.addEventListener("click", () => keyboard_open(target, old_text));
 }

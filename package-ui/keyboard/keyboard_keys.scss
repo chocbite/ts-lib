@@ -52,3 +52,40 @@ onscreen-keyboard-key {
     filter: brightness(0.9);
   }
 }
+
+//What a key types when held, small in the top right corner
+onscreen-keyboard-key[hint] {
+  position: relative;
+
+  &::after {
+    content: attr(hint);
+    position: absolute;
+    top: 0.1rem;
+    right: 0.25rem;
+    font-size: clamp(0.6rem, 1.4vw, 0.85rem);
+    opacity: 0.6;
+  }
+}
+
+//The keys a held key types, in a row above it, the one under the pointer in the accent color
+onscreen-keyboard-hold {
+  position: absolute;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  border-radius: tray.$radius;
+  background-color: var(--keyboard-colors-background);
+  box-shadow: 0 0.125rem 0.75rem 0 var(--keyboard-colors-shadow);
+  font-size: clamp(1rem, 2.6vw, 1.6rem);
+
+  > div {
+    @include tray.key;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  > div[active="true"] {
+    @include tray.accent;
+  }
+}

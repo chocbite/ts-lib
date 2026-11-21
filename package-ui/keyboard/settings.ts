@@ -18,3 +18,14 @@ SETTINGS.register(
   PRIVATE_VIRTUAL_KEYBOARD,
 );
 export const VIRTUAL_KEYBOARD = PRIVATE_VIRTUAL_KEYBOARD.read_write;
+
+//The language of the text keyboard, the id of a layout like "da" or "de-CH", empty to follow the language of the browser
+const LANGUAGE_ID = "language";
+const PRIVATE_KEYBOARD_LANGUAGE = st.rosw(SETTINGS.get(LANGUAGE_ID, ""), true);
+SETTINGS.register(
+  LANGUAGE_ID,
+  "Keyboard Language",
+  "Layout of the text keyboard, empty to follow the language of the browser",
+  PRIVATE_KEYBOARD_LANGUAGE,
+);
+export const KEYBOARD_LANGUAGE = PRIVATE_KEYBOARD_LANGUAGE.read_write;

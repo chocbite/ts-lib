@@ -1,4 +1,5 @@
 import { DOCUMENT_HANDLER } from "#document";
+import type { StateOrValRES } from "@chocbite/ts-lib/state";
 import { KeyboardBase } from "./base";
 import { keyboard_type } from "./helpers";
 import { Keyboard_Color } from "./keyboard_color";
@@ -16,7 +17,15 @@ import { VIRTUAL_KEYBOARD } from "./settings";
 import { EMAIL_KEYBOARD, TEXT_KEYBOARD } from "./text";
 import { KeyboardConfig, KeyboardType } from "./types";
 
-export { VIRTUAL_KEYBOARD } from "./settings";
+export type { CldrLayout, CldrLayoutInfo, CldrRows } from "./languages";
+export {
+  KEYBOARD_LAYOUT,
+  KEYBOARD_LAYOUTS,
+  keyboard_layout,
+  keyboard_layout_config,
+  keyboard_layout_for,
+} from "./languages";
+export { KEYBOARD_LANGUAGE, VIRTUAL_KEYBOARD } from "./settings";
 export { KeyboardSpecialKeys, KeyboardType } from "./types";
 export type {
   KeyboardConfig,
@@ -87,7 +96,9 @@ DOCUMENT_HANDLER.events.on("added", (e) => {
   else e.data.removeEventListener("focusin", on_focus);
 });
 
-/** Creates a new on-screen keyboard instance with the specified configuration */
-export function keyboard_create(config: KeyboardConfig): Keyboard_Keys {
+/** Creates a new on-screen keyboard instance with the specified configuration, or a state of it to change the layout while in use */
+export function keyboard_create(
+  config: StateOrValRES<KeyboardConfig>,
+): Keyboard_Keys {
   return new Keyboard_Keys(config);
 }
