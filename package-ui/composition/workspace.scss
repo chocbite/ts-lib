@@ -6,10 +6,3 @@ composition-workspace {
   height: 100%;
   overflow: hidden;
 }
-
-//The layout of a panel fills it
-composition-workspacepanel {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-}

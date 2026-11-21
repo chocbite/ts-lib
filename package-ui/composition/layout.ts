@@ -7,6 +7,7 @@ import {
   type InputOf,
   type InputOptions,
 } from "#base";
+import { ok, type Result } from "@chocbite/ts-lib/result";
 import ctm, { type ContextMenuLines } from "#context_menu";
 import {
   material_close_rounded,
@@ -18,7 +19,10 @@ import type { SVGFunc } from "#svg";
 import { rem_to_px } from "#theme";
 import state, {
   type StateArrayRead,
+  type StateCollectedREA,
+  type StateOrVal,
   type StateOrValROS,
+  type StateREA,
   type StateROS,
 } from "@chocbite/ts-lib/state";
 import {
@@ -26,9 +30,11 @@ import {
   CONTENT_CREATE,
   CONTENT_HOST,
   content_context_lines,
+  ContentBase,
   HOST_CLOSE_CONTENT,
-  type ContentBase,
+  type ContentCreateOptions,
   type ContentHost,
+  type ContentOptions,
 } from "./content";
 import "./layout.scss";
 import { TITLEBAR_HEIGHT_TOUCH } from "./panel";
@@ -147,10 +153,6 @@ const MIN_WIDTH = 8;
 const MIN_HEIGHT = 4;
 /**Width in rem of a tab bar at the left or right side, the styles use the same*/
 const SIDE_BAR_WIDTH = 10;
-/**Event a layout sends up when what it shows changed, like the shown tab of a group, internal to this module*/
-export const LAYOUT_CHANGED = "composition-layout-changed";
-const changed = (element: Element) =>
-  element.dispatchEvent(new Event(LAYOUT_CHANGED, { bubbles: true }));
 /**Width of a sizer in rem, in touch mode, used for the minimum size of splits*/
 const SIZER_TOUCH = 1;
 /**Distance in rem from a pressed sizer where other sizers are moved with it, at crossings and where sizers line up*/
@@ -164,6 +166,22 @@ const ROOT_EDGE = 1.2;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(value, max));
+
+/**An input of a content as a state, an initial value as a read only state, so it can be collected or proxied*/
+const as_any_state = <T>(value: StateOrVal<T>): StateREA<T> =>
+  state.is.state(value) ? value : state.ok(value);
+
+/**The value of a result, the fallback for an error*/
+const value_or = <T>(result: Result<T, unknown>, fallback: T): T =>
+  result.ok ? result.value : fallback;
+
+/**A collected state of a node element, its states are set again when the children of the node change*/
+type Collected<T> = StateCollectedREA<T, StateREA<any>[]>;
+const collect = <T>(
+  transform: (values: Result<any, unknown>[]) => T,
+  first: StateREA<any>,
+): Collected<T> =>
+  state.c.rea<T, StateREA<any>[]>((values) => ok(transform(values)), first);
 
 /**Writes the state when it is writable, writes of local states apply at once*/
 function write(target: StateROS<unknown>, value: unknown): void {
@@ -385,8 +403,9 @@ function element_of(node: LayoutNode): NodeElement {
   return element;
 }
 
-/**Element of a split or a tab group, its share of the space follows the size state of the node*/
-abstract class NodeElement extends Base {
+/**Element of a split or a tab group, a content, its share of the space follows the size state of the node
+ * Whether it can be closed and its smallest size are collected from what it holds, its title and icon follow one of them*/
+abstract class NodeElement extends ContentBase {
   static element_name() {
     return "@abstract@";
   }
@@ -395,15 +414,47 @@ abstract class NodeElement extends Base {
   }
 
   readonly node: LayoutNode;
-  /**Smallest size in rem, from the contents inside*/
-  min_width = 0;
-  min_height = 0;
+  /**Whether the user can close everything inside*/
+  abstract readonly closable: Collected<boolean>;
+  /**Smallest size in rem, from what is inside*/
+  abstract readonly min_width: Collected<number>;
+  abstract readonly min_height: Collected<number>;
+  /**Title and icon of the content shown*/
+  readonly shown_title = state.p.rea(as_any_state<string>(""));
+  readonly shown_icon = state.p.rea(
+    as_any_state<SVGFunc | undefined>(undefined),
+  );
+  /**Smallest size in rem applied to the element, from the min states, for the sizers*/
+  shown_min_width = 0;
+  shown_min_height = 0;
 
   constructor(node: LayoutNode) {
     super();
     this.node = node;
+    //Only the contents in it have menus and focus, as before it was a content
+    ctm.detach(this);
+    this.removeAttribute("tabindex");
     this.attach_state(node.size, (size) => {
       this.style.flexGrow = String(size.value);
+    });
+  }
+
+  [CREATE](options: ContentCreateOptions): void {
+    super[CREATE]({
+      ...options,
+      title: this.shown_title,
+      icon: this.shown_icon,
+      closable: this.closable,
+      min_width: this.min_width,
+      min_height: this.min_height,
+    });
+    this.attach_state(this.min_width, (w) => {
+      this.shown_min_width = value_or(w, 0);
+      this.style.minWidth = this.shown_min_width + "rem";
+    });
+    this.attach_state(this.min_height, (h) => {
+      this.shown_min_height = value_or(h, 0);
+      this.style.minHeight = this.shown_min_height + "rem";
     });
   }
 
@@ -411,17 +462,14 @@ abstract class NodeElement extends Base {
     return this.closest<Layout>("composition-layout");
   }
 
-  abstract update_min(): void;
-
-  /**Sets the smallest size, and tells the split it is in when it changed*/
-  protected publish_min(width: number, height: number): void {
-    if (width === this.min_width && height === this.min_height) return;
-    this.min_width = width;
-    this.min_height = height;
-    this.style.minWidth = width + "rem";
-    this.style.minHeight = height + "rem";
-    const parent = this.parentElement;
-    if (parent instanceof SplitElement) parent.update_min();
+  /**Closes everything inside, never itself, a node goes when what it holds is gone*/
+  content_close(): void {
+    const root = this.node;
+    const close = (node: LayoutNode): void => {
+      if (is_split(node)) for (const child of node.children.ok()) close(child);
+      else for (const content of [...node.tabs.ok()]) content.content_close();
+    };
+    close(root);
   }
 }
 
@@ -440,11 +488,63 @@ class SplitElement extends NodeElement {
   declare readonly node: LayoutSplit;
   /**Elements of the children, in order, the DOM has a sizer between each two*/
   #children: NodeElement[] = [];
+  /**Child holding the group the user worked in last, its title is shown*/
+  #focused?: NodeElement;
+
+  /**Closable when every child is*/
+  readonly closable: Collected<boolean>;
+  /**Along the direction the children and the sizers between them add up, across the biggest child*/
+  readonly min_width: Collected<number>;
+  readonly min_height: Collected<number>;
 
   constructor(node: LayoutSplit) {
     super(node);
+    this.closable = collect(
+      ([, ...children]) =>
+        children.length > 0 && children.every((c) => value_or(c, false)),
+      node.children,
+    );
+    this.min_width = collect(
+      ([, ...children]) => this.#min(children, node.direction === "row"),
+      node.children,
+    );
+    this.min_height = collect(
+      ([, ...children]) => this.#min(children, node.direction === "column"),
+      node.children,
+    );
     this.classList.add(node.direction);
     this.attach_state(node.children, (children) => this.#apply(children.value));
+    this.addEventListener("focusin", (e) => {
+      const child = this.#children.find((c) => c.contains(e.target as Node));
+      if (child && child !== this.#focused) {
+        this.#focused = child;
+        this.#follow();
+      }
+    });
+  }
+
+  #min(children: Result<any, unknown>[], along: boolean): number {
+    const mins = children.map((c) => value_or<number>(c, 0));
+    if (along)
+      return (
+        mins.reduce((sum, m) => sum + m, 0) +
+        Math.max(0, mins.length - 1) * SIZER_TOUCH
+      );
+    return Math.max(0, ...mins);
+  }
+
+  /**Collects from the children again, and shows the title of the focused child, or of the first*/
+  #follow(): void {
+    const children = this.#children;
+    const items = this.node.children;
+    this.closable.set_states(items, ...children.map((c) => c.closable));
+    this.min_width.set_states(items, ...children.map((c) => c.min_width));
+    this.min_height.set_states(items, ...children.map((c) => c.min_height));
+    if (this.#focused && !children.includes(this.#focused))
+      this.#focused = undefined;
+    const shown = this.#focused ?? children[0];
+    this.shown_title.set_state(shown?.shown_title ?? as_any_state(""));
+    this.shown_icon.set_state(shown?.shown_icon ?? as_any_state(undefined));
   }
 
   /**Applies only the changes the array write carries*/
@@ -478,8 +578,7 @@ class SplitElement extends NodeElement {
         }
       }
     }
-    this.update_min();
-    changed(this);
+    this.#follow();
   }
 
   #insert(index: number, nodes: readonly LayoutNode[]): void {
@@ -514,18 +613,6 @@ class SplitElement extends NodeElement {
       this.lastElementChild.remove();
   }
 
-  update_min(): void {
-    const children = this.#children;
-    const sizers = Math.max(0, children.length - 1) * SIZER_TOUCH;
-    const row = this.node.direction === "row";
-    const along = (e: NodeElement) => (row ? e.min_width : e.min_height);
-    const across = (e: NodeElement) => (row ? e.min_height : e.min_width);
-    const sum = children.reduce((s, e) => s + along(e), sizers);
-    const max = children.reduce((m, e) => Math.max(m, across(e)), 0);
-    if (row) this.publish_min(sum, max);
-    else this.publish_min(max, sum);
-  }
-
   #sizer(): HTMLDivElement {
     const sizer = document.createElement("div");
     sizer.className = "sizer";
@@ -549,8 +636,10 @@ class SplitElement extends NodeElement {
     };
     const la = length(a);
     const total = la + length(b);
-    const min_a = rem_to_px(row ? a.min_width : a.min_height);
-    const min_b = rem_to_px(row ? b.min_width : b.min_height);
+    const min = (n: NodeElement) =>
+      rem_to_px(row ? n.shown_min_width : n.shown_min_height);
+    const min_a = min(a);
+    const min_b = min(b);
     const grow = a.node.size.ok() + b.node.size.ok();
     let grow_a = a.node.size.ok();
     return {
@@ -675,9 +764,45 @@ class TabsElement extends NodeElement {
   #tabs: LayoutTab[] = [];
   #side: LayoutTabsSide = "top";
   #compact = false;
+  /**Content whose title and icon are shown*/
+  #shown?: ContentBase;
+  readonly #side_state: StateREA<LayoutTabsSide>;
+  readonly #compact_state: StateREA<boolean>;
+  /**Closable when the tabs can be changed and every content can be closed*/
+  readonly closable: Collected<boolean>;
+  /**The biggest content, and the bar beside it at the left or right side, or above or below it*/
+  readonly min_width: Collected<number>;
+  readonly min_height: Collected<number>;
 
   constructor(node: LayoutTabs) {
     super(node);
+    this.#side_state = node.side ?? as_any_state<LayoutTabsSide>("top");
+    this.#compact_state = node.compact ?? as_any_state(false);
+    const at_side = (side: Result<any, unknown>) => {
+      const at = value_or<LayoutTabsSide>(side, "top");
+      return at === "left" || at === "right";
+    };
+    const biggest = (contents: Result<any, unknown>[], least: number) =>
+      Math.max(least, ...contents.map((c) => value_or<number>(c, 0)));
+    this.closable = collect(
+      ([, ...contents]) =>
+        node.tabs.writable &&
+        contents.length > 0 &&
+        contents.every((c) => value_or(c, false)),
+      node.tabs,
+    );
+    this.min_width = collect(([, side, compact, ...contents]) => {
+      const width = biggest(contents, MIN_WIDTH);
+      if (!at_side(side)) return width;
+      return (
+        width +
+        (value_or(compact, false) ? TITLEBAR_HEIGHT_TOUCH : SIDE_BAR_WIDTH)
+      );
+    }, node.tabs);
+    this.min_height = collect(([, side, ...contents]) => {
+      const height = biggest(contents, MIN_HEIGHT);
+      return at_side(side) ? height : height + TITLEBAR_HEIGHT_TOUCH;
+    }, node.tabs);
     this.bar.className = "bar";
     this.body.className = "body";
     this.classList.add("side-top");
@@ -685,19 +810,15 @@ class TabsElement extends NodeElement {
     this.classList.toggle("locked", !node.tabs.writable);
     this.attach_state(node.tabs, (tabs) => this.#apply(tabs.value));
     this.attach_state(node.active, () => this.#show_active());
-    if (node.side)
-      this.attach_state(node.side, (side) => {
-        this.classList.remove("side-" + this.#side);
-        this.#side = side.ok ? side.value : "top";
-        this.classList.add("side-" + this.#side);
-        this.update_min();
-      });
-    if (node.compact)
-      this.attach_state(node.compact, (compact) => {
-        this.#compact = compact.ok && compact.value;
-        this.classList.toggle("compact", this.#compact);
-        this.update_min();
-      });
+    this.attach_state(this.#side_state, (side) => {
+      this.classList.remove("side-" + this.#side);
+      this.#side = value_or(side, "top");
+      this.classList.add("side-" + this.#side);
+    });
+    this.attach_state(this.#compact_state, (compact) => {
+      this.#compact = value_or(compact, false);
+      this.classList.toggle("compact", this.#compact);
+    });
   }
 
   /**Whether the tabs are above each other, at the left or right side*/
@@ -735,7 +856,28 @@ class TabsElement extends NodeElement {
       }
     }
     this.#show_active();
-    this.update_min();
+    this.#collect();
+  }
+
+  /**Collects from the contents again*/
+  #collect(): void {
+    const contents = this.#tabs.map((t) => t.content);
+    const items = this.node.tabs;
+    this.closable.set_states(
+      items,
+      ...contents.map((c) => as_any_state(c.content_closable)),
+    );
+    this.min_width.set_states(
+      items,
+      this.#side_state,
+      this.#compact_state,
+      ...contents.map((c) => as_any_state(c.content_min_width)),
+    );
+    this.min_height.set_states(
+      items,
+      this.#side_state,
+      ...contents.map((c) => as_any_state(c.content_min_height)),
+    );
   }
 
   #insert(index: number, contents: readonly ContentBase[]): void {
@@ -763,20 +905,13 @@ class TabsElement extends NodeElement {
     if (!shown) this.body.replaceChildren();
     else if (this.body.firstChild !== shown.content)
       this.body.replaceChildren(shown.content);
-    changed(this);
-  }
-
-  /**The bar adds to the height at the top or bottom, and to the width at a side*/
-  update_min(): void {
-    const tabs = this.#tabs;
-    const width = tabs.reduce((m, t) => Math.max(m, t.min_width), MIN_WIDTH);
-    const height = tabs.reduce((m, t) => Math.max(m, t.min_height), MIN_HEIGHT);
-    if (this.vertical)
-      this.publish_min(
-        width + (this.#compact ? TITLEBAR_HEIGHT_TOUCH : SIDE_BAR_WIDTH),
-        height,
-      );
-    else this.publish_min(width, height + TITLEBAR_HEIGHT_TOUCH);
+    const content = shown?.content;
+    if (content === this.#shown) return;
+    this.#shown = content;
+    this.shown_title.set_state(
+      as_any_state(content ? content.content_title : ""),
+    );
+    this.shown_icon.set_state(as_any_state(content?.content_icon));
   }
 }
 define_element(TabsElement);
@@ -792,8 +927,6 @@ const TAB_CONTENT = {
   title: input_key<InputOf<typeof CONTENT_CREATE.title>>(),
   icon: input_key<InputOf<typeof CONTENT_CREATE.icon>>(),
   closable: input_key<InputOf<typeof CONTENT_CREATE.closable>>(),
-  min_width: input_key<InputOf<typeof CONTENT_CREATE.min_width>>(),
-  min_height: input_key<InputOf<typeof CONTENT_CREATE.min_height>>(),
 };
 
 /**The tab of every content shown by a layout, a content is in one place at a time, so its tab is moved with it*/
@@ -831,7 +964,7 @@ const TAB_SIDES: [LayoutTabsSide, string][] = [
   ["right", "Right"],
 ];
 
-/**Tab of one content, follows its title, icon, close button and smallest size*/
+/**Tab of one content, follows its title, icon and close button*/
 class LayoutTab extends Base {
   static element_name() {
     return "layouttab";
@@ -841,8 +974,6 @@ class LayoutTab extends Base {
   }
 
   readonly content: ContentBase;
-  min_width = 0;
-  min_height = 0;
   #closable = false;
   #dragging = false;
   #icon = this.appendChild(document.createElement("div"));
@@ -900,21 +1031,7 @@ class LayoutTab extends Base {
     this.set_input(TAB_CONTENT.closable, content.content_closable, (c) => {
       this.#closable = c.ok && c.value;
       this.#close.hidden = !this.#closable;
-      changed(this);
     });
-    this.set_input(TAB_CONTENT.min_width, content.content_min_width, (w) => {
-      this.min_width = w.ok ? w.value : 0;
-      this.group_element()?.update_min();
-    });
-    this.set_input(TAB_CONTENT.min_height, content.content_min_height, (h) => {
-      this.min_height = h.ok ? h.value : 0;
-      this.group_element()?.update_min();
-    });
-  }
-
-  /**Whether the content can be closed by the user*/
-  get closable(): boolean {
-    return this.#closable;
   }
 
   /**Element of the group the tab is in*/
@@ -1141,12 +1258,6 @@ function near_side(
   return distance < part ? side : undefined;
 }
 
-/**Whether the user can close the content shown by a layout, internal to this module*/
-export function content_closable(content: ContentBase): boolean {
-  const tab = TABS.get(content);
-  return !!tab?.closable && !!tab.group_element()?.node.tabs.writable;
-}
-
 /**Finds where the tab would go when dropped at the point, nothing where dropping changes nothing or is not allowed*/
 function find_target(
   tab: LayoutTab,
@@ -1245,10 +1356,12 @@ const LAYOUT = {
    * a writable state is written when the root changes, a read only state keeps the root, so the layout can not be split at its top*/
   root: input_key<StateOrValROS<LayoutNode>>(),
 };
-export type LayoutOptions = BaseOptions & InputOptions<typeof LAYOUT>;
+export type LayoutOptions = ContentOptions & InputOptions<typeof LAYOUT>;
 
-/**Contents in tab groups, side by side and above each other, the user drags the tabs around*/
-class Layout extends Base {
+/**Contents in tab groups, side by side and above each other, the user drags the tabs around
+ * A content itself, so it can be shown in a panel, its title, icon, whether it can be closed and its smallest size
+ * follow the root, it can be closed when every content in it can, and its owner lets it be emptied*/
+class Layout extends ContentBase {
   static element_name() {
     return "layout";
   }
@@ -1264,11 +1377,23 @@ class Layout extends Base {
   #indicator = this.appendChild(document.createElement("div"));
   /**Group the user worked in last*/
   #last?: LayoutTabs;
+  readonly #title = state.p.rea(as_any_state<string>(""));
+  readonly #icon = state.p.rea(as_any_state<SVGFunc | undefined>(undefined));
+  readonly #closable = state.p.rea(as_any_state(false), (closable) =>
+    ok(
+      value_or(closable, false) &&
+        (this.owner?.[OWNER_CAN_EMPTY](this) ?? true),
+    ),
+  );
+  readonly #min_width = state.p.rea(as_any_state(0));
+  readonly #min_height = state.p.rea(as_any_state(0));
 
   /**@param owner what the layout belongs to, internal to this module*/
   constructor(owner?: LayoutOwner) {
     super();
     this.owner = owner;
+    //The contents in it have menus of their own, the layout menu shows where it is shown, like on a panel title bar
+    ctm.detach(this);
     this.#indicator.className = "indicator";
     this.addEventListener("focusin", (e) => {
       const group = (e.target as Element).closest("composition-layouttabs");
@@ -1278,8 +1403,21 @@ class Layout extends Base {
   }
 
   [CREATE](options: LayoutOptions): void {
-    super[CREATE](options);
+    super[CREATE]({
+      ...options,
+      title: this.#title,
+      icon: this.#icon,
+      closable: this.#closable,
+      min_width: this.#min_width,
+      min_height: this.#min_height,
+    });
     if (options.root === undefined) this.#show_root(layout_tabs());
+  }
+
+  /**Closes every content in it, without an owner it then closes like any content, like the panel it is shown in*/
+  content_close(): void {
+    for (const content of this.contents()) content.content_close();
+    if (!this.owner) super.content_close();
   }
 
   set(options: LayoutOptions): this {
@@ -1377,22 +1515,11 @@ class Layout extends Base {
     if (this.#root_element?.parentElement === this) this.#root_element.remove();
     this.#root_element = element;
     this.insertBefore(element, this.#indicator);
-    changed(this);
-  }
-
-  /**Content of the shown tab of the group the user worked in last, or of the first group*/
-  current(): ContentBase | undefined {
-    const root = this.root_node();
-    if (!root) return undefined;
-    const last =
-      this.#last && (this.#last === root || this.parent_of(this.#last))
-        ? this.#last
-        : undefined;
-    const group = last ?? first_group(root);
-    if (!group) return undefined;
-    const tabs = group.tabs.ok();
-    const active = group.active.ok();
-    return active && tabs.includes(active) ? active : tabs[0];
+    this.#title.set_state(element.shown_title);
+    this.#icon.set_state(element.shown_icon);
+    this.#closable.set_state(element.closable);
+    this.#min_width.set_state(element.min_width);
+    this.#min_height.set_state(element.min_height);
   }
 }
 define_element(Layout);

@@ -4,10 +4,8 @@ import {
   define_element,
   input_key,
   type BaseOptions,
-  type InputOf,
   type InputOptions,
 } from "#base";
-import type { SVGFunc } from "#svg";
 import { px_to_rem } from "#theme";
 import state, {
   type StateArrayRead,
@@ -15,17 +13,10 @@ import state, {
   type StateOrValROS,
   type StateROS,
 } from "@chocbite/ts-lib/state";
+import type { ContentBase } from "./content";
 import {
-  CONTENT_CREATE,
-  content_context_lines,
-  ContentBase,
-  type ContentCreateOptions,
-} from "./content";
-import {
-  content_closable,
   Layout,
   layout_tabs,
-  LAYOUT_CHANGED,
   OWNER_CAN_EMPTY,
   OWNER_CAN_POPOUT,
   OWNER_EMPTY,
@@ -86,88 +77,6 @@ function write(target: StateROS<unknown>, value: unknown): void {
   if (target.writable)
     void (target as unknown as { write(v: unknown): unknown }).write(value);
 }
-
-//      _____        _   _ ______ _
-//     |  __ \ /\   | \ | |  ____| |
-//     | |__) /  \  |  \| | |__  | |
-//     |  ___/ /\ \ | . ` |  __| | |
-//     | |  / ____ \| |\  | |____| |____
-//     |_| /_/    \_\_| \_|______|______|
-/**Inputs of the shown content the panel content follows, inner inputs that are not options*/
-const SHOWN = {
-  title: input_key<InputOf<typeof CONTENT_CREATE.title>>(),
-  icon: input_key<InputOf<typeof CONTENT_CREATE.icon>>(),
-};
-
-/**Content of a panel of a workspace, the layout of the panel
- * The panel shows the title and icon of the shown tab, of the group worked in last, and can be closed when every content
- * in it can be closed, closing it closes them*/
-class WorkspacePanelContent extends ContentBase {
-  static element_name() {
-    return "workspacepanel";
-  }
-  static element_name_space() {
-    return "composition";
-  }
-
-  readonly layout: Layout;
-  readonly #title = state.from_w("");
-  readonly #icon = state.ok_w<SVGFunc | undefined>(undefined);
-  readonly #closable = state.ok_w(false);
-  /**Content whose title and icon are shown*/
-  #shown?: ContentBase;
-
-  constructor(layout: Layout) {
-    super();
-    this.layout = this.appendChild(layout);
-    const update = () => this.#update();
-    this.addEventListener(LAYOUT_CHANGED, update);
-    this.addEventListener("focusin", update);
-  }
-
-  [CREATE](options: ContentCreateOptions): void {
-    super[CREATE]({
-      ...options,
-      title: this.#title,
-      icon: this.#icon,
-      closable: this.#closable,
-    });
-    this.set({
-      context_menu: () => {
-        const shown = this.layout.current();
-        return shown ? content_context_lines(shown) : [];
-      },
-    });
-  }
-
-  /**Closes every content in the panel, the panel goes when the last one leaves*/
-  content_close(): void {
-    for (const content of this.layout.contents()) content.content_close();
-  }
-
-  /**Follows the shown content, and whether everything in the panel can be closed*/
-  #update(): void {
-    const shown = this.layout.current();
-    if (shown && shown !== this.#shown) {
-      this.#shown = shown;
-      this.set_input(SHOWN.title, shown.content_title, (title) => {
-        if (title.ok) this.#title.set_ok(title.value);
-        else this.#title.set_err(title.error);
-      });
-      this.set_input(SHOWN.icon, shown.content_icon, (icon) =>
-        this.#icon.set_ok(icon.ok ? icon.value : undefined),
-      );
-    }
-    const contents = this.layout.contents();
-    const owner = this.layout.owner;
-    this.#closable.set_ok(
-      contents.length > 0 &&
-        contents.every(content_closable) &&
-        (owner?.[OWNER_CAN_EMPTY](this.layout) ?? false),
-    );
-  }
-}
-define_element(WorkspacePanelContent);
 
 //     __          ______  _____  _  __ _____ _____        _____ ______
 //     \ \        / / __ \|  __ \| |/ // ____|  __ \ /\   / ____|  ____|
@@ -300,11 +209,7 @@ class Workspace extends Base implements LayoutOwner {
   #insert(index: number, panels: readonly WorkspacePanel[]): void {
     const container = this.container;
     const made = panels.map((data) => {
-      const content = WorkspacePanelContent.create(
-        {},
-        Layout.create({ root: data.root }, this),
-      );
-      const panel = container.panel(content, {
+      const panel = container.panel(Layout.create({ root: data.root }, this), {
         x: data.x,
         y: data.y,
         width: data.width,
@@ -379,11 +284,7 @@ class Workspace extends Base implements LayoutOwner {
   [OWNER_EMPTY](layout: Layout): void {
     const panels = this.#panels_state();
     if (!panels) return;
-    const index = this.#panels.findIndex(
-      (p) =>
-        p.content instanceof WorkspacePanelContent &&
-        p.content.layout === layout,
-    );
+    const index = this.#panels.findIndex((p) => p.content === layout);
     if (index !== -1) write(panels, state.a.write.splice(index, 1));
   }
 }
