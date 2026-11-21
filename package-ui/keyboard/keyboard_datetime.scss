@@ -19,6 +19,32 @@ onscreen-keyboard-keyboard-datetime {
       .keyboard-datetime-time {
         margin-top: 0;
       }
+
+      //Tabs between the date and the time on a narrow screen, both are in the same place so the tray keeps its height
+      > .keyboard-datetime-tabs {
+        display: none;
+      }
+
+      @media (max-width: 40rem) {
+        grid-template-columns: minmax(0, 1fr);
+        align-items: stretch;
+
+        > .keyboard-datetime-tabs {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0.4rem;
+        }
+
+        > .keyboard-datetime-layers,
+        > .keyboard-datetime-time {
+          grid-area: 2 / 1;
+        }
+
+        &.tab-date > .keyboard-datetime-time,
+        &.tab-time > .keyboard-datetime-layers {
+          visibility: hidden;
+        }
+      }
     }
   }
 
@@ -46,6 +72,28 @@ onscreen-keyboard-keyboard-datetime {
   }
 
   .keyboard-datetime-months {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.4rem;
+  }
+
+  //The picker and the year layer in the same place, the hidden one keeps its size so the tray does not change height
+  .keyboard-datetime-layers {
+    display: grid;
+  }
+
+  .keyboard-datetime-layer {
+    grid-area: 1 / 1;
+    display: flex;
+    flex-direction: column;
+
+    &.hidden {
+      visibility: hidden;
+    }
+  }
+
+  .keyboard-datetime-years {
+    flex-grow: 1;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 0.4rem;
@@ -141,8 +189,25 @@ onscreen-keyboard-keyboard-datetime {
     background-color: var(--keyboard-colors-key_special);
   }
 
-  .keyboard-datetime-header strong,
-  .keyboard-datetime-header span {
+  //The month or year, opens the year layer, and the years, goes back
+  .keyboard-datetime-header .keyboard-datetime-title {
+    background-color: transparent;
+    box-shadow: none;
+    color: var(--keyboard-colors-keytext);
     font-size: 1.1rem;
+    font-weight: bold;
+    text-align: start;
+
+    &::after {
+      content: " ▾";
+      font-size: 0.8em;
+      opacity: 0.6;
+    }
+  }
+
+  .keyboard-datetime-year-layer
+    .keyboard-datetime-header
+    .keyboard-datetime-title::after {
+    content: " ▴";
   }
 }

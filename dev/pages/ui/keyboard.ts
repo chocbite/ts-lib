@@ -6,6 +6,8 @@ import {
   KeyboardType,
   VIRTUAL_KEYBOARD,
 } from "@chocbite/ts-lib-ui/keyboard";
+import form from "@chocbite/ts-lib-ui/form";
+import { prompts } from "@chocbite/ts-lib-ui/prompts";
 import { box, controls, row, section } from "../../helpers";
 
 /**Adds a labeled input to the parent*/
@@ -160,7 +162,7 @@ function status(parent: HTMLElement): HTMLElement {
 {
   const sec = section(
     "keyboard_open",
-    "Opens a keyboard for the field without the setting, works with the setting off. NumberHex is only reachable this way. Date and color keyboards only open for inputs of their own type",
+    "Opens a keyboard for the field without the setting, works with the setting off. NumberHex is only reachable this way. Date, time and color keyboards only open for inputs of their own type, each date and time button has its own field",
   );
   const fields = row(sec);
   const text = input(fields, "Text field, data-keyboard-manual", {
@@ -168,11 +170,20 @@ function status(parent: HTMLElement): HTMLElement {
     "data-keyboard-manual": "true",
     placeholder: "Pick a keyboard",
   });
-  const date = input(fields, "Date field, data-keyboard-manual", {
-    type: "date",
-    "data-keyboard-manual": "true",
-    value: "2026-01-31",
-  });
+  //A date and time keyboard only opens for an input of its own type, so each has a field
+  const dates: Partial<Record<KeyboardType, HTMLInputElement>> = {};
+  for (const [type, input_type, value] of [
+    [KeyboardType.Date, "date", "2026-01-31"],
+    [KeyboardType.DateTimeLocal, "datetime-local", "2026-01-31T14:30"],
+    [KeyboardType.Month, "month", "2026-01"],
+    [KeyboardType.Time, "time", "14:30"],
+    [KeyboardType.Week, "week", "2026-W05"],
+  ] as const)
+    dates[type] = input(fields, `${input_type} field, data-keyboard-manual`, {
+      type: input_type,
+      "data-keyboard-manual": "true",
+      value,
+    });
   const color = input(fields, "Color field, data-keyboard-manual", {
     type: "color",
     "data-keyboard-manual": "true",
@@ -193,18 +204,10 @@ function status(parent: HTMLElement): HTMLElement {
   };
   const buttons: { [text: string]: () => void } = {};
   for (const [name, type] of Object.entries(KeyboardType))
-    buttons[name] =
-      type === KeyboardType.Color
-        ? open(color, type)
-        : [
-              KeyboardType.Date,
-              KeyboardType.DateTimeLocal,
-              KeyboardType.Month,
-              KeyboardType.Time,
-              KeyboardType.Week,
-            ].includes(type as never)
-          ? open(date, type)
-          : open(text, type);
+    buttons[name] = open(
+      type === KeyboardType.Color ? color : (dates[type] ?? text),
+      type,
+    );
   buttons["Color with alpha"] = open(color_alpha, KeyboardType.Color);
   buttons["Close (returned function)"] = () => close();
   controls(sec, buttons);
@@ -352,54 +355,33 @@ function status(parent: HTMLElement): HTMLElement {
   controls(sec, buttons);
 }
 
-//      ____  _      _____    _______ ________   _________
-//     / __ \| |    |  __ \  |__   __|  ____\ \ / /__   __|
-//    | |  | | |    | |  | |    | |  | |__   \ V /   | |
-//    | |  | | |    | |  | |    | |  |  __|   > <    | |
-//    | |__| | |____| |__| |    | |  | |____ / . \   | |
-//     \____/|______|_____/     |_|  |______/_/ \_\  |_|
-//A copy of the text keyboard from before the languages, to compare the new layouts with, remove when they are done
+//     _____  _               _____ ______
+//    |  __ \| |        /\   / ____|  ____|
+//    | |__) | |       /  \ | |    | |__
+//    |  ___/| |      / /\ \| |    |  __|
+//    | |    | |____ / ____ \ |____| |____
+//    |_|    |______/_/    \_\_____|______|
 {
   const sec = section(
-    "Old text keyboard",
-    "The text keyboard as it was before the languages, frozen as a custom keyboard. Compare it with the Languages section above: key sizes, which characters are where, and the shift and Sym layers",
+    "Making room for the keyboard",
+    "The keyboard must never cover the field it types in. The prompt shows a field outside the body, set a short screen size like 800x420 in the shell and open its keyboard, the prompt should move up. The field at the very end of the page should come up above the keyboard, even when the page is scrolled to its end. Closing the keyboard puts the page back, typing must still work while it is moved",
   );
-  type Key = { text: string; key?: string; cols?: number };
-  const chars = (s: string): Key[] => s.split("").map((text) => ({ text }));
-  const bottom: (Key | number)[] = [
-    { text: "Sym", key: "layer:sym", cols: 5 },
-    6,
-    { text: "Space", key: " ", cols: 20 },
-    { text: "🡸", key: "left" },
-    { text: "🡺", key: "right" },
-    { text: "🗙", key: "close", cols: 5 },
-  ];
-  const layer = (top: string, d: string, c: string, b: string) => ({
-    max_width: 60,
-    key_cols: 4,
-    keys: [
-      [...chars(top), { text: "⌫", key: "backspace" }],
-      [2, ...chars(d)],
-      [
-        { text: "Esc", key: "escape", cols: 3 },
-        ...chars(c),
-        { text: "⏎", key: "enter", cols: 5 },
-      ],
-      [{ text: "⇧", key: "layer:shift", cols: 5 }, ...chars(b)],
-      bottom,
-    ],
+  controls(sec, {
+    "Prompt with a field": () =>
+      void prompts.form(
+        "Prompt",
+        [form.text({ text: "Name" }), form.text_input({ id: "name" })],
+        { text: "OK" },
+      ),
   });
-  const old_text = keyboard_create({
-    default: layer("1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm,."),
-    layers: {
-      shift: layer("1234567890", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM;:"),
-      sym: layer('!"#¤%&/()=', "+@£$€?{[]}", "-_½§¨^~'*", "<>|\\°`¶"),
-    },
-  });
-  const target = input(row(sec), "Old text keyboard", {
-    type: "text",
-    "data-keyboard-manual": "true",
-    placeholder: "Click to open",
-  });
-  target.addEventListener("click", () => keyboard_open(target, old_text));
 }
+
+//The last field of the page, for the end of a page that scrolls
+input(
+  section(
+    "End of the page",
+    "The last field, scroll to the end and open its keyboard",
+  ),
+  "Last field, opens with the setting on",
+  { type: "text", placeholder: "Last field" },
+);

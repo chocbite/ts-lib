@@ -61,3 +61,37 @@ describe("public types", () => {
     expect(key.text).toBe("1");
   });
 });
+
+describe("date and time keyboards", () => {
+  const TYPES = [
+    [KeyboardType.Date, "date"],
+    [KeyboardType.DateTimeLocal, "datetime-local"],
+    [KeyboardType.Month, "month"],
+    [KeyboardType.Time, "time"],
+    [KeyboardType.Week, "week"],
+  ] as const;
+
+  it("open only for an input of their own type", () => {
+    for (const [type, input_type] of TYPES)
+      for (const [, other] of TYPES) {
+        const close = keyboard_open(appendInput(other), type);
+        expect(
+          document.querySelector("onscreen-keyboard-keyboard-datetime") !== null,
+          `${type} on ${other}`,
+        ).toBe(other === input_type);
+        close();
+      }
+  });
+
+  it("are a keyboard per type", () => {
+    const shown = TYPES.map(([type, input_type]) => {
+      const close = keyboard_open(appendInput(input_type), type);
+      const keyboard = document.querySelector(
+        "onscreen-keyboard-keyboard-datetime",
+      );
+      close();
+      return keyboard;
+    });
+    expect(new Set(shown).size).toBe(TYPES.length);
+  });
+});
