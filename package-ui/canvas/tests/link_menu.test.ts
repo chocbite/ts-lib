@@ -1,6 +1,10 @@
 import { define_element, input_key, type InputOptions } from "#base";
 import depot from "@chocbite/ts-lib/depot";
-import state, { type StateOrVal, type StateROSW } from "@chocbite/ts-lib/state";
+import state, {
+  type StateOrVal,
+  type StateROS,
+  type StateROSW,
+} from "@chocbite/ts-lib/state";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { canvas, type CanvasWidget } from "..";
 import { CanvasLink } from "../link";
@@ -60,7 +64,9 @@ afterEach(() => {
   for (const panel of document.querySelectorAll("composition-panel"))
     (panel as HTMLElement & { close(): void }).close();
   document.body.replaceChildren();
-  for (const child of [...states.children.ok()]) child.remove();
+  //A registered group always has a children state
+  const children = states.children as StateROS<readonly { remove(): void }[]>;
+  for (const child of [...children.ok()]) child.remove();
 });
 
 const PATH = (id: string) => "/states/linkmenutest/" + id;

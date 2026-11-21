@@ -1,7 +1,7 @@
 import { Base, define_element, input_key, type InputOptions } from "#base";
 import depot, { type DepotNode } from "@chocbite/ts-lib/depot";
 import { ok, type ResultNice } from "@chocbite/ts-lib/result";
-import type { State, StateOrVal } from "@chocbite/ts-lib/state";
+import state, { type State, type StateOrVal } from "@chocbite/ts-lib/state";
 import {
   widget_properties,
   WIDGETS,
@@ -198,11 +198,11 @@ export class WidgetSlot extends Base {
     const entry = node.value;
     if (entry.kind !== "entry" || entry.type !== WIDGETS)
       return this.#set_definition(`"${this.widget.widget}" is not a widget`);
-    this.attach_state_to_symbol(DEFINITION, entry.value, (definition) =>
+    //The entry is in the widgets type, so its content is a widget definition
+    const content = state.as_state(entry.value as StateOrVal<WidgetDefinition>);
+    this.attach_state_to_symbol(DEFINITION, content, (definition) =>
       this.#set_definition(
-        definition.ok
-          ? (definition.value as WidgetDefinition)
-          : definition.error.nice,
+        definition.ok ? definition.value : definition.error.nice,
       ),
     );
   }

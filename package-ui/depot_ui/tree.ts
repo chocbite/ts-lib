@@ -17,8 +17,8 @@ export class DepotTree<T> {
   #search = "";
   /**Rows shown per group*/
   #rows = new Map<DepotGroup<T>, StateLocalROS<DepotChild<T>[]>>();
-  /**Subscriptions to the children of every group below the root*/
-  #subs = new Map<DepotGroup<T>, () => void>();
+  /**Every group below the root that was visited, with what stops following its children, nothing for constant children*/
+  #subs = new Map<DepotGroup<T>, (() => void) | undefined>();
   #pending = false;
   #disposed = false;
 
@@ -50,7 +50,7 @@ export class DepotTree<T> {
   /**Drops the subscriptions to the depot*/
   dispose(): void {
     this.#disposed = true;
-    for (const [group, sub] of this.#subs) group.children.unsub(sub);
+    for (const unsub of this.#subs.values()) unsub?.();
     this.#subs.clear();
   }
 
@@ -64,8 +64,9 @@ export class DepotTree<T> {
   #matches(entry: DepotEntry<T>): boolean {
     if (!this.#filter(entry)) return false;
     if (!this.#search) return true;
+    const name = state.is.state(entry.name) ? entry.name.ok() : entry.name;
     return (
-      entry.name.toLowerCase().includes(this.#search) ||
+      name.toLowerCase().includes(this.#search) ||
       entry.path.toLowerCase().includes(this.#search)
     );
   }
@@ -86,10 +87,17 @@ export class DepotTree<T> {
     const seen = new Set<DepotGroup<T>>();
     const visit = (group: DepotGroup<T>): DepotChild<T>[] => {
       seen.add(group);
+      //Children that are a state are followed, constant children never change
+      const children = group.children;
       if (!this.#subs.has(group))
-        this.#subs.set(group, group.children.sub(this.#changed));
+        this.#subs.set(
+          group,
+          state.is.state(children)
+            ? (children.sub(this.#changed), () => children.unsub(this.#changed))
+            : undefined,
+        );
       const shown: DepotChild<T>[] = [];
-      for (const child of group.children.ok())
+      for (const child of state.is.state(children) ? children.ok() : children)
         if (child.kind === "entry" ? this.#matches(child) : visit(child).length)
           shown.push(child);
       const rows = this.#rows_of(group);
@@ -104,9 +112,9 @@ export class DepotTree<T> {
     };
     visit(this.#root);
     //Groups that were removed, or are below a removed group
-    for (const [group, sub] of this.#subs) {
+    for (const [group, unsub] of this.#subs) {
       if (seen.has(group)) continue;
-      group.children.unsub(sub);
+      unsub?.();
       this.#subs.delete(group);
       this.#rows.get(group)?.set_ok([]);
       this.#rows.delete(group);

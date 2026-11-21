@@ -416,12 +416,14 @@ class PropertiesEditor extends Base {
           found[i] = `"${widget.widget}" is not a registered widget`;
           return update();
         }
-        names[i] = node.value.name;
-        this.attach_state_to_symbol(definition, node.value.value, (content) => {
-          //The entry is in the widgets type, so its content is a widget definition
-          found[i] = content.ok
-            ? (content.value as WidgetDefinition)
-            : content.error.nice;
+        const name = node.value.name;
+        names[i] = state.is.state(name) ? name.ok() : name;
+        //The entry is in the widgets type, so its content is a widget definition
+        const content_of = state.as_state(
+          node.value.value as StateOrVal<WidgetDefinition>,
+        );
+        this.attach_state_to_symbol(definition, content_of, (content) => {
+          found[i] = content.ok ? content.value : content.error.nice;
           update();
         });
       });

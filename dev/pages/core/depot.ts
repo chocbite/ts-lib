@@ -1,11 +1,16 @@
 import depot, {
   type DepotChild,
   type DepotGroup,
+  type DepotSourceChild,
+  type DepotSourceEntry,
+  type DepotSourceGroup,
   type DepotType,
 } from "@chocbite/ts-lib/depot";
 import state, {
   STATE_ARRAY_READ_KEY,
   type StateArrayRead,
+  type StateOrValROS,
+  type StateROS,
 } from "@chocbite/ts-lib/state";
 import { box, controls, row, section } from "../../helpers";
 
@@ -27,37 +32,86 @@ function log_box(parent: HTMLElement, label: string) {
   };
 }
 
-/**Renders a group and everything below it, following the children states.
+/**Levels shown below a type, so a recursive provided source ends*/
+const MAX_DEPTH = 5;
+
+/**Shows a name in a span, following it when it is a state, returns a function dropping the subscription*/
+function render_name(name: StateOrValROS<string>, parent: HTMLElement) {
+  const span = parent.appendChild(document.createElement("span"));
+  if (!state.is.state(name)) {
+    span.textContent = `"${name}"`;
+    return () => {};
+  }
+  const sub = name.sub((r) => {
+    span.textContent = `"${r.value}"`;
+  }, true);
+  return () => name.unsub(sub);
+}
+
+/**Renders a group and everything below it, following children that are a state, constant children are shown once.
  * Returns a function dropping the subscriptions*/
-function render_group(group: DepotGroup<unknown>, parent: HTMLElement) {
+function render_group(
+  group: DepotGroup<unknown>,
+  parent: HTMLElement,
+  depth = 0,
+) {
   const list = parent.appendChild(document.createElement("div"));
   list.style.paddingLeft = "1.2rem";
+  if (depth >= MAX_DEPTH) {
+    list.textContent = "…";
+    return () => {};
+  }
   let drops: (() => void)[] = [];
-  const sub = group.children.sub((r) => {
+  const show = (children: readonly DepotChild<unknown>[]) => {
     for (const drop of drops) drop();
     drops = [];
     list.replaceChildren();
-    for (const child of r.value) drops.push(render_child(child, list));
-  }, true);
+    for (const child of children)
+      drops.push(render_child(child, list, depth + 1));
+  };
+  const children = group.children;
+  if (!state.is.state(children)) {
+    show(children);
+    return () => {
+      for (const drop of drops) drop();
+    };
+  }
+  const sub = children.sub((r) => show(r.ok ? r.value : []), true);
   return () => {
-    group.children.unsub(sub);
+    children.unsub(sub);
     for (const drop of drops) drop();
   };
 }
 
-function render_child(child: DepotChild<unknown>, parent: HTMLElement) {
+function render_child(
+  child: DepotChild<unknown>,
+  parent: HTMLElement,
+  depth: number,
+) {
   const line = parent.appendChild(document.createElement("div"));
+  line.append(child.id + (child.kind === "entry" ? "  " : "/  "));
+  const drop_name = render_name(child.name, line);
   if (child.kind === "entry") {
-    line.textContent = `${child.id}  "${child.name}"`;
     const value = line.appendChild(document.createElement("span"));
     value.style.opacity = "0.6";
-    const sub = child.value.sub((r) => {
+    const content = child.value;
+    if (!state.is.state(content)) {
+      value.textContent = `  = ${JSON.stringify(content)} (constant)`;
+      return drop_name;
+    }
+    const sub = content.sub((r) => {
       value.textContent = `  = ${r.ok ? JSON.stringify(r.value) : "⚠ " + r.error}`;
     }, true);
-    return () => child.value.unsub(sub);
+    return () => {
+      drop_name();
+      content.unsub(sub);
+    };
   }
-  line.textContent = `${child.id}/  "${child.name}"`;
-  return render_group(child, parent);
+  const drop_group = render_group(child, parent, depth);
+  return () => {
+    drop_name();
+    drop_group();
+  };
 }
 
 /**A live tree of every type in the depot*/
@@ -75,8 +129,9 @@ function tree_box(parent: HTMLElement) {
     for (const type of r.value) {
       //The cost section measures the depot, not rendering of the tree
       if (type.id.startsWith("cost")) continue;
-      tree.appendChild(document.createElement("div")).textContent =
-        `/${type.id}  "${type.name}"`;
+      const line = tree.appendChild(document.createElement("div"));
+      line.append(`/${type.id}  `);
+      drops.push(render_name(type.name, line));
       drops.push(render_group(type, tree));
     }
   }, true);
@@ -182,7 +237,9 @@ function lookup_box(parent: HTMLElement, paths: string[]) {
   const r = row(sec);
   const log = log_box(r, "log/children");
   const type = depot.type<number>("log", "Log", "For the children metadata");
-  type.children.sub((res) => {
+  //A registered group always has a children state
+  const children = type.children as StateROS<readonly DepotChild<number>[]>;
+  children.sub((res) => {
     const ops = (res.value as StateArrayRead<DepotChild<number>>)[
       STATE_ARRAY_READ_KEY
     ];
@@ -198,11 +255,119 @@ function lookup_box(parent: HTMLElement, paths: string[]) {
   controls(sec, {
     add: () => type.add(`e${n++}`, "", "", n),
     "add group": () => type.group(`g${n++}`, "", ""),
-    "remove first": () => type.children.ok()[0]?.remove(),
-    "remove last": () => type.children.ok().at(-1)?.remove(),
+    "remove first": () => children.ok()[0]?.remove(),
+    "remove last": () => children.ok().at(-1)?.remove(),
     "alias first, then remove alias": () => {
-      const first = type.children.ok()[0];
+      const first = children.ok()[0];
       if (first) type.alias(`a${n++}`, first).remove();
+    },
+  });
+}
+
+//##################################################################################################################################################
+{
+  const sec = section(
+    "Providers",
+    "A source mounted at /server/objects, like objects users create on a server, its children a state. Add, rename and remove objects: the tree and the lookups should follow, a rename changes only the name, not the path. /server/loop is a recursive source, a group holding itself and a leaf, the tree stops at a depth, the lookups go as deep as asked, each path its own node. Unmount removes the objects mount, its lookups turn into errors",
+  );
+  const r = row(sec);
+  const server = depot.type<number>("server", "Server", "Provided sources");
+  /**An object on the server, the name a state as users rename it*/
+  type ServerObject = DepotSourceEntry<number> & {
+    name: ReturnType<typeof state.ok_w<string>>;
+  };
+  const objects = state.ok_w<DepotSourceChild<number>[]>([]);
+  const source: DepotSourceGroup<number> = {
+    name: "Objects",
+    description: "Created by users",
+    children: objects,
+  };
+  const leaf: DepotSourceEntry<number> = {
+    name: "Leaf",
+    description: "",
+    value: 42,
+  };
+  const loop_children: DepotSourceChild<number>[] = [];
+  const loop: DepotSourceGroup<number> = {
+    name: "Loop",
+    description: "Holds itself",
+    children: loop_children,
+  };
+  loop_children.push(
+    { id: "loop", source: loop },
+    { id: "leaf", source: leaf },
+  );
+  let mount: DepotChild<number> | undefined = server.provide("objects", source);
+  server.provide("loop", loop);
+  tree_box(r);
+  lookup_box(r, [
+    "/server/objects",
+    "/server/objects/o0",
+    "/server/objects/o1",
+    "/server/loop/leaf",
+    "/server/loop/loop/loop/loop/loop/loop/leaf",
+    "/server/loop/nope",
+  ]);
+  let n = 0;
+  controls(sec, {
+    "add object": () => {
+      const object: ServerObject = {
+        name: state.ok_w(`Object ${n}`),
+        description: "",
+        value: n,
+      };
+      objects.set_ok([...objects.ok(), { id: `o${n++}`, source: object }]);
+    },
+    "rename first": () => {
+      const first = objects.ok()[0]?.source as ServerObject | undefined;
+      first?.name.set_ok(first.name.ok() + "!");
+    },
+    "remove first": () => objects.set_ok(objects.ok().slice(1)),
+    "unmount / mount": () => {
+      if (mount) {
+        mount.remove();
+        mount = undefined;
+      } else mount = server.provide("objects", source);
+    },
+  });
+}
+
+//##################################################################################################################################################
+{
+  const sec = section(
+    "Provider cost",
+    "Mounts a source of 100000 entries with a child lookup, then does 1000 lookups of different entries and 1000 of the same. Only the looked up entries get nodes, mounting should take no time whatever the size",
+  );
+  const r = row(sec);
+  const log = log_box(r, "times");
+  let run = 0;
+  controls(sec, {
+    run: () => {
+      const id = `costprovided${run++}`;
+      let t = performance.now();
+      const lap = (text: string) => {
+        const now = performance.now();
+        log(`${text.padEnd(28)} ${(now - t).toFixed(1)}ms`);
+        t = now;
+      };
+      const entries = new Map<string, DepotSourceEntry<number>>();
+      for (let i = 0; i < 100000; i++)
+        entries.set(`e${i}`, { name: `E${i}`, description: "", value: i });
+      lap("make 100000 source items");
+      const type = depot.type<number>(id, "Cost", "");
+      type.provide("big", {
+        name: "Big",
+        description: "",
+        children: [],
+        child: (child) => entries.get(child),
+      });
+      lap("mount");
+      for (let i = 0; i < 1000; i++) depot.get(`/${id}/big/e${i * 97}`).get();
+      lap("1000 lookups");
+      for (let i = 0; i < 1000; i++) depot.get(`/${id}/big/e5`).get();
+      lap("1000 same lookups");
+      type.remove();
+      lap("remove type");
     },
   });
 }

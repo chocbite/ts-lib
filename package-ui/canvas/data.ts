@@ -98,7 +98,9 @@ export function canvas_widget<O extends WidgetBaseOptions>(
 function definition_size(
   definition: DepotEntry<WidgetDefinition<any>>,
 ): { width: number; height: number } | undefined {
-  const content = definition.value.rsync ? definition.value.get() : undefined;
+  const value = definition.value;
+  if (!state.is.state(value)) return value.size;
+  const content = value.rsync ? value.get() : undefined;
   return content?.ok ? content.value.size : undefined;
 }
 
@@ -226,7 +228,7 @@ export async function new_widget<O extends WidgetBaseOptions>(
   definition: DepotEntry<WidgetDefinition<O>>,
   at: { x: number; y: number } = { x: 0, y: 0 },
 ): Promise<ResultNice<CanvasWidget<O>>> {
-  const content = await definition.value;
+  const content = await state.as_state(definition.value);
   if (!content.ok) return err(content.error);
   const options: Record<string, unknown> = {};
   for (const [key, property] of widget_properties(content.value))

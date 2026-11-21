@@ -1,19 +1,42 @@
 import type { StateArrayRead, StateArrayReadTypes } from "#state";
 import state, {
   STATE_ARRAY_READ_KEY,
-  type StateREA,
+  type StateOrVal,
   type StateRES,
   type StateROS,
 } from "#state";
 import { NiceError } from "#result";
 import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
-import depot, { type DepotChild, type DepotEntry, type DepotNode } from "..";
+import depot, {
+  type DepotChild,
+  type DepotEntry,
+  type DepotGroup,
+  type DepotNode,
+  type DepotSourceChild,
+  type DepotSourceEntry,
+  type DepotSourceGroup,
+} from "..";
 
 afterEach(() => {
   for (const type of [...depot.types.ok()])
     if (type !== depot.states) type.remove();
-  for (const child of [...depot.states.children.ok()]) child.remove();
+  for (const child of [...children_of(depot.states)]) child.remove();
 });
+
+/**The children of a group now, a constant or the value of their state*/
+const children_of = <T>(group: {
+  children: readonly T[] | StateROS<readonly T[]>;
+}): readonly T[] =>
+  state.is.state(group.children) ? group.children.ok() : group.children;
+
+/**The children state of a registered group, which always has one*/
+const children_state = <T>(group: {
+  children: readonly T[] | StateROS<readonly T[]>;
+}): StateROS<readonly T[]> => {
+  if (!state.is.state(group.children))
+    throw new Error("Registered groups have a children state");
+  return group.children;
+};
 
 /**Collects the array changes a children state gives its subscribers*/
 const changes = <T>(children: StateROS<readonly T[]>) => {
@@ -39,7 +62,7 @@ describe("registration", () => {
     expect(basic.parent).toBe(widgets);
     expect(widgets.parent).toBeUndefined();
     expect(depot.types.ok()).toEqual([depot.states, widgets]);
-    expect(basic.children.ok()).toEqual([rect]);
+    expect(children_of(basic)).toEqual([rect]);
   });
 
   it("builds paths by walking up the parents", () => {
@@ -57,7 +80,7 @@ describe("registration", () => {
     const b = widgets.add("b", "", "", 1);
     const a = widgets.group("a", "", "");
     expect(depot.types.ok()).toEqual([depot.states, widgets, colors]);
-    expect(widgets.children.ok()).toEqual([b, a]);
+    expect(children_of(widgets)).toEqual([b, a]);
   });
 
   it("throws on a duplicate id in the same group and allows it in another", () => {
@@ -82,7 +105,7 @@ describe("registration", () => {
     expect(() => widgets.add(id, "", "", 1)).toThrow("invalid");
     expect(() => widgets.group(id, "", "")).toThrow("invalid");
     expect(() => depot.type(id, "", "")).toThrow("invalid");
-    expect(widgets.children.ok()).toEqual([]);
+    expect(children_of(widgets)).toEqual([]);
   });
 
   it("accepts letters, digits, _ and -", () => {
@@ -92,9 +115,9 @@ describe("registration", () => {
 });
 
 describe("content", () => {
-  it("wraps a value that is not a state in a state", async () => {
+  it("keeps a value that is not a state as it is, without a state", () => {
     const entry = depot.type<number>("t", "", "").add("e", "", "", 5);
-    expect((await entry.value).unwrap()).toBe(5);
+    expect(entry.value).toBe(5);
   });
 
   it("keeps a given state", async () => {
@@ -102,13 +125,13 @@ describe("content", () => {
     const entry = depot.type<number>("t", "", "").add("e", "", "", value);
     expect(entry.value).toBe(value);
     value.set_err(new NiceError(Symbol("Test error"), "gone"));
-    expect((await entry.value).err).toBe(true);
+    expect((await state.as_state(entry.value)).err).toBe(true);
   });
 
   it("types the content by the type", () => {
     const entry = depot.type<number>("t", "", "").add("e", "", "", 5);
     expectTypeOf(entry).toEqualTypeOf<DepotEntry<number>>();
-    expectTypeOf(entry.value).toEqualTypeOf<StateREA<number>>();
+    expectTypeOf(entry.value).toEqualTypeOf<StateOrVal<number>>();
     // @ts-expect-error content must match the type
     depot.type<number>("u", "", "").add("e", "", "", "text");
   });
@@ -133,7 +156,7 @@ describe("removing", () => {
     const entry = widgets.add("a", "", "", 1);
     entry.remove();
     expect(entry.removed).toBe(true);
-    expect(widgets.children.ok()).toEqual([]);
+    expect(children_of(widgets)).toEqual([]);
     expect(widgets.add("a", "", "", 2)).not.toBe(entry);
   });
 
@@ -144,9 +167,9 @@ describe("removing", () => {
     const c = b.add("c", "", "", 1);
     a.remove();
     expect([a.removed, b.removed, c.removed]).toEqual([true, true, true]);
-    expect(widgets.children.ok()).toEqual([]);
-    expect(a.children.ok()).toEqual([]);
-    expect(b.children.ok()).toEqual([]);
+    expect(children_of(widgets)).toEqual([]);
+    expect(children_of(a)).toEqual([]);
+    expect(children_of(b)).toEqual([]);
   });
 
   it("removing a type frees its id and removes everything below it", () => {
@@ -173,7 +196,7 @@ describe("removing", () => {
     entry.remove();
     const again = widgets.add("a", "", "", 2);
     entry.remove();
-    expect(widgets.children.ok()).toEqual([again]);
+    expect(children_of(widgets)).toEqual([again]);
   });
 
   it("a removed node keeps its path", () => {
@@ -189,7 +212,7 @@ describe("removing", () => {
 describe("children state", () => {
   it("tells subscribers what was added and removed", () => {
     const widgets = depot.type<number>("widgets", "", "");
-    const list = changes<DepotChild<number>>(widgets.children);
+    const list = changes<DepotChild<number>>(children_state(widgets));
     const a = widgets.add("a", "", "", 1);
     const b = widgets.group("b", "", "");
     a.remove();
@@ -332,7 +355,7 @@ describe("aliases", () => {
     const widgets = depot.type("widgets", "", "");
     const rect = widgets.add("rectangle", "", "", 1);
     widgets.alias("rect", rect);
-    expect(widgets.children.ok()).toEqual([rect]);
+    expect(children_of(widgets)).toEqual([rect]);
   });
 
   it("an alias of a group resolves paths below it", () => {
@@ -389,7 +412,7 @@ describe("aliases", () => {
     const rect = widgets.add("rect", "", "", 1);
     const alias = widgets.alias("r", rect);
     let calls = 0;
-    widgets.children.sub(() => calls++);
+    children_state(widgets).sub(() => calls++);
     alias.remove();
     expect(calls).toBe(0);
   });
@@ -433,7 +456,7 @@ describe("states type", () => {
     machine.add("speed", "", "", state.ok(5));
     machine.add("name", "", "", state.from_w("a"));
     machine.add("fixed", "", "", true);
-    expect(machine.children.ok().length).toBe(3);
+    expect(children_of(machine).length).toBe(3);
   });
 
   it("its groups and entries can be removed", () => {
@@ -441,7 +464,7 @@ describe("states type", () => {
     const speed = machine.add("speed", "", "", state.ok(5));
     machine.remove();
     expect(speed.removed).toBe(true);
-    expect(depot.states.children.ok()).toEqual([]);
+    expect(children_of(depot.states)).toEqual([]);
   });
 });
 
@@ -450,6 +473,198 @@ describe("icons", () => {
     const t = depot.type("t", "", "");
     // @ts-expect-error icons are typed by ts-lib-ui
     t.group("g", "", "", () => null);
-    expect(t.children.ok().length).toBe(1);
+    expect(children_of(t).length).toBe(1);
+  });
+});
+
+describe("providers", () => {
+  /**Value of a lookup now, undefined while it is an error*/
+  const at = (path: string) => depot.get(path).get().unwrap_or(undefined);
+
+  /**A constant source, a group with an entry and a sub group with an entry*/
+  const constant = (): DepotSourceGroup<number> => ({
+    name: "Root",
+    description: "A constant source",
+    children: [
+      { id: "a", source: { name: "A", description: "", value: 1 } },
+      {
+        id: "sub",
+        source: {
+          name: "Sub",
+          description: "",
+          children: [
+            { id: "b", source: { name: "B", description: "", value: 2 } },
+          ],
+        },
+      },
+    ],
+  });
+
+  it("mounts a source, its items are looked up and listed through it", () => {
+    const t = depot.type<number>("t", "", "");
+    const root = t.provide("root", constant());
+    expect(root.kind).toBe("group");
+    expect(root.path).toBe("/t/root");
+    expect(root.name).toBe("Root");
+    expect(children_of(t)).toEqual([root]);
+    const b = at("/t/root/sub/b") as DepotEntry<number>;
+    expect(b.kind).toBe("entry");
+    expect(b.path).toBe("/t/root/sub/b");
+    expect(b.name).toBe("B");
+    expect(b.value).toBe(2);
+    //A constant source gives constants, not states
+    const listed = (root as DepotGroup<number>).children;
+    expect(state.is.state(listed)).toBe(false);
+    expect(
+      (listed as readonly DepotChild<number>[]).map((child) => child.id),
+    ).toEqual(["a", "sub"]);
+  });
+
+  it("gives the same node for the same path while the source object is the same", () => {
+    const t = depot.type<number>("t", "", "");
+    const root = t.provide("root", constant()) as DepotGroup<number>;
+    const looked = at("/t/root/a");
+    expect(at("/t/root/a")).toBe(looked);
+    expect(children_of(root)[0]).toBe(looked);
+  });
+
+  it("makes nodes only for what is looked up, a source with child is not listed", () => {
+    let listed = 0;
+    const entry = { name: "E", description: "", value: 1 };
+    //Counts going through the children, reading the property to see it is not a state is fine
+    const children: DepotSourceChild<number>[] = [];
+    children.find = () => (listed++, undefined);
+    children[Symbol.iterator] = () => (listed++, [][Symbol.iterator]());
+    const t = depot.type<number>("t", "", "");
+    t.provide("big", {
+      name: "",
+      description: "",
+      children,
+      child: (id) => (id === "e" ? entry : undefined),
+    });
+    expect((at("/t/big/e") as DepotEntry<number>).value).toBe(1);
+    expect(at("/t/big/x")).toBeUndefined();
+    expect(listed).toBe(0);
+  });
+
+  it("walks a recursive source, each path its own node", () => {
+    const leaf: DepotSourceEntry<number> = {
+      name: "",
+      description: "",
+      value: 7,
+    };
+    const loop: DepotSourceGroup<number> = {
+      name: "",
+      description: "",
+      children: [],
+      child: (id) => (id === "loop" ? loop : id === "leaf" ? leaf : undefined),
+    };
+    depot.type<number>("t", "", "").provide("loop", loop);
+    const deep = at("/t/loop/loop/loop/leaf") as DepotEntry<number>;
+    expect(deep.path).toBe("/t/loop/loop/loop/leaf");
+    expect(deep.value).toBe(7);
+    expect(at("/t/loop/leaf")).not.toBe(deep);
+  });
+
+  it("follows a source whose children are a state", () => {
+    const children = state.ok_w<DepotSourceChild<number>[]>([]);
+    const t = depot.type<number>("t", "", "");
+    const root = t.provide("root", {
+      name: "",
+      description: "",
+      children,
+    }) as DepotGroup<number>;
+    const lookup = depot.get("/t/root/x");
+    expect(lookup.get().err).toBe(true);
+    const listed = root.children as StateROS<readonly DepotChild<number>[]>;
+    expect(listed.ok()).toEqual([]);
+    //Added
+    const x = { name: "X", description: "", value: 1 };
+    children.set_ok([{ id: "x", source: x }]);
+    const node = lookup.get().unwrap_or(undefined);
+    expect(node?.path).toBe("/t/root/x");
+    expect(listed.ok()).toEqual([node]);
+    //Another object under the same id is another node, the old one is removed
+    children.set_ok([{ id: "x", source: { ...x } }]);
+    const again = lookup.get().unwrap_or(undefined);
+    expect(again).not.toBe(node);
+    expect(node?.removed).toBe(true);
+    //Removed
+    children.set_ok([]);
+    expect(lookup.get().err).toBe(true);
+    expect(again?.removed).toBe(true);
+    expect(listed.ok()).toEqual([]);
+  });
+
+  it("gives the name state of the source, so a rename shows", () => {
+    const name = state.ok_w("Old");
+    const t = depot.type<number>("t", "", "");
+    t.provide("root", {
+      name: "",
+      description: "",
+      children: [{ id: "e", source: { name, description: "", value: 1 } }],
+    });
+    const e = at("/t/root/e") as DepotEntry<number>;
+    expect(e.name).toBe(name);
+    name.set_ok("New");
+    expect((e.name as StateROS<string>).ok()).toBe("New");
+  });
+
+  it("is read only in the depot, the source decides", () => {
+    const t = depot.type<number>("t", "", "");
+    const registered = t.add("r", "", "", 1);
+    const root = t.provide("root", constant()) as DepotGroup<number>;
+    const a = at("/t/root/a") as DepotEntry<number>;
+    expect(() => root.add("x", "", "", 1)).toThrow("provided");
+    expect(() => root.group("x", "", "")).toThrow("provided");
+    expect(() => root.alias("x", registered)).toThrow("provided");
+    expect(() => root.provide("x", constant())).toThrow("provided");
+    expect(() => a.remove()).toThrow("provided");
+    expect(() => t.alias("x", a)).toThrow("provided");
+  });
+
+  it("leaves out children whose id is not a valid depot id", () => {
+    const t = depot.type<number>("t", "", "");
+    const root = t.provide("root", {
+      name: "",
+      description: "",
+      children: [
+        { id: "a b", source: { name: "", description: "", value: 1 } },
+        { id: "ok", source: { name: "", description: "", value: 2 } },
+      ],
+    }) as DepotGroup<number>;
+    expect(children_of(root).map((child) => child.id)).toEqual(["ok"]);
+    expect(depot.get("/t/root/a b").get().err).toBe(true);
+  });
+
+  it("unmounts when its node is removed, and stops following the source", () => {
+    const children = state.ok_w<DepotSourceChild<number>[]>([
+      { id: "x", source: { name: "", description: "", value: 1 } },
+    ]);
+    const t = depot.type<number>("t", "", "");
+    const root = t.provide("root", { name: "", description: "", children });
+    const x = at("/t/root/x")!;
+    root.remove();
+    expect(root.removed).toBe(true);
+    expect(x.removed).toBe(true);
+    expect(depot.get("/t/root/x").get().err).toBe(true);
+    expect(children.in_use()).toBeUndefined();
+    //The id is free for another mount
+    t.provide("root", constant());
+    expect(at("/t/root/a")?.path).toBe("/t/root/a");
+  });
+
+  it("mounts an entry source", () => {
+    const t = depot.type<number>("t", "", "");
+    const e = t.provide("e", { name: "E", description: "", value: 3 });
+    expect(e.kind).toBe("entry");
+    expect((e as DepotEntry<number>).value).toBe(3);
+    expect(at("/t/e")).toBe(e);
+  });
+
+  it("types the content of a source by the type", () => {
+    const t = depot.type<number>("t", "", "");
+    // @ts-expect-error content must match the type
+    t.provide("e", { name: "", description: "", value: "text" });
   });
 });

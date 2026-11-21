@@ -322,7 +322,7 @@ export function link_node_state(
     return state.err(
       err_nice(link_errors.NOT_A_STATE, `"${link.path}" is not a state`).error,
     );
-  return linked_state(link, node.value.value, convert);
+  return linked_state(link, state.as_state(node.value.value), convert);
 }
 
 /**The value a link gives now, through its transforms and converted, an error when the state is not registered*/

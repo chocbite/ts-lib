@@ -30,7 +30,7 @@ Groups can not be selected, only entries. The search box filters while typing on
 
 ## `depot_ui.select_state(options?)`
 
-The selector for the states type, with a column of the live value of every state. It works like `select`, the entries it gives hold the state as `entry.value`.
+The selector for the states type, with a column of the live value of every state. It works like `select`, the entries it gives hold the state as `entry.value`, or a value for an entry registered with one that never changes, `state.as_state(entry.value)` gives a state either way.
 
 ```ts
 const [entry] = await depot_ui.select_state({ writable: true, kind: "number" });

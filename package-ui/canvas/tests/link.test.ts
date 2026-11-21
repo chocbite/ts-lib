@@ -1,6 +1,10 @@
 import { define_element, input_key, type InputOptions } from "#base";
 import depot from "@chocbite/ts-lib/depot";
-import state, { type StateOrVal, type StateROSW } from "@chocbite/ts-lib/state";
+import state, {
+  type StateOrVal,
+  type StateROS,
+  type StateROSW,
+} from "@chocbite/ts-lib/state";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { canvas, type CanvasPage, type CanvasWidget } from "..";
 import { CanvasLink } from "../link";
@@ -51,7 +55,9 @@ afterAll(() => {
 
 afterEach(() => {
   document.body.replaceChildren();
-  for (const child of [...states.children.ok()]) child.remove();
+  //A registered group always has a children state
+  const children = states.children as StateROS<readonly { remove(): void }[]>;
+  for (const child of [...children.ok()]) child.remove();
 });
 
 const TEXT = "/states/canvaslinktest/text";

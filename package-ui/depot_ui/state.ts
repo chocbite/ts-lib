@@ -2,6 +2,7 @@ import depot, {
   type DepotEntry,
   type DepotGroup,
 } from "@chocbite/ts-lib/depot";
+import state from "@chocbite/ts-lib/state";
 import { type DepotStateKind, state_kind } from "./kind";
 import { depot_select_values } from "./selector";
 
@@ -42,9 +43,11 @@ export function depot_select_state(
     selected: options.selected,
     title: options.title,
     filter: (entry) => {
-      if (writable && !entry.value.writable) return false;
+      //An entry of the states type holds the state, or a constant that is never writable
+      const value = entry.value;
+      if (writable && !(state.is.state(value) && value.writable)) return false;
       if (kinds) {
-        const kind = state_kind(entry.value);
+        const kind = state_kind(state.as_state(value));
         if (!kind || !kinds.includes(kind)) return false;
       }
       return !filter || filter(entry);

@@ -24,8 +24,14 @@ export function widget_id(widget: CanvasWidget): string {
 export function widget_name(widget: CanvasWidget): string {
   const node = depot.get(widget.widget);
   const found = node.rsync ? node.get() : undefined;
-  if (found?.ok && found.value.kind === "entry" && found.value.type === WIDGETS)
-    return found.value.name;
+  if (
+    found?.ok &&
+    found.value.kind === "entry" &&
+    found.value.type === WIDGETS
+  ) {
+    const name = found.value.name;
+    return state.is.state(name) ? name.ok() : name;
+  }
   return widget.widget.split("/").at(-1) ?? widget.widget;
 }
 
