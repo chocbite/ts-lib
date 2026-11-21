@@ -313,7 +313,7 @@ function status(parent: HTMLElement): HTMLElement {
 {
   const sec = section(
     "Languages",
-    "The text keyboard has the layout of KEYBOARD_LANGUAGE, or of the browser when it is empty. Switch with the buttons, or with the globe key on the keyboard, which opens the list by continent and country. Try the dead keys: ´ then e is é, ¨ then u is ü on Danish. Hold a key for its AltGr character and accented letters, like 2 for @ and e for é è ê ë on Danish, slide to one and let go. The Sym key has two pages of symbols. Look at the staggered rows, and scripts like Hindi (combining marks on a dotted circle) and Arabic",
+    "The text keyboard has the layout of KEYBOARD_LANGUAGE, or of the browser when it is empty. Switch with the buttons, or with the globe key on the keyboard, which opens the list by continent and country. Try the dead keys: ´ then e is é, ¨ then u is ü on Danish. Hold a key for its AltGr character and accented letters, like 2 for @ and e for é è ê ë on Danish, slide to one and let go. The Sym key has two pages of symbols, and the Ω key next to it every character, emoji by group, like Smileys & Emotion or Flags, and the Unicode blocks, try Arrows or Box Drawing and turn the pages. Look at the staggered rows, and scripts like Hindi (combining marks on a dotted circle) and Arabic",
   );
   const line = status(sec);
   KEYBOARD_LAYOUT.sub((v) => {

@@ -44,6 +44,12 @@ const OMITTED = {
     `Omitted, generated file with ${code.match(/^\s*"(?:[^"\\]|\\.)*\\f(?:[^"\\]|\\.)*",?$/gm)?.length ?? 0} keyboard layouts from Unicode CLDR. ` +
     "It exports `CLDR_LAYOUTS`, one string per layout, decoded by `package-ui/keyboard/languages.ts`, where the `id` of a layout is a locale like `da` or `de-CH`, " +
     "and the tables `CLDR_DEAD_KEYS`, `CLDR_CONTINENTS`, `CLDR_CONTINENT_OF` and `CLDR_TERRITORY_NAMES`.",
+  "keyboard/unicode_blocks.ts": (code) =>
+    `Omitted, generated file with ${code.match(/^\s*\["/gm)?.length ?? 0} Unicode blocks. ` +
+    "It exports `UNICODE_BLOCKS`, an array of `[name, first code point, last code point, script]`, script 1 for a block of a script and 0 for symbols.",
+  "keyboard/unicode_emoji.ts": (code) =>
+    `Omitted, generated file with ${[...code.matchAll(/^ {4}\["[^"]*", "(.*)"\],$/gm)].reduce((n, match) => n + match[1].split(" ").length, 0)} emoji from Unicode. ` +
+    "It exports `UNICODE_EMOJI`, an array of `[group, [[subgroup, emoji separated by spaces]]]` in the order of Unicode.",
 };
 
 const git = (command) =>
