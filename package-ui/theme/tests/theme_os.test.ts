@@ -2,7 +2,7 @@ import { GREY } from "@chocbite/ts-lib/colors";
 import { describe, expect, it, vi } from "vitest";
 
 //The operating system dark mode query is replaced before the theme module loads, so the test can switch it,
-//every test file runs in its own browser context, so the theme module loads fresh here
+//every test file runs in its own frame and starts with an empty local storage, so the theme module loads fresh here
 const os_listeners: ((e: { matches: boolean }) => void)[] = [];
 vi.stubGlobal("matchMedia", (media: string) => ({
   matches: false,

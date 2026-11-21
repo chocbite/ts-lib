@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 const key = (id: string) => "@chocbite/ts-lib-theme/" + id;
 
 //Stored values are set before the theme module loads,
-//every test file runs in its own browser context, so the theme module loads fresh here
+//every test file runs in its own frame and starts with an empty local storage, so the theme module loads fresh here
 describe("Theme settings from storage", () => {
   it("ignores stored values of the wrong type or outside the allowed values", async () => {
     localStorage.setItem(key("scale"), JSON.stringify("big"));

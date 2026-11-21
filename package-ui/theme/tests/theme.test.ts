@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 //The theme module is imported in the tests, after the stored settings are set up,
-//every test file runs in its own browser context, so the import happens here first
+//every test file runs in its own frame and starts with an empty local storage, so the import happens here first
 describe("Theme engine", () => {
   it("rem_to_px uses the stored scale from the start", async () => {
     localStorage.setItem("@chocbite/ts-lib-theme/scale", "150");

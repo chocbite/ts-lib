@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 const THEME_KEY = "@chocbite/ts-lib-theme/theme";
 
-//Stored before the theme module loads, every test file runs in its own browser context,
+//Stored before the theme module loads, every test file runs in its own frame and starts with an empty local storage,
 //so the theme module loads fresh here
 localStorage.setItem(THEME_KEY, JSON.stringify("system"));
 const match_media = vi.spyOn(window, "matchMedia");
