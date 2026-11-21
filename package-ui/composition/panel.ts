@@ -84,10 +84,19 @@ document.documentElement.style.setProperty(
 //Internal to this module, between the panel and its container
 export const PANEL_ADDED = Symbol("panel_added");
 export const PANEL_PLACE = Symbol("panel_place");
-export const PANEL_MOVE = Symbol("panel_move");
 export const HOST_LAYER = Symbol("host_layer");
 export const HOST_RAISE = Symbol("host_raise");
 export const HOST_REMOVE = Symbol("host_remove");
+
+/**Called on the content while the user moves its panel by the title bar, done when let go, internal to this module*/
+export const CONTENT_PANEL_MOVED = Symbol("content_panel_moved");
+interface MovedContent {
+  [CONTENT_PANEL_MOVED](e: PointerEvent, done: boolean): void;
+}
+const moved = (content: ContentBase, e: PointerEvent, done: boolean) => {
+  if (CONTENT_PANEL_MOVED in content)
+    (content as ContentBase & MovedContent)[CONTENT_PANEL_MOVED](e, done);
+};
 
 /**The container of a panel, as the panel sees it*/
 export interface PanelHost {
@@ -303,11 +312,6 @@ class Panel extends Base {
     this.#place();
   }
 
-  /**Called by the container, starts moving the panel from a press on another element, like a tab bar in the panel*/
-  [PANEL_MOVE](e: PointerEvent, handle: HTMLDivElement): void {
-    this.#move_start(e, handle);
-  }
-
   /**Called by the container when its size changes, the panel is kept inside it*/
   [PANEL_PLACE](): void {
     this.#place();
@@ -476,27 +480,30 @@ class Panel extends Base {
     if (this.#can_change("y")) this.#change("y", corner.top + h * ay);
   }
 
-  /**Moves the panel with the pointer, from a press on the title bar, or on the handle another element gives*/
-  #move_start(e: PointerEvent, titlebar = this.#titlebar): void {
+  #move_start(e: PointerEvent): void {
     if (e.button !== 0) return;
     if (!this.#can_change("x") && !this.#can_change("y")) return;
+    const titlebar = this.#titlebar;
     titlebar.setPointerCapture(e.pointerId);
     titlebar.classList.add("moving");
     this.#moving = true;
     const start = this.#corner();
-    titlebar.onpointermove = (ev) =>
+    titlebar.onpointermove = (ev) => {
       this.#move_to(
         start.left + px_to_rem(ev.clientX - e.clientX),
         start.top + px_to_rem(ev.clientY - e.clientY),
         start.width,
         start.height,
       );
+      moved(this.#content, ev, false);
+    };
     titlebar.onpointerup = (ev) => {
       titlebar.releasePointerCapture(ev.pointerId);
       titlebar.classList.remove("moving");
       this.#moving = false;
       titlebar.onpointermove = null;
       titlebar.onpointerup = null;
+      moved(this.#content, ev, true);
     };
   }
 
@@ -603,7 +610,8 @@ class Panel extends Base {
             e.clientY >= rect.top &&
             e.clientY <= rect.bottom
           )
-            this.close();
+            //Through the content, which closes the panel with it, or decides how it is closed
+            this.#content.content_close();
         };
       };
       button.oncontextmenu = (e) => {

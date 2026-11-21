@@ -58,7 +58,7 @@ const describe = (node: LayoutNode, depth = 0): string => {
 {
   const sec = section(
     "Workspace",
-    "Right click a tab and Pop out to put it in a panel floating above the layout, a tab alone in the main layout has no Pop out. Drag tabs between the main layout and the panels, and between panels, a panel with one tab goes into the layout by dragging its tab, a panel is removed when its last tab leaves. The empty space of a tab bar in a panel moves the panel, its edges size it. Inside a panel tabs can be split like in the layout. The panels are in the panel container of the page, like all panels, so they stay where they are when the page scrolls, the starting panel is placed over the box when the page loads. The text below follows the states of the workspace, the panels with their place and size",
+    "Right click a tab and Pop out to put it in a panel, a tab alone in the main layout has no Pop out. Drag tabs between the main layout and the panels, and between panels, a panel is removed when its last tab leaves. The title bar of a panel shows the shown tab of the group worked in last, and moves the panel. With one tab the tab bar is hidden, moving the panel over a layout then shows where the tab goes, letting go there puts it in the layout. The close button shows when every tab in the panel can be closed, Terminal can not, and closes them all. The panels are in the panel container of the page, like all panels, so they stay where they are when the page scrolls, the starting panel is placed over the box when the page loads. The text below follows the states of the workspace, the panels with their place and size",
   );
   let count = 0;
   const root = state.ok_w<LayoutNode>(

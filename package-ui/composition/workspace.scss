@@ -7,17 +7,13 @@ composition-workspace {
   overflow: hidden;
 }
 
-//The layout of a panel fills it, the empty space of its tab bars moves the panel
+//The layout of a panel fills it, with one tab the panel title bar shows it instead of the tab bar
 composition-workspacepanel {
   position: absolute;
   inset: 0;
   overflow: hidden;
 
-  composition-layouttabs > .bar {
-    cursor: grab;
-
-    &.moving {
-      cursor: grabbing;
-    }
+  &.single composition-layouttabs > .bar {
+    display: none;
   }
 }

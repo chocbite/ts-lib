@@ -4,8 +4,10 @@ import {
   define_element,
   input_key,
   type BaseOptions,
+  type InputOf,
   type InputOptions,
 } from "#base";
+import type { SVGFunc } from "#svg";
 import { px_to_rem } from "#theme";
 import state, {
   type StateArrayRead,
@@ -13,20 +15,30 @@ import state, {
   type StateOrValROS,
   type StateROS,
 } from "@chocbite/ts-lib/state";
-import { ContentBase } from "./content";
 import {
+  CONTENT_CREATE,
+  content_context_lines,
+  ContentBase,
+  type ContentCreateOptions,
+} from "./content";
+import {
+  content_closable,
+  drag_content,
+  drop_content,
   Layout,
+  LAYOUT_CHANGED,
   OWNER_CAN_EMPTY,
   OWNER_CAN_POPOUT,
   OWNER_EMPTY,
   OWNER_POPOUT,
+  type DropTarget,
   type LayoutNode,
   type LayoutOpenOptions,
   type LayoutOwner,
   type LayoutTabs,
 } from "./layout";
 import { panel_container, type PanelContainer } from "./container";
-import { PANEL_MOVE, type Panel } from "./panel";
+import { CONTENT_PANEL_MOVED, type Panel } from "./panel";
 import "./workspace.scss";
 
 //      _____       _______
@@ -84,7 +96,16 @@ function write(target: StateROS<unknown>, value: unknown): void {
 //     |  ___/ /\ \ | . ` |  __| | |
 //     | |  / ____ \| |\  | |____| |____
 //     |_| /_/    \_\_| \_|______|______|
-/**Content of a panel of a workspace, the layout of the panel, the empty space of its tab bars moves the panel*/
+/**Inputs of the shown content the panel content follows, inner inputs that are not options*/
+const SHOWN = {
+  title: input_key<InputOf<typeof CONTENT_CREATE.title>>(),
+  icon: input_key<InputOf<typeof CONTENT_CREATE.icon>>(),
+};
+
+/**Content of a panel of a workspace, the layout of the panel
+ * The panel shows the title and icon of the shown tab, of the group worked in last, and can be closed when every content
+ * in it can be closed, closing it closes them. With one tab the tab bar is hidden, the panel title bar shows it,
+ * moving the panel then drags the tab, dropping it in a layout puts it there and the panel goes away*/
 class WorkspacePanelContent extends ContentBase {
   static element_name() {
     return "workspacepanel";
@@ -94,20 +115,80 @@ class WorkspacePanelContent extends ContentBase {
   }
 
   readonly layout: Layout;
-  panel?: Panel;
+  readonly #title = state.from_w("");
+  readonly #icon = state.ok_w<SVGFunc | undefined>(undefined);
+  readonly #closable = state.ok_w(false);
+  /**Content whose title and icon are shown*/
+  #shown?: ContentBase;
+  /**Where the only tab goes when the panel is let go*/
+  #target?: DropTarget;
 
   constructor(layout: Layout) {
     super();
     this.layout = this.appendChild(layout);
-    this.addEventListener("pointerdown", (e) => {
-      const bar = e.target as HTMLDivElement;
-      if (
-        this.panel &&
-        bar.classList.contains("bar") &&
-        bar.parentElement?.tagName === "COMPOSITION-LAYOUTTABS"
-      )
-        this.panel[PANEL_MOVE](e, bar);
+    const update = () => this.#update();
+    this.addEventListener(LAYOUT_CHANGED, update);
+    this.addEventListener("focusin", update);
+  }
+
+  [CREATE](options: ContentCreateOptions): void {
+    super[CREATE]({
+      ...options,
+      title: this.#title,
+      icon: this.#icon,
+      closable: this.#closable,
     });
+    this.set({
+      context_menu: () => {
+        const shown = this.layout.current();
+        return shown ? content_context_lines(shown) : [];
+      },
+    });
+  }
+
+  /**Closes every content in the panel, the panel goes when the last one leaves*/
+  content_close(): void {
+    for (const content of this.layout.contents()) content.content_close();
+  }
+
+  /**Follows the shown content, and whether everything in the panel can be closed*/
+  #update(): void {
+    const shown = this.layout.current();
+    if (shown && shown !== this.#shown) {
+      this.#shown = shown;
+      this.set_input(SHOWN.title, shown.content_title, (title) => {
+        if (title.ok) this.#title.set_ok(title.value);
+        else this.#title.set_err(title.error);
+      });
+      this.set_input(SHOWN.icon, shown.content_icon, (icon) =>
+        this.#icon.set_ok(icon.ok ? icon.value : undefined),
+      );
+    }
+    const contents = this.layout.contents();
+    const root = this.layout.root_node();
+    const owner = this.layout.owner;
+    this.#closable.set_ok(
+      contents.length > 0 &&
+        contents.every(content_closable) &&
+        (owner?.[OWNER_CAN_EMPTY](this.layout) ?? false),
+    );
+    this.classList.toggle(
+      "single",
+      contents.length === 1 && !!root && !("children" in root),
+    );
+  }
+
+  /**With one tab, moving the panel drags the tab, the panel itself is skipped when finding where it goes*/
+  [CONTENT_PANEL_MOVED](e: PointerEvent, done: boolean): void {
+    const contents = this.layout.contents();
+    const panel = this.closest("composition-panel");
+    if (contents.length !== 1 || !panel) return;
+    const content = contents[0];
+    if (done) {
+      const target = this.#target;
+      this.#target = undefined;
+      drop_content(content, target);
+    } else this.#target = drag_content(content, e.clientX, e.clientY, panel);
   }
 }
 define_element(WorkspacePanelContent);
@@ -253,9 +334,7 @@ class Workspace extends Base implements LayoutOwner {
         width: data.width,
         height: data.height,
         layer: this.#config.layer,
-        titlebar: false,
       });
-      content.panel = panel;
       return panel;
     });
     this.#panels.splice(index, 0, ...made);

@@ -162,13 +162,50 @@ composition-layouttabs {
   //Only the content of the active tab is in the document, it fills the group and scrolls by itself
   > .body {
     position: relative;
-    flex-grow: 1;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
 
     > * {
       position: absolute;
       inset: 0;
       overflow: auto;
       outline: none;
+    }
+  }
+}
+
+//Sides of the tabs, the bar is first in the group, the flex direction puts it at its side
+composition-layouttabs {
+  &.side-bottom {
+    flex-direction: column-reverse;
+    > .bar {
+      box-shadow: inset 0 1px 0 0 var(--composition-colors-border);
+    }
+  }
+  &.side-left {
+    flex-direction: row;
+    > .bar {
+      box-shadow: inset -1px 0 0 0 var(--composition-colors-border);
+    }
+  }
+  &.side-right {
+    flex-direction: row-reverse;
+    > .bar {
+      box-shadow: inset 1px 0 0 0 var(--composition-colors-border);
+    }
+  }
+
+  //At a side the tabs are above each other, in a column as wide as SIDE_BAR_WIDTH in layout.ts
+  &.side-left,
+  &.side-right {
+    > .bar {
+      flex-direction: column;
+      height: auto;
+      width: 10rem;
+    }
+    &.compact > .bar {
+      width: var(--titlebar-height);
     }
   }
 }
@@ -213,6 +250,53 @@ composition-layouttab {
   }
   composition-layouttabs:focus-within > .bar > &.selected::before {
     background-color: var(--composition-colors-shadowFocus);
+  }
+  //The line is on the side away from the content
+  composition-layouttabs.side-bottom > .bar > &.selected::before {
+    top: auto;
+    bottom: 0;
+  }
+  composition-layouttabs.side-left > .bar > &.selected::before,
+  composition-layouttabs.side-right > .bar > &.selected::before {
+    bottom: 0;
+    width: 2px;
+    height: auto;
+  }
+  composition-layouttabs.side-right > .bar > &.selected::before {
+    left: auto;
+    right: 0;
+  }
+
+  //Above each other the tabs fill the width of the bar
+  composition-layouttabs.side-left > .bar > &,
+  composition-layouttabs.side-right > .bar > & {
+    flex: 0 0 var(--titlebar-height);
+    max-width: none;
+    border-right: none;
+    border-bottom: 1px solid var(--composition-colors-border);
+  }
+
+  //Compact tabs show only the icon, or the first letter of the title without one
+  > .letter {
+    display: none;
+  }
+  composition-layouttabs.compact > .bar > & {
+    flex: 0 0 var(--titlebar-height);
+    min-width: 0;
+    padding: 0;
+    justify-content: center;
+
+    > .title,
+    > .close {
+      display: none;
+    }
+    > .icon {
+      margin: 0;
+    }
+    &.no-icon > .letter {
+      display: block;
+      font-weight: 600;
+    }
   }
 
   &:focus-visible {

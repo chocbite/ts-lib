@@ -53,6 +53,9 @@ export type LayoutSide = (typeof LayoutSide)[keyof typeof LayoutSide];
 /**Direction a split puts its children in, row is side by side, column is above each other*/
 export type LayoutDirection = "row" | "column";
 
+/**Side of a tab group its tabs are on*/
+export type LayoutTabsSide = "top" | "bottom" | "left" | "right";
+
 /**A tab group of a layout, the layout writes its states when the user changes it, a read only state locks that part*/
 export interface LayoutTabs {
   /**Contents shown as tabs, in order, written with array instructions*/
@@ -61,6 +64,10 @@ export interface LayoutTabs {
   readonly active: StateROS<ContentBase | undefined>;
   /**Share of the space of the split it is in*/
   readonly size: StateROS<number>;
+  /**Side the tabs are on, top when not given, the user changes it from the menu of a tab when it is writable*/
+  readonly side?: StateROS<LayoutTabsSide>;
+  /**Whether the tabs show only their icon, false when not given, the user changes it from the menu of a tab when it is writable*/
+  readonly compact?: StateROS<boolean>;
 }
 /**A split of a layout, its children side by side or above each other*/
 export interface LayoutSplit {
@@ -79,12 +86,19 @@ const is_split = (node: LayoutNode): node is LayoutSplit => "children" in node;
 /**A tab group with writable states, starting with the given contents*/
 export function layout_tabs(
   tabs: ContentBase[] = [],
-  options: { active?: ContentBase; size?: number } = {},
+  options: {
+    active?: ContentBase;
+    size?: number;
+    side?: LayoutTabsSide;
+    compact?: boolean;
+  } = {},
 ): LayoutTabs {
   return {
     tabs: state.ok_w(tabs),
     active: state.ok_w<ContentBase | undefined>(options.active),
     size: state.ok_w(options.size ?? 1),
+    side: state.ok_w<LayoutTabsSide>(options.side ?? "top"),
+    compact: state.ok_w(options.compact ?? false),
   };
 }
 
@@ -131,6 +145,12 @@ export interface LayoutOwner {
 /**Smallest size of a tab group in rem, without its tab bar*/
 const MIN_WIDTH = 8;
 const MIN_HEIGHT = 4;
+/**Width in rem of a tab bar at the left or right side, the styles use the same*/
+const SIDE_BAR_WIDTH = 10;
+/**Event a layout sends up when what it shows changed, like the shown tab of a group, internal to this module*/
+export const LAYOUT_CHANGED = "composition-layout-changed";
+const changed = (element: Element) =>
+  element.dispatchEvent(new Event(LAYOUT_CHANGED, { bubbles: true }));
 /**Width of a sizer in rem, in touch mode, used for the minimum size of splits*/
 const SIZER_TOUCH = 1;
 /**Distance in rem from a pressed sizer where other sizers are moved with it, at crossings and where sizers line up*/
@@ -309,7 +329,7 @@ function can_split(layout: Layout, node: LayoutNode): boolean {
 }
 
 /**Where a dragged tab goes, into a tab bar at an index, a side of a group, or a side of the whole layout*/
-type DropTarget = { layout: Layout; rect?: DOMRect } & (
+export type DropTarget = { layout: Layout; rect?: DOMRect } & (
   | { group: LayoutTabs; index: number }
   | { node: LayoutNode; side: LayoutSide }
   | { root: true; side: LayoutSide }
@@ -463,6 +483,7 @@ class SplitElement extends NodeElement {
       }
     }
     this.update_min();
+    changed(this);
   }
 
   #insert(index: number, nodes: readonly LayoutNode[]): void {
@@ -656,15 +677,36 @@ class TabsElement extends NodeElement {
   readonly body = this.appendChild(document.createElement("div"));
   /**Tabs in order, a tab moved to another group is no longer a child of the bar*/
   #tabs: LayoutTab[] = [];
+  #side: LayoutTabsSide = "top";
+  #compact = false;
 
   constructor(node: LayoutTabs) {
     super(node);
     this.bar.className = "bar";
     this.body.className = "body";
+    this.classList.add("side-top");
     //A group with read only tabs hides the close buttons
     this.classList.toggle("locked", !node.tabs.writable);
     this.attach_state(node.tabs, (tabs) => this.#apply(tabs.value));
     this.attach_state(node.active, () => this.#show_active());
+    if (node.side)
+      this.attach_state(node.side, (side) => {
+        this.classList.remove("side-" + this.#side);
+        this.#side = side.ok ? side.value : "top";
+        this.classList.add("side-" + this.#side);
+        this.update_min();
+      });
+    if (node.compact)
+      this.attach_state(node.compact, (compact) => {
+        this.#compact = compact.ok && compact.value;
+        this.classList.toggle("compact", this.#compact);
+        this.update_min();
+      });
+  }
+
+  /**Whether the tabs are above each other, at the left or right side*/
+  get vertical(): boolean {
+    return this.#side === "left" || this.#side === "right";
   }
 
   /**Applies only the changes the array write carries*/
@@ -725,15 +767,20 @@ class TabsElement extends NodeElement {
     if (!shown) this.body.replaceChildren();
     else if (this.body.firstChild !== shown.content)
       this.body.replaceChildren(shown.content);
+    changed(this);
   }
 
+  /**The bar adds to the height at the top or bottom, and to the width at a side*/
   update_min(): void {
     const tabs = this.#tabs;
-    this.publish_min(
-      tabs.reduce((m, t) => Math.max(m, t.min_width), MIN_WIDTH),
-      tabs.reduce((m, t) => Math.max(m, t.min_height), MIN_HEIGHT) +
-        TITLEBAR_HEIGHT_TOUCH,
-    );
+    const width = tabs.reduce((m, t) => Math.max(m, t.min_width), MIN_WIDTH);
+    const height = tabs.reduce((m, t) => Math.max(m, t.min_height), MIN_HEIGHT);
+    if (this.vertical)
+      this.publish_min(
+        width + (this.#compact ? TITLEBAR_HEIGHT_TOUCH : SIDE_BAR_WIDTH),
+        height,
+      );
+    else this.publish_min(width, height + TITLEBAR_HEIGHT_TOUCH);
   }
 }
 define_element(TabsElement);
@@ -780,6 +827,14 @@ const LAYOUT_HOST: ContentHost = {
   },
 };
 
+/**Sides of the tabs in the menu of a tab*/
+const TAB_SIDES: [LayoutTabsSide, string][] = [
+  ["top", "Top"],
+  ["bottom", "Bottom"],
+  ["left", "Left"],
+  ["right", "Right"],
+];
+
 /**Tab of one content, follows its title, icon, close button and smallest size*/
 class LayoutTab extends Base {
   static element_name() {
@@ -795,6 +850,8 @@ class LayoutTab extends Base {
   #closable = false;
   #dragging = false;
   #icon = this.appendChild(document.createElement("div"));
+  /**First letter of the title, shown instead of the icon by compact tabs of content without one*/
+  #letter = this.appendChild(document.createElement("div"));
   #title = this.appendChild(document.createElement("div"));
   #close = this.appendChild(document.createElement("div"));
 
@@ -804,6 +861,9 @@ class LayoutTab extends Base {
     content[CONTENT_HOST] = LAYOUT_HOST;
     this.tabIndex = -1;
     this.#icon.className = "icon";
+    //Without an icon given the icon input never calls back
+    this.#set_icon(undefined);
+    this.#letter.className = "letter";
     this.#title.className = "title";
     this.#close.className = "close";
     this.#close.textContent = "×";
@@ -835,13 +895,16 @@ class LayoutTab extends Base {
       this.#set_icon(icon.ok ? icon.value : undefined),
     );
     this.set_input(TAB_CONTENT.title, content.content_title, (title) => {
-      this.#title.textContent = title.ok
-        ? title.value
-        : "⚠ " + title.error.nice;
+      const text = title.ok ? title.value : "⚠ " + title.error.nice;
+      this.#title.textContent = text;
+      //The whole title on hover, for compact tabs and titles cut short
+      this.title = text;
+      this.#letter.textContent = (title.ok ? title.value : "⚠").slice(0, 1);
     });
     this.set_input(TAB_CONTENT.closable, content.content_closable, (c) => {
       this.#closable = c.ok && c.value;
       this.#close.hidden = !this.#closable;
+      changed(this);
     });
     this.set_input(TAB_CONTENT.min_width, content.content_min_width, (w) => {
       this.min_width = w.ok ? w.value : 0;
@@ -851,6 +914,11 @@ class LayoutTab extends Base {
       this.min_height = h.ok ? h.value : 0;
       this.group_element()?.update_min();
     });
+  }
+
+  /**Whether the content can be closed by the user*/
+  get closable(): boolean {
+    return this.#closable;
   }
 
   /**Element of the group the tab is in*/
@@ -868,6 +936,7 @@ class LayoutTab extends Base {
     this.#icon.replaceChildren();
     if (icon) this.#icon.appendChild(icon());
     this.#icon.hidden = !icon;
+    this.classList.toggle("no-icon", !icon);
   }
 
   #lines(): ContextMenuLines {
@@ -918,6 +987,31 @@ class LayoutTab extends Base {
         }),
       );
     }
+    const side = group?.node.side;
+    if (side?.writable)
+      lines.push(
+        ctm.sub({
+          text: "Tabs at",
+          menu: ctm.menu(
+            TAB_SIDES.map(([value, text]) =>
+              ctm.line({
+                text,
+                checked: side.ok() === value,
+                on_click: () => write(side, value),
+              }),
+            ),
+          ),
+        }),
+      );
+    const compact = group?.node.compact;
+    if (compact?.writable)
+      lines.push(
+        ctm.line({
+          text: "Compact tabs",
+          checked: compact.ok(),
+          on_click: () => write(compact, !compact.ok()),
+        }),
+      );
     return lines;
   }
 
@@ -1051,13 +1145,45 @@ function near_side(
   return distance < part ? side : undefined;
 }
 
+/**Where the content would go when dropped at the point, shown by the indicator, for a panel moved by its title bar
+ * dragging its only content, skip is the panel, internal to this module*/
+export function drag_content(
+  content: ContentBase,
+  x: number,
+  y: number,
+  skip: Element,
+): DropTarget | undefined {
+  const tab = TABS.get(content);
+  const target = tab && find_target(tab, x, y, skip);
+  show_indicator(target);
+  return target;
+}
+
+/**Drops the content where drag_content found, nothing without a target, internal to this module*/
+export function drop_content(
+  content: ContentBase,
+  target: DropTarget | undefined,
+): void {
+  show_indicator(undefined);
+  if (target) move_content(content, target);
+}
+
+/**Whether the user can close the content shown by a layout, internal to this module*/
+export function content_closable(content: ContentBase): boolean {
+  return TABS.get(content)?.closable ?? false;
+}
+
 /**Finds where the tab would go when dropped at the point, nothing where dropping changes nothing or is not allowed*/
 function find_target(
   tab: LayoutTab,
   x: number,
   y: number,
+  skip?: Element,
 ): DropTarget | undefined {
-  const element = tab.ownerDocument.elementFromPoint(x, y);
+  const doc = tab.ownerDocument;
+  const element = skip
+    ? doc.elementsFromPoint(x, y).find((e) => !skip.contains(e))
+    : doc.elementFromPoint(x, y);
   const layout = element?.closest<Layout>("composition-layout");
   if (!element || !layout) return;
   const from = tab.group_element();
@@ -1090,28 +1216,40 @@ function find_target(
 
   //Over the tab bar, the tab goes between the tabs
   const bar = group_element.bar.getBoundingClientRect();
-  if (y < bar.bottom) {
+  const vertical = group_element.vertical;
+  if (x >= bar.left && x <= bar.right && y >= bar.top && y <= bar.bottom) {
     if (alone(group) || !group.tabs.writable) return;
     const contents = group.tabs.ok();
     let index = contents.findIndex((content) => {
       const r = TABS.get(content)?.getBoundingClientRect();
-      return r && x < r.left + r.width / 2;
+      return (
+        r && (vertical ? y < r.top + r.height / 2 : x < r.left + r.width / 2)
+      );
     });
     if (index === -1) index = contents.length;
     if (source === group) {
       const at = contents.indexOf(tab.content);
       if (index === at || index === at + 1) return;
     }
-    const before = contents[index];
-    const after = contents.at(-1);
-    const line = before
-      ? TABS.get(before)?.getBoundingClientRect().left
-      : after && TABS.get(after)?.getBoundingClientRect().right;
+    const before = contents[index] && TABS.get(contents[index]);
+    const last = contents.at(-1);
+    const after = last && TABS.get(last);
+    const r = (before ?? after)?.getBoundingClientRect();
+    if (vertical) {
+      const line = r ? (before ? r.top : r.bottom) : bar.top;
+      return {
+        layout,
+        group,
+        index,
+        rect: new DOMRect(bar.left, line - 1.5, bar.width, 3),
+      };
+    }
+    const line = r ? (before ? r.left : r.right) : bar.left;
     return {
       layout,
       group,
       index,
-      rect: new DOMRect((line ?? bar.left) - 1.5, bar.top, 3, bar.height),
+      rect: new DOMRect(line - 1.5, bar.top, 3, bar.height),
     };
   }
 
@@ -1269,6 +1407,22 @@ class Layout extends Base {
     if (this.#root_element?.parentElement === this) this.#root_element.remove();
     this.#root_element = element;
     this.insertBefore(element, this.#indicator);
+    changed(this);
+  }
+
+  /**Content of the shown tab of the group the user worked in last, or of the first group*/
+  current(): ContentBase | undefined {
+    const root = this.root_node();
+    if (!root) return undefined;
+    const last =
+      this.#last && (this.#last === root || this.parent_of(this.#last))
+        ? this.#last
+        : undefined;
+    const group = last ?? first_group(root);
+    if (!group) return undefined;
+    const tabs = group.tabs.ok();
+    const active = group.active.ok();
+    return active && tabs.includes(active) ? active : tabs[0];
   }
 }
 define_element(Layout);

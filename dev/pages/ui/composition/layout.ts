@@ -173,6 +173,61 @@ const describe = (node: LayoutNode, depth = 0): string => {
   );
 }
 
+//      _______       ____   _____
+//     |__   __|/\   |  _ \ / ____|
+//        | |  /  \  | |_) | (___
+//        | | / /\ \ |  _ < \___ \
+//        | |/ ____ \| |_) |____) |
+//        |_/_/    \_\____/|_____/
+{
+  const sec = section(
+    "Tab sides and compact tabs",
+    "Right click a tab for Tabs at, to put the tabs of its group at a side, and Compact tabs, to show only icons, a content without an icon shows the first letter of its title. The whole title shows when hovering a tab. Tabs are never wider than 14rem, the long title is cut short. Drag tabs into the side bars, the line shows where they go",
+  );
+  const tabs = (name: string) => [
+    demo(
+      { title: `${name} files`, icon: material_folder_rounded, closable: true },
+      `${name} files`,
+    ),
+    demo(
+      { title: `${name} terminal`, icon: material_terminal_rounded },
+      `${name} terminal`,
+    ),
+    demo({ title: `${name} notes`, closable: true }, `${name} notes, no icon`),
+  ];
+  box(sec, "Groups with their tabs at each side", {
+    width: "60rem",
+    maxWidth: "100%",
+    height: "30rem",
+    border: "1px solid #8884",
+  }).appendChild(
+    comp.layout({
+      root: comp.layout_split("row", [
+        comp.layout_tabs(tabs("Left"), { side: "left", compact: true }),
+        comp.layout_split(
+          "column",
+          [
+            comp.layout_tabs([
+              ...tabs("Top"),
+              demo(
+                {
+                  title:
+                    "A very long title that is cut short at the max width of a tab",
+                  closable: true,
+                },
+                "Long title",
+              ),
+            ]),
+            comp.layout_tabs(tabs("Bottom"), { side: "bottom" }),
+          ],
+          3,
+        ),
+        comp.layout_tabs(tabs("Right"), { side: "right", size: 1.5 }),
+      ]),
+    }),
+  );
+}
+
 //      _      ____   _____ _  ________ _____
 //     | |    / __ \ / ____| |/ /  ____|  __ \
 //     | |   | |  | | |    | ' /| |__  | |  | |
