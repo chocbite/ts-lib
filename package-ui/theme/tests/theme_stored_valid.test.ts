@@ -12,7 +12,7 @@ const STORED: { [id: string]: unknown } = {
 };
 
 //Valid stored values are set before the theme module loads,
-//every test file runs in its own browser context, so the theme module loads fresh here
+//every test file runs in its own frame and starts with an empty local storage, so the theme module loads fresh here
 for (const id in STORED) localStorage.setItem(key(id), JSON.stringify(STORED[id]));
 
 const root_var = (name: string) =>

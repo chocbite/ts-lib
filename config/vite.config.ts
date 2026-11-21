@@ -33,6 +33,8 @@ export default defineConfig({
         test: {
           name: "ui",
           include: ["**/*.test.ts"],
+          //Every test file starts with an empty local storage
+          setupFiles: [at_root("config/vitest.ui.setup.js")],
           //Failure screenshots go to the repo root
           attachmentsDir: at_root(".vitest/attachments"),
           browser: {
