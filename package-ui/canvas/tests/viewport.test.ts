@@ -1381,6 +1381,81 @@ describe("Editing inside groups", () => {
     expect(getComputedStyle(group_element()).visibility).toBe("visible");
   });
 
+  it("shows the canvas of the group edited with a backdrop and an outline, following its size", async () => {
+    const { viewport, selected, g, c } = await with_group();
+    const back = () =>
+      viewport.querySelector<HTMLElement>(":scope > .area-back");
+    const line = () =>
+      viewport.querySelector<SVGElement>(":scope > .area-line polygon.canvas");
+    expect(back()).toBeNull();
+    expect(line()).toBeNull();
+    selected.set_ok([c]);
+    await frames();
+    const group = viewport
+      .querySelector(":scope > .container canvas-groupwidget")!
+      .getBoundingClientRect();
+    //Behind the content, the outline on top of it
+    const children = [...viewport.children];
+    const level = viewport.querySelector(":scope > .level")!;
+    expect(children.indexOf(back()!)).toBeLessThan(children.indexOf(level));
+    expect(children.indexOf(line()!.parentElement!)).toBeGreaterThan(
+      children.indexOf(level),
+    );
+    //Grouped from the widgets, the canvas is the group
+    const area = () => line()!.getBoundingClientRect();
+    expect(area().left).toBeCloseTo(group.left, 0);
+    expect(area().top).toBeCloseTo(group.top, 0);
+    expect(area().width).toBeCloseTo(group.width, 0);
+    expect(area().height).toBeCloseTo(group.height, 0);
+    expect(getComputedStyle(back()!).clipPath).toContain("polygon");
+    //Twice as wide, scaled to fit the group it is half as high and centered
+    const width = (
+      g.options as Record<string, ReturnType<typeof state.ok_w<number>>>
+    ).content_width;
+    width.set_ok(width.ok() * 2);
+    await frames();
+    expect(area().width).toBeCloseTo(group.width, 0);
+    expect(area().height).toBeCloseTo(group.height / 2, 0);
+    expect(area().top).toBeCloseTo(group.top + group.height / 4, 0);
+    //Gone on the page
+    viewport.set({ edit: false });
+    await frames();
+    expect(back()).toBeNull();
+    expect(line()).toBeNull();
+  });
+
+  it("outlines the bounds of the group edited, which keep when the canvas changes", async () => {
+    const { viewport, selected, g, c } = await with_group();
+    selected.set_ok([c]);
+    await frames();
+    const bounds = () =>
+      viewport
+        .querySelector<SVGElement>(":scope > .area-line polygon.bounds")!
+        .getBoundingClientRect();
+    const group = () =>
+      viewport
+        .querySelector(":scope > .container canvas-groupwidget")!
+        .getBoundingClientRect();
+    const same = () => {
+      expect(bounds().left).toBeCloseTo(group().left, 0);
+      expect(bounds().top).toBeCloseTo(group().top, 0);
+      expect(bounds().width).toBeCloseTo(group().width, 0);
+      expect(bounds().height).toBeCloseTo(group().height, 0);
+    };
+    same();
+    const option = (key: string) =>
+      (g.options as Record<string, ReturnType<typeof state.ok_w<number>>>)[key];
+    //The canvas changes, the bounds of the widget stay
+    option("content_width").set_ok(option("content_width").ok() * 2);
+    await frames();
+    same();
+    //The widget changes, the bounds follow
+    option("width").set_ok(option("width").ok() + 30);
+    option("rotation").set_ok(90);
+    await frames();
+    same();
+  });
+
   it("moves a widget in a scaled group by the movement of the pointer", async () => {
     const { selected, g, c, viewport } = await with_group();
     const option = (key: string) =>
@@ -1430,7 +1505,7 @@ describe("Editing inside groups", () => {
       expect(edited.left).toBeCloseTo(shown.left, 0);
       expect(edited.width).toBeCloseTo(shown.width, 0);
     }
-    option("display").set_ok("fixed");
+    option("display").set_ok("clip");
     await frames();
     for (const [edited, shown] of placed()) {
       expect(edited.left).toBeCloseTo(shown.left, 0);

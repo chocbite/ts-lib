@@ -99,7 +99,9 @@ function group_page(
       : undefined) as CanvasPage["id"],
     width: options.content_width as CanvasPage["width"],
     height: options.content_height as CanvasPage["height"],
-    background: options.background as CanvasPage["background"],
+    //Transparent when not given, as the group shows it
+    background: (options.background ??
+      "transparent") as CanvasPage["background"],
     widgets: options.widgets as CanvasPage["widgets"],
   };
 }
@@ -174,6 +176,26 @@ class Viewport extends Base {
   #root_element: PageElement | undefined;
   /**The layer of the content of the group edited inside, on top of the page*/
   #level: HTMLDivElement | undefined;
+  /**The canvas of the group edited inside, in viewport pixels, a checkerboard behind the level and a dashed outline on top of it*/
+  #area_back = Object.assign(document.createElement("div"), {
+    className: "area-back",
+  });
+  #area_line = (() => {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.classList.add("area-line");
+    //The canvas, and the bounds of the group itself, its x, y, width, height and rotation on the level above,
+    //each over a line of the contrast color that shows in its gaps
+    for (const name of ["canvas", "bounds"])
+      for (const contrast of [true, false])
+        svg
+          .appendChild(
+            document.createElementNS("http://www.w3.org/2000/svg", "polygon"),
+          )
+          .classList.add(
+            ...(contrast ? ["contrast", name + "-contrast"] : [name]),
+          );
+    return svg;
+  })();
   /**The group elements of the path in the page, the level follows them, the last is hidden while edited*/
   #chain: WidgetBase[] = [];
   /**Maps the level edited to viewport pixels, the view, and for the content of a group the groups of the path*/
@@ -279,6 +301,8 @@ class Viewport extends Base {
     const parent = this.#level_page(this.#path.length - 1);
     this.#level?.remove();
     this.#level = undefined;
+    this.#area_back.remove();
+    this.#area_line.remove();
     for (const element of this.#chain) {
       element.removeEventListener(WIDGET_TRANSFORM_EVENT, this.#on_chain);
       element.removeEventListener("scroll", this.#on_chain);
@@ -307,6 +331,8 @@ class Viewport extends Base {
       const level = document.createElement("div");
       level.className = "level";
       this.insertBefore(level, this.#transformer);
+      this.insertBefore(this.#area_back, level);
+      this.insertBefore(this.#area_line, this.#transformer);
       this.#page = level.appendChild(page_element(page));
       this.#level = level;
     }
@@ -336,6 +362,9 @@ class Viewport extends Base {
 
   /**Maps the content of the last group of the path to the page, through every group of the path, like the groups show it:
    * moved to the group, turned around its center, scrolled, and scaled evenly and centered when displayed scaled*/
+  /**The box of the last group of the path in its own units, mapped to the level above by the matrix, set by #chain_matrix*/
+  #bounds = { matrix: new DOMMatrix(), width: 0, height: 0 };
+
   #chain_matrix(): DOMMatrix {
     let matrix = new DOMMatrix();
     this.#path.forEach((group, i) => {
@@ -370,6 +399,7 @@ class Viewport extends Base {
         .translate(frame.x + frame.width / 2, frame.y + frame.height / 2)
         .rotate(frame.rotation)
         .translate(-frame.width / 2, -frame.height / 2);
+      this.#bounds = { matrix, width: frame.width, height: frame.height };
       if (display === "scroll" && element)
         matrix = matrix.translate(-element.scrollLeft, -element.scrollTop);
       matrix = matrix.translate(fit.x, fit.y).scale(fit.scale_x, fit.scale_y);
@@ -658,9 +688,48 @@ class Viewport extends Base {
     this.#level_matrix = this.#level
       ? view.multiply(this.#chain_matrix())
       : view;
-    if (this.#level)
+    if (this.#level) {
       this.#level.style.transform = this.#level_matrix.toString();
+      this.#draw_area(view);
+    }
     this.#transformer.view(this.#level_matrix);
+  }
+
+  /**Places the backdrop and outline on the canvas of the group edited, its corners through the level matrix,
+   * and the outline of the bounds of the group, through the view and the groups above it*/
+  #draw_area(view: DOMMatrix) {
+    const page = this.#page;
+    if (!page) return;
+    const box = (matrix: DOMMatrix, width: number, height: number) =>
+      [
+        [0, 0],
+        [width, 0],
+        [width, height],
+        [0, height],
+      ].map(([x, y]) => matrix.transformPoint(new DOMPoint(x, y)));
+    const points = (corners: DOMPoint[]) =>
+      corners.map((point) => `${point.x},${point.y}`).join(" ");
+    const canvas = box(this.#level_matrix, page.page_width, page.page_height);
+    this.#area_back.style.clipPath = `polygon(${canvas
+      .map((point) => `${point.x}px ${point.y}px`)
+      .join(", ")})`;
+    /**Places a line and the contrast line under it*/
+    const line = (name: string, corners: DOMPoint[]) => {
+      for (const polygon of this.#area_line.querySelectorAll(
+        `.${name}, .${name}-contrast`,
+      ))
+        polygon.setAttribute("points", points(corners));
+    };
+    line("canvas", canvas);
+    //The view times the groups up to the last, and its box
+    line(
+      "bounds",
+      box(
+        view.multiply(this.#bounds.matrix),
+        this.#bounds.width,
+        this.#bounds.height,
+      ),
+    );
   }
 
   /**Zooms by the factor, keeping the given point in viewport coordinates in place */

@@ -151,7 +151,7 @@ A group is a widget whose content is a page of its own, registered by canvas as 
 
 Decisions:
 
-- **Display mode:** scale (the content scaled evenly to fit the group, centered, the default), stretch (each axis on its own, like a picture, edited fitted evenly so nothing slants), fixed (at its own size from the top left, cut off) or scrollbar (at its own size, scrollbars when bigger). The content size is the box of the widgets when grouped.
+- **Display mode:** scale (the content scaled evenly to fit the group, centered, the default), stretch (each axis on its own, like a picture, edited fitted evenly so nothing slants), clipped (at its own size from the top left, cut off) or scroll (at its own size, scrollbars when bigger). The content size is the box of the widgets when grouped.
 - **Ids are unique per level,** every page element, a nested one too, keeps the ids of its widgets unique.
 - **The selection is of one level,** selecting at another level replaces it.
 - **Every viewport has its own edit path,** a viewport follows the selection to the level of the selected widgets.

@@ -97,6 +97,15 @@ transformer.make_variable(
   undefined,
 );
 transformer.make_variable(
+  "contrast",
+  "Outline Contrast Color",
+  "Color between the dashes of the transformer outline and the outlines of a group edited inside, so they show on any background, also one of the transformer color",
+  GREY["50"],
+  GREY["900"],
+  "Color",
+  undefined,
+);
+transformer.make_variable(
   "handleBackground",
   "Handle Background Color",
   "Background color of the transformer handles",

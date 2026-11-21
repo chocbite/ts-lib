@@ -80,7 +80,7 @@ describe("Groups", () => {
     );
   });
 
-  it("scales the content to the group, or shows it at its own size, fixed or with scrollbars", async () => {
+  it("scales the content to the group, or shows it at its own size, clipped or with scrollbars", async () => {
     const child = box(0, 0, 20, 10);
     const widgets = state.ok_w<CanvasWidget[]>([child]);
     const page: CanvasPage = { width: 200, height: 100, widgets };
@@ -99,7 +99,7 @@ describe("Groups", () => {
     await vi.waitFor(() =>
       expect(element().getBoundingClientRect().width).toBeCloseTo(40),
     );
-    (option(g, "display") as StateOkW<string>).set_ok("fixed");
+    (option(g, "display") as StateOkW<string>).set_ok("clip");
     expect(element().getBoundingClientRect().width).toBeCloseTo(20);
     expect(getComputedStyle(group_element).overflow).toBe("hidden");
     (option(g, "display") as StateOkW<string>).set_ok("scroll");

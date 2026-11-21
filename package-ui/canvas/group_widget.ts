@@ -29,11 +29,11 @@ import "./group_widget.scss";
 export { GROUP };
 
 /**How the content of a group fits the group*/
-export type GroupDisplay = "scale" | "stretch" | "fixed" | "scroll";
+export type GroupDisplay = "scale" | "stretch" | "clip" | "scroll";
 
 /**Inputs of the group widget*/
 const GROUP_WIDGET = {
-  /**Scale fits the content to the size of the group, fixed shows it at its own size from the top left, cut off,
+  /**Scale fits the content to the size of the group, stretch fills it, each axis on its own, clip shows it at its own size from the top left, cut off,
    * scroll at its own size with scrollbars when it is bigger*/
   display: input_key<StateOrVal<GroupDisplay>>(),
   /**Size of the content, the page of the widgets of the group*/
@@ -162,9 +162,9 @@ export const GROUP_DEFINITION = WIDGETS.group(
         default: "scale",
         list: {
           scale: { name: "Scale" },
-          fixed: { name: "Fixed" },
           stretch: { name: "Stretch" },
-          scroll: { name: "Scrollbar" },
+          clip: { name: "Clipped" },
+          scroll: { name: "Scroll" },
         },
       },
       content_width: {

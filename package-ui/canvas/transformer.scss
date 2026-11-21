@@ -59,6 +59,8 @@ canvas-transformer {
   //The handles query the size of the outline, to hide side handles on small widgets
   container-type: size;
   outline: 1px dashed base.$transformer_color;
+  //Under the outline, the contrast color in its gaps, so it shows on any background
+  box-shadow: 0 0 0 1px base.$transformer_contrast;
   //Only the handles and sides take pointer events, so widgets under the outline can still be pressed
   pointer-events: none;
 
