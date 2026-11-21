@@ -579,6 +579,79 @@ describe("Collected states", function () {
       expect(updates).toEqual([13]);
     });
   });
+
+  describe(
+    "Changing states and getter while subscribed",
+    { timeout: 200 },
+    function () {
+      const sum = (values: readonly StateResult<number>[]) => {
+        let total = 0;
+        for (const value of values) {
+          if (value.err) return value;
+          total += value.value;
+        }
+        return ok(total);
+      };
+
+      it("RES: set_states tells subscribers the new value", async function () {
+        const state = st.c.res<number, StateRES<number>[]>(sum, st.ok(1));
+        const updates: StateResult<number>[] = [];
+        state.sub((value) => updates.push(value), true);
+        await sleep(5);
+        state.set_states(st.ok(1), st.ok(5));
+        await sleep(5);
+        expect(updates).toEqual([ok(1), ok(6)]);
+      });
+
+      it("REA: set_states tells subscribers the new value", async function () {
+        const state = st.c.rea<number, StateRES<number>[]>(sum, st.ok(1));
+        const updates: StateResult<number>[] = [];
+        state.sub((value) => updates.push(value), true);
+        await sleep(5);
+        state.set_states(st.ok(1), st.ok(5));
+        await sleep(5);
+        expect(await state).toEqual(ok(6));
+        expect(updates).toEqual([ok(1), ok(6)]);
+      });
+
+      it("ROA: set_states tells subscribers the new value", async function () {
+        const state = st.c.roa<
+          number,
+          [StateRES<number>, ...StateRES<number>[]]
+        >(
+          (values) =>
+            ok(values.reduce((total, v) => total + (v.ok ? v.value : 0), 0)),
+          st.ok(1),
+        );
+        const updates: StateResult<number>[] = [];
+        state.sub((value) => updates.push(value), true);
+        await sleep(5);
+        state.set_states(st.ok(1), st.ok(5));
+        await sleep(5);
+        expect(await state).toEqual(ok(6));
+        expect(updates).toEqual([ok(1), ok(6)]);
+      });
+
+      it("REA: set_getter tells subscribers the new value", async function () {
+        const state = st.c.rea<number, StateRES<number>[]>(sum, st.ok(1));
+        const updates: StateResult<number>[] = [];
+        state.sub((value) => updates.push(value), true);
+        await sleep(5);
+        state.set_getter(() => ok(10));
+        await sleep(5);
+        expect(await state).toEqual(ok(10));
+        expect(updates).toEqual([ok(1), ok(10)]);
+      });
+
+      it("REA: the first subscriber gets the first value once", async function () {
+        const state = st.c.rea<number, StateRES<number>[]>(sum, st.ok(1));
+        const updates: StateResult<number>[] = [];
+        state.sub((value) => updates.push(value), true);
+        await sleep(5);
+        expect(updates).toEqual([ok(1)]);
+      });
+    },
+  );
 });
 
 describe("Collected states with ok values", () => {
@@ -610,7 +683,11 @@ describe("Collected states with ok values", () => {
   });
 
   it("gives rea_map the plain values of async states", async () => {
-    const total = st.c.rea_map(([a, b]) => a * b, st.rea(() => sleep(1, ok(3))), st.res(ok(5)));
+    const total = st.c.rea_map(
+      ([a, b]) => a * b,
+      st.rea(() => sleep(1, ok(3))),
+      st.res(ok(5)),
+    );
 
     expect(await total).toEqual(ok(15));
     expectTypeOf(total).toMatchTypeOf<StateREA<number>>();
@@ -658,7 +735,12 @@ describe("Writable collected states", () => {
   it("gives the result of write, an error included", async () => {
     const [a, b] = states();
     const failed = err_nice(TEST_ERROR, "refused");
-    const sum = st.c.resw(result_sum, { write: (_value: number) => Promise.resolve(failed) }, a, b);
+    const sum = st.c.resw(
+      result_sum,
+      { write: (_value: number) => Promise.resolve(failed) },
+      a,
+      b,
+    );
 
     expect(await sum.write(9)).toBe(failed);
   });
@@ -670,13 +752,22 @@ describe("Writable collected states", () => {
       {
         write: (_value: number) => Promise.resolve(ok(undefined)),
         check: (value, collected) =>
-          Promise.resolve(value > collected.length ? ok(value) : err_nice(TEST_ERROR, "too low")),
+          Promise.resolve(
+            value > collected.length
+              ? ok(value)
+              : err_nice(TEST_ERROR, "too low"),
+          ),
         limit: (value) => Promise.resolve(ok(Math.min(value, 10))),
       },
       a,
       b,
     );
-    const without = st.c.resw(result_sum, { write: (_value: number) => Promise.resolve(ok(undefined)) }, a, b);
+    const without = st.c.resw(
+      result_sum,
+      { write: (_value: number) => Promise.resolve(ok(undefined)) },
+      a,
+      b,
+    );
 
     expect(await with_both.limit(50)).toEqual(ok(10));
     expect((await with_both.check(1)).err).toBe(true);
@@ -701,7 +792,8 @@ describe("Writable collected states", () => {
     );
     sum.set_write_enabled(st.ok(false));
 
-    const disabled = (result: StateResult<unknown>) => !result.ok && result.error.kind === st.errors.WRITE_DISABLED;
+    const disabled = (result: StateResult<unknown>) =>
+      !result.ok && result.error.kind === st.errors.WRITE_DISABLED;
     expect(disabled(await sum.write(1))).toBe(true);
     expect(disabled(await sum.check(1))).toBe(true);
     expect(disabled(await sum.limit(1))).toBe(true);
@@ -713,16 +805,25 @@ describe("Writable collected states", () => {
     const a = st.ok(2);
     const rosw = st.c.rosw((values) => ok(values[0].value * 2), write, a);
     const roaw = st.c.roaw((values) => ok(values[0].value * 3), write, a);
-    const reaw = st.c.reaw((values) => values[0], write, st.rea(() => sleep(1, ok(4))));
+    const reaw = st.c.reaw(
+      (values) => values[0],
+      write,
+      st.rea(() => sleep(1, ok(4))),
+    );
     const resw_map = st.c.resw_map(([v]) => v + 1, write, a);
-    const reaw_map = st.c.reaw_map(([v]) => v + 2, write, st.rea(() => sleep(1, ok(4))));
+    const reaw_map = st.c.reaw_map(
+      ([v]) => v + 2,
+      write,
+      st.rea(() => sleep(1, ok(4))),
+    );
 
     expect(rosw.ok()).toBe(4);
     expect((await roaw).value).toBe(6);
     expect(await reaw).toEqual(ok(4));
     expect(resw_map.get()).toEqual(ok(3));
     expect(await reaw_map).toEqual(ok(6));
-    for (const s of [rosw, roaw, reaw, resw_map, reaw_map]) expect(s.writable).toBe(true);
+    for (const s of [rosw, roaw, reaw, resw_map, reaw_map])
+      expect(s.writable).toBe(true);
     expectTypeOf(rosw).toMatchTypeOf<StateROSW<number, any, number>>();
     expectTypeOf(roaw).toMatchTypeOf<StateROAW<number, any, number>>();
     expectTypeOf(reaw).toMatchTypeOf<StateREAW<number, any, number>>();
@@ -731,7 +832,11 @@ describe("Writable collected states", () => {
 
   it("gives a read only view that can not write", async () => {
     const write = { write: (_value: number) => Promise.resolve(ok(undefined)) };
-    const view = st.c.rosw((values) => ok(values[0].value), write, st.ok(1)).read_only;
+    const view = st.c.rosw(
+      (values) => ok(values[0].value),
+      write,
+      st.ok(1),
+    ).read_only;
 
     expect(view.writable).toBe(false);
   });
@@ -745,7 +850,9 @@ describe("Writable collected states", () => {
 });
 
 /**Sum of the values, the first error when one fails*/
-function result_sum(values: readonly StateResult<number>[]): StateResult<number> {
+function result_sum(
+  values: readonly StateResult<number>[],
+): StateResult<number> {
   let sum = 0;
   for (const value of values) {
     if (value.err) return value;
