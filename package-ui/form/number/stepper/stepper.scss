@@ -17,7 +17,6 @@ form-stepper {
   position: relative;
 
   .touch & {
-    min-width: 14rem;
     height: base.$size_touchHeight;
   }
 
@@ -30,11 +29,19 @@ form-stepper {
     min-width: 0;
     overflow: hidden;
     outline: none;
+    //What does not fit wraps to a second line that is cut off, so the min and max legends disappear whole when there is no room
+    //The value fills the height of the first line, the second line is below the element
+    flex-wrap: wrap;
+    align-content: flex-start;
 
     > span:nth-child(1) {
       @include base.value-font;
       padding-left: 0.3rem;
       min-width: 3rem;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
       text-align: end;
       outline: none;
       cursor: text;
@@ -47,7 +54,14 @@ form-stepper {
     > span:nth-child(2) {
       @include base.unit-container;
       padding-left: 0.2rem;
-      flex-shrink: 0;
+      //Starts small and grows up to its whole text, so it does not wrap away before the legends, a long unit ends in … when tight
+      flex: 1 1 2.5rem;
+      min-width: 0;
+      max-width: max-content;
+
+      .touch & {
+        max-width: max-content;
+      }
       -webkit-user-select: none;
       user-select: none;
     }
@@ -59,9 +73,6 @@ form-stepper {
       flex-grow: 1;
       padding-right: 0.3rem;
       align-items: flex-end;
-      //The legends give way first when the stepper is narrow
-      min-width: 0;
-      overflow: hidden;
 
       > span {
         @include base.limit-legend;

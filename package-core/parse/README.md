@@ -65,6 +65,8 @@ A string of type characters, joined for unions. The characters must be in the or
 
 In an object, a key whose spec allows a missing value is optional in the type (`age?: number | undefined`), because a missing key stays missing in the result. This covers `"?…"` strings, `["?", spec]` and unions with an optional member. A key with a default, `["?", spec, () => v]`, stays required.
 
+**A default must give a value its spec allows.** The types refuse `["?", "s", () => false]`: for a type string the schema type itself does, so `satisfies` catches it too. For an object, array or parser spec, `make_parser` and `make_fetch_parser` check it and name the path in the error, `"settings: the default gives a value the spec does not allow"`. At runtime the parser also checks a default against its spec, for plain JavaScript and `any`.
+
 ### Structures
 
 | Spec                     | Matches                                                                          | Type                        |
@@ -228,7 +230,7 @@ device.restart.write(true); // write({ restart: true })
 - **The state is local and never fetches.** Subscribing to it doesn't start polling.
 - **What it reads:**
   - **Without a default** it always reads `undefined`.
-  - **With a default,** `["?", "nwo", () => v]`, it reads the default, typed as the write type and the type of the default. A written value is read at once, so an input shows what you sent, also while `write_debounce` collects it. When the write finishes, the state reads the last value written successfully, so a failed write goes back to the one before it.
+  - **With a default,** `["?", "nwo", () => v]`, it reads the default, which must be of the write type, `make_fetch_parser` throws otherwise, as nothing parses it. A written value is read at once, so an input shows what you sent, also while `write_debounce` collects it. When the write finishes, the state reads the last value written successfully, so a failed write goes back to the one before it.
   - **With `{ reset: true }`** as the fourth entry, the state reads the default again when a write finishes, whether it succeeded or failed. This suits PINs and commands.
 - **When writes overlap,** only the last one decides what the state reads when it finishes.
 - **Write-only containers:** a fixed array, tuple, record or object of only write-only members is write-only as a whole. The server doesn't send it, so it's left out of parsing and has no `FETCH_PARSE` state of its own. `passcode: [3, "swo"]` writes `{ passcode: { 2: "1234" } }` through `passcode[2][FETCH_PARSE]`, as primitive items of a fixed array are wrapped.

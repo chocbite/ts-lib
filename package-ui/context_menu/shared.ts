@@ -10,8 +10,8 @@ variables.make_variable(
   "background",
   "Background Color",
   "Color of background",
-  GREY["50"],
-  GREY["900"],
+  "#FFFFFF",
+  "#2B2B2B",
   "Color",
   undefined,
 );
@@ -19,8 +19,8 @@ variables.make_variable(
   "text",
   "Text Color",
   "Color of text",
-  GREY["600"],
-  GREY["400"],
+  GREY["900"],
+  GREY["100"],
   "Color",
   undefined,
 );
@@ -28,8 +28,8 @@ variables.make_variable(
   "hover",
   "Hover Color",
   "Background color of line when hovering over it",
-  BLUE["200"],
-  BLUE["900"],
+  GREY["200"],
+  "#3D3D3D",
   "Color",
   undefined,
 );
@@ -47,7 +47,25 @@ variables.make_variable(
   "Border Color",
   "Color of border and dividers",
   GREY["300"],
-  GREY["800"],
+  GREY["700"],
+  "Color",
+  undefined,
+);
+variables.make_variable(
+  "focus",
+  "Focus Color",
+  "Ring around the line with keyboard focus",
+  BLUE["400"],
+  BLUE["300"],
+  "Color",
+  undefined,
+);
+variables.make_variable(
+  "shadow",
+  "Shadow Color",
+  "Shadow of the menu floating above the page",
+  "rgba(0, 0, 0, 0.18)",
+  "rgba(0, 0, 0, 0.6)",
   "Color",
   undefined,
 );

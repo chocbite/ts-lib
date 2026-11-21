@@ -110,7 +110,8 @@ class FormNumberInput<
         set_cursor_end(this.#value_box);
       })
       .map(() => {
-        if (!cur) return;
+        //-1 when the caret was not in the value, there is none to restore
+        if (!cur || sel < 0) return;
         set_cursor_position(this.#value_box, sel);
       });
   }

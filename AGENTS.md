@@ -25,6 +25,8 @@ Bundling is fine, but unused icons must still be tree-shakeable by the consumer'
 ## Layout
 
 Each module is a folder `<folder>/<module>/` directly in the package folder, with an `index.ts` and its own `README.md`. A package folder holds only its modules, `package.json` and `README.md`, and in `package-ui` also `PATTERN.md`.
+The tests of a module are in its `tests/` folder, `<module>/tests/<name>.test.ts`, one flat folder also for the sources in sub folders, with helpers only the tests use next to them. They import the files of their own module with `../`, like `../number/slider/slider`, which is fine as it stays inside the module. `tests/` folders are never built or put in `SOURCE.md`.
+A module can have a `scripts/` folder with TypeScript scripts that generate its data, run with plain `node` from the repo root, like `package-ui/keyboard/scripts/cldr_layouts.ts`. Like `tests/` they are never built or put in `SOURCE.md`, and they are typechecked through `tsconfig.node.json`. Notes for working on the module itself, like how to run its scripts, go in an `INTERNAL.md` next to its `README.md`, which is not published.
 Every module is published as a subpath export, e.g. `@chocbite/ts-lib/state` and `@chocbite/ts-lib-ui/theme`. There is no root export.
 
 - ts-lib: `colors common depot event math parse result safe state string`
@@ -58,7 +60,7 @@ npm run build                         # both packages into dist/ts-lib and dist/
 npm run release                       # typecheck, test, build, publish both dist folders
 ```
 
-Config files are all in `config/`, the scripts pass them with `--config`, so run tools through the npm scripts (`npm run vitest` instead of `npx vitest`): `vite.config.ts` (dev server, and the `core` and `ui` vitest projects), `tsdown.config.ts`, `eslint.config.js`, and `tsconfig.core.json`, `tsconfig.ui.json`, `tsconfig.dev.json` and `tsconfig.node.json` (the config files themselves) on `tsconfig.base.json`. Core and ui are separate TypeScript programs because only ui gets the `DOM` lib. The root `tsconfig.json` only references them, it stays in the root because editors and typescript-eslint look for a `tsconfig.json` next to or above a file. `.vscode/settings.json` points the ESLint and Vitest extensions at `config/`.
+Config files are all in `config/`, the scripts pass them with `--config`, so run tools through the npm scripts (`npm run vitest` instead of `npx vitest`): `vite.config.ts` (dev server, and the `core` and `ui` vitest projects), `tsdown.config.ts`, `eslint.config.js`, and `tsconfig.core.json`, `tsconfig.ui.json`, `tsconfig.dev.json` and `tsconfig.node.json` (the config files themselves and the module `scripts/`) on `tsconfig.base.json`. Core and ui are separate TypeScript programs because only ui gets the `DOM` lib. The root `tsconfig.json` only references them, it stays in the root because editors and typescript-eslint look for a `tsconfig.json` next to or above a file. `.vscode/settings.json` points the ESLint and Vitest extensions at `config/`.
 
 ts-lib tests run in plain Node. ts-lib-ui tests run in Chromium via `@vitest/browser-playwright` (`npx playwright install chromium` once).
 
@@ -83,6 +85,10 @@ Packages are published from `dist/ts-lib` and `dist/ts-lib-ui` in the repo root,
 - The trial frame calls `theme_init` and applies theme, input mode, scale and animation level from the shell, pages must not call `theme_init`.
 - The shell (`dev/index.html`, `dev/shell.ts`) must never import from the libraries, so it keeps working while they are broken.
 - Check with `npm run typecheck:dev` (not part of `npm run typecheck`) and by loading the page.
+
+## Git
+
+Work is done on a branch, not on `main`. At the start of a task that changes files, check the branch, and if it is `main`, warn the user before making changes and offer to create a branch for the work.
 
 ## Conventions
 

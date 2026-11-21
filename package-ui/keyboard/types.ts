@@ -5,6 +5,8 @@ export const KeyboardSpecialKeys = {
   Escape: "escape",
   Left: "left",
   Right: "right",
+  /**Opens the list of keyboard languages, choosing one writes KEYBOARD_LANGUAGE*/
+  Language: "language",
 } as const;
 export type KeyboardSpecialKeys =
   (typeof KeyboardSpecialKeys)[keyof typeof KeyboardSpecialKeys];
@@ -51,6 +53,8 @@ export type KeyboardType = (typeof KeyboardType)[keyof typeof KeyboardType];
 export interface KeyboardKeyConfig {
   text: string;
   key?: string;
+  /**What the key can type when held, shown above it to slide to, the first is shown small in the corner of the key*/
+  hold?: readonly string[];
   rows?: number;
   cols?: number;
 }
@@ -63,6 +67,8 @@ export interface KeyboardLayerConfig {
   /**Default number of columns a key occupies in this layer */
   key_cols?: number;
   keys: (KeyboardKeyConfig | number)[][];
+  /**False to type the keys of the layer as they are, without the dead keys of the keyboard, like a layer of symbols*/
+  dead_keys?: false;
 }
 
 export interface KeyboardLayers {
@@ -72,4 +78,8 @@ export interface KeyboardLayers {
 export interface KeyboardConfig {
   default: KeyboardLayerConfig;
   layers?: KeyboardLayers;
+  /**Dead keys, what a dead key followed by another key types, by the two keys, like "´e" to "é"
+   * A key is a dead key when it starts one of them, it types nothing until the next key
+   * A combination that is not here types both keys*/
+  dead_keys?: { readonly [keys: string]: string };
 }

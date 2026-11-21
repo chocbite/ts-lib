@@ -177,6 +177,10 @@ $value_font_size: 0.9rem;
 $touch_value_font_size: $value_font_size * 1.4;
 $unit_font_size: 0.7rem;
 $touch_unit_font_size: $unit_font_size * 1.4;
+//Value and unit share one line height, so their boxes are the same height and centering them lines up their text
+//It is taller than the font, so descenders like the p in rpm are not cut off by the unit's overflow hidden
+$value_line_height: $value_font_size * 1.25;
+$touch_value_line_height: $touch_value_font_size * 1.25;
 $value_unit_font_height: max($value_font_size, $unit_font_size) + 0.4rem;
 $touch_value_unit_font_height: max(
     $touch_value_font_size,
@@ -200,22 +204,22 @@ $touch_value_unit_font_height: max(
 @mixin value-font {
   color: $color_text;
   font-size: $value_font_size;
-  line-height: $value_font_size;
+  line-height: $value_line_height;
 
   .touch & {
     font-size: $touch_value_font_size;
-    line-height: $touch_value_font_size;
+    line-height: $touch_value_line_height;
   }
 }
 
 @mixin unit-font {
   color: $color_text_unselected;
   font-size: $unit_font_size;
-  line-height: $unit_font_size;
+  line-height: $value_line_height;
 
   .touch & {
     font-size: $touch_unit_font_size;
-    line-height: $unit_font_size;
+    line-height: $touch_value_line_height;
   }
 }
 

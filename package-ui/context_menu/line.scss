@@ -6,6 +6,11 @@ $padding: 0.25rem;
 $paddingDouble: $padding * 2;
 $iconWidth: 1.8rem;
 $iconWidthTouch: 2.6rem;
+//Icons are drawn smaller than their cell, so they sit beside the text instead of towering over it
+$iconSize: 1.15rem;
+$iconSizeTouch: 1.5rem;
+//Lines sit inside the padding of the menu, their corners follow the corners of the menu
+$radius: 0.3rem;
 
 @mixin hover {
   @media (hover) {
@@ -21,12 +26,12 @@ $iconWidthTouch: 2.6rem;
         min-width: calc(
           $menuMinWidth - $paddingDouble - $borderWidthDouble - 4px
         );
-        border-radius: 0.5rem;
+        border-radius: $radius;
         background-color: var(--contextmenu-hover);
       }
     }
 
-    &:focus-visible,
+    //Focus in the line or its open sub menu marks it like hover, keyboard focus adds a ring
     &:focus-within {
       outline: none;
 
@@ -38,9 +43,13 @@ $iconWidthTouch: 2.6rem;
         min-width: calc(
           $menuMinWidth - $paddingDouble - $borderWidthDouble - 4px
         );
-        border-radius: 0.5rem;
-        outline: var(--contextmenu-hover) solid 0.2rem;
+        border-radius: $radius;
+        background-color: var(--contextmenu-hover);
       }
+    }
+
+    &:focus-visible::after {
+      box-shadow: inset 0 0 0 0.125rem var(--contextmenu-focus);
     }
   }
 }
@@ -48,7 +57,7 @@ $iconWidthTouch: 2.6rem;
 @mixin line {
   display: table-row;
   position: relative;
-  border-radius: 0.5rem;
+  border-radius: $radius;
   -webkit-user-select: none;
   user-select: none;
   color: var(--contextmenu-text);
@@ -59,7 +68,7 @@ $iconWidthTouch: 2.6rem;
 
   //Read access, shown but not usable
   &[inert] {
-    opacity: 0.5;
+    opacity: 0.4;
   }
 
   > div {
@@ -91,17 +100,21 @@ $iconWidthTouch: 2.6rem;
     > svg {
       display: block;
       box-sizing: border-box;
-      height: 100%;
-      width: $iconWidth;
+      height: $iconSize;
+      width: $iconSize;
+      margin: auto;
+      opacity: 0.8;
 
       .touch & {
-        width: $iconWidthTouch;
+        height: $iconSizeTouch;
+        width: $iconSizeTouch;
       }
     }
   }
 
   .text {
     font-size: 0.9rem;
+    padding-right: 0.5rem;
 
     &:last-child {
       width: 1.8rem;
@@ -113,10 +126,17 @@ $iconWidthTouch: 2.6rem;
     }
   }
 
+  //Quieter than the text, it is a hint
   .shortcut {
     white-space: nowrap;
     text-align: end;
-    padding-left: 1rem;
-    padding-right: 0.4rem;
+    padding-left: 1.5rem;
+    padding-right: 0.5rem;
+    font-size: 0.8rem;
+    opacity: 0.6;
+
+    .touch & {
+      font-size: 0.95rem;
+    }
   }
 }

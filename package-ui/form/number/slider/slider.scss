@@ -18,30 +18,40 @@ form-slider {
   display: flex;
   flex-direction: row;
   justify-content: flex-start;
+  //A container, so the knob can shrink to the room between the buttons when the slider is narrow
+  //Where the slider is sized by its content it keeps the width of the buttons and a whole knob
+  container-type: inline-size;
+  contain-intrinsic-inline-size: calc(#{$thumbWidth} + #{$inner} * 2);
 
   .touch & {
     height: base.$size_touchHeight;
+    contain-intrinsic-inline-size: calc(#{$touchThumbWidth} + #{$touch_inner} * 2);
   }
 
   //The track the knob moves along, between the buttons, the knob sits at 0 to 100% of it
+  //The knob is its full width when there is room, and the room between the buttons when there is not
   > div {
+    --knob: #{min($thumbWidth, calc(100cqw - #{$inner} * 2))};
     display: flex;
     justify-content: space-between;
     align-items: center;
     height: 100%;
-    width: calc(100% - #{$thumbWidth} - #{$inner} * 2);
+    width: calc(100cqw - var(--knob) - #{$inner} * 2);
     position: relative;
     z-index: 1;
 
     .touch & {
-      width: calc(100% - #{$touchThumbWidth} - #{$touch_inner} * 2);
+      --knob: #{min($touchThumbWidth, calc(100cqw - #{$touch_inner} * 2))};
+      width: calc(100cqw - var(--knob) - #{$touch_inner} * 2);
     }
 
     //Knob, a grey block with the value, value and unit side by side
     > div {
       top: 0;
-      width: $thumbWidth;
+      width: var(--knob);
       height: 100%;
+      box-sizing: border-box;
+      overflow: hidden;
       border-radius: calc(#{base.$size_cornerRadius} - #{base.$border_thickness});
       background-color: base.$color_button;
       box-sizing: border-box;
@@ -50,8 +60,7 @@ form-slider {
       display: flex;
       flex-direction: row;
       justify-content: center;
-      align-items: baseline;
-      padding-top: 0.25rem;
+      align-items: center;
       padding-inline: 0.2rem;
       outline: none;
       cursor: grab;
@@ -73,10 +82,7 @@ form-slider {
         }
       }
 
-      .touch & {
-        width: $touchThumbWidth;
-        padding-top: 0.35rem;
-      }
+
 
       > span:first-child {
         @include base.value-font;

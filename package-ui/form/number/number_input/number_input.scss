@@ -9,13 +9,17 @@ form-numberinput {
   min-width: min-content;
   display: flex;
   align-items: center;
+  //What does not fit wraps to a second line that is cut off, so the min and max legends disappear whole when there is no room
+  //The value fills the height of the first line, the second line is below the element
+  flex-wrap: wrap;
+  align-content: flex-start;
+  overflow: hidden;
   -webkit-user-select: none;
   user-select: none;
   cursor: text;
   outline: none;
 
   .touch & {
-    min-width: 14rem;
     height: base.$size_touchHeight;
   }
 
@@ -43,6 +47,14 @@ form-numberinput {
   > span:nth-child(2) {
     @include base.unit-container;
     padding-inline: 0.2rem;
+    //Starts small and grows up to its whole text, so it does not wrap away before the legends, a long unit ends in … when tight
+    flex: 1 1 2.5rem;
+    min-width: 0;
+    max-width: max-content;
+
+    .touch & {
+      max-width: max-content;
+    }
     -webkit-user-select: none;
     user-select: none;
   }

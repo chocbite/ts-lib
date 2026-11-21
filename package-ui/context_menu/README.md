@@ -243,4 +243,4 @@ ctm.menu(() => [
 
 ## Theming
 
-The colors are theme variables of `@chocbite/ts-lib-ui/theme`, in the group `contextmenu`: `background`, `text`, `hover`, `hoverText` and `border`.
+The colors are theme variables of `@chocbite/ts-lib-ui/theme`, in the group `contextmenu`: `background`, `text`, `hover` (the line under the pointer and the line of an open sub menu), `hoverText`, `border` (the border and the dividers), `focus` (the ring around the line with keyboard focus) and `shadow`.
