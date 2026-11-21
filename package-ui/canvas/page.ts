@@ -10,7 +10,6 @@ import type { StateOrVal } from "@chocbite/ts-lib/state";
 import type { CanvasPage, CanvasWidget } from "./data";
 import "./page.scss";
 import "./shared";
-import { group_bounds } from "./group";
 import { fill_ids } from "./ids";
 import { WIDGET_ELEMENTS_EVENT, WIDGET_ID_EVENT, WidgetSlot } from "./slot";
 import { WIDGET_GEOMETRY, type WidgetBase } from "./widget";
@@ -19,6 +18,7 @@ import { WIDGET_GEOMETRY, type WidgetBase } from "./widget";
 const PAGE = {
   width: input_key<StateOrVal<number>>(),
   height: input_key<StateOrVal<number>>(),
+  background: input_key<StateOrVal<string>>(),
   widgets: input_key<StateOrVal<readonly CanvasWidget[]>>(),
 };
 type PageElementOptions = BaseOptions & InputOptions<typeof PAGE>;
@@ -128,6 +128,10 @@ export class PageElement extends Base {
       this.#height = height.value;
       this.style.height = height.value + "px";
     });
+    this.set_input(PAGE.background, options.background, (background) => {
+      //An error shows the background of the theme
+      this.style.background = background.ok ? background.value : "";
+    });
     this.set_input(PAGE.widgets, options.widgets, (widgets) => {
       //An error keeps the widgets shown, the fault icon explains it
       if (widgets.ok) this.#apply(widgets.value);
@@ -177,29 +181,6 @@ export class PageElement extends Base {
     return found;
   }
 
-  /**The widgets whose whole outline is inside the rectangle on the page, in drawing order, rotated ones by their rotated outline*/
-  widgets_inside(
-    left: number,
-    top: number,
-    right: number,
-    bottom: number,
-  ): CanvasWidget[] {
-    const found: CanvasWidget[] = [];
-    for (const slot of this.children as HTMLCollectionOf<WidgetSlot>) {
-      const element = slot.element;
-      if (!element) continue;
-      const box = group_bounds([element[WIDGET_GEOMETRY]]);
-      if (
-        box.x >= left &&
-        box.y >= top &&
-        box.x + box.width <= right &&
-        box.y + box.height <= bottom
-      )
-        found.push(slot.widget);
-    }
-    return found;
-  }
-
   /**The slot of a widget, undefined when the widget is not on the page*/
   slot_of(widget: CanvasWidget): WidgetSlot | undefined {
     for (const slot of this.children as HTMLCollectionOf<WidgetSlot>)
@@ -214,6 +195,7 @@ export function page_element(page: CanvasPage): PageElement {
   return PageElement.create({
     width: page.width,
     height: page.height,
+    background: page.background,
     widgets: page.widgets,
   });
 }

@@ -233,6 +233,12 @@ export class RXX<RT, IN extends State<any>[], WT, RRT extends SR<RT>>
 
   /**Called when subscriber is added*/
   protected on_sub() {
+    this.#subscribe(false);
+  }
+
+  /**Subscribes to the states and computes the value
+   * @param notify - true to tell the subscribers the new value, when resubscribing after the states or getter changed*/
+  #subscribe(notify: boolean) {
     const subscription_id = ++this.#subscription_id;
     if (!this.#states.length) {
       this.#buffer = err_nice(
@@ -249,7 +255,7 @@ export class RXX<RT, IN extends State<any>[], WT, RRT extends SR<RT>>
       this.#buffer = this.getter(
         this.#state_buffers as StateCollectedTransVal<IN>,
       );
-      this.update_subs(this.#buffer);
+      if (notify) this.update_subs(this.#buffer);
       let calc = false;
       this.#states.forEach((s, i) => {
         this.#state_subscribers[i] = s.sub((value) => {
@@ -275,7 +281,9 @@ export class RXX<RT, IN extends State<any>[], WT, RRT extends SR<RT>>
         for (let i = 0; i < this.#state_buffers.length; i++)
           this.#state_buffers[i] = this.#state_buffers[i]! ?? vals[i];
         initialized = true;
-        if (this.#compute()) this.ful_r_prom(this.#buffer!);
+        if (!this.#compute()) return;
+        if (notify) this.update_subs(this.#buffer!);
+        this.ful_r_prom(this.#buffer!);
       });
       //Creates a new scope to hold the calc variable
       {
@@ -317,14 +325,14 @@ export class RXX<RT, IN extends State<any>[], WT, RRT extends SR<RT>>
     if (this.in_use()) {
       this.on_unsub();
       this.#states = [...states] as unknown as IN;
-      this.on_sub();
+      this.#subscribe(true);
     } else this.#states = [...states] as unknown as IN;
   }
   set_getter(getter: (values: StateCollectedTransVal<IN>) => RRT) {
     if (this.in_use()) {
       this.on_unsub();
       this.getter = getter;
-      this.on_sub();
+      this.#subscribe(true);
     } else this.getter = getter;
   }
   get state() {

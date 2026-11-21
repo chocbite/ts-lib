@@ -78,7 +78,10 @@ export abstract class KeyboardBase extends Base {
       element.scrollIntoView({ behavior: "instant", block: "center" });
       const erect = element.getBoundingClientRect();
       //Moves the page up until the element is above the keyboard, but never so far that its top leaves the screen
-      const shift = Math.max(krect.top - (erect.top + erect.height), -erect.top);
+      const shift = Math.max(
+        krect.top - (erect.top + erect.height),
+        -erect.top,
+      );
       if (shift < 0) {
         const body = element.ownerDocument.body;
         this.#body_transform ??= body.style.transform;

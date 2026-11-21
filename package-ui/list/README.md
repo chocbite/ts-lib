@@ -95,6 +95,8 @@ Options:
 
 A row with `selectable: false` in its row options, or an invalid row, can not be selected. Its radio button or checkbox cell is empty, and trying to select it shows "Not selectable" at the row, an error of kind `list.errors.NOT_SELECTABLE`.
 
+A row that can not be selected but can be opened, like a folder in a tree where only the entries are picked, opens and closes with a click on the row or space in its key field instead, without a warning. Only the first click of a double click counts, so a double click opens it and leaves it open. A click on its radio button or checkbox cell still warns.
+
 ### The state
 
 - The list shows a row as selected when its key is in the state. Keys without a visible row are kept in the state, they show as soon as their row is visible again, for example when its parent is opened, or the row comes back in the data.

@@ -170,3 +170,14 @@ export abstract class WidgetBase extends Base {
     this.dispatchEvent(new Event(WIDGET_TRANSFORM_EVENT));
   }
 }
+
+/**Whether the element has scrollbars, it scrolls and its content is bigger, a widget that cuts its content off does not*/
+export function scrolls(element: HTMLElement): boolean {
+  const style = getComputedStyle(element);
+  const can = (overflow: string) =>
+    overflow === "auto" || overflow === "scroll";
+  return (
+    (can(style.overflowX) && element.scrollWidth > element.clientWidth) ||
+    (can(style.overflowY) && element.scrollHeight > element.clientHeight)
+  );
+}

@@ -214,3 +214,98 @@ describe("Outline", () => {
     expect(widgets.ok()).toEqual([a, c, b]);
   });
 });
+
+describe("Outline of groups", () => {
+  /**The id in the key field of a row itself, not of its sub rows*/
+  const own = (row: Element) =>
+    row.querySelector(":scope > div > list-keyfield")!.textContent;
+  /**A page of A, and a group G of B and C*/
+  const nested = async () => {
+    const made = make(["A", "B", "C"]);
+    const [a, b, c] = made.widgets.ok();
+    const g = (await canvas.group(made.page, [b, c]))!;
+    (g.options.id as StateOkW<string>).set_ok("G");
+    const ids = () => made.rows().map(own);
+    const open = (id: string) =>
+      made
+        .row_of(id)
+        .querySelector<HTMLElement>(
+          ":scope > div > list-keyfield .opener > div",
+        )!
+        .click();
+    return { ...made, a, b, c, g, ids, open };
+  };
+
+  it("shows a group as a row that opens to its widgets, front first", async () => {
+    const { ids, open } = await nested();
+    expect(ids()).toEqual(["G", "A"]);
+    open("G");
+    expect(ids()).toEqual(["G", "C", "B", "A"]);
+  });
+
+  it("follows the widgets in a group", async () => {
+    const { ids, open, g } = await nested();
+    open("G");
+    (
+      (g.options as Record<string, unknown>).widgets as StateOkW<CanvasWidget[]>
+    ).array.push(canvas.widget(definition, { id: "D" }));
+    expect(ids()).toEqual(["G", "D", "C", "B", "A"]);
+  });
+
+  it("keeps the selection to one level, a widget of another level replaces it", async () => {
+    const { open, selected, row_of, a, c } = await nested();
+    open("G");
+    selected.set_ok([a]);
+    row_of("C")
+      .querySelector(":scope > div > list-keyfield")!
+      .dispatchEvent(
+        new MouseEvent("click", {
+          bubbles: true,
+          cancelable: true,
+          ctrlKey: true,
+        }),
+      );
+    await tick();
+    expect(selected.ok()).toEqual([c]);
+  });
+
+  it("keeps a selection of one level when widgets were grouped while their group is closed", async () => {
+    //B is listed at the page from before it was grouped, the group is not opened
+    const { selected, b, g } = await nested();
+    //A widget pasted into the group, never listed
+    const pasted = canvas.widget(definition, { id: "P" });
+    (
+      (g.options as Record<string, unknown>).widgets as StateOkW<CanvasWidget[]>
+    ).array.push(pasted);
+    selected.set_ok([b]);
+    //Added like a ctrl click in a viewport does
+    await selected.write(state.a.write.push(pasted));
+    await tick();
+    expect(selected.ok()).toEqual([b, pasted]);
+  });
+
+  it("acts in the group of a row with its menu", async () => {
+    const { open, row_of, widgets, a, b, c, g } = await nested();
+    open("G");
+    row_of("B").dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+    );
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        "contextmenu-container contextmenu-option",
+      ),
+    ]
+      .find((option) => option.textContent === "DeleteDel")!
+      .click();
+    await tick();
+    expect(
+      (
+        (g.options as Record<string, unknown>).widgets as StateROSW<
+          CanvasWidget[]
+        >
+      ).ok(),
+    ).toEqual([c]);
+    expect(widgets.ok()).toEqual([a, g]);
+    void b;
+  });
+});

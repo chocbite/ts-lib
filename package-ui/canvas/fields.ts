@@ -25,7 +25,8 @@ export function property_field(
   const description = property.description;
   switch (property.kind) {
     case "number":
-      return form.number_input({
+      return form.stepper({
+        live: true,
         value: value as StateOrVal<number> | undefined,
         min: property.min,
         max: property.max,
@@ -45,6 +46,7 @@ export function property_field(
     case "color":
       return form.color({
         value: value as StateOrVal<string> | undefined,
+        alpha: property.alpha,
         description,
         change,
       });

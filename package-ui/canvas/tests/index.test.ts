@@ -138,6 +138,25 @@ describe("Canvas module", () => {
     }
   });
 
+  it("loads the id and background of a page, an empty id and white when not saved", () => {
+    const value = (page: CanvasPage, key: "id" | "background") =>
+      (page[key] as StateROSW<string>).ok();
+    const saved = canvas.page_from_json({ id: "Main", background: "#123456" });
+    if (!saved.some) throw new Error("not loaded");
+    expect([
+      value(saved.value, "id"),
+      value(saved.value, "background"),
+    ]).toEqual(["Main", "#123456"]);
+    const old = canvas.page_from_json({});
+    if (!old.some) throw new Error("not loaded");
+    expect([value(old.value, "id"), value(old.value, "background")]).toEqual([
+      "",
+      "#ffffff",
+    ]);
+    expect(canvas.page_from_json({ background: 5 }).some).toBe(false);
+    expect(canvas.page_from_json({ id: 5 }).some).toBe(false);
+  });
+
   it("gives none for JSON that is not a page", () => {
     for (const json of [
       null,

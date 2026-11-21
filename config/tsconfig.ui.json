@@ -5,5 +5,7 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "types": []
   },
-  "include": ["../package-ui"]
+  "include": ["../package-ui"],
+  //The scripts of the modules run in node, they are in tsconfig.node.json
+  "exclude": ["../package-ui/*/scripts"]
 }

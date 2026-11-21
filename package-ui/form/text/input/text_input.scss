@@ -3,6 +3,8 @@
 form-textinput {
   @include base.base;
   @include base.field;
+  //Its own alignment, the input is unset so it would take the alignment of the parent, like a centered list field
+  text-align: start;
   display: block;
   position: relative;
   user-select: none;

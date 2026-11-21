@@ -330,12 +330,18 @@ const viewport_in = (
 {
   const sec = section(
     "One page, two viewports",
-    "Two editors, an outline and a properties editor on one page and selection. Click, ctrl or shift click, or drag a rectangle on the page to select. Drag the box to move, resize and rotate. Right click for menus. In a focused editor or outline: Ctrl+A, Ctrl+X, Ctrl+C, Ctrl+V and Delete. The buttons change the widgets and page size, see the canvas README for the details",
+    "Two editors on one page, each with a selection, outline and properties editor of its own, so a change in one can be watched in the other. Click, ctrl or shift click, or drag a rectangle on the page to select. Drag the box to move, resize and rotate. Right click for menus. In a focused editor or outline: Ctrl+A, Ctrl+X, Ctrl+C, Ctrl+V, Delete, and Ctrl+G and Ctrl+Shift+G to group and ungroup. Edit in the menu of a group, or a double click on it, edits inside it, a double click beside the widgets of the group goes up again, Add widget in the menu of an empty spot adds widgets there, the bar at the top goes back up, selecting in the outline jumps the editors to the level. With nothing selected a properties editor shows the level of its editor. The buttons change the widgets and page size, see the canvas README for the details",
   );
   const width = state.ok_w(800);
   const height = state.ok_w(600);
   const widgets = state.ok_w<CanvasWidget[]>(trial_widgets());
-  const page: CanvasPage = { width, height, widgets };
+  const page: CanvasPage = {
+    id: state.ok_w("Main"),
+    width,
+    height,
+    background: state.ok_w("#ffffff"),
+    widgets,
+  };
   const selected = state.ok_w<CanvasWidget[]>([]);
   const shown = sec.appendChild(document.createElement("div"));
   shown.style.fontFamily = "monospace";
@@ -346,18 +352,11 @@ const viewport_in = (
         : "nothing selected";
   }, true);
   const boxes = row(sec);
-  viewport_in(
+  //The properties editor shows the level this editor shows while nothing is selected
+  const editor = viewport_in(
     boxes,
     "Editor",
     { width: "36rem", height: "27rem" },
-    page,
-    true,
-    selected,
-  );
-  viewport_in(
-    boxes,
-    "Second editor",
-    { width: "20rem", height: "15rem" },
     page,
     true,
     selected,
@@ -371,7 +370,35 @@ const viewport_in = (
     width: "22rem",
     height: "27rem",
     display: "flex",
-  }).appendChild(canvas.properties({ selected })).style.flexGrow = "1";
+  }).appendChild(
+    canvas.properties({ selected, page: editor.shown_page }),
+  ).style.flexGrow = "1";
+  //The second editor has a selection, outline and properties editor of its own, so a change in one editor can be watched in the other,
+  //like changing the content size of a group the other edits inside
+  const selected_second = state.ok_w<CanvasWidget[]>([]);
+  const second_boxes = row(sec);
+  const second = viewport_in(
+    second_boxes,
+    "Second editor, its own selection",
+    { width: "36rem", height: "27rem" },
+    page,
+    true,
+    selected_second,
+  );
+  box(second_boxes, "Outline of the second editor", {
+    width: "14rem",
+    height: "27rem",
+    display: "flex",
+  }).appendChild(
+    canvas.outline({ page, selected: selected_second }),
+  ).style.flexGrow = "1";
+  box(second_boxes, "Properties of the second editor", {
+    width: "22rem",
+    height: "27rem",
+    display: "flex",
+  }).appendChild(
+    canvas.properties({ selected: selected_second, page: second.shown_page }),
+  ).style.flexGrow = "1";
   let added = 0;
   controls(sec, {
     "Add box": () => {
@@ -456,7 +483,7 @@ const viewport_in = (
     width: "22rem",
     height: "27rem",
     display: "flex",
-  }).appendChild(canvas.properties({ selected })).style.flexGrow = "1";
+  }).appendChild(canvas.properties({ selected, page })).style.flexGrow = "1";
 }
 
 //Kept across reloads
@@ -535,7 +562,7 @@ const viewport_in = (
     width: "22rem",
     height: "27rem",
     display: "flex",
-  }).appendChild(canvas.properties({ selected })).style.flexGrow = "1";
+  }).appendChild(canvas.properties({ selected, page })).style.flexGrow = "1";
 }
 
 //      _____ _______    _______ ______  _____
@@ -741,7 +768,7 @@ const viewport_in = (
     width: "22rem",
     height: "20rem",
     display: "flex",
-  }).appendChild(canvas.properties({ selected })).style.flexGrow = "1";
+  }).appendChild(canvas.properties({ selected, page })).style.flexGrow = "1";
 }
 
 //     __  __          _   ___     __

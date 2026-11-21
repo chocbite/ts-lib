@@ -143,6 +143,28 @@ Saving was done first, as it does not need the properties.
 
 16. **Cut, copy and paste,** done: the JSON of the widgets in the clipboard of the system, so they can be copied between browsers, and a copy kept in the app, ctrl+x, ctrl+c and ctrl+v in a focused viewport or outline, the lines in their menus, and Center view in the menu of the viewport.
 
+17. **Page properties,** done: `id` and `background` of a page, shown by the properties editor as Page while nothing is selected.
+
+## Next: groups
+
+A group is a widget whose content is a page of its own, registered by canvas as `/widgets/canvas/group`. Its options are the base ones, `display`, `content_width`, `content_height`, `background`, transparent by default, and `widgets`, the widgets of its content. A CustomWidget later is the same, with the content page in its definition, shared by its instances, and properties of its own, a link kind for a child option linked to a property of its CustomWidget fits the links.
+
+Decisions:
+
+- **Display mode:** scale (the content scaled evenly to fit the group, centered, the default), stretch (each axis on its own, like a picture, edited fitted evenly so nothing slants), clipped (at its own size from the top left, cut off) or scroll (at its own size, scrollbars when bigger). The content size is the box of the widgets when grouped.
+- **Ids are unique per level,** every page element, a nested one too, keeps the ids of its widgets unique.
+- **The selection is of one level,** selecting at another level replaces it.
+- **Every viewport has its own edit path,** a viewport follows the selection to the level of the selected widgets.
+- **Editing swaps** the content of the viewport with the content of the group, a bar at the top shows the path by ids and leads up again.
+
+### Steps
+
+1. **Group widget and data,** done: the definition and element with the display modes, saving, loading and copying recurse into groups, group (ctrl+g) and ungroup (ctrl+shift+g) in the viewport, the outline and their menus.
+2. **Outline tree,** done: groups are openable rows with their widgets as sub rows.
+3. **Editing inside,** done: the edit path of a viewport, Edit in the menu of a group, the path bar, following the selection to its level, the properties editor shows the content page of the group while nothing is selected in it.
+
+4. **Editing in place,** done: Scale mode scales evenly, the transformer maps through a matrix, the viewport shows the page grayed behind the content of the group edited, which is shown where the group shows it, the path floats with a door exit, follows the structure, and the id of the content is refused when taken on the level of the group.
+
 Later: undo. The link menu shows each transform kind once, in a fixed order, a list of transforms to add and order is for when there are more kinds.
 
 Each step ends with typecheck, tests and lint passing, and a stop for review.

@@ -31,7 +31,7 @@ const rectangle = basic.add(
 
 - **`create`** is called once for every viewport showing the widget, always with the same options.
 - **`size`**: the size of a new widget, 100 by 100 when not given.
-- **`properties`**: the options the user changes, in the order they are shown, each with a name, a kind and the value a new widget starts with. The kinds are `number` (with `min`, `max`, `step`, `decimals` and `unit`), `text` (with `max_length`), `color`, `boolean` and `enum` (with `list`, the values and their names). A `section` groups properties in the properties editor, see below. Position, size, rotation, opacity and visible are the base properties canvas adds to every widget, in the General section. Options without a property are left to code, like a state the widget is linked to.
+- **`properties`**: the options the user changes, in the order they are shown, each with a name, a kind and the value a new widget starts with. The kinds are `number` (with `min`, `max`, `step`, `decimals` and `unit`), `text` (with `max_length`), `color` (with `alpha`, to set transparency), `boolean` and `enum` (with `list`, the values and their names). A `section` groups properties in the properties editor, see below. Position, size, rotation, opacity and visible are the base properties canvas adds to every widget, in the General section. Options without a property are left to code, like a state the widget is linked to.
 - **`canvas.definition`** gives the definition as it is, typed by the parameter of `create`, so every property is checked against its option: a number option needs a number property, an enum default must be in its list. Without it the properties are only checked against the base options. The entry keeps the type of the definition, so `canvas.widget` checks the options against it too.
 
 `canvas.widget_properties(definition)` lists every property of a widget, position, size, rotation, opacity and visible first. `await canvas.new_widget(entry, { x, y })` makes a new widget with a writable state for every property, starting at its default, as a result that is the error of the definition when it has none.
@@ -54,7 +54,9 @@ const widgets = state.ok_w<CanvasWidget[]>([
 const page: CanvasPage = { width: 800, height: 600, widgets };
 ```
 
+- **`id`**: a name of the page, empty when not given.
 - **`width` and `height`**: the size of the page in page units, 1920 by 1080 when not given.
+- **`background`**: a CSS color, the page background of the theme when not given. `canvas.page_from_json` gives every page a state for each of these, the background white for pages saved without one.
 - **`widgets`**: the widgets, the last is drawn on top. Change it with the array helpers of the state, like `widgets.array.push(widget)`, `delete(widget)` and `move(from, to)`, or the matching write instructions of `state.a.write`. The viewports apply the changes the state gives with `state_ui.a.apply`, so only the slots of added, removed or moved widgets are touched. A whole new array reuses the slots by place, a slot given another widget makes its element again, so prefer the helpers for small changes. A widget given twice is shown twice.
 - **`canvas.widget(definition, options)`** makes a widget from a definition entry. An initial value or link is made a writable state, a state is used as it is. A base property not given gets a writable state at its default, the size from the definition when it is registered, so every widget can be moved, sized and linked. `canvas.page_from_json` does the same for a loaded widget. Or write `{ widget: path, options }` directly with a state for every option, like when a page is loaded.
 - **Options are always states,** so every viewport shares them, the properties editor changes them, and storing the page follows them. A read only state locks the option. The state holds the value of the option, or a link to a state of the depot, see below.
@@ -133,21 +135,22 @@ A definition whose content is in error is left out of the result, as it has no p
 
 ## Properties editor
 
-`canvas.properties({ selected })` shows the properties of the selected widget in a list, or those several selected widgets have in common, see below, a row per property with a field bound to the option of the widget. Give it the selection state of the viewports to follow the selection:
+`canvas.properties({ selected, page })` shows the properties of the selected widget in a list, or those several selected widgets have in common, see below, a row per property with a field bound to the option of the widget. Give it the selection state of the viewports to follow the selection:
 
 ```ts
 const selected = state.ok_w<CanvasWidget[]>([]);
 const editor = canvas.viewport({ page, edit: true, selected });
-const properties = canvas.properties({ selected });
+const properties = canvas.properties({ selected, page });
 ```
 
 - The fields follow the options like form elements do: a writable state is written, so a change shows in every viewport, and a move in a viewport shows in the editor. A read only state is only shown.
 - The base properties come first, in the General section, then the properties of the definition, see widget definitions.
 - **Sections** keep widgets with many properties manageable. Properties with the same `section` are the sub rows of a row named by the section, placed where its first property is, Properties without a section, or with an empty one, are at the root. The editor remembers the open sections by name, so a section stays open when an option in it is linked or unlinked, and when another widget is selected.
 - The title is the name of the definition, or tells that the widget is not registered.
+- **With nothing selected** it shows the page given as `page`: its ID, Width, Height and Background, titled Page. A value that is not a writable state is only shown, and they can not be linked, as the page is not resolved like the options of widgets.
 - A linked option shows the path it is linked to and the value the link gives, read only, as it is a state of the app.
 - **The link column** has a chain for every option with a writable state, filled when linked. Pressing it opens the link menu: the path of the state, typed or picked with Choose state from `depot_ui.select_state`, and the fields of the transforms. Link writes the link to the option, Unlink writes the value the link gives now, or the default of the property when it gives none. An option of the definition not given to the widget has no state, so its field shows the default of the property read only and it can not be linked. Base properties always have a state, and widgets made by `canvas.new_widget` and the selector have a state for every property.
-- The fields are form elements in a `list.node_field` for now, as each property has an element of its own kind, numbers in number inputs, texts in text inputs, colors in color inputs, booleans in switches and enums in dropdowns.
+- The fields are form elements in a `list.node_field` for now, as each property has an element of its own kind, numbers in steppers, texts in text inputs, colors in color inputs, booleans in switches and enums in dropdowns. The link column has a fixed width.
 
 ### Several selected widgets
 
@@ -219,7 +222,7 @@ Every widget has an `id`, the first base property in General. It is a text that 
 
 ## Outline
 
-`canvas.outline({ page, selected })` lists the widgets of a page, the widget in front first, with its id and the name of its widget. Give it the selection state of the viewports. It selects like a list in multi mode: a click on a row selects only its widget, ctrl click and the checkboxes add or take out, shift click selects a range. The menu of a row orders or deletes the selected widgets when the row is one of them, else only its widget. Delete or backspace deletes the selected widgets while the outline has focus.
+`canvas.outline({ page, selected })` lists the widgets of a page, the widget in front first, with its id and the name of its widget. A group is a row that opens to the widgets of its content, front first too, groups in groups as deep as they go, the outline shows the whole tree. The menus and keys of the outline act on the level of the row or of the selected widgets, deleting, pasting, grouping and ordering inside a group. The selection is of one level, selecting a widget of another level, like with ctrl click, keeps only the widgets of that level. Give it the selection state of the viewports. It selects like a list in multi mode: a click on a row selects only its widget, ctrl click and the checkboxes add or take out, shift click selects a range. The menu of a row orders or deletes the selected widgets when the row is one of them, else only its widget. Delete or backspace deletes the selected widgets while the outline has focus.
 
 The add row below the widgets, Add widget, opens the widget selector of `canvas.select_widget`. The picked widgets are added in front, centered on the page, and selected. It is greyed out when the widgets of the page are not a writable state.
 
@@ -235,6 +238,40 @@ The last widget of a page is drawn on top. `await canvas.reorder(page, widgets, 
 
 The menus of the outline and the viewport have the same lines: Bring to front, Move forward, Move backward and Send to back, a line that can not move the widgets is greyed out, and Delete. Deleted widgets are taken out of the selection.
 
+## Groups
+
+A group is a widget whose content is a page of widgets of its own, registered by canvas as `/widgets/canvas/group`. Its options are the base ones and:
+
+- **`display`**: how the content fits the group, `"scale"`, the default, scales it evenly to fit the group, centered, so it keeps its proportions, `"stretch"` scales each axis on its own to fill the group, like a picture, so text stretches and a turned widget in it shows slanted, `"clip"` shows it at its own size from the top left, cut off, `"scroll"` at its own size with scrollbars when it is bigger.
+- **`content_width` and `content_height`**: the size of the content.
+- **`background`**: the background of the content, a CSS color like the background of a page, transparent by default.
+- **`widgets`**: the widgets of the content, like the widgets of a page, not a property, so the properties editor does not show it.
+
+Groups are saved, loaded and copied with their widgets. Every page element, the one inside a group too, keeps the ids of its own widgets unique, so ids are unique per level, the widgets in a group keep theirs.
+
+`await canvas.group(page, widgets, rotation?)` groups widgets of a page into a new group, in the place of the front one of them in the drawing order, and gives it. The group is the box around them, turned by the rotation, its content the same size, displayed scaled, and the widgets keep their drawing order with positions relative to it. `await canvas.ungroup(page, groups)` puts the widgets of groups back in the place of each group, where the group shows them, and gives them. Linked positions keep their links.
+
+A focused viewport or outline groups the selected widgets with ctrl+g, turned by the rotation of the box of the selection, and ungroups the selected groups with ctrl+shift+g, their widget menus have Group and Ungroup. The group, or the widgets that were in the groups, are selected after.
+
+### Editing inside a group
+
+An editing viewport edits inside a group with Edit in the menu of the group, or a double click on it, in place: the page stays where it is, grayed behind, with the group hidden in it, and the content of the group is shown on top exactly where the group shows it, moved, turned and scaled through every group of the path. Stretched content is edited fitted evenly, like scaled content, over the place of the group, as a stretch would slant turned widgets, which the transformer can not follow, so it lines up with the group as shown only roughly, and exactly again after leaving. The canvas of the group, its content width and height, has a checkerboard behind the content and a dashed outline on top, and the bounds of the group itself, its x, y, width, height and rotation, a fainter solid outline, both in screen pixels. Everything works on the content like on a page: selecting, the transformer, turned with the groups, the menus, the clipboard, grouping and ordering. Groups in groups go as deep as they go.
+
+- **A double click** on a group edits inside it, on a spot without a widget of the level edited it goes up one level. The widget is found at the point, so a double click on a selected group works through its transformer.
+- **The path** floats at the top left, a round exit button with a door, which goes up one level, then the levels by id as they change, the page first, each goes up to it. Going up selects the group it came out of. Entering clears the selection.
+- **The content follows the groups:** a group of the path moved, scrolled, or given another content size or display, from another viewport too, places the content edited again.
+- **Scrollbars:** a press on the scrollbar of a group displayed with scrollbars is left to the scrollbar, it does not select, and the edges of the transformer of a selected widget that scrolls let presses through, its center handle still moves it.
+- **The path follows the structure:** a group of the path that is removed from its level, from another viewport or the outline, takes the viewport up to the deepest level left.
+- **The id of the content** is the id of the group, it refuses an id another widget of the level of the group has, like the ID field of a widget.
+- **Every viewport has its own path.** A viewport follows the selection to the level of the selected widgets, so selecting a widget in a group in the outline shows that group in the viewports.
+- **Leaving edit mode** shows the page again.
+- **`viewport.shown_page`** is a read only state of the page the viewport shows, the page given or the content of the group. Give it to a properties editor as its `page`, so with nothing selected it shows the level, for a group its id, content size and background.
+
+```ts
+const editor = canvas.viewport({ page, edit: true, selected });
+const properties = canvas.properties({ selected, page: editor.shown_page });
+```
+
 ## Cut, copy and paste
 
 `canvas.copy(widgets)` copies widgets and gives their text for the clipboard of the system, `await canvas.cut(page, widgets)` copies them and removes them from the page, and `await canvas.paste(page, { at, text, within })` adds copies to the page, in front, and gives them.
@@ -248,14 +285,14 @@ The menus of the outline and the viewport have the same lines: Bring to front, M
 
 ## Viewport menu
 
-In edit mode a right click without moving, or a long press on touch, opens the menu of the widget in front at the point. A widget that is not selected is selected first, a selected one keeps the selection, and the ordering lines act on all selected widgets. A right drag pans as before. Where there is no widget, on the page or around it, the menu of the viewport opens, with Paste, Select all, and Center view, which resets zoom and pan so the page fits the viewport, like when it is made.
+In edit mode a right click without moving, or a long press on touch, opens the menu of the widget in front at the point. A widget that is not selected is selected first, a selected one keeps the selection, and the ordering lines act on all selected widgets. A right drag pans as before. Where there is no widget, on the page or around it, the menu of the viewport opens, with Paste, Add widget, which opens the widget selector and adds the picked widgets with the top left of the first at the point, selected, Select all, and Center view, which resets zoom and pan so the page fits the viewport, like when it is made.
 
-- Cut, Copy, Paste and Delete, then the ordering lines, see above.
+- Cut, Copy, Paste and Delete, Group and Ungroup, then the ordering lines, see above.
 - **Select covered** opens a submenu of every widget whose outline covers the point, in front first, by id, the selected one checked. Picking one selects only it, so a widget hidden under others, or not visible, can be selected. The widgets are found by their rotated outline, when the submenu opens.
 
 ## Moving, resizing and rotating
 
-The transformer around the selected widget moves it by its outline and center handle, resizes it by its corner and side handles, keeping the opposite corner or side in place, and rotates it by the handle above it. Positions and sizes snap to 5 units and rotation to 15 degrees, alt snaps to 1 unit and 5 degrees, shift turns snapping off.
+The transformer around the selected widget moves it by its outline and center handle, resizes it by its corner and side handles, keeping the opposite corner or side in place, and rotates it by the handle above it. Positions and sizes snap to 5 units and rotation to 15 degrees, alt turns snapping off. While resizing, ctrl keeps the ratio of width and height and shift resizes around the center, both together work too.
 
 Several selected widgets get one box, the box around their outlines, rotated widgets by their rotated outline. The box has a rotation of its own, shared by the viewports and properties editors given the same selection state. It starts at the rotation the widgets share, 0 when theirs differ, and is kept while the same widgets are selected:
 

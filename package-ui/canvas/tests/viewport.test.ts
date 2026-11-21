@@ -8,7 +8,9 @@ import {
   type CanvasPage,
   type CanvasWidget,
 } from "../data";
+import { group_widgets } from "../group_widget";
 import { reorder_widget as canvas_reorder } from "../order";
+import { canvas_properties } from "../properties_editor";
 import { WidgetSlot } from "../slot";
 import { Transformer } from "../transformer";
 import { canvas_viewport, type Viewport } from "../viewport";
@@ -167,6 +169,22 @@ describe("Page", () => {
     const page = viewport.querySelector("canvas-page") as HTMLElement;
     expect(page.style.width).toBe("1920px");
     expect(page.style.height).toBe("1080px");
+  });
+
+  it("paints the background of the page, the theme color without one", async () => {
+    const background = state.ok_w("#ff0000");
+    const { viewport } = await make_viewport({
+      ...page_data(),
+      background,
+    } as PageData);
+    const element = viewport.querySelector("canvas-page") as HTMLElement;
+    expect(getComputedStyle(element).backgroundColor).toBe("rgb(255, 0, 0)");
+    background.set_ok("#00ff00");
+    expect(getComputedStyle(element).backgroundColor).toBe("rgb(0, 255, 0)");
+    const themed = (await make_viewport()).viewport.querySelector(
+      "canvas-page",
+    ) as HTMLElement;
+    expect(themed.style.background).toBe("");
   });
 
   it("width and height size the page element and follow their states", async () => {
@@ -969,6 +987,8 @@ describe("Viewport menu", () => {
       "CopyCtrl+C",
       "PasteCtrl+V",
       "DeleteDel",
+      "GroupCtrl+G",
+      "UngroupCtrl+Shift+G",
       "Bring to front",
       "Move forward",
       "Move backward",
@@ -993,6 +1013,7 @@ describe("Viewport menu", () => {
     right_click(150, 80);
     expect(options()).toEqual([
       "PasteCtrl+V",
+      "Add widget",
       "Select allCtrl+A",
       "Center view",
     ]);
@@ -1087,6 +1108,36 @@ describe("Viewport menu", () => {
     ).toEqual([190, 115]);
   });
 
+  it("adds widgets picked in the widget selector at the point of the menu, and selects them", async () => {
+    const { page, selected, right_click } = await overlapping();
+    right_click(150, 80);
+    option("Add widget").click();
+    await new Promise((resolve) => setTimeout(resolve));
+    const panel = document.querySelector("depot-selector")!;
+    const input = panel.querySelector("input")!;
+    input.value = "Test widget";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    [...panel.querySelectorAll<HTMLElement>("list-row")]
+      .find(
+        (row) =>
+          row.querySelector("list-keyfield")!.textContent === "Test widget",
+      )!
+      .querySelector<HTMLElement>("list-keyfield")!
+      .click();
+    [...panel.querySelectorAll<HTMLElement>("form-button")]
+      .find((button) => button.textContent === "Select")!
+      .click();
+    await vi.waitFor(() => expect(page.widgets.ok()).toHaveLength(3));
+    const added = page.widgets.ok()[2];
+    expect(added.widget).toBe(test_definition.path);
+    expect(
+      ["x", "y"].map((key) =>
+        (added.options as Record<string, { ok(): unknown }>)[key].ok(),
+      ),
+    ).toEqual([150, 80]);
+    expect(selected.ok()).toEqual([added]);
+  });
+
   it("center view resets zoom and pan to the view the viewport starts with", async () => {
     const { viewport, container, client, box } = await overlapping();
     const start = container.style.transform;
@@ -1128,7 +1179,7 @@ describe("Viewport menu", () => {
     option("Select covered").click();
     await new Promise((resolve) => setTimeout(resolve));
     //The selected widget has a checkmark
-    expect(options().slice(9)).toEqual(["Over✓", "Under"]);
+    expect(options().slice(11)).toEqual(["Over✓", "Under"]);
     option("Under").click();
     expect(selected.ok()).toEqual([item_of(under)]);
   });
@@ -1155,6 +1206,580 @@ describe("Viewport menu", () => {
   });
 });
 
+/**The element of a widget on the level a viewport edits, the content of a group, or the page*/
+const element_of_level = (viewport: Viewport, widget: CanvasWidget) => {
+  const page =
+    viewport.querySelector(":scope > .level > canvas-page") ??
+    viewport.querySelector(":scope > .container > canvas-page")!;
+  return [...page.querySelectorAll(":scope > canvas-slot")].find(
+    (slot) => (slot as WidgetSlot).widget === widget,
+  )!.firstElementChild as WidgetBase;
+};
+
+describe("Editing inside groups", () => {
+  afterEach(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+    document.querySelector("contextmenu-container")?.replaceChildren();
+    document.body.replaceChildren();
+  });
+
+  /**An editing viewport of a page of A, and G, a group of B and C, sharing a selection state*/
+  const with_group = async () => {
+    const made = await make_viewport();
+    const selected = state.ok_w<CanvasWidget[]>([]);
+    made.viewport.set({ edit: true, selected });
+    const a = item_of(
+      made.place_with({ x: 10, y: 10, width: 20, height: 20, id: "A" }),
+    );
+    const b = item_of(
+      made.place_with({ x: 100, y: 10, width: 20, height: 20, id: "B" }),
+    );
+    const c = item_of(
+      made.place_with({ x: 140, y: 40, width: 20, height: 20, id: "C" }),
+    );
+    const g = (await group_widgets(made.page, [b, c]))!;
+    (g.options.id as ReturnType<typeof state.ok_w<string>>).set_ok("G");
+    await frames();
+    /**The widgets the viewport shows now*/
+    /**The page the viewport edits on now, the content of a group in the level layer, or the page*/
+    const level_page = () =>
+      made.viewport.querySelector(":scope > .level > canvas-page") ??
+      made.viewport.querySelector(":scope > .container > canvas-page")!;
+    const shown = () =>
+      [...level_page().querySelectorAll(":scope > canvas-slot")].map(
+        (slot) => (slot as WidgetSlot).widget,
+      );
+    /**The element of a widget on the level edited now*/
+    const element_of = (widget: CanvasWidget) =>
+      [...level_page().querySelectorAll(":scope > canvas-slot")].find(
+        (slot) => (slot as WidgetSlot).widget === widget,
+      )!.firstElementChild as WidgetBase;
+    /**The element of a widget inside the group on the page, as the group shows it*/
+    const in_group = (widget: CanvasWidget) =>
+      [
+        ...made.viewport.querySelectorAll(
+          ":scope > .container canvas-groupwidget canvas-slot",
+        ),
+      ].find((slot) => (slot as WidgetSlot).widget === widget)!
+        .firstElementChild as WidgetBase;
+    const bar = () =>
+      made.viewport.querySelector<HTMLElement>(":scope > .path");
+    const menu_option = (text: string) =>
+      [
+        ...document.querySelectorAll<HTMLElement>(
+          "contextmenu-container contextmenu-option",
+        ),
+      ].find((option) => option.textContent === text);
+    const right_click = (x: number, y: number) => {
+      const at = made.client(x, y);
+      pointer(made.viewport, "pointerdown", { button: 2, ...at });
+      pointer(made.viewport, "pointerup", { button: 2, ...at });
+    };
+    return {
+      ...made,
+      selected,
+      a,
+      b,
+      c,
+      g,
+      shown,
+      bar,
+      menu_option,
+      right_click,
+      element_of,
+      in_group,
+      level_page,
+    };
+  };
+
+  it("edit in the menu of a group shows its content, exit goes back up and selects the group", async () => {
+    const { shown, bar, menu_option, right_click, selected, a, b, c, g } =
+      await with_group();
+    expect(shown()).toEqual([a, g]);
+    expect(bar()).toBeNull();
+    right_click(130, 30);
+    expect(selected.ok()).toEqual([g]);
+    menu_option("Edit")!.click();
+    await frames();
+    expect(shown()).toEqual([b, c]);
+    expect(selected.ok()).toEqual([]);
+    expect(bar()!.textContent).toContain("G");
+    //A round button with a door
+    expect(bar()!.querySelector(".exit > svg")).not.toBeNull();
+    bar()!.querySelector<HTMLElement>(".exit")!.click();
+    await frames();
+    expect(shown()).toEqual([a, g]);
+    expect(bar()).toBeNull();
+    expect(selected.ok()).toEqual([g]);
+  });
+
+  it("keeps the widgets where the group shows them, a turned and scaled group too", async () => {
+    const { selected, g, b, c, viewport, element_of, in_group } =
+      await with_group();
+    const option = (key: string) =>
+      (g.options as Record<string, ReturnType<typeof state.ok_w<number>>>)[key];
+    //The group is turned and twice as big
+    option("rotation").set_ok(30);
+    option("width").set_ok(option("width").ok() * 2);
+    option("height").set_ok(option("height").ok() * 2);
+    await frames();
+    const before = [b, c].map((w) => in_group(w).getBoundingClientRect());
+    selected.set_ok([c]);
+    await frames();
+    const after = [b, c].map((w) => element_of(w).getBoundingClientRect());
+    after.forEach((rect, i) => {
+      expect(rect.left).toBeCloseTo(before[i].left, 0);
+      expect(rect.top).toBeCloseTo(before[i].top, 0);
+      expect(rect.width).toBeCloseTo(before[i].width, 0);
+      expect(rect.height).toBeCloseTo(before[i].height, 0);
+    });
+    //The transformer is turned with the group, around the widget
+    const transformer = viewport.querySelector(
+      ":scope > canvas-transformer",
+    ) as HTMLElement;
+    expect(transformer.style.transform).toBe("rotate(30deg)");
+    const box = transformer.getBoundingClientRect();
+    expect(box.left + box.width / 2).toBeCloseTo(
+      after[1].left + after[1].width / 2,
+      0,
+    );
+  });
+
+  it("edits the content of a stretched group fitted evenly, so nothing is slanted", async () => {
+    const { selected, g, c, element_of } = await with_group();
+    const option = (key: string) =>
+      (g.options as Record<string, ReturnType<typeof state.ok_w<unknown>>>)[
+        key
+      ];
+    option("display").set_ok("stretch");
+    //Four times as wide, as high as before
+    option("width").set_ok((option("width").ok() as number) * 4);
+    await frames();
+    selected.set_ok([c]);
+    await frames();
+    //The view scales by 2 and the content keeps its proportions, 20 by 20 stays square
+    const rect = element_of(c).getBoundingClientRect();
+    expect(rect.width).toBeCloseTo(rect.height, 0);
+  });
+
+  it("shows the page grayed behind the group edited, the group itself hidden", async () => {
+    const { viewport, selected, c } = await with_group();
+    const container = viewport.querySelector(
+      ":scope > .container",
+    ) as HTMLElement;
+    const group_element = () =>
+      container.querySelector("canvas-groupwidget") as HTMLElement;
+    expect(getComputedStyle(container).filter).toBe("none");
+    selected.set_ok([c]);
+    await frames();
+    expect(getComputedStyle(container).filter).toContain("grayscale");
+    expect(getComputedStyle(container).pointerEvents).toBe("none");
+    expect(getComputedStyle(group_element()).visibility).toBe("hidden");
+    viewport.set({ edit: false });
+    await frames();
+    expect(getComputedStyle(container).filter).toBe("none");
+    expect(getComputedStyle(group_element()).visibility).toBe("visible");
+  });
+
+  it("shows the canvas of the group edited with a backdrop and an outline, following its size", async () => {
+    const { viewport, selected, g, c } = await with_group();
+    const back = () =>
+      viewport.querySelector<HTMLElement>(":scope > .area-back");
+    const line = () =>
+      viewport.querySelector<SVGElement>(":scope > .area-line polygon.canvas");
+    expect(back()).toBeNull();
+    expect(line()).toBeNull();
+    selected.set_ok([c]);
+    await frames();
+    const group = viewport
+      .querySelector(":scope > .container canvas-groupwidget")!
+      .getBoundingClientRect();
+    //Behind the content, the outline on top of it
+    const children = [...viewport.children];
+    const level = viewport.querySelector(":scope > .level")!;
+    expect(children.indexOf(back()!)).toBeLessThan(children.indexOf(level));
+    expect(children.indexOf(line()!.parentElement!)).toBeGreaterThan(
+      children.indexOf(level),
+    );
+    //Grouped from the widgets, the canvas is the group
+    const area = () => line()!.getBoundingClientRect();
+    expect(area().left).toBeCloseTo(group.left, 0);
+    expect(area().top).toBeCloseTo(group.top, 0);
+    expect(area().width).toBeCloseTo(group.width, 0);
+    expect(area().height).toBeCloseTo(group.height, 0);
+    expect(getComputedStyle(back()!).clipPath).toContain("polygon");
+    //Twice as wide, scaled to fit the group it is half as high and centered
+    const width = (
+      g.options as Record<string, ReturnType<typeof state.ok_w<number>>>
+    ).content_width;
+    width.set_ok(width.ok() * 2);
+    await frames();
+    expect(area().width).toBeCloseTo(group.width, 0);
+    expect(area().height).toBeCloseTo(group.height / 2, 0);
+    expect(area().top).toBeCloseTo(group.top + group.height / 4, 0);
+    //Gone on the page
+    viewport.set({ edit: false });
+    await frames();
+    expect(back()).toBeNull();
+    expect(line()).toBeNull();
+  });
+
+  it("outlines the bounds of the group edited, which keep when the canvas changes", async () => {
+    const { viewport, selected, g, c } = await with_group();
+    selected.set_ok([c]);
+    await frames();
+    const bounds = () =>
+      viewport
+        .querySelector<SVGElement>(":scope > .area-line polygon.bounds")!
+        .getBoundingClientRect();
+    const group = () =>
+      viewport
+        .querySelector(":scope > .container canvas-groupwidget")!
+        .getBoundingClientRect();
+    const same = () => {
+      expect(bounds().left).toBeCloseTo(group().left, 0);
+      expect(bounds().top).toBeCloseTo(group().top, 0);
+      expect(bounds().width).toBeCloseTo(group().width, 0);
+      expect(bounds().height).toBeCloseTo(group().height, 0);
+    };
+    same();
+    const option = (key: string) =>
+      (g.options as Record<string, ReturnType<typeof state.ok_w<number>>>)[key];
+    //The canvas changes, the bounds of the widget stay
+    option("content_width").set_ok(option("content_width").ok() * 2);
+    await frames();
+    same();
+    //The widget changes, the bounds follow
+    option("width").set_ok(option("width").ok() + 30);
+    option("rotation").set_ok(90);
+    await frames();
+    same();
+  });
+
+  it("moves a widget in a scaled group by the movement of the pointer", async () => {
+    const { selected, g, c, viewport } = await with_group();
+    const option = (key: string) =>
+      (g.options as Record<string, ReturnType<typeof state.ok_w<number>>>)[key];
+    option("width").set_ok(option("width").ok() * 2);
+    option("height").set_ok(option("height").ok() * 2);
+    selected.set_ok([c]);
+    await frames();
+    const before = (c.options.x as ReturnType<typeof state.ok_w<number>>).ok();
+    const move = viewport.querySelector<HTMLElement>(
+      ":scope > canvas-transformer > .handle.move",
+    )!;
+    const rect = move.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    pointer(move, "pointerdown", { clientX: x, clientY: y });
+    //The view scales by 2 and the group by 2, 40 pixels are 10 units of the content
+    pointer(window, "pointermove", { clientX: x + 40, clientY: y });
+    pointer(window, "pointerup", { clientX: x + 40, clientY: y });
+    expect(
+      (c.options.x as ReturnType<typeof state.ok_w<number>>).ok(),
+    ).toBeCloseTo(before + 10);
+  });
+
+  it("places the content again when the content size or display of a group of the path changes", async () => {
+    const { selected, g, b, c, element_of, in_group } = await with_group();
+    selected.set_ok([c]);
+    await frames();
+    const option = (key: string) =>
+      (g.options as Record<string, ReturnType<typeof state.ok_w<unknown>>>)[
+        key
+      ];
+    //Made elsewhere, like in another editor, the group shows its content at half the size
+    option("content_width").set_ok(
+      (option("content_width").ok() as number) * 2,
+    );
+    option("content_height").set_ok(
+      (option("content_height").ok() as number) * 2,
+    );
+    await frames();
+    const placed = () =>
+      [b, c].map((w) => [
+        element_of(w).getBoundingClientRect(),
+        in_group(w).getBoundingClientRect(),
+      ]);
+    for (const [edited, shown] of placed()) {
+      expect(edited.left).toBeCloseTo(shown.left, 0);
+      expect(edited.width).toBeCloseTo(shown.width, 0);
+    }
+    option("display").set_ok("clip");
+    await frames();
+    for (const [edited, shown] of placed()) {
+      expect(edited.left).toBeCloseTo(shown.left, 0);
+      expect(edited.width).toBeCloseTo(shown.width, 0);
+    }
+  });
+
+  it("leaves a press on the scrollbar of a group to the scrollbar", async () => {
+    const { viewport, selected, g } = await with_group();
+    const option = (key: string) =>
+      (g.options as Record<string, ReturnType<typeof state.ok_w<unknown>>>)[
+        key
+      ];
+    option("display").set_ok("scroll");
+    //Smaller than its content, so it scrolls
+    option("width").set_ok(30);
+    option("height").set_ok(20);
+    await frames();
+    const group_element = viewport.querySelector(
+      ":scope > .container canvas-groupwidget",
+    ) as HTMLElement;
+    expect(group_element.scrollWidth).toBeGreaterThan(
+      group_element.clientWidth,
+    );
+    //A press on the scrollbar has the scrolling element as its target
+    const press = new PointerEvent("pointerdown", {
+      bubbles: true,
+      cancelable: true,
+      pointerType: "mouse",
+      pointerId: 1,
+      button: 0,
+    });
+    group_element.dispatchEvent(press);
+    expect(selected.ok()).toEqual([]);
+    expect(press.defaultPrevented).toBe(false);
+    //Selected, the edges of the transformer let presses through to the scrollbars
+    selected.set_ok([g]);
+    await frames();
+    const side = viewport.querySelector(
+      ":scope > canvas-transformer > .side.right",
+    ) as HTMLElement;
+    expect(getComputedStyle(side).pointerEvents).toBe("none");
+  });
+
+  it("a double click on a group edits inside it", async () => {
+    const { viewport, shown, b, c } = await with_group();
+    //At the point of the group, a selected group has its transformer over it
+    const box = viewport
+      .querySelector(":scope > .container canvas-groupwidget")!
+      .getBoundingClientRect();
+    viewport.dispatchEvent(
+      new MouseEvent("dblclick", {
+        bubbles: true,
+        cancelable: true,
+        clientX: box.left + box.width / 2,
+        clientY: box.top + box.height / 2,
+      }),
+    );
+    await frames();
+    expect(shown()).toEqual([b, c]);
+  });
+
+  it("a double click where there is no widget of the level goes up one level", async () => {
+    const { viewport, shown, selected, a, g, c } = await with_group();
+    selected.set_ok([c]);
+    await frames();
+    //On a widget of the level the level is kept
+    const on = element_of_level(viewport, c).getBoundingClientRect();
+    viewport.dispatchEvent(
+      new MouseEvent("dblclick", {
+        bubbles: true,
+        cancelable: true,
+        clientX: on.left + on.width / 2,
+        clientY: on.top + on.height / 2,
+      }),
+    );
+    await frames();
+    expect(shown()).not.toEqual([a, g]);
+    //Beside it, where only the grayed page is, it goes up
+    const view = viewport.getBoundingClientRect();
+    viewport.dispatchEvent(
+      new MouseEvent("dblclick", {
+        bubbles: true,
+        cancelable: true,
+        clientX: view.left + 2,
+        clientY: view.bottom - 2,
+      }),
+    );
+    await frames();
+    expect(shown()).toEqual([a, g]);
+    expect(selected.ok()).toEqual([g]);
+  });
+
+  it("ctrl click selects a widget pasted into a group after grouping and cutting", async () => {
+    const made = await make_viewport();
+    const selected = state.ok_w<CanvasWidget[]>([]);
+    made.viewport.set({ edit: true, selected });
+    const [ea, eb, ec] = [
+      made.place_with({ x: 10, y: 10, width: 20, height: 20, id: "A" }),
+      made.place_with({ x: 100, y: 10, width: 20, height: 20, id: "B" }),
+      made.place_with({ x: 140, y: 40, width: 20, height: 20, id: "C" }),
+    ];
+    const key = (init: KeyboardEventInit) =>
+      made.viewport.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          bubbles: true,
+          cancelable: true,
+          ...init,
+        }),
+      );
+    const clipboard = new DataTransfer();
+    const clip = (type: "cut" | "paste") =>
+      made.viewport.dispatchEvent(
+        new ClipboardEvent(type, {
+          clipboardData: clipboard,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    //Select two widgets and group them
+    pointer(eb, "pointerdown");
+    pointer(ec, "pointerdown", { ctrlKey: true });
+    key({ key: "g", ctrlKey: true });
+    await vi.waitFor(() => expect(made.page.widgets.ok()).toHaveLength(2));
+    const g = made.page.widgets.ok()[1];
+    await frames();
+    //Cut a widget
+    pointer(ea, "pointerdown");
+    clip("cut");
+    await vi.waitFor(() => expect(made.page.widgets.ok()).toEqual([g]));
+    //Enter the group and paste
+    const group_box = made.viewport
+      .querySelector(":scope > .container canvas-groupwidget")!
+      .getBoundingClientRect();
+    made.viewport.dispatchEvent(
+      new MouseEvent("dblclick", {
+        bubbles: true,
+        cancelable: true,
+        clientX: group_box.left + group_box.width / 2,
+        clientY: group_box.top + group_box.height / 2,
+      }),
+    );
+    await frames();
+    clip("paste");
+    await vi.waitFor(() => expect(selected.ok()).toHaveLength(1));
+    const [pasted] = selected.ok();
+    await frames();
+    //Ctrl click takes it out and puts it back
+    const element = element_of_level(made.viewport, pasted);
+    pointer(element, "pointerdown", { ctrlKey: true });
+    expect(selected.ok()).toEqual([]);
+    pointer(element, "pointerdown", { ctrlKey: true });
+    expect(selected.ok()).toEqual([pasted]);
+    //And a widget of the group with it
+    const inside = (
+      g.options as Record<string, { ok(): CanvasWidget[] }>
+    ).widgets.ok()[0];
+    pointer(element_of_level(made.viewport, inside), "pointerdown", {
+      shiftKey: true,
+    });
+    expect(selected.ok()).toEqual([pasted, inside]);
+  });
+
+  it("shows the ids of the path as they change", async () => {
+    const { bar, selected, g, c } = await with_group();
+    selected.set_ok([c]);
+    await frames();
+    (g.options.id as ReturnType<typeof state.ok_w<string>>).set_ok("Renamed");
+    await frames();
+    expect(
+      [...bar()!.querySelectorAll(".crumb")].map((crumb) => crumb.textContent),
+    ).toEqual(["Page", "Renamed"]);
+  });
+
+  it("follows the selection to the level of the selected widgets", async () => {
+    const { shown, selected, a, b, c, g } = await with_group();
+    selected.set_ok([c]);
+    await frames();
+    expect(shown()).toEqual([b, c]);
+    selected.set_ok([a]);
+    await frames();
+    expect(shown()).toEqual([a, g]);
+  });
+
+  it("goes to any level of the path, groups in groups too", async () => {
+    const { viewport, page, shown, bar, selected, a, b, c, g } =
+      await with_group();
+    //H is a group of C inside G
+    const inner = (await group_widgets(
+      { widgets: (g.options as Record<string, unknown>).widgets } as never,
+      [c],
+    ))!;
+    (inner.options.id as ReturnType<typeof state.ok_w<string>>).set_ok("H");
+    selected.set_ok([c]);
+    await frames();
+    expect(shown()).toEqual([c]);
+    expect(
+      [...bar()!.querySelectorAll(".crumb")].map((crumb) => crumb.textContent),
+    ).toEqual(["Page", "G", "H"]);
+    bar()!.querySelectorAll<HTMLElement>(".crumb")[1].click();
+    await frames();
+    expect(shown()).toEqual([b, inner]);
+    expect(selected.ok()).toEqual([inner]);
+    bar()!.querySelectorAll<HTMLElement>(".crumb")[0].click();
+    await frames();
+    expect(shown()).toEqual([a, g]);
+    void viewport;
+    void page;
+  });
+
+  it("goes up when a group of the path is removed", async () => {
+    const { page, shown, bar, selected, a, b, c, g } = await with_group();
+    const inner = (await group_widgets(
+      { widgets: (g.options as Record<string, unknown>).widgets } as never,
+      [c],
+    ))!;
+    selected.set_ok([c]);
+    await frames();
+    expect(shown()).toEqual([c]);
+    //H is removed from G, the viewport shows G
+    (
+      (g.options as Record<string, unknown>).widgets as ReturnType<
+        typeof state.ok_w<CanvasWidget[]>
+      >
+    ).array.delete(inner);
+    await frames();
+    expect(shown()).toEqual([b]);
+    //G is removed from the page
+    page.widgets.array.delete(g);
+    await frames();
+    expect(shown()).toEqual([a]);
+    expect(bar()).toBeNull();
+  });
+
+  it("refuses an id for the content of a group that another widget of its level has", async () => {
+    const { viewport, selected, c } = await with_group();
+    selected.set_ok([c]);
+    await frames();
+    const id = viewport.shown_page.ok()!.id as ReturnType<
+      typeof state.ok_w<string>
+    >;
+    expect((await id.write("A")).ok).toBe(false);
+    expect(id.ok()).toBe("G");
+    expect((await id.write("Fresh")).ok).toBe(true);
+    expect(id.ok()).toBe("Fresh");
+  });
+
+  it("shows the page again when leaving edit mode", async () => {
+    const { viewport, shown, selected, a, c, g } = await with_group();
+    selected.set_ok([c]);
+    await frames();
+    viewport.set({ edit: false });
+    await frames();
+    expect(shown()).toEqual([a, g]);
+  });
+
+  it("gives the page of the level it shows, which the properties editor shows with nothing selected", async () => {
+    const { viewport, page, selected, c, g } = await with_group();
+    expect(viewport.shown_page.ok()).toBe(page);
+    const editor = document.body.appendChild(
+      canvas_properties({ selected, page: viewport.shown_page }),
+    );
+    selected.set_ok([c]);
+    await frames();
+    selected.set_ok([]);
+    const level = viewport.shown_page.ok()!;
+    expect(level.widgets).toBe((g.options as Record<string, unknown>).widgets);
+    expect(level.width).toBe(
+      (g.options as Record<string, unknown>).content_width,
+    );
+    expect(editor.querySelector(":scope > .title")!.textContent).toBe("Page");
+  });
+});
+
 describe("Transformer", () => {
   afterEach(() => {
     document.body.replaceChildren();
@@ -1175,7 +1800,7 @@ describe("Transformer", () => {
       name: string,
       dx: number,
       dy: number,
-      keys: { shiftKey?: boolean; altKey?: boolean } = {},
+      keys: { shiftKey?: boolean; altKey?: boolean; ctrlKey?: boolean } = {},
     ) => {
       const element = handle(name);
       const box = element.getBoundingClientRect();
@@ -1320,12 +1945,34 @@ describe("Transformer", () => {
     expect(w[WIDGET_GEOMETRY].y).toBe(20);
   });
 
-  it("alt snaps to 1 unit and shift does not snap", async () => {
+  it("only alt turns snapping off", async () => {
     const { w, drag } = await with_selection();
     drag("handle move", 3, 0, { altKey: true });
-    expect(w[WIDGET_GEOMETRY].x).toBe(52);
-    drag("handle move", 3, 0, { shiftKey: true });
-    expect(w[WIDGET_GEOMETRY].x).toBe(53.5);
+    expect(w[WIDGET_GEOMETRY].x).toBe(51.5);
+    drag("handle move", 3, 0, { shiftKey: true, ctrlKey: true });
+    expect(w[WIDGET_GEOMETRY].x).toBe(55);
+  });
+
+  it("ctrl keeps the ratio when resizing, by the axis that changed most", async () => {
+    const { w, drag } = await with_selection();
+    //20 units wider, 1.5 times as wide
+    drag("handle resize se", 40, 0, { ctrlKey: true });
+    expect(place_of(w)).toEqual([50, 25, 60, 30, 0]);
+    //A side handle scales the other axis around its middle
+    drag("handle resize s", 0, 60, { ctrlKey: true });
+    expect(place_of(w)).toEqual([20, 25, 120, 60, 0]);
+  });
+
+  it("shift resizes around the center", async () => {
+    const { w, drag } = await with_selection();
+    drag("handle resize e", 20, 0, { shiftKey: true });
+    expect(place_of(w)).toEqual([40, 25, 60, 20, 0]);
+  });
+
+  it("ctrl and shift resize around the center keeping the ratio", async () => {
+    const { w, drag } = await with_selection();
+    drag("handle resize se", 40, 0, { ctrlKey: true, shiftKey: true });
+    expect(place_of(w)).toEqual([30, 15, 80, 40, 0]);
   });
 
   it("the sides move the widget", async () => {

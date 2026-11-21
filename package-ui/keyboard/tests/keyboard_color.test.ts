@@ -82,7 +82,11 @@ describe("Keyboard_Color", () => {
     keyboard = new Keyboard_Color();
     keyboard.open(appendInput("color", "#ff8000"));
     const p = parts(keyboard);
-    expect([p.red.value, p.green.value, p.blue.value]).toEqual(["255", "128", "0"]);
+    expect([p.red.value, p.green.value, p.blue.value]).toEqual([
+      "255",
+      "128",
+      "0",
+    ]);
     expect(p.hue.value).toBe("30");
     expect(p.hex.value).toBe("#ff8000");
   });
@@ -197,5 +201,33 @@ describe("Keyboard_Color", () => {
     //A slider moved while closed writes nowhere
     slide(parts(keyboard).blue, 255);
     expect(input.value).toBe("#00ff00");
+  });
+
+  it("has an alpha slider for inputs with data-alpha, which it writes back", () => {
+    const input = appendInput("color", "#ff0000");
+    input.dataset.alpha = "0.5";
+    keyboard = new Keyboard_Color();
+    keyboard.open(input);
+    const alpha = keyboard.querySelector<HTMLInputElement>(
+      'label[title="Alpha"] input',
+    )!;
+    expect(alpha.closest("label")!.hidden).toBe(false);
+    expect(alpha.value).toBe("50");
+    const events = record(input);
+    slide(alpha, 20);
+    expect(input.dataset.alpha).toBe("0.2");
+    expect(input.value).toBe("#ff0000");
+    //The hex shows the alpha too
+    expect(parts(keyboard).hex.value).toBe("#ff000033");
+    expect(events).toEqual(["input", "change"]);
+  });
+
+  it("hides the alpha slider for inputs without data-alpha", () => {
+    keyboard = new Keyboard_Color();
+    keyboard.open(appendInput("color", "#ff0000"));
+    expect(
+      keyboard.querySelector('label[title="Alpha"]')?.hasAttribute("hidden") ??
+        true,
+    ).toBe(true);
   });
 });

@@ -98,9 +98,14 @@ const toggle = (editor: HTMLElement, name: string) =>
   row_of(editor, name)
     .querySelector<HTMLElement>("list-keyfield .opener > div")!
     .click();
+/**The value box of the stepper of a number property, its first box, before the unit*/
+const number_box = (editor: HTMLElement, name: string) =>
+  field(editor, name).querySelector<HTMLElement>(
+    ":scope > span > span:first-child",
+  )!;
 /**The value a number field shows, in its value box*/
 const number_of = (editor: HTMLElement, name: string) =>
-  field(editor, name).querySelector(":scope > span")!.textContent;
+  number_box(editor, name).textContent;
 /**The value a text field shows, in its input*/
 const text_of = (editor: HTMLElement, name: string) =>
   field(editor, name).querySelector("input")!.value;
@@ -117,17 +122,49 @@ const type_number = async (
   name: string,
   number: number,
 ) => {
-  const element = field(editor, name);
-  const box = element.querySelector(":scope > span")!;
+  //Typed into the value box and written when it loses focus, as the stepper does
+  const box = number_box(editor, name);
+  box.focus();
   box.textContent = String(number);
   box.dispatchEvent(new Event("input"));
-  element.dispatchEvent(
-    new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
-  );
+  box.blur();
+  await new Promise((resolve) => setTimeout(resolve, 0));
   await tick();
 };
 
 describe("Properties editor", () => {
+  it("shows the properties of the page when nothing is selected", async () => {
+    const page: CanvasPage = {
+      id: state.ok_w("Main"),
+      width: state.ok_w(800),
+      height: state.ok_w(600),
+      background: state.ok_w("#ffffff"),
+    };
+    const selected = state.ok_w<CanvasWidget[]>([]);
+    const editor = document.body.appendChild(
+      canvas.properties({ selected, page }),
+    );
+    expect(title(editor)).toBe("Page");
+    expect(names(editor)).toEqual(["ID", "Width", "Height", "Background"]);
+    expect(text_of(editor, "ID")).toBe("Main");
+    expect(number_of(editor, "Width")).toBe("800");
+    //The background can be transparent
+    expect(
+      field(editor, "Background").querySelector("input.alpha"),
+    ).not.toBeNull();
+    //The page is not resolved like the options of widgets, so it can not be linked
+    expect(
+      row_of(editor, "Width").querySelector("canvas-linkfield")!.classList,
+    ).toContain("none");
+    await type_number(editor, "Width", 1024);
+    expect((page.width as StateOkW<number>).ok()).toBe(1024);
+    //A selected widget is shown instead
+    selected.set_ok([canvas.widget(definition, {})]);
+    expect(title(editor)).toBe("Editor box");
+    selected.set_ok([]);
+    expect(title(editor)).toBe("Page");
+  });
+
   it("shows that nothing is selected", () => {
     const editor = editor_with([]);
     expect(title(editor)).toBe("Nothing selected");

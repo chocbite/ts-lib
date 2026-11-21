@@ -8,6 +8,7 @@ import {
 } from "./data";
 import { canvas_link, linear_transform } from "./link";
 import { copy_widgets, cut_widgets, paste_widgets } from "./clipboard";
+import { group_widgets, ungroup_widgets } from "./group_widget";
 import { remove_widgets, reorder_widget } from "./order";
 import { canvas_outline } from "./outline";
 import { canvas_properties } from "./properties_editor";
@@ -49,6 +50,10 @@ export const canvas = {
   /**Adds copies of the copied widgets to a page, in front, or of the widgets in a text from the clipboard of the system,
    * placed at a point or kept inside an area if given, gives the copies*/
   paste: paste_widgets,
+  /**Groups widgets of a page into a new group in their place, gives the group*/
+  group: group_widgets,
+  /**Puts the widgets of groups back on a page in their place, gives them*/
+  ungroup: ungroup_widgets,
   /**The widgets type of the depot, where widget definitions are registered*/
   widgets: WIDGETS,
   /**Builds a page from its JSON with writable states, the check of get of a settings group storing a page*/
@@ -80,6 +85,7 @@ export type {
   CanvasPropertiesOptions,
   PropertiesEditor,
 } from "./properties_editor";
+export type { GroupDisplay, GroupWidgetOptions } from "./group_widget";
 export type { WidgetOrder } from "./order";
 export type { CanvasOutlineOptions, Outline } from "./outline";
 export type { CanvasSelectWidgetOptions } from "./select";

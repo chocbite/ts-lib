@@ -1,4 +1,5 @@
 import st from "@chocbite/ts-lib/state";
+import { theme_init } from "#theme";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { form_color } from "../special/color/color_input";
 
@@ -80,5 +81,84 @@ describe("Color input", () => {
     state.set_ok("#000001");
     await wait();
     expect(input.value).toBe("#000001");
+  });
+});
+
+//Sizes of the elements come from theme variables
+theme_init();
+
+const tick = () => new Promise((resolve) => setTimeout(resolve));
+const show = <E extends HTMLElement>(element: E) =>
+  document.body.appendChild(element);
+/**The color the swatch shows, over the checkerboard*/
+const shown = (element: HTMLElement) =>
+  getComputedStyle(element.querySelector(":scope > .swatch > div")!)
+    .backgroundColor;
+const slider = (element: HTMLElement) =>
+  element.querySelector<HTMLInputElement>(":scope > input.alpha");
+const native = (element: HTMLElement) =>
+  element.querySelector<HTMLInputElement>('input[type="color"]')!;
+/**Picks a color in the native picker*/
+const pick = async (element: HTMLElement, color: string) => {
+  native(element).value = color;
+  native(element).dispatchEvent(new Event("change"));
+  await tick();
+};
+
+describe("Color input with alpha", () => {
+  afterEach(() => document.body.replaceChildren());
+
+  it("shows the color with its alpha over a checkerboard, and an alpha slider", () => {
+    const element = show(form_color({ value: "#ff000080", alpha: true }));
+    expect(shown(element)).toMatch(/^rgba\(255, 0, 0, 0\.5\d*\)$/);
+    expect(
+      getComputedStyle(element.querySelector(":scope > .swatch")!)
+        .backgroundImage,
+    ).toContain("gradient");
+    expect(slider(element)!.value).toBe("50");
+  });
+
+  it("takes transparent as no alpha", () => {
+    const element = show(form_color({ value: "transparent", alpha: true }));
+    expect(shown(element)).toBe("rgba(0, 0, 0, 0)");
+    expect(slider(element)!.value).toBe("0");
+  });
+
+  it("writes the alpha of the slider, a color picked keeps it", async () => {
+    const value = st.ok_w("#ff0000");
+    const element = show(form_color({ value, alpha: true }));
+    const alpha = slider(element)!;
+    alpha.value = "25";
+    alpha.dispatchEvent(new Event("input"));
+    alpha.dispatchEvent(new Event("change"));
+    await tick();
+    expect(value.ok()).toBe("#ff000040");
+    await pick(element, "#00ff00");
+    expect(value.ok()).toBe("#00ff0040");
+  });
+
+  it("without alpha shows the alpha of a value, but writes only the color, without a slider", async () => {
+    const value = st.ok_w("#ff000080");
+    const element = show(form_color({ value }));
+    expect(slider(element)).toBeNull();
+    expect(shown(element)).toMatch(/^rgba\(255, 0, 0, 0\.5\d*\)$/);
+    await pick(element, "#00ff00");
+    expect(value.ok()).toBe("#00ff00");
+  });
+
+  it("gives the native input the alpha for the on-screen keyboard, and takes it back from it", async () => {
+    const value = st.ok_w("#ff000080");
+    const element = show(form_color({ value, alpha: true }));
+    expect(Number(native(element).dataset.alpha)).toBeCloseTo(0.5, 2);
+    //Like the color keyboard writes it
+    native(element).dataset.alpha = "0.25";
+    native(element).dispatchEvent(new Event("input"));
+    native(element).dispatchEvent(new Event("change"));
+    await tick();
+    expect(value.ok()).toBe("#ff000040");
+    //Without alpha the native input has none
+    expect(
+      native(show(form_color({ value: "#ff0000" }))).hasAttribute("data-alpha"),
+    ).toBe(false);
   });
 });
