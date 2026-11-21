@@ -11,6 +11,7 @@ import ctm, { type ContextMenuLines } from "#context_menu";
 import {
   material_close_rounded,
   material_horizontal_split_rounded,
+  material_open_in_new_rounded,
   material_vertical_split_rounded,
 } from "#icons";
 import type { SVGFunc } from "#svg";
@@ -109,6 +110,24 @@ export interface LayoutOpenOptions {
   side?: LayoutSide;
 }
 
+/**Called on the owner of a layout, internal to this module*/
+export const OWNER_CAN_POPOUT = Symbol("owner_can_popout");
+export const OWNER_POPOUT = Symbol("owner_popout");
+export const OWNER_EMPTY = Symbol("owner_empty");
+export const OWNER_CAN_EMPTY = Symbol("owner_can_empty");
+/**What a layout belongs to, given when the layout is created and never changed, like a workspace,
+ * tabs move only between layouts with the same owner, and layouts without an owner*/
+export interface LayoutOwner {
+  /**Whether the owner can take popped out tabs right now*/
+  [OWNER_CAN_POPOUT](): boolean;
+  /**Takes a tab group the layout popped out, already taken out of the layout, rect is where its group was on the page*/
+  [OWNER_POPOUT](layout: Layout, node: LayoutTabs, rect: DOMRect): void;
+  /**Whether the last tab of the layout can leave it*/
+  [OWNER_CAN_EMPTY](layout: Layout): boolean;
+  /**The tree of the layout became an empty tab group, like a panel whose last tab was dragged out*/
+  [OWNER_EMPTY](layout: Layout): void;
+}
+
 /**Smallest size of a tab group in rem, without its tab bar*/
 const MIN_WIDTH = 8;
 const MIN_HEIGHT = 4;
@@ -173,6 +192,42 @@ function take_out(layout: Layout, group: LayoutTabs, content: ContentBase) {
   write(group.tabs, state.a.write.splice(index, 1));
   if (group.active.ok() === content) write(group.active, next);
   if (last) remove_node(layout, group);
+  //Told after the change that took the tab out, a dragged tab is put in its new place first
+  const owner = layout.owner;
+  if (owner && is_empty(layout))
+    queueMicrotask(() => {
+      if (is_empty(layout)) owner[OWNER_EMPTY](layout);
+    });
+}
+
+/**Whether the tree of the layout is one tab group without tabs*/
+function is_empty(layout: Layout): boolean {
+  const root = layout.root_node();
+  return !!root && !is_split(root) && root.tabs.ok().length === 0;
+}
+
+/**Whether the content can leave its group, the last tab of a group in a read only split can not,
+ * the empty group could not be removed, and the owner decides for the last tab of the layout*/
+function can_leave(layout: Layout, group: LayoutTabs): boolean {
+  if (!group.tabs.writable) return false;
+  if (group.tabs.ok().length > 1) return true;
+  const parent = layout.parent_of(group);
+  if (parent) return parent.children.writable;
+  return layout.owner?.[OWNER_CAN_EMPTY](layout) ?? true;
+}
+
+/**Takes the content out of its layout and gives it to the owner of the layout in a tab group of its own*/
+function popout(layout: Layout, group: TabsElement, content: ContentBase) {
+  const owner = layout.owner;
+  if (!owner) return;
+  const rect = group.getBoundingClientRect();
+  take_out(layout, group.node, content);
+  owner[OWNER_POPOUT](
+    layout,
+    layout_tabs([content], { active: content }),
+    rect,
+  );
+  TABS.get(content)?.focus();
 }
 
 /**Removes the node from its split, a split left with one node is replaced by it, the root stays*/
@@ -827,6 +882,20 @@ class LayoutTab extends Base {
           on_click: () => this.content.content_close(),
         }),
       );
+    //A tab alone in a layout is not popped out, it would leave an empty layout, a panel with one tab is moved instead
+    if (
+      group &&
+      layout?.owner?.[OWNER_CAN_POPOUT]() &&
+      can_leave(layout, group.node) &&
+      !(layout.root_node() === group.node && group.node.tabs.ok().length === 1)
+    )
+      lines.push(
+        ctm.line({
+          text: "Pop out",
+          icon: material_open_in_new_rounded,
+          on_click: () => popout(layout, group, this.content),
+        }),
+      );
     if (
       group &&
       layout &&
@@ -995,12 +1064,10 @@ function find_target(
   const source = from?.node;
   const alone = (group: LayoutTabs) =>
     source === group && group.tabs.ok().length === 1;
-  //The last tab of a group in a read only split can not leave, the empty group could not be removed
   const source_layout = from?.layout();
-  if (source && source_layout && alone(source)) {
-    const parent = source_layout.parent_of(source);
-    if (parent && !parent.children.writable) return;
-  }
+  if (!source || !source_layout || !can_leave(source_layout, source)) return;
+  //Tabs stay among the layouts of their owner
+  if (source_layout.owner !== layout.owner) return;
 
   //Along the edges of a layout with splits, the whole layout is split
   const root = layout.root_node();
@@ -1081,6 +1148,8 @@ class Layout extends Base {
     return "composition";
   }
 
+  /**What the layout belongs to, given at creation*/
+  readonly owner?: LayoutOwner;
   /**The root when it is not a state*/
   #root?: LayoutNode;
   #root_element?: NodeElement;
@@ -1088,8 +1157,10 @@ class Layout extends Base {
   /**Group the user worked in last*/
   #last?: LayoutTabs;
 
-  constructor() {
+  /**@param owner what the layout belongs to, internal to this module*/
+  constructor(owner?: LayoutOwner) {
     super();
+    this.owner = owner;
     this.#indicator.className = "indicator";
     this.addEventListener("focusin", (e) => {
       const group = (e.target as Element).closest("composition-layouttabs");
@@ -1202,7 +1273,7 @@ class Layout extends Base {
 }
 define_element(Layout);
 
-export type { Layout };
+export { Layout };
 
 /**Creates a layout of tab groups, side by side and above each other, the user drags the tabs around
  * The structure is the root input, nodes made with layout_split and layout_tabs, each holding states the layout writes*/

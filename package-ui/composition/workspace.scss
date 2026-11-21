@@ -1,0 +1,23 @@
+//Fills the element it is put in with the main layout, the panels are in a panel container
+composition-workspace {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+//The layout of a panel fills it, the empty space of its tab bars moves the panel
+composition-workspacepanel {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+
+  composition-layouttabs > .bar {
+    cursor: grab;
+
+    &.moving {
+      cursor: grabbing;
+    }
+  }
+}

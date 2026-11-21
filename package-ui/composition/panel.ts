@@ -84,6 +84,7 @@ document.documentElement.style.setProperty(
 //Internal to this module, between the panel and its container
 export const PANEL_ADDED = Symbol("panel_added");
 export const PANEL_PLACE = Symbol("panel_place");
+export const PANEL_MOVE = Symbol("panel_move");
 export const HOST_LAYER = Symbol("host_layer");
 export const HOST_RAISE = Symbol("host_raise");
 export const HOST_REMOVE = Symbol("host_remove");
@@ -302,6 +303,11 @@ class Panel extends Base {
     this.#place();
   }
 
+  /**Called by the container, starts moving the panel from a press on another element, like a tab bar in the panel*/
+  [PANEL_MOVE](e: PointerEvent, handle: HTMLDivElement): void {
+    this.#move_start(e, handle);
+  }
+
   /**Called by the container when its size changes, the panel is kept inside it*/
   [PANEL_PLACE](): void {
     this.#place();
@@ -470,10 +476,10 @@ class Panel extends Base {
     if (this.#can_change("y")) this.#change("y", corner.top + h * ay);
   }
 
-  #move_start(e: PointerEvent): void {
+  /**Moves the panel with the pointer, from a press on the title bar, or on the handle another element gives*/
+  #move_start(e: PointerEvent, titlebar = this.#titlebar): void {
     if (e.button !== 0) return;
     if (!this.#can_change("x") && !this.#can_change("y")) return;
-    const titlebar = this.#titlebar;
     titlebar.setPointerCapture(e.pointerId);
     titlebar.classList.add("moving");
     this.#moving = true;
