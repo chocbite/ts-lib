@@ -147,6 +147,32 @@ const describe = (node: LayoutNode, depth = 0): string => {
   state.v.viewer(root, show);
 }
 
+//       _____ _____   ____   _____ _____ _____ _   _  _____
+//      / ____|  __ \ / __ \ / ____/ ____|_   _| \ | |/ ____|
+//     | |    | |__) | |  | | (___| (___   | | |  \| | |  __
+//     | |    |  _  /| |  | |\___ \\___ \  | | | . ` | | |_ |
+//     | |____| | \ \| |__| |____) |___) |_| |_| |\  | |__| |
+//      \_____|_|  \_\\____/|_____/_____/|_____|_| \_|\_____|
+{
+  const sec = section(
+    "Crossing sizers",
+    "Press where sizers meet to move them together, the lines that will move light up and the cursor shows moving both ways. The two upright lines start lined up, pressing the middle line where they meet it moves all three. Move one upright line a bit away, they still move together while within reach, move it further and they move alone",
+  );
+  const cell = (name: string) =>
+    comp.layout_tabs([demo({ title: name, closable: true }, name)]);
+  const row = (name: string) =>
+    comp.layout_split("row", [cell(`${name} left`), cell(`${name} right`)]);
+  box(sec, "Two rows in a column", {
+    width: "40rem",
+    maxWidth: "100%",
+    height: "20rem",
+  }).appendChild(
+    comp.layout({
+      root: comp.layout_split("column", [row("Top"), row("Bottom")]),
+    }),
+  );
+}
+
 //      _      ____   _____ _  ________ _____
 //     | |    / __ \ / ____| |/ /  ____|  __ \
 //     | |   | |  | | |    | ' /| |__  | |  | |

@@ -87,8 +87,14 @@ composition-layoutsplit {
     }
 
     &:hover::after,
+    &.joined::after,
     &.active::after {
       background-color: var(--composition-colors-shadowFocus);
+    }
+
+    //Where sizers cross, pressing moves them all
+    &.crossing {
+      cursor: move !important;
     }
   }
 
@@ -101,6 +107,7 @@ composition-layoutsplit {
       width: 1px;
     }
     &:hover::after,
+    &.joined::after,
     &.active::after {
       left: calc(50% - 1.5px);
       width: 3px;
@@ -116,6 +123,7 @@ composition-layoutsplit {
       height: 1px;
     }
     &:hover::after,
+    &.joined::after,
     &.active::after {
       top: calc(50% - 1.5px);
       height: 3px;
@@ -271,5 +279,10 @@ composition-layouttab {
   &:hover > .close,
   .touch & > .close {
     visibility: visible;
+  }
+
+  //Read only tabs can not be closed
+  composition-layouttabs.locked > .bar > & > .close {
+    display: none;
   }
 }

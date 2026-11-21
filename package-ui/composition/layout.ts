@@ -114,6 +114,8 @@ const MIN_WIDTH = 8;
 const MIN_HEIGHT = 4;
 /**Width of a sizer in rem, in touch mode, used for the minimum size of splits*/
 const SIZER_TOUCH = 1;
+/**Distance in rem from a pressed sizer where other sizers are moved with it, at crossings and where sizers line up*/
+const SIZER_REACH = 0.75;
 /**How far the pointer moves in px before pressing a tab becomes dragging it*/
 const DRAG_DISTANCE = 6;
 /**Part of a tab group from its edges where a dropped tab splits the group, closer to the middle it joins it*/
@@ -455,19 +457,19 @@ class SplitElement extends NodeElement {
   #sizer(): HTMLDivElement {
     const sizer = document.createElement("div");
     sizer.className = "sizer";
-    sizer.onpointerdown = (e) => this.#size_start(e, sizer);
+    sizer.onpointerdown = (e) => sizer_press(e, sizer);
+    sizer.onpointermove = (e) => sizer_hover(sizer, e);
+    sizer.onpointerleave = () => sizer_hover(sizer);
     return sizer;
   }
 
-  /**Moves the sizer, the two children beside it share their space, never below their smallest size,
-   * the sizes are written when the sizer is let go*/
-  #size_start(e: PointerEvent, sizer: HTMLDivElement): void {
-    if (e.button !== 0) return;
+  /**Starts moving a sizer of the split, the two children beside it share their space, never below their
+   * smallest size, the sizes are written when it ends, undefined when either size is read only*/
+  sizer_drag(sizer: Element): SizerDrag | undefined {
     const a = sizer.previousElementSibling;
     const b = sizer.nextElementSibling;
     if (!(a instanceof NodeElement) || !(b instanceof NodeElement)) return;
     if (!a.node.size.writable || !b.node.size.writable) return;
-    e.preventDefault();
     const row = this.node.direction === "row";
     const length = (n: NodeElement) => {
       const rect = n.getBoundingClientRect();
@@ -479,25 +481,108 @@ class SplitElement extends NodeElement {
     const min_b = rem_to_px(row ? b.min_width : b.min_height);
     const grow = a.node.size.ok() + b.node.size.ok();
     let grow_a = a.node.size.ok();
-    sizer.setPointerCapture(e.pointerId);
-    sizer.classList.add("active");
-    sizer.onpointermove = (ev) => {
-      if (min_a > total - min_b) return;
-      const moved = row ? ev.clientX - e.clientX : ev.clientY - e.clientY;
-      const size = clamp(la + moved, min_a, total - min_b);
-      grow_a = (grow * size) / total;
-      a.style.flexGrow = String(grow_a);
-      b.style.flexGrow = String(grow - grow_a);
-    };
-    sizer.onpointerup = sizer.onpointercancel = () => {
-      sizer.classList.remove("active");
-      sizer.onpointermove = sizer.onpointerup = sizer.onpointercancel = null;
-      write(a.node.size, grow_a);
-      write(b.node.size, grow - grow_a);
+    return {
+      row,
+      move: (moved) => {
+        if (min_a > total - min_b) return;
+        const size = clamp(la + moved, min_a, total - min_b);
+        grow_a = (grow * size) / total;
+        a.style.flexGrow = String(grow_a);
+        b.style.flexGrow = String(grow - grow_a);
+      },
+      end: () => {
+        write(a.node.size, grow_a);
+        write(b.node.size, grow - grow_a);
+      },
     };
   }
 }
 define_element(SplitElement);
+
+/**One sizer being moved, moved is in px from where the pointer was pressed, along the direction of its split*/
+interface SizerDrag {
+  readonly row: boolean;
+  move(moved: number): void;
+  end(): void;
+}
+
+/**Whether the sizer is between children side by side, so it moves sideways*/
+const sizer_row = (sizer: Element) =>
+  sizer.parentElement?.classList.contains("row") ?? false;
+
+/**The sizer and every other sizer of the same layout within reach of the point, so sizers meeting at a
+ * crossing, or lining up across a sizer, are moved together*/
+function sizers_at(sizer: HTMLElement, x: number, y: number): HTMLElement[] {
+  const layout = sizer.closest("composition-layout");
+  if (!layout) return [sizer];
+  const reach = rem_to_px(SIZER_REACH);
+  const found = [sizer];
+  for (const other of layout.querySelectorAll<HTMLElement>(".sizer")) {
+    if (other === sizer || other.closest("composition-layout") !== layout)
+      continue;
+    const r = other.getBoundingClientRect();
+    if (
+      x >= r.left - reach &&
+      x <= r.right + reach &&
+      y >= r.top - reach &&
+      y <= r.bottom + reach
+    )
+      found.push(other);
+  }
+  return found;
+}
+
+/**Sizers marked as moving together with the hovered sizer*/
+let joined: HTMLElement[] = [];
+
+/**Marks the sizers a press would move with the hovered one, a crossing gets the move cursor,
+ * without an event the pointer left*/
+function sizer_hover(sizer: HTMLElement, e?: PointerEvent): void {
+  if (sizer.classList.contains("active")) return;
+  for (const other of joined) other.classList.remove("joined");
+  joined = e ? sizers_at(sizer, e.clientX, e.clientY).slice(1) : [];
+  for (const other of joined) other.classList.add("joined");
+  const row = sizer_row(sizer);
+  sizer.classList.toggle(
+    "crossing",
+    joined.some((other) => sizer_row(other) !== row),
+  );
+}
+
+/**Moves the pressed sizer and the sizers within reach of the pointer, each along its own direction*/
+function sizer_press(e: PointerEvent, sizer: HTMLElement): void {
+  if (e.button !== 0) return;
+  const sizers = sizers_at(sizer, e.clientX, e.clientY);
+  const drags: SizerDrag[] = [];
+  const moving: HTMLElement[] = [];
+  for (const s of sizers) {
+    const split = s.parentElement;
+    const drag =
+      split instanceof SplitElement ? split.sizer_drag(s) : undefined;
+    if (!drag) continue;
+    drags.push(drag);
+    moving.push(s);
+  }
+  if (!drags.length) return;
+  e.preventDefault();
+  sizer_hover(sizer);
+  sizer.classList.toggle(
+    "crossing",
+    drags.some((d) => d.row) && drags.some((d) => !d.row),
+  );
+  for (const s of moving) s.classList.add("active");
+  sizer.setPointerCapture(e.pointerId);
+  sizer.onpointermove = (ev) => {
+    for (const drag of drags)
+      drag.move(drag.row ? ev.clientX - e.clientX : ev.clientY - e.clientY);
+  };
+  sizer.onpointerup = sizer.onpointercancel = () => {
+    for (const s of moving) s.classList.remove("active");
+    sizer.onpointermove = (ev) => sizer_hover(sizer, ev);
+    sizer.onpointerup = sizer.onpointercancel = null;
+    for (const drag of drags) drag.end();
+  };
+}
 
 //      _______       ____   _____
 //     |__   __|/\   |  _ \ / ____|
@@ -521,6 +606,8 @@ class TabsElement extends NodeElement {
     super(node);
     this.bar.className = "bar";
     this.body.className = "body";
+    //A group with read only tabs hides the close buttons
+    this.classList.toggle("locked", !node.tabs.writable);
     this.attach_state(node.tabs, (tabs) => this.#apply(tabs.value));
     this.attach_state(node.active, () => this.#show_active());
   }
