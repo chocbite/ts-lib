@@ -14,7 +14,7 @@ import {
 } from "..";
 import {
   test_state_sub,
-  test_state_then,
+  test_state_read,
   type TestStateAll,
   type TestStateOk,
   type TestStateWrite,
@@ -54,8 +54,8 @@ describe("Resource states", function () {
     it("Subscribing And Unsubscribing", async function () {
       await test_state_sub(maker, 50);
     });
-    describe("Then", async function () {
-      await test_state_then(maker, 50);
+    describe("Read", async function () {
+      await test_state_read(maker, 50);
     });
   });
   //##################################################################################################################################################
@@ -91,8 +91,8 @@ describe("Resource states", function () {
     it("Subscribing And Unsubscribing", async function () {
       await test_state_sub(maker, 50);
     });
-    describe("Then", async function () {
-      await test_state_then(maker, 50);
+    describe("Read", async function () {
+      await test_state_read(maker, 50);
     });
   });
 
@@ -129,8 +129,8 @@ describe("Resource states", function () {
     it("Subscribing And Unsubscribing", async function () {
       await test_state_sub(maker, 50);
     });
-    describe("Then", async function () {
-      await test_state_then(maker, 50);
+    describe("Read", async function () {
+      await test_state_read(maker, 50);
     });
   });
 
@@ -167,8 +167,8 @@ describe("Resource states", function () {
     it("Subscribing And Unsubscribing", async function () {
       await test_state_sub(maker, 50);
     });
-    describe("Then", async function () {
-      await test_state_then(maker, 50);
+    describe("Read", async function () {
+      await test_state_read(maker, 50);
     });
   });
 });
@@ -182,7 +182,7 @@ describe("Resource state failures", { timeout: 500 }, function () {
       { timeout: 30 },
     );
     const read = await Promise.race([
-      state.then((value) => value),
+      state.read().then((value) => value),
       sleep(100, "pending" as const),
     ]);
     expect(read).not.toBe("pending");
@@ -198,9 +198,9 @@ describe("Resource state failures", { timeout: 500 }, function () {
       () => {},
       { timeout: 30 },
     );
-    const first = state.then((value) => value);
+    const first = state.read().then((value) => value);
     await sleep(50);
-    expect(await state.then((value) => value)).toEqual(ok(5));
+    expect(await state.read().then((value) => value)).toEqual(ok(5));
     expect(await first).toEqual(ok(5));
     expect(attempts).toBe(2);
   });
@@ -254,12 +254,12 @@ describe("Resource state validity and retention", { timeout: 500 }, function () 
     const { state, calls } = counted({ validity: true, retention: 50 });
     const sub = () => {};
     state.sub(sub, true);
-    await state;
+    await state.read();
     state.unsub(sub);
     await sleep(10);
-    expect(await state.then((v) => v)).toEqual(ok(1));
+    expect(await state.read().then((v) => v)).toEqual(ok(1));
     state.sub(sub, true);
-    await state;
+    await state.read();
     expect(calls.once).toBe(1);
     expect(calls.teardown).toBe(0);
     state.unsub(sub);
@@ -268,30 +268,30 @@ describe("Resource state validity and retention", { timeout: 500 }, function () 
     const { state, calls } = counted({ validity: true, retention: 20 });
     const sub = () => {};
     state.sub(sub, true);
-    await state;
+    await state.read();
     state.unsub(sub);
     await sleep(40);
     expect(calls.teardown).toBe(1);
-    expect(await state.then((v) => v)).toEqual(ok(2));
+    expect(await state.read().then((v) => v)).toEqual(ok(2));
     expect(calls.once).toBe(2);
   });
   it("validity true: without retention the buffered value is invalidated at last unsubscribe", async function () {
     const { state, calls } = counted({ validity: true });
     const sub = () => {};
     state.sub(sub, true);
-    await state;
+    await state.read();
     state.unsub(sub);
     expect(calls.teardown).toBe(1);
-    expect(await state.then((v) => v)).toEqual(ok(2));
+    expect(await state.read().then((v) => v)).toEqual(ok(2));
     expect(calls.once).toBe(2);
   });
   it("validity true: buffered value stays valid while subscribed", async function () {
     const { state, calls } = counted({ validity: true });
     const sub = () => {};
     state.sub(sub, true);
-    await state;
+    await state.read();
     await sleep(20);
-    expect(await state.then((v) => v)).toEqual(ok(1));
+    expect(await state.read().then((v) => v)).toEqual(ok(1));
     expect(calls.once).toBe(1);
     state.unsub(sub);
   });
@@ -299,11 +299,11 @@ describe("Resource state validity and retention", { timeout: 500 }, function () 
     const { state, calls } = counted({ validity: 20, retention: 200 });
     const sub = () => {};
     state.sub(sub, true);
-    await state;
+    await state.read();
     state.unsub(sub);
     await sleep(40);
     state.sub(sub, true);
-    await state;
+    await state.read();
     expect(calls.once).toBe(2);
     expect(calls.teardown).toBe(0);
     state.unsub(sub);
@@ -312,9 +312,9 @@ describe("Resource state validity and retention", { timeout: 500 }, function () 
     const { state, calls } = counted({ validity: 100 });
     const sub = () => {};
     state.sub(sub, true);
-    await state;
+    await state.read();
     state.unsub(sub);
-    expect(await state.then((v) => v)).toEqual(ok(1));
+    expect(await state.read().then((v) => v)).toEqual(ok(1));
     expect(calls.once).toBe(1);
   });
 });

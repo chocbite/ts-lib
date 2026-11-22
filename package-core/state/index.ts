@@ -21,7 +21,10 @@ import { STRING } from "./helpers/string";
 import { UTIL } from "./helpers/util";
 import { VIEWER } from "./helpers/viewer";
 import { rea, reaw, res, resw, roa, roaw, ros, rosw } from "./local";
-import { PROXY } from "./proxy";
+//Registers the proxy maker the proxy methods of every state use, see set_proxy_maker
+import "./proxy";
+//Registers the maker of the nested method of every state, see set_nested_maker
+import "./nested";
 import { RESOURCE } from "./remote";
 import { StateResult as SR, STATE_KEY } from "./types";
 
@@ -73,10 +76,6 @@ export const state = {
   //The "as typeof" casts make the declaration output reference the helper objects instead of inlining
   //their types, inlining would drop the doc comments on their members
   /* eslint-disable @typescript-eslint/no-unnecessary-type-assertion */
-  /**Proxy states, allows for creating states that proxy other states */
-  p: PROXY as typeof PROXY,
-  /**Proxy states, allows for creating states that proxy other states */
-  proxy: PROXY as typeof PROXY,
   /**Collected states, collects values from multiple states and reduces it to one */
   c: COLLECTED as typeof COLLECTED,
   /**Collected states, collects values from multiple states and reduces it to one */
@@ -238,6 +237,7 @@ export type {
   StateOrValROAW,
   StateOrValROS,
   StateOrValROSW,
+  StateProxySource,
   StateREA,
   StateReadType,
   StateREAW,

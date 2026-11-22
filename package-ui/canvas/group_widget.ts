@@ -263,7 +263,7 @@ function set_geometry(widget: CanvasWidget, geometry: WidgetGeometry): void {
 async function writable_widgets(page: CanvasPage) {
   const widgets = page.widgets;
   if (!state.is.state(widgets) || !widgets.writable) return undefined;
-  const current = await widgets;
+  const current = await widgets.read();
   return current.ok ? { state: widgets, now: current.value } : undefined;
 }
 
@@ -372,8 +372,8 @@ export async function ungroup_widgets(
     transform_group(inside.map(geometry_of), from, to).forEach((geometry, i) =>
       set_geometry(inside[i], geometry),
     );
-    const now = (await widgets.state).ok
-      ? ((await widgets.state) as { value: readonly CanvasWidget[] }).value
+    const now = (await widgets.state.read()).ok
+      ? ((await widgets.state.read()) as { value: readonly CanvasWidget[] }).value
       : [];
     const index = now.indexOf(group);
     await widgets.state.write?.(state.a.write.delete<CanvasWidget>(group));

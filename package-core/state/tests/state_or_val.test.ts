@@ -49,7 +49,7 @@ describe("as_state", () => {
     source.set_err(new NiceError(TEST_ERROR, "gone"));
     expect(result.get()).toEqual(err_nice(TEST_ERROR, "gone"));
     source.set_ok(6);
-    expect(await result).toEqual(ok(6));
+    expect(await result.read()).toEqual(ok(6));
   });
 
   it("returns the read only type of the input", () => {

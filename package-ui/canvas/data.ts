@@ -226,7 +226,7 @@ export async function new_widget<O extends WidgetBaseOptions>(
   definition: DepotEntry<WidgetDefinition<O>>,
   at: { x: number; y: number } = { x: 0, y: 0 },
 ): Promise<ResultNice<CanvasWidget<O>>> {
-  const content = await definition.value;
+  const content = await definition.value.read();
   if (!content.ok) return err(content.error);
   const options: Record<string, unknown> = {};
   for (const [key, property] of widget_properties(content.value))

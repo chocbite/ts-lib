@@ -299,8 +299,8 @@ const word = (i: number) => WORDS[i % WORDS.length];
               text: "Add sub row",
               icon: material_add_to_queue_rounded,
               //Locked at four sub rows
-              access: state.p.ros(sub_rows.related().value.length, (len) =>
-                ok(len.value >= 4 ? AccessTypes.Read : AccessTypes.Write),
+              access: sub_rows.related().value.length.proxy_map((len) =>
+                len >= 4 ? AccessTypes.Read : AccessTypes.Write,
               ).state,
               on_add: () => sub_rows.write(state.a.write.push(item * 10 + 9)),
             },
@@ -853,13 +853,13 @@ function sel_list(
   box(r, "reversed, other columns", { width: "14rem" }).appendChild(
     other(
       "Upper",
-      state.p.ros(rows, (r) => ok([...r.value].reverse())),
+      rows.proxy_map((r) => [...r].reverse()),
     ),
   );
   box(r, "first three rows", { width: "14rem" }).appendChild(
     other(
       "Upper",
-      state.p.ros(rows, (r) => ok(r.value.slice(0, 3))),
+      rows.proxy_map((r) => r.slice(0, 3)),
     ),
   );
   sel_show(sec, shared);

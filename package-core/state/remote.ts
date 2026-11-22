@@ -1,5 +1,4 @@
 import {
-  is_promise_like,
   sync_reject,
   sync_resolve,
 } from "#common";
@@ -102,9 +101,9 @@ export type StateRemoteFuncREAW<
  *
  * Debounce and Timout
  * example if the debounce is set to 50 and timeout to 200
- * singleGet will not be called until 50 ms after the first await of the state
- * when singleGet returns a Result, it is returned to all awaiters then buffered for the period of the timeout
- * any awaiters within the timeout will get the buffer, after that it starts over
+ * singleGet will not be called until 50 ms after the first read of the state
+ * when singleGet returns a Result, it is returned to all readers then buffered for the period of the timeout
+ * any readers within the timeout will get the buffer, after that it starts over
  *
  * Debounce and Retention
  * When a subscriber is added the debounce delay is added before setupConnection is called
@@ -184,7 +183,7 @@ export abstract class StateRemote<
     if (this.validity === true) this.#valid = 0;
   }
 
-  /**Called if the state is awaited, returns the value once*/
+  /**Called when the state is read, returns the value once*/
   protected abstract single_get(state: StateRemoteOwner<RRT, WT, HEL>): void;
 
   /**Called when state is subscribed to to setup connection to remote resource*/
@@ -247,43 +246,28 @@ export abstract class StateRemote<
   get rsync(): false {
     return false;
   }
-  then<TResult1 = RRT, TResult2 = never>(
-    on_fulfilled?: ((value: RRT) => TResult1 | PromiseLike<TResult1>) | null,
-    on_rejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
-  ): PromiseLike<TResult1 | TResult2> {
+  read(): PromiseLike<RRT> {
+    if (this.#valid === true || this.#valid >= performance.now())
+      return sync_resolve(this.#buffer!);
     try {
-      if (this.#valid === true || this.#valid >= performance.now()) {
-        const result = on_fulfilled
-          ? on_fulfilled(this.#buffer!)
-          : this.#buffer!;
-        if (is_promise_like(result)) return result;
-        return sync_resolve(result as TResult1);
-      } else {
-        const prom = this.append_r_prom(
-          on_fulfilled ?? ((v) => v as unknown as TResult1),
-        );
-        if (!this.#fetching) {
-          this.#fetching = true;
-          this.#timeout_timout = setTimeout(() => {
-            this.#fetching = false;
-            //Ok states have no error value, their reads wait and the next read retries
-            if (!this.rok)
-              this.ful_r_prom(
-                err_nice(state_errors.TIMED_OUT, new Error(`No response within ${this.timeout}ms`)) as RRT,
-              );
-          }, this.timeout);
-          if (this.debounce > 0)
-            setTimeout(() => this.single_get(this), this.debounce);
-          else this.single_get(this);
-        }
-        return prom;
+      const prom = this.append_r_prom();
+      if (!this.#fetching) {
+        this.#fetching = true;
+        this.#timeout_timout = setTimeout(() => {
+          this.#fetching = false;
+          //Ok states have no error value, their reads wait and the next read retries
+          if (!this.rok)
+            this.ful_r_prom(
+              err_nice(state_errors.TIMED_OUT, new Error(`No response within ${this.timeout}ms`)) as RRT,
+            );
+        }, this.timeout);
+        if (this.debounce > 0)
+          setTimeout(() => this.single_get(this), this.debounce);
+        else this.single_get(this);
       }
+      return prom;
     } catch (error) {
-      if (on_rejected) {
-        const rejected_result = on_rejected(error);
-        if (is_promise_like(rejected_result)) return rejected_result;
-        return sync_resolve(rejected_result);
-      }
+      //The once function of the state can throw
       return sync_reject(error);
     }
   }
@@ -388,7 +372,7 @@ class Func<
     return this.#rok;
   }
 
-  /**Called if the state is awaited, returns the value once*/
+  /**Called when the state is read, returns the value once*/
   protected single_get(_state: StateRemoteOwner<RRT, WT, HEL>): void {}
 
   /**Called when state is subscribed to to setup connection to remote resource*/

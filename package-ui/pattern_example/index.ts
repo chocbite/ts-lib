@@ -7,7 +7,6 @@ import {
   type InputOptions,
   type BaseOptions,
 } from "#base";
-import { ok } from "@chocbite/ts-lib/result";
 import {
   state,
   type StateOrVal,
@@ -368,7 +367,7 @@ export interface ExampleEditorCreateOptions extends ExampleEditorOptions {
 
 /**The scale as text, derived with a proxy state*/
 const scale_label = (scale: StateROS<number>) =>
-  state.p.ros(scale, (v) => ok(`scale ${v.value.toFixed(2)}`));
+  scale.proxy_map((v) => `scale ${v.toFixed(2)}`);
 
 /**Wraps a view with controls, the stand in for an editor wrapping a viewport
  * The children are built in the constructor, the scale and limits are passed on to them unchanged,

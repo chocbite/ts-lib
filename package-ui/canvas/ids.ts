@@ -1,6 +1,6 @@
 import depot from "@chocbite/ts-lib/depot";
 import { err_nice, type ResultNice } from "@chocbite/ts-lib/result";
-import state, { type State, type StateREAW } from "@chocbite/ts-lib/state";
+import type { State, StateREAW } from "@chocbite/ts-lib/state";
 import { WIDGETS, type CanvasWidget } from "./data";
 
 /**Errors of widget ids*/
@@ -78,7 +78,7 @@ export function refuse_taken_ids(
   widgets: () => readonly CanvasWidget[] | undefined,
 ): State<unknown, any, any> {
   if (!value.writable) return value;
-  return state.proxy.reaw(value as StateREAW<unknown>, undefined, {
+  return (value as StateREAW<unknown>).proxy_w((result) => result, {
     write: (id, source) => {
       const level = widgets();
       return typeof id === "string" && level && id_taken(level, widget, id)

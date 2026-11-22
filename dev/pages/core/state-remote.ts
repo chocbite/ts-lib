@@ -69,7 +69,7 @@ function remote_box(
     times,
   );
 
-  const sub = (v: Awaited<typeof remote>) => {
+  const sub = (v: Awaited<ReturnType<typeof remote.read>>) => {
     write_log(`shown: ${v.ok ? v.value : v.error}`, "#3a3");
   };
   const unfold = () => {
@@ -95,7 +95,7 @@ function remote_box(
     },
     "Await once": async () => {
       write_log("await");
-      const v = await remote;
+      const v = await remote.read();
       write_log(`await got: ${v.ok ? v.value : v.error}`, "#39e");
     },
     "Clear log": () => log.replaceChildren(),

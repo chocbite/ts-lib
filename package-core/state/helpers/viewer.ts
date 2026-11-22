@@ -48,7 +48,7 @@ class StateViewer {
 
   constructor(state: State<unknown, any>, callback: () => void) {
     //Waits for the first value, so nothing is called on setup and async states are subscribed once they have a value
-    state.then((v) => {
+    state.read().then((v) => {
       if (this.#dead) return;
       this.#walk(v, callback);
       this.#func = state.sub((v) => {

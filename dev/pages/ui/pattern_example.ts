@@ -121,7 +121,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
     "The main goal: both sliders and the box share one writable state, and the label is derived from it. Moving either slider should move everything. A slider with an initial value keeps it itself and moves alone, one with a read only state of the width follows it but can not be moved",
   );
   const width = state.ok_w(150);
-  const label = state.p.ros(width, (value) => ok(`${value.value}px`));
+  const label = width.proxy_map((value) => `${value}px`);
   const boxes = row(sec);
   box(boxes, "Sliders").append(
     example_slider({ value: width, min: 40, max: 300 }),
@@ -314,7 +314,7 @@ const output = (parent: HTMLElement): HTMLPreElement => {
       width: 160,
       height: 24,
       color: "#16a085",
-      label: state.p.ros(editor.scale, (v) => ok(`outside ${v.value}`)),
+      label: editor.scale.proxy_map((v) => `outside ${v}`),
     });
     box(boxes, name).append(editor, readout);
     editors.push(editor);

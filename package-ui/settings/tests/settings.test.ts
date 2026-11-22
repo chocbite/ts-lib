@@ -21,7 +21,7 @@ describe("Settings register types", function () {
         "Map",
         "Description",
         st.ok_w(new Map<string, number>()),
-        async (state) => JSON.stringify([...(await state).value]),
+        async (state) => JSON.stringify([...(await state.read()).value]),
       );
     };
     expect(check).toBeTypeOf("function");
@@ -175,7 +175,7 @@ describe("SettingsGroup register", () => {
   it("stores through the transform", async () => {
     const state = st.ok_w(new Map<string, number>([["a", 1]]));
     group.register("map", "Map", "", state, async (s) =>
-      JSON.stringify([...(await s).value]),
+      JSON.stringify([...(await s.read()).value]),
     );
     key("@test/register/map");
     await state.write(new Map([["b", 2]]));

@@ -79,7 +79,7 @@ export class StateEnumHelperBase<
   }
 
   async check(value: K): Promise<SR<K>> {
-    const list = await this.list;
+    const list = await this.list.read();
     //The reason the list is missing is what the user needs to see
     if (list.err) return err(list.error);
     if (value in list.value) return ok(value);

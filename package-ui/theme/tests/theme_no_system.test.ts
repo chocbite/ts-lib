@@ -13,7 +13,7 @@ describe("Theme without the operating system dark mode", () => {
       const { theme_init, THEME, Themes } = await import("..");
       theme_init({ default: Themes.Dark });
       expect(THEME.ok()).toBe(Themes.Dark);
-      const list = (await THEME.related().unwrap().list).unwrap();
+      const list = (await THEME.related().unwrap().list.read()).unwrap();
       expect(Themes.System in list).toBe(false);
       expect(
         match_media.mock.calls.some(([query]) =>

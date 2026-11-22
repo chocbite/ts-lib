@@ -34,10 +34,8 @@ class SizeState extends state.class<ResultOk<number>, never, OptionNone> {
   protected on_unsub(): void {
     this.#sizes.in_use(-1);
   }
-  then<TResult1 = ResultOk<number>, TResult2 = never>(
-    on_fulfilled?: ((value: ResultOk<number>) => TResult1 | PromiseLike<TResult1>) | null,
-  ): PromiseLike<TResult1 | TResult2> {
-    return sync_resolve(this.#value).then(on_fulfilled);
+  read(): PromiseLike<ResultOk<number>> {
+    return sync_resolve(this.#value);
   }
   get rsync(): true {
     return true;

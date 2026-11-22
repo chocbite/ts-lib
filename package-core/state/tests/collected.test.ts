@@ -1,6 +1,6 @@
 import { sleep } from "#common";
 import { ok, ResultOk, err_nice } from "#result";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import {
   state as st,
   StateResult,
@@ -9,13 +9,14 @@ import {
   type StateRES,
   type StateRESW,
   type StateROAW,
+  type StateROS,
   type StateROSW,
 } from "..";
 import {
   test_state_get,
   test_state_get_ok,
   test_state_sub,
-  test_state_then,
+  test_state_read,
   type TestStateAll,
   type TestStateOk,
   type TestStateOkSync,
@@ -48,7 +49,7 @@ describe("Collected states", function () {
       await test_state_sub(maker_single, 0);
     });
     describe("Single Then", async function () {
-      await test_state_then(maker_single, 0);
+      await test_state_read(maker_single, 0);
     });
     it("Single Get", async function () {
       await test_state_get(maker_single);
@@ -80,7 +81,7 @@ describe("Collected states", function () {
       await test_state_sub(maker_multiple, 0);
     });
     describe("Multiple Then", async function () {
-      await test_state_then(maker_multiple, 0);
+      await test_state_read(maker_multiple, 0);
     });
     it("Multiple Get", async function () {
       await test_state_get(maker_multiple);
@@ -113,7 +114,7 @@ describe("Collected states", function () {
       await test_state_sub(maker_single, 0);
     });
     describe("Single Then", async function () {
-      await test_state_then(maker_single, 0);
+      await test_state_read(maker_single, 0);
     });
     it("Single Get", async function () {
       await test_state_get(maker_single);
@@ -149,7 +150,7 @@ describe("Collected states", function () {
       await test_state_sub(maker_multiple, 0);
     });
     describe("Multiple Then", async function () {
-      await test_state_then(maker_multiple, 0);
+      await test_state_read(maker_multiple, 0);
     });
     it("Multiple Get", async function () {
       await test_state_get(maker_multiple);
@@ -182,7 +183,7 @@ describe("Collected states", function () {
       await test_state_sub(maker_single, 50);
     });
     describe("Single Then", async function () {
-      await test_state_then(maker_single, 50);
+      await test_state_read(maker_single, 50);
     });
     const maker_multiple: TestStateOk = () => {
       const stat1 = st.roa(() => sleep(1, ok(0.25)));
@@ -208,7 +209,7 @@ describe("Collected states", function () {
       await test_state_sub(maker_multiple, 50);
     });
     describe("Multiple Then", async function () {
-      await test_state_then(maker_multiple, 50);
+      await test_state_read(maker_multiple, 50);
     });
   });
   //##################################################################################################################################################
@@ -238,7 +239,7 @@ describe("Collected states", function () {
       await test_state_sub(maker_single, 50);
     });
     describe("Single Then", async function () {
-      await test_state_then(maker_single, 50);
+      await test_state_read(maker_single, 50);
     });
     const maker_multiple: TestStateAll = () => {
       const stat1 = st.rea(() => sleep(1, ok(0.25)));
@@ -271,7 +272,7 @@ describe("Collected states", function () {
       await test_state_sub(maker_multiple, 50);
     });
     describe("Multiple Then", async function () {
-      await test_state_then(maker_multiple, 50);
+      await test_state_read(maker_multiple, 50);
     });
   });
   //##################################################################################################################################################
@@ -463,7 +464,7 @@ describe("Collected states", function () {
       stat2.set_ok(20);
       await sleep(1);
       expect(transform_call_count).equal(1);
-      expect(await state).toEqual(ok(30));
+      expect(await state.read()).toEqual(ok(30));
       state.unsub(sub);
     });
 
@@ -491,7 +492,7 @@ describe("Collected states", function () {
       stat2.set(ok(20));
       await sleep(1);
       expect(transform_call_count).equal(1);
-      expect(await state).toEqual(ok(30));
+      expect(await state.read()).toEqual(ok(30));
       state.unsub(sub);
     });
 
@@ -610,7 +611,7 @@ describe("Collected states", function () {
         await sleep(5);
         state.set_states(st.ok(1), st.ok(5));
         await sleep(5);
-        expect(await state).toEqual(ok(6));
+        expect(await state.read()).toEqual(ok(6));
         expect(updates).toEqual([ok(1), ok(6)]);
       });
 
@@ -628,7 +629,7 @@ describe("Collected states", function () {
         await sleep(5);
         state.set_states(st.ok(1), st.ok(5));
         await sleep(5);
-        expect(await state).toEqual(ok(6));
+        expect(await state.read()).toEqual(ok(6));
         expect(updates).toEqual([ok(1), ok(6)]);
       });
 
@@ -639,7 +640,7 @@ describe("Collected states", function () {
         await sleep(5);
         state.set_getter(() => ok(10));
         await sleep(5);
-        expect(await state).toEqual(ok(10));
+        expect(await state.read()).toEqual(ok(10));
         expect(updates).toEqual([ok(1), ok(10)]);
       });
 
@@ -689,7 +690,7 @@ describe("Collected states with ok values", () => {
       st.res(ok(5)),
     );
 
-    expect(await total).toEqual(ok(15));
+    expect(await total.read()).toEqual(ok(15));
     expectTypeOf(total).toMatchTypeOf<StateREA<number>>();
   });
 
@@ -818,10 +819,10 @@ describe("Writable collected states", () => {
     );
 
     expect(rosw.ok()).toBe(4);
-    expect((await roaw).value).toBe(6);
-    expect(await reaw).toEqual(ok(4));
+    expect((await roaw.read()).value).toBe(6);
+    expect(await reaw.read()).toEqual(ok(4));
     expect(resw_map.get()).toEqual(ok(3));
-    expect(await reaw_map).toEqual(ok(6));
+    expect(await reaw_map.read()).toEqual(ok(6));
     for (const s of [rosw, roaw, reaw, resw_map, reaw_map])
       expect(s.writable).toBe(true);
     expectTypeOf(rosw).toMatchTypeOf<StateROSW<number, any, number>>();
@@ -860,3 +861,258 @@ function result_sum(
   }
   return ok(sum);
 }
+
+describe("Reads of a subscribed collected state between a change and its microtask", function () {
+  const sum_of = (runs: { count: number }) => (values: ResultOk<number>[]) => {
+    runs.count++;
+    return ok(values.reduce((total, value) => total + value.value, 0));
+  };
+  it("ROS: get gives the value of the states right after one changes", async function () {
+    const a = st.ok_w(1);
+    const b = st.ok_w(10);
+    const sum = st.c.ros(([x, y]) => ok(x.value + y.value), a, b);
+    sum.sub(() => {});
+    a.set_ok(2);
+    expect(sum.ok()).toBe(12);
+    b.set_ok(20);
+    expect(sum.get()).toEqual(ok(22));
+  });
+  it("RES: get gives the value of the states right after one changes", async function () {
+    const a = st.from_w(1);
+    const b = st.from_w(10);
+    const sum = st.c.res_map(([x, y]) => x + y, a, b);
+    sum.sub(() => {});
+    a.set_ok(2);
+    expect(sum.get()).toEqual(ok(12));
+  });
+  it("ROS: five sets with reads between them still tell the subscribers once, with the last value", async function () {
+    const states = [1, 2, 3, 4, 5].map((v) => st.ok_w(v));
+    const sum = st.c.ros(sum_of({ count: 0 }), ...(states as [typeof states[0], ...typeof states]));
+    const told: number[] = [];
+    sum.sub((value) => told.push(value.value));
+    states.forEach((state, i) => {
+      state.set_ok(10 * (i + 1));
+      expect(sum.ok()).toBe(states.reduce((total, s) => total + s.ok(), 0));
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(told).toEqual([150]);
+  });
+  it("ROS: the getter runs once for a change read several times, and not again in the microtask", async function () {
+    const runs = { count: 0 };
+    const a = st.ok_w(1);
+    const b = st.ok_w(10);
+    const sum = st.c.ros(sum_of(runs), a, b);
+    const told: number[] = [];
+    sum.sub((value) => told.push(value.value));
+    runs.count = 0;
+    a.set_ok(2);
+    expect(sum.ok()).toBe(12);
+    expect(sum.ok()).toBe(12);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(runs.count).toBe(1);
+    expect(told).toEqual([12]);
+  });
+  it("ROS: without reads the getter runs once in the microtask, as before", async function () {
+    const runs = { count: 0 };
+    const a = st.ok_w(1);
+    const b = st.ok_w(10);
+    const sum = st.c.ros(sum_of(runs), a, b);
+    sum.sub(() => {});
+    runs.count = 0;
+    a.set_ok(2);
+    b.set_ok(20);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(runs.count).toBe(1);
+    expect(sum.ok()).toBe(22);
+  });
+  it("ROS: a getter that throws keeps the last value and tells no one", async function () {
+    const a = st.ok_w(1);
+    const sum = st.c.ros(([x]) => {
+      if (x.value === 2) throw new Error("no 2");
+      return ok(x.value);
+    }, a);
+    const told: number[] = [];
+    sum.sub((value) => told.push(value.value));
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    a.set_ok(2);
+    expect(sum.ok()).toBe(1);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(told).toEqual([]);
+    error.mockRestore();
+  });
+  it("REA: read gives the value of the states right after one changes", async function () {
+    const a = st.ok_w(1);
+    const b = st.ok_w(10);
+    const sum = st.c.rea_map(([x, y]) => x + y, a, b);
+    sum.sub(() => {});
+    await sleep(1);
+    a.set_ok(2);
+    //Taken before anything else runs, so it is what the state has right now
+    const read = sum.read();
+    expect(await read).toEqual(ok(12));
+  });
+});
+
+describe("Reads of states derived from a collected state, between a change and its microtask", function () {
+  /**a and b, their sum, and a proxy and a collected state of the sum, all subscribed with filled buffers*/
+  const chain = async () => {
+    const a = st.ok_w(1);
+    const b = st.ok_w(10);
+    const sum = st.c.ros(([x, y]) => ok(x.value + y.value), a, b);
+    const text = sum.proxy_map((v) => `sum ${v}`);
+    const text_of_text = text.proxy_map((v) => `<${v}>`);
+    const hundreds = st.c.ros(([s]) => ok(s.value * 100), sum);
+    const told = { text: [] as string[], hundreds: [] as number[] };
+    text.sub((v) => told.text.push(v.value));
+    text_of_text.sub(() => {});
+    hundreds.sub((v) => told.hundreds.push(v.value));
+    //Fills the buffers, the derived states are told in microtasks
+    a.set_ok(2);
+    await sleep(0);
+    told.text.length = 0;
+    told.hundreds.length = 0;
+    return { a, b, sum, text, text_of_text, hundreds, told };
+  };
+  it("a proxy of the collected state is current", async function () {
+    const { a, text } = await chain();
+    a.set_ok(3);
+    expect(text.ok()).toBe("sum 13");
+  });
+  it("a proxy of a proxy of the collected state is current", async function () {
+    const { a, text_of_text } = await chain();
+    a.set_ok(3);
+    expect(text_of_text.ok()).toBe("<sum 13>");
+  });
+  it("a collected state of the collected state is current", async function () {
+    const { a, hundreds } = await chain();
+    a.set_ok(3);
+    expect(hundreds.ok()).toBe(1300);
+    a.set_ok(4);
+    expect(hundreds.ok()).toBe(1400);
+  });
+  it("the derived states are still told once, with the last value", async function () {
+    const { a, b, text, hundreds, told } = await chain();
+    a.set_ok(3);
+    expect(text.ok()).toBe("sum 13");
+    b.set_ok(20);
+    expect(hundreds.ok()).toBe(2300);
+    await sleep(0);
+    expect(told.text).toEqual(["sum 23"]);
+    expect(told.hundreds).toEqual([2300]);
+  });
+  it("a proxy is not told when the collected state is recomputed to the same value", async function () {
+    const { a, b, told } = await chain();
+    a.set_ok(3);
+    b.set_ok(9);
+    await sleep(0);
+    expect(told.text).toEqual([]);
+  });
+  it("a subscriber of a source added before the collected state sees it current", async function () {
+    const a = st.ok_w(1);
+    const b = st.ok_w(10);
+    const seen: number[] = [];
+    const made: { sum?: StateROS<number> } = {};
+    a.sub(() => seen.push(made.sum!.ok()));
+    const sum = st.c.ros(([x, y]) => ok(x.value + y.value), a, b);
+    made.sum = sum;
+    const text = sum.proxy_map((v) => v * 2);
+    sum.sub(() => {});
+    text.sub(() => {});
+    await sleep(0);
+    a.set_ok(2);
+    expect(seen).toEqual([12]);
+  });
+  it("a subscriber of a source added before a proxy sees the proxy current", async function () {
+    const a = st.ok_w(1);
+    const seen: number[] = [];
+    const made: { doubled?: StateROS<number> } = {};
+    a.sub(() => seen.push(made.doubled!.ok()));
+    const doubled = a.proxy_map((v) => v * 2);
+    made.doubled = doubled;
+    doubled.sub(() => {});
+    a.set_ok(2);
+    await sleep(0);
+    a.set_ok(3);
+    expect(seen).toEqual([4, 6]);
+  });
+  it("a subscriber of a proxy sees a collected state of the same source current", async function () {
+    const a = st.ok_w(1);
+    const b = st.ok_w(10);
+    const doubled = a.proxy_map((v) => v * 2);
+    const sum = st.c.ros(([x, y]) => ok(x.value + y.value), a, b);
+    const seen: number[] = [];
+    //The proxy subscribes to a before the collected state does, so it is told first
+    doubled.sub(() => seen.push(sum.ok()));
+    sum.sub(() => {});
+    a.set_ok(2);
+    expect(seen).toEqual([12]);
+  });
+  it("read of a proxy of an async collected state is current", async function () {
+    const a = st.ok_w(1);
+    const b = st.ok_w(10);
+    const sum = st.c.rea_map(([x, y]) => x + y, a, b);
+    const text = sum.proxy_map((v) => `sum ${v}`);
+    text.sub(() => {});
+    //Lets the collected state get the values of its states, then fills the buffer of the proxy
+    await sleep(1);
+    a.set_ok(2);
+    await sleep(1);
+    expect(await text.read()).toEqual(ok("sum 12"));
+    a.set_ok(3);
+    const read = text.read();
+    expect(await read).toEqual(ok("sum 13"));
+  });
+  it("derived subscribers count as subscribers of their state", async function () {
+    const a = st.ok_w(1);
+    const doubled = a.proxy_map((v) => v * 2);
+    const sub = doubled.sub(() => {});
+    expect(a.amount()).toBe(1);
+    expect(a.in_use()).toBe(a);
+    doubled.unsub(sub);
+    expect(a.amount()).toBe(0);
+  });
+});
+
+describe("Scheduling of collected states", function () {
+  const sum = (values: ResultOk<number>[]) => ok(values.reduce((total, value) => total + value.value, 0));
+  it("a chain of collected states tells its subscribers in the first microtask", async function () {
+    const a = st.ok_w(1);
+    const b = st.ok_w(10);
+    const c1 = st.c.ros(sum, a, b);
+    const c2 = st.c.ros(sum, c1);
+    const c3 = st.c.ros(sum, c2);
+    const told: number[] = [];
+    c3.sub((value) => told.push(value.value));
+    a.set_ok(2);
+    await Promise.resolve();
+    expect(told).toEqual([12]);
+  });
+  it("many collected states of one state are each told once", async function () {
+    const a = st.ok_w(0);
+    const told: number[] = [];
+    for (let i = 0; i < 100; i++) st.c.ros(sum, a, st.ok(i)).sub((value) => told.push(value.value));
+    a.set_ok(1000);
+    a.set_ok(2000);
+    await Promise.resolve();
+    expect(told).toEqual(Array.from({ length: 100 }, (_, i) => 2000 + i));
+  });
+  it("a subscriber that throws does not stop the other collected states", async function () {
+    const a = st.ok_w(0);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    st.c.ros(sum, a).sub(() => {
+      throw new Error("subscriber");
+    });
+    const told: number[] = [];
+    st.c.ros(sum, a).sub((value) => told.push(value.value));
+    a.set_ok(1);
+    await Promise.resolve();
+    a.set_ok(2);
+    await Promise.resolve();
+    expect(told).toEqual([1, 2]);
+    error.mockRestore();
+  });
+});

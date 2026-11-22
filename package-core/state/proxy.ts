@@ -1,4 +1,4 @@
-import { is_promise_like, sync_reject, sync_resolve } from "#common";
+import { sync_resolve } from "#common";
 import {
   err_nice,
   none,
@@ -8,7 +8,13 @@ import {
   ResultOk,
 } from "#result";
 import { not_writable, state_errors } from "./errors";
-import { set_proxy_maker, STATE_WRITE_DISABLED, StateBase } from "./base";
+import {
+  set_proxy_maker,
+  STATE_DERIVED_KEY,
+  STATE_WRITE_DISABLED,
+  StateBase,
+  type StateDerivedSub,
+} from "./base";
 import {
   StateResult as SR,
   StateInferResult,
@@ -48,25 +54,28 @@ function gated<T>(
   func: () => PromiseLike<SR<T>>,
 ): PromiseLike<SR<T>> {
   if (!gate) return func();
-  return gate.then((res) =>
+  return gate.read().then((res) =>
     res.ok && res.value
       ? func()
       : err_nice(state_errors.WRITE_DISABLED, "writing is disabled"),
   );
 }
 
-interface Owner<S extends State<any, any>, ROUT, WOUT, RROUT> {
+/**The result the source of a proxy gives, from its read, as set_state takes a StateBase of the kind, see SourceOf in types.ts*/
+type SourceResult<S> = S extends { read(): PromiseLike<infer R> } ? R : never;
+
+interface Owner<S, ROUT, WOUT, RROUT> {
   /**Sets the state that is being proxied, and updates subscribers with new value*/
   set_state(state: S): void;
   /**Changes the transform function of the proxy, and updates subscribers with new value*/
-  set_transform_read(transform: (value: StateInferResult<S>) => RROUT): void;
+  set_transform_read(transform: (value: SourceResult<S>) => RROUT): void;
   /**Changes how the proxy writes, see StateProxyWrite, undefined writes to the source as it is*/
   set_write(write: StateProxyWrite<S, WOUT> | undefined): void;
   readonly state: State<ROUT, OptionNone, WOUT>;
 }
 
 export type StateProxyROA<
-  S extends State<RIN, any, WIN>,
+  S,
   RIN = S extends State<infer RT> ? RT : never,
   WIN = S extends State<any, infer WT> ? WT : any,
   ROUT = RIN,
@@ -78,7 +87,7 @@ export type StateProxyROA<
   };
 
 export type StateProxyROAW<
-  S extends StateREAW<RIN, any, WIN>,
+  S,
   RIN = S extends State<infer RT> ? RT : never,
   WIN = S extends State<any, infer WT> ? WT : never,
   ROUT = RIN,
@@ -90,7 +99,7 @@ export type StateProxyROAW<
   };
 
 export type StateProxyROS<
-  S extends StateRES<RIN, any, WIN>,
+  S,
   RIN = S extends State<infer RT> ? RT : never,
   WIN = S extends State<any, infer WT> ? WT : any,
   ROUT = RIN,
@@ -102,7 +111,7 @@ export type StateProxyROS<
   };
 
 export type StateProxyROSW<
-  S extends StateRESW<RIN, any, WIN>,
+  S,
   RIN = S extends State<infer RT> ? RT : never,
   WIN = S extends State<any, infer WT> ? WT : never,
   ROUT = RIN,
@@ -114,7 +123,7 @@ export type StateProxyROSW<
   };
 
 export type StateProxyREA<
-  S extends State<RIN, any, WIN>,
+  S,
   RIN = S extends State<infer RT> ? RT : never,
   WIN = S extends State<any, infer WT> ? WT : any,
   ROUT = RIN,
@@ -126,7 +135,7 @@ export type StateProxyREA<
   };
 
 export type StateProxyREAW<
-  S extends StateREAW<RIN, any, WIN>,
+  S,
   RIN = S extends State<infer RT> ? RT : never,
   WIN = S extends State<any, infer WT> ? WT : never,
   ROUT = RIN,
@@ -138,7 +147,7 @@ export type StateProxyREAW<
   };
 
 export type StateProxyRES<
-  S extends StateRES<RIN, any, WIN>,
+  S,
   RIN = S extends State<infer RT> ? RT : never,
   WIN = S extends State<any, infer WT> ? WT : any,
   ROUT = RIN,
@@ -150,7 +159,7 @@ export type StateProxyRES<
   };
 
 export type StateProxyRESW<
-  S extends StateRESW<RIN, any, WIN>,
+  S,
   RIN = S extends State<infer RT> ? RT : never,
   WIN = S extends State<any, infer WT> ? WT : never,
   ROUT = RIN,
@@ -200,26 +209,52 @@ class RXXX<
   #state: S;
   /**How to write a value, undefined writes it to the source as it is*/
   #write?: StateProxyWrite<S, WOUT>;
-  #subscriber = (value: SR<RIN>) => {
-    const transformed = this.transform_read(value as StateInferResult<S>);
-    //Objects and arrays can be changed in place, so they are always passed on
-    const changed =
-      !this.#buffer?.compare(transformed) ||
-      (transformed.ok && typeof transformed.value === "object");
-    this.#buffer = transformed;
-    if (changed) this.update_subs(transformed);
-  };
+  /**The subscriber to the source, made on the first subscribe, a proxy nobody uses has none*/
+  #subscriber?: StateDerivedSub;
+  #make_subscriber(): StateDerivedSub {
+    return (this.#subscriber ??= Object.assign(
+      (value: SR<RIN>) => {
+        const transformed = this.transform_read(value as StateInferResult<S>);
+        const last = this.#buffer ?? this.#invalidated;
+        this.#invalidated = undefined;
+        this.#stale = false;
+        //Objects and arrays can be changed in place, so they are always passed on
+        const changed =
+          !last?.compare(transformed) ||
+          (transformed.ok && typeof transformed.value === "object");
+        this.#buffer = transformed;
+        if (changed) this.update_subs(transformed);
+      },
+      { [STATE_DERIVED_KEY]: () => this.#invalidate() },
+    ));
+  }
   #buffer?: RROUT;
+  /**The buffer while the source changed but has not told the value yet, reads go through to the source until it does.
+   * Kept to tell if the value then is a change*/
+  #invalidated?: RROUT;
+  /**True from an invalidate until the value is told, so a chain is invalidated once*/
+  #stale = false;
+  #invalidate(): void {
+    if (this.#stale) return;
+    this.#stale = true;
+    if (this.#buffer) {
+      this.#invalidated = this.#buffer;
+      this.#buffer = undefined;
+    }
+    this.invalidate_derived();
+  }
 
   private transform_read(value: StateInferResult<S>): RROUT {
     return value as unknown as RROUT;
   }
   protected on_sub(run: boolean = false): void {
-    this.#state.sub(this.#subscriber, run);
+    this.#state.sub(this.#make_subscriber(), run);
   }
   protected on_unsub(): void {
-    this.#state.unsub(this.#subscriber);
+    this.#state.unsub(this.#subscriber!);
     this.#buffer = undefined;
+    this.#invalidated = undefined;
+    this.#stale = false;
   }
 
   //#Owner Context
@@ -230,12 +265,14 @@ class RXXX<
       this.on_sub(true);
     } else this.#state = state;
   }
-  set_transform_read(transform: (value: StateInferResult<S>) => RROUT) {
+  set_transform_read(transform: (value: SourceResult<S>) => RROUT) {
+    //The same result, read through set_state's StateBase of the kind
+    const read = transform as (value: StateInferResult<S>) => RROUT;
     if (this.in_use()) {
       this.on_unsub();
-      this.transform_read = transform;
+      this.transform_read = read;
       this.on_sub(true);
-    } else this.transform_read = transform;
+    } else this.transform_read = read;
   }
   set_write(write: StateProxyWrite<S, WOUT> | undefined) {
     this.#write = write;
@@ -257,32 +294,12 @@ class RXXX<
   get rsync(): boolean {
     return this.#state.rsync;
   }
-  then<TResult1 = RROUT, TResult2 = never>(
-    on_fulfilled?: ((value: RROUT) => TResult1 | PromiseLike<TResult1>) | null,
-    on_rejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
-  ): PromiseLike<TResult1 | TResult2> {
-    try {
-      if (this.#buffer) {
-        const result = on_fulfilled ? on_fulfilled(this.#buffer) : this.#buffer;
-        if (is_promise_like(result)) return result;
-        return sync_resolve(result as TResult1);
-      } else {
-        return this.#state.then((v) => {
-          const result = on_fulfilled
-            ? on_fulfilled(this.transform_read(v as StateInferResult<S>))
-            : this.transform_read(v as StateInferResult<S>);
-          if (is_promise_like(result)) return result;
-          return sync_resolve(result as TResult1);
-        });
-      }
-    } catch (error) {
-      if (on_rejected) {
-        const rejected_result = on_rejected(error);
-        if (is_promise_like(rejected_result)) return rejected_result;
-        return sync_resolve(rejected_result);
-      }
-      return sync_reject(error);
-    }
+  read(): PromiseLike<RROUT> {
+    if (this.#buffer) return sync_resolve(this.#buffer);
+    //A transform that throws gives a rejected thenable
+    return this.#state
+      .read()
+      .then((v) => this.transform_read(v as StateInferResult<S>));
   }
   get(): RROUT {
     if (this.#buffer) return this.#buffer;
@@ -349,461 +366,21 @@ class RXXX<
   }
 }
 
-//##################################################################################################################################################
-//      _____   ____
-//     |  __ \ / __ \   /\
-//     | |__) | |  | | /  \
-//     |  _  /| |  | |/ /\ \
-//     | | \ \| |__| / ____ \
-//     |_|  \_\\____/_/    \_\
-/**Creates a guarenteed ok proxy state which mirrors another state, with an optional transform function.
- * @param state - state to proxy.
- * @param transform - Function to transform value of proxy*/
-function roa_from<
-  S extends StateREA<RIN, any, WIN>,
-  RIN = S extends State<infer RT> ? RT : never,
-  ROUT = RIN,
-  WIN = S extends State<any, any, infer WT> ? WT : any,
-  WOUT = WIN,
->(
-  state: S,
-  transform?: (value: StateInferResult<S>) => ResultOk<ROUT>,
-): StateProxyROA<S, RIN, WIN, ROUT, WOUT> {
-  return new RXXX<S, RIN, WIN, ROUT, WOUT, ResultOk<ROUT>>(
-    true,
-    false,
-    state,
-    transform,
-  ) as StateProxyROA<S, RIN, WIN, ROUT, WOUT>;
-}
-
-//##################################################################################################################################################
-//      _____   ____     __          __
-//     |  __ \ / __ \   /\ \        / /
-//     | |__) | |  | | /  \ \  /\  / /
-//     |  _  /| |  | |/ /\ \ \/  \/ /
-//     | | \ \| |__| / ____ \  /\  /
-//     |_|  \_\\____/_/    \_\/  \/
-
-/**Creates a writable proxy state which mirrors another state, with an optional transform function.
- * Without write, writes, check and limit go to the source as they are, and the proxy has the write type of the source.
- * With write, see StateProxyWrite, the proxy can have a write type of its own, which needs write.
- * @param state - state to proxy.
- * @param transform_read - Function to transform value of proxy
- * @param write - Writes, checks and limits a value, given the source state*/
-function roaw_from<
-  S extends StateREAW<RIN, any, WIN>,
-  RIN = S extends State<infer RT> ? RT : never,
-  WIN = S extends State<any, any, infer WT> ? WT : any,
-  ROUT = RIN,
->(
-  state: S,
-  transform_read?: (value: StateInferResult<S>) => ResultOk<ROUT>,
-): StateProxyROAW<S, RIN, WIN, ROUT, WIN>;
-function roaw_from<
-  S extends StateREAW<RIN, any, WIN>,
-  RIN = S extends State<infer RT> ? RT : never,
-  WIN = S extends State<any, any, infer WT> ? WT : any,
-  ROUT = RIN,
-  WOUT = WIN,
->(
-  state: S,
-  transform_read: ((value: StateInferResult<S>) => ResultOk<ROUT>) | undefined,
-  write: StateProxyWrite<S, WOUT>,
-): StateProxyROAW<S, RIN, WIN, ROUT, WOUT>;
-function roaw_from<S extends StateREAW<RIN, any, WIN>, RIN, WIN, ROUT, WOUT>(
-  state: S,
-  transform_read?: (value: StateInferResult<S>) => ResultOk<ROUT>,
-  write?: StateProxyWrite<S, WOUT>,
-): StateProxyROAW<S, RIN, WIN, ROUT, WOUT> {
-  return new RXXX<S, RIN, WIN, ROUT, WOUT, ResultOk<ROUT>>(
-    true,
-    true,
-    state,
-    transform_read,
-    write,
-  ) as StateProxyROAW<S, RIN, WIN, ROUT, WOUT>;
-}
-
-//##################################################################################################################################################
-//      _____   ____   _____
-//     |  __ \ / __ \ / ____|
-//     | |__) | |  | | (___
-//     |  _  /| |  | |\___ \
-//     | | \ \| |__| |____) |
-//     |_|  \_\\____/|_____/
-/**Creates a sync proxy state which mirrors another state, with an optional transform function.
- * @param state - state to proxy.
- * @param transform - Function to transform value of proxy*/
-function ros_from<
-  S extends StateRES<RIN, any, WIN>,
-  RIN = S extends State<infer RT> ? RT : never,
-  ROUT = RIN,
-  WIN = S extends State<any, any, infer WT> ? WT : any,
-  WOUT = WIN,
->(
-  state: S,
-  transform?: (value: StateInferResult<S>) => ResultOk<ROUT>,
-): StateProxyROS<S, RIN, WIN, ROUT, WOUT> {
-  return new RXXX<S, RIN, WIN, ROUT, WOUT, ResultOk<ROUT>>(
-    true,
-    false,
-    state,
-    transform,
-  ) as StateProxyROS<S, RIN, WIN, ROUT, WOUT>;
-}
-
-//##################################################################################################################################################
-//      _____   ____   _______          __
-//     |  __ \ / __ \ / ____\ \        / /
-//     | |__) | |  | | (___  \ \  /\  / /
-//     |  _  /| |  | |\___ \  \ \/  \/ /
-//     | | \ \| |__| |____) |  \  /\  /
-//     |_|  \_\\____/|_____/    \/  \/
-/**Creates a writable proxy state which mirrors another state, with an optional transform function.
- * Without write, writes, check and limit go to the source as they are, and the proxy has the write type of the source.
- * With write, see StateProxyWrite, the proxy can have a write type of its own, which needs write.
- * @param state - state to proxy.
- * @param transform_read - Function to transform value of proxy
- * @param write - Writes, checks and limits a value, given the source state*/
-function rosw_from<
-  S extends StateRESW<RIN, any, WIN>,
-  RIN = S extends State<infer RT> ? RT : never,
-  WIN = S extends State<any, any, infer WT> ? WT : any,
-  ROUT = RIN,
->(
-  state: S,
-  transform_read?: (value: StateInferResult<S>) => ResultOk<ROUT>,
-): StateProxyROSW<S, RIN, WIN, ROUT, WIN>;
-function rosw_from<
-  S extends StateRESW<RIN, any, WIN>,
-  RIN = S extends State<infer RT> ? RT : never,
-  WIN = S extends State<any, any, infer WT> ? WT : any,
-  ROUT = RIN,
-  WOUT = WIN,
->(
-  state: S,
-  transform_read: ((value: StateInferResult<S>) => ResultOk<ROUT>) | undefined,
-  write: StateProxyWrite<S, WOUT>,
-): StateProxyROSW<S, RIN, WIN, ROUT, WOUT>;
-function rosw_from<S extends StateRESW<RIN, any, WIN>, RIN, WIN, ROUT, WOUT>(
-  state: S,
-  transform_read?: (value: StateInferResult<S>) => ResultOk<ROUT>,
-  write?: StateProxyWrite<S, WOUT>,
-): StateProxyROSW<S, RIN, WIN, ROUT, WOUT> {
-  return new RXXX<S, RIN, WIN, ROUT, WOUT, ResultOk<ROUT>>(
-    true,
-    true,
-    state,
-    transform_read,
-    write,
-  ) as StateProxyROSW<S, RIN, WIN, ROUT, WOUT>;
-}
-
-//##################################################################################################################################################
-//      _____  ______
-//     |  __ \|  ____|   /\
-//     | |__) | |__     /  \
-//     |  _  /|  __|   / /\ \
-//     | | \ \| |____ / ____ \
-//     |_|  \_\______/_/    \_\
-/**Creates a proxy state which mirrors another state, with an optional transform function.
- * @param state - state to proxy.
- * @param transform - Function to transform value of proxy*/
-function rea_from<
-  S extends StateREA<RIN, any, WIN>,
-  RIN = S extends State<infer RT> ? RT : never,
-  ROUT = RIN,
-  WIN = S extends State<any, any, infer WT> ? WT : any,
-  WOUT = WIN,
->(
-  state: S,
-  transform?: (value: StateInferResult<S>) => SR<ROUT>,
-): StateProxyREA<S, RIN, WIN, ROUT, WOUT> {
-  return new RXXX<S, RIN, WIN, ROUT, WOUT, SR<ROUT>>(
-    false,
-    false,
-    state,
-    transform,
-  ) as StateProxyREA<S, RIN, WIN, ROUT, WOUT>;
-}
-
-//##################################################################################################################################################
-//      _____  ______     __          __
-//     |  __ \|  ____|   /\ \        / /
-//     | |__) | |__     /  \ \  /\  / /
-//     |  _  /|  __|   / /\ \ \/  \/ /
-//     | | \ \| |____ / ____ \  /\  /
-//     |_|  \_\______/_/    \_\/  \/
-/**Creates a writable proxy state which mirrors another state, with an optional transform function.
- * Without write, writes, check and limit go to the source as they are, and the proxy has the write type of the source.
- * With write, see StateProxyWrite, the proxy can have a write type of its own, which needs write.
- * @param state - state to proxy.
- * @param transform_read - Function to transform value of proxy
- * @param write - Writes, checks and limits a value, given the source state*/
-function reaw_from<
-  S extends StateREAW<RIN, any, WIN>,
-  RIN = S extends State<infer RT> ? RT : never,
-  WIN = S extends State<any, any, infer WT> ? WT : any,
-  ROUT = RIN,
->(
-  state: S,
-  transform_read?: (value: StateInferResult<S>) => SR<ROUT>,
-): StateProxyREAW<S, RIN, WIN, ROUT, WIN>;
-function reaw_from<
-  S extends StateREAW<RIN, any, WIN>,
-  RIN = S extends State<infer RT> ? RT : never,
-  WIN = S extends State<any, any, infer WT> ? WT : any,
-  ROUT = RIN,
-  WOUT = WIN,
->(
-  state: S,
-  transform_read: ((value: StateInferResult<S>) => SR<ROUT>) | undefined,
-  write: StateProxyWrite<S, WOUT>,
-): StateProxyREAW<S, RIN, WIN, ROUT, WOUT>;
-function reaw_from<S extends StateREAW<RIN, any, WIN>, RIN, WIN, ROUT, WOUT>(
-  state: S,
-  transform_read?: (value: StateInferResult<S>) => SR<ROUT>,
-  write?: StateProxyWrite<S, WOUT>,
-): StateProxyREAW<S, RIN, WIN, ROUT, WOUT> {
-  return new RXXX<S, RIN, WIN, ROUT, WOUT, SR<ROUT>>(
-    false,
-    true,
-    state,
-    transform_read,
-    write,
-  ) as StateProxyREAW<S, RIN, WIN, ROUT, WOUT>;
-}
-
-//##################################################################################################################################################
-//      _____  ______  _____
-//     |  __ \|  ____|/ ____|
-//     | |__) | |__  | (___
-//     |  _  /|  __|  \___ \
-//     | | \ \| |____ ____) |
-//     |_|  \_\______|_____/
-
-/**Creates a sync proxy state which mirrors another state, with an optional transform function.
- * @param state - state to proxy.
- * @param transform - Function to transform value of proxy*/
-function res_from<
-  S extends StateRES<RIN, any, WIN>,
-  RIN = S extends State<infer RT> ? RT : never,
-  ROUT = RIN,
-  WIN = S extends State<any, any, infer WT> ? WT : any,
-  WOUT = WIN,
->(
-  state: S,
-  transform?: (value: StateInferResult<S>) => SR<ROUT>,
-): StateProxyRES<S, RIN, WIN, ROUT, WOUT> {
-  return new RXXX<S, RIN, WIN, ROUT, WOUT, SR<ROUT>>(
-    false,
-    false,
-    state,
-    transform,
-  ) as StateProxyRES<S, RIN, WIN, ROUT, WOUT>;
-}
-
-//##################################################################################################################################################
-//      _____  ______  _______          __
-//     |  __ \|  ____|/ ____\ \        / /
-//     | |__) | |__  | (___  \ \  /\  / /
-//     |  _  /|  __|  \___ \  \ \/  \/ /
-//     | | \ \| |____ ____) |  \  /\  /
-//     |_|  \_\______|_____/    \/  \/
-
-/**Creates a writable proxy state which mirrors another state, with an optional transform function.
- * Without write, writes, check and limit go to the source as they are, and the proxy has the write type of the source.
- * With write, see StateProxyWrite, the proxy can have a write type of its own, which needs write.
- * @param state - state to proxy.
- * @param transform_read - Function to transform value of proxy
- * @param write - Writes, checks and limits a value, given the source state*/
-function resw_from<
-  S extends StateRESW<RIN, any, WIN>,
-  RIN = S extends State<infer RT> ? RT : never,
-  WIN = S extends State<any, any, infer WT> ? WT : any,
-  ROUT = RIN,
->(
-  state: S,
-  transform_read?: (value: StateInferResult<S>) => SR<ROUT>,
-): StateProxyRESW<S, RIN, WIN, ROUT, WIN>;
-function resw_from<
-  S extends StateRESW<RIN, any, WIN>,
-  RIN = S extends State<infer RT> ? RT : never,
-  WIN = S extends State<any, any, infer WT> ? WT : any,
-  ROUT = RIN,
-  WOUT = WIN,
->(
-  state: S,
-  transform_read: ((value: StateInferResult<S>) => SR<ROUT>) | undefined,
-  write: StateProxyWrite<S, WOUT>,
-): StateProxyRESW<S, RIN, WIN, ROUT, WOUT>;
-function resw_from<S extends StateRESW<RIN, any, WIN>, RIN, WIN, ROUT, WOUT>(
-  state: S,
-  transform_read?: (value: StateInferResult<S>) => SR<ROUT>,
-  write?: StateProxyWrite<S, WOUT>,
-): StateProxyRESW<S, RIN, WIN, ROUT, WOUT> {
-  return new RXXX<S, RIN, WIN, ROUT, WOUT, SR<ROUT>>(
-    false,
-    true,
-    state,
-    transform_read,
-    write,
-  ) as StateProxyRESW<S, RIN, WIN, ROUT, WOUT>;
-}
-
-//##################################################################################################################################################
-//      __  __          _____
-//     |  \/  |   /\   |  __ \
-//     | \  / |  /  \  | |__) |
-//     | |\/| | / /\ \ |  ___/
-//     | |  | |/ ____ \| |
-//     |_|  |_/_/    \_\_|
 /**A read transform of the result made from a function of the plain value, an error is passed on as it is*/
 const mapped =
   <S extends State<any>, ROUT>(map: (value: StateInferType<S>) => ROUT) =>
   (result: StateInferResult<S>): SR<ROUT> =>
     (result as SR<StateInferType<S>>).map(map);
 
-/**Like rea, the function gets the plain value and gives a plain value, an error of the state is passed on as it is.
- * @param state - state to proxy.
- * @param map - Function to transform the value of the state*/
-function rea_map<S extends StateREA<any, any, any>, ROUT>(
-  state: S,
-  map: (value: StateInferType<S>) => ROUT,
-) {
-  return rea_from<S, StateInferType<S>, ROUT>(state, mapped<S, ROUT>(map));
-}
-
-/**Like res, the function gets the plain value and gives a plain value, an error of the state is passed on as it is.
- * @param state - state to proxy.
- * @param map - Function to transform the value of the state*/
-function res_map<S extends StateRES<any, any, any>, ROUT>(
-  state: S,
-  map: (value: StateInferType<S>) => ROUT,
-) {
-  return res_from<S, StateInferType<S>, ROUT>(state, mapped<S, ROUT>(map));
-}
-
-/**Like reaw, the function gets the plain value and gives a plain value, an error of the state is passed on as it is.
- * Without write the proxy has the write type of the source, with write it can have one of its own, see StateProxyWrite.
- * @param state - state to proxy.
- * @param map - Function to transform the value of the state
- * @param write - Writes, checks and limits a value, given the source state*/
-function reaw_map<
-  S extends StateREAW<any, any, any>,
-  ROUT,
-  WIN = S extends State<any, any, infer WT> ? WT : any,
->(
-  state: S,
-  map: (value: StateInferType<S>) => ROUT,
-): StateProxyREAW<S, StateInferType<S>, WIN, ROUT, WIN>;
-function reaw_map<
-  S extends StateREAW<any, any, any>,
-  ROUT,
-  WOUT,
-  WIN = S extends State<any, any, infer WT> ? WT : any,
->(
-  state: S,
-  map: (value: StateInferType<S>) => ROUT,
-  write: StateProxyWrite<S, WOUT>,
-): StateProxyREAW<S, StateInferType<S>, WIN, ROUT, WOUT>;
-function reaw_map<S extends StateREAW<any, any, any>, ROUT, WOUT>(
-  state: S,
-  map: (value: StateInferType<S>) => ROUT,
-  write?: StateProxyWrite<S, WOUT>,
-) {
-  return new RXXX<S, StateInferType<S>, unknown, ROUT, WOUT, SR<ROUT>>(
-    false,
-    true,
-    state,
-    mapped<S, ROUT>(map),
-    write,
-  ) as unknown as StateProxyREAW<S, StateInferType<S>, any, ROUT, WOUT>;
-}
-
-/**Like resw, the function gets the plain value and gives a plain value, an error of the state is passed on as it is.
- * Without write the proxy has the write type of the source, with write it can have one of its own, see StateProxyWrite.
- * @param state - state to proxy.
- * @param map - Function to transform the value of the state
- * @param write - Writes, checks and limits a value, given the source state*/
-function resw_map<
-  S extends StateRESW<any, any, any>,
-  ROUT,
-  WIN = S extends State<any, any, infer WT> ? WT : any,
->(
-  state: S,
-  map: (value: StateInferType<S>) => ROUT,
-): StateProxyRESW<S, StateInferType<S>, WIN, ROUT, WIN>;
-function resw_map<
-  S extends StateRESW<any, any, any>,
-  ROUT,
-  WOUT,
-  WIN = S extends State<any, any, infer WT> ? WT : any,
->(
-  state: S,
-  map: (value: StateInferType<S>) => ROUT,
-  write: StateProxyWrite<S, WOUT>,
-): StateProxyRESW<S, StateInferType<S>, WIN, ROUT, WOUT>;
-function resw_map<S extends StateRESW<any, any, any>, ROUT, WOUT>(
-  state: S,
-  map: (value: StateInferType<S>) => ROUT,
-  write?: StateProxyWrite<S, WOUT>,
-) {
-  return new RXXX<S, StateInferType<S>, unknown, ROUT, WOUT, SR<ROUT>>(
-    false,
-    true,
-    state,
-    mapped<S, ROUT>(map),
-    write,
-  ) as unknown as StateProxyRESW<S, StateInferType<S>, any, ROUT, WOUT>;
-}
-
 //The proxy and proxy_map methods of every state make their proxies here, base.ts can not import this file,
 //as the proxy class extends StateBase, which does not exist yet while base.ts loads
-set_proxy_maker((base, map_ok, transform, writable, write) => {
+set_proxy_maker((base, mode, transform, writable, write) => {
   const state = base as State<unknown, any, unknown>;
   return new RXXX(
-    map_ok && state.rok,
+    mode === "ok" || (mode === "map" && state.rok),
     writable,
     state,
-    map_ok ? mapped(transform) : (transform as (value: SR<unknown>) => SR<unknown>),
+    mode === "map" ? mapped(transform) : (transform as (value: SR<unknown>) => SR<unknown>),
     write as StateProxyWrite<State<unknown, any, unknown>, unknown> | undefined,
   );
 });
-
-//##################################################################################################################################################
-//      ________   _______   ____  _____ _______ _____
-//     |  ____\ \ / /  __ \ / __ \|  __ \__   __/ ____|
-//     | |__   \ V /| |__) | |  | | |__) | | | | (___
-//     |  __|   > < |  ___/| |  | |  _  /  | |  \___ \
-//     | |____ / . \| |    | |__| | | \ \  | |  ____) |
-//     |______/_/ \_\_|     \____/|_|  \_\ |_| |_____/
-
-/**Proxy state redirecting another state */
-export const PROXY = {
-  /**Creates an async ok proxy state which mirrors another state */
-  roa: roa_from,
-  /**Creates a writable async ok proxy state which mirrors another state */
-  roaw: roaw_from,
-  /**Creates a sync ok proxy state which mirrors another state */
-  ros: ros_from,
-  /**Creates a writable sync ok proxy state which mirrors another state */
-  rosw: rosw_from,
-  /**Creates an async errorable proxy state which mirrors another state */
-  rea: rea_from,
-  /**Creates a writable async errorable proxy state which mirrors another state */
-  reaw: reaw_from,
-  /**Creates a sync errorable proxy state which mirrors another state */
-  res: res_from,
-  /**Creates a writable sync errorable proxy state which mirrors another state */
-  resw: resw_from,
-  /**Like rea, with a function of the plain value, an error is passed on as it is */
-  rea_map,
-  /**Like res, with a function of the plain value, an error is passed on as it is */
-  res_map,
-  /**Like reaw, with a function of the plain value, an error is passed on as it is */
-  reaw_map,
-  /**Like resw, with a function of the plain value, an error is passed on as it is */
-  resw_map,
-};

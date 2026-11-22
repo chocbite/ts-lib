@@ -45,7 +45,7 @@ describe("Theme with the operating system dark mode", () => {
   it("shows the theme the operating system uses in the System choice", async () => {
     const { THEME, Themes } = await import("..");
     const system_choice = async () =>
-      (await THEME.related().unwrap().list).unwrap()[Themes.System];
+      (await THEME.related().unwrap().list.read()).unwrap()[Themes.System];
     await os_dark_mode(true);
     expect((await system_choice()).name).toBe("System (Dark)");
     await os_dark_mode(false);

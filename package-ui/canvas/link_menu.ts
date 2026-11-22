@@ -70,7 +70,7 @@ export async function open_link_menu(
   options: readonly OptionState<unknown>[],
   property: WidgetProperty,
 ): Promise<void> {
-  const currents = await Promise.all(options.map((option) => option));
+  const currents = await Promise.all(options.map((option) => option.read()));
   const links = currents.map((current) =>
     current.ok && current.value instanceof CanvasLink
       ? current.value

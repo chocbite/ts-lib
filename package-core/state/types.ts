@@ -1,5 +1,6 @@
 import {
   ResultInferOk,
+  type NiceError,
   type Option,
   type ResultNice,
   type ResultOk,
@@ -10,7 +11,17 @@ import type {
   StateArrayWriteInstruction,
 } from "./helpers/array";
 import type { StateObjectRead, StateObjectWrite } from "./helpers/object";
-import type { StateProxyWrite } from "./proxy";
+import type {
+  StateProxyREA,
+  StateProxyREAW,
+  StateProxyRES,
+  StateProxyRESW,
+  StateProxyROA,
+  StateProxyROAW,
+  StateProxyROS,
+  StateProxyROSW,
+  StateProxyWrite,
+} from "./proxy";
 
 export const STATE_VIEWER_OVERRIDE_KEY = Symbol("STATE_VIEWER_OVERRIDE_KEY");
 
@@ -39,6 +50,12 @@ export type StateWriteType<RT> = 0 extends 1 & RT
     : string extends keyof RT
       ? StateObjectWrite<RT[string & keyof RT]>
       : RT;
+
+/**The result a state gives its subscribers, read from its read, so sub and unsub are the same in every kind of state
+ * and can be called on the union types like StateREA, which gives the result of all its kinds*/
+export type SubValue<S> = S extends { read(): PromiseLike<infer R extends StateResult<any>> }
+  ? R
+  : never;
 
 /**Function used to subscribe to state changes
  * @template RT - The type of the state’s value when read.*/
@@ -115,11 +132,10 @@ export interface StateBase<
   [STATE_KEY]: true;
 
   //#Reader Context
-  /**Allows getting value of the state*/
-  then<TResult1 = RRT, TResult2 = never>(
-    on_fulfilled?: ((value: RRT) => TResult1 | PromiseLike<TResult1>) | null,
-    on_rejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
-  ): PromiseLike<TResult1 | TResult2>;
+  /**Gives the current value of the state, the thenable resolves once the state has a value.
+   * On a sync state the then of the thenable calls its function at once, without waiting for a microtask.
+   * The state itself is not a thenable, so promises can resolve to it*/
+  read(): PromiseLike<RRT>;
   /**Returns the value as JSON, use StateJsonCompatible to require a value type JSON can represent.
    * States in error, NaN and Infinity are written as null and logged with console.error*/
   to_json(): PromiseLike<string>;
@@ -136,9 +152,9 @@ export interface StateBase<
 
   /**This adds a function as a subscriber to changes to the state
    * @param update set true to update subscriber immediatly*/
-  sub<T = StateSub<RRT>>(func: StateSub<RRT>, update?: boolean): T;
+  sub<S, F extends StateSub<SubValue<S>>>(this: S, func: F, update?: boolean): NoInfer<F>;
   /**This removes a function as a subscriber to the state*/
-  unsub<T = StateSub<RRT>>(func: T): T;
+  unsub<S, F extends StateSub<SubValue<S>>>(this: S, func: F): NoInfer<F>;
 
   /**This returns related states if any*/
   related(): REL;
@@ -166,53 +182,197 @@ export interface StateBase<
   check?(value: WT): PromiseLike<StateResult<WT>>;
 }
 
-/**proxy and proxy_map of a state, read only proxies.
+/**The kind of a state type, the most specific of the eight it fits.
+ * Wrapped in [] so a union like StateREA is one kind, not one per member*/
+type KindOf<S> = [S] extends [StateROSW<any, any, any>]
+  ? "ROSW"
+  : [S] extends [StateRESW<any, any, any>]
+    ? "RESW"
+    : [S] extends [StateROAW<any, any, any>]
+      ? "ROAW"
+      : [S] extends [StateREAW<any, any, any>]
+        ? "REAW"
+        : [S] extends [StateROS<any, any, any>]
+          ? "ROS"
+          : [S] extends [StateRES<any, any, any>]
+            ? "RES"
+            : [S] extends [StateROA<any, any, any>]
+              ? "ROA"
+              : "REA";
+type ReadKind<K> = K extends "ROSW" | "ROS"
+  ? "ROS"
+  : K extends "RESW" | "RES"
+    ? "RES"
+    : K extends "ROAW" | "ROA"
+      ? "ROA"
+      : "REA";
+type IsSync<K> = K extends "ROS" | "ROSW" | "RES" | "RESW" ? true : false;
+type IsOk<K> = K extends "ROS" | "ROSW" | "ROA" | "ROAW" ? true : false;
+/**The result a state of a kind gives*/
+type ResultOf<K, RT> = IsOk<K> extends true ? ResultOk<RT> : StateResult<RT>;
+type IsWritable<K> = K extends "ROSW" | "RESW" | "ROAW" | "REAW" ? true : false;
+/**A state a proxy can follow, what set_state of a proxy takes, narrowed to the kind of the proxy by SourceOf.
+ * Made of StateBase, which has no proxy methods, the state types would make TypeScript recurse,
+ * as their proxy methods give owners which take them again*/
+export interface StateProxySource<RRT extends StateResult<any>, WT>
+  extends StateBase<RRT, any, WT> {}
+/**A state of the kind a proxy of a kind follows*/
+type SourceOf<K, RT, WT> = StateProxySource<ResultOf<K, RT>, WT> &
+  (IsSync<K> extends true ? { readonly rsync: true; get(): ResultOf<K, RT> } : unknown) &
+  (IsOk<K> extends true ? { readonly rok: true } : unknown) &
+  (IsWritable<K> extends true
+    ? { readonly writable: true; write(value: WT): PromiseLike<StateResult<void>> }
+    : unknown);
+/**The proxy of a kind with its owner, see the StateProxy types*/
+type ProxyOwner<K, SRC, RT, WT, T, W> = K extends "ROSW"
+  ? StateProxyROSW<SRC, RT, WT, T, W>
+  : K extends "RESW"
+    ? StateProxyRESW<SRC, RT, WT, T, W>
+    : K extends "ROAW"
+      ? StateProxyROAW<SRC, RT, WT, T, W>
+      : K extends "REAW"
+        ? StateProxyREAW<SRC, RT, WT, T, W>
+        : K extends "ROS"
+          ? StateProxyROS<SRC, RT, WT, T, W>
+          : K extends "RES"
+            ? StateProxyRES<SRC, RT, WT, T, W>
+            : K extends "ROA"
+              ? StateProxyROA<SRC, RT, WT, T, W>
+              : StateProxyREA<SRC, RT, WT, T, W>;
+/**Read only proxies follow the read kind of the state, ROSW is followed as ROS*/
+type ReadProxy<S, K, RT, WT, T> = ProxyOwner<K, SourceOf<ReadKind<KindOf<S>>, RT, WT>, RT, WT, T, WT>;
+type WriteProxy<S, K, RT, WT, T, W> = ProxyOwner<K, SourceOf<KindOf<S>, RT, WT>, RT, WT, T, W>;
+
+/**What nested can get from its select, a state, the rest are plain values*/
+type StateLike = StateBase<any, any, any>;
+type NestedStates<R> = Extract<Exclude<R, undefined>, StateLike>;
+type NestedPlain<R> = Exclude<Exclude<R, undefined>, StateLike>;
+/**The value of a state, distributed over a union of states*/
+type ValueOfState<X> = X extends { read(): PromiseLike<infer RR extends StateResult<any>> }
+  ? ResultInferOk<RR>
+  : never;
+/**The write type of a state, distributed over a union of states*/
+type WriteOfState<X> = X extends { write(value: infer W): any } ? W : never;
+/**The kind of state nested gives, from the kind of the state it is called on and what its select can give.
+ * Sync when the state and every inner state are, plain values are sync and ok.
+ * Ok when the state and every inner state are, and no inner state can be missing.
+ * Writable when every inner value is a writable state*/
+type NestedKind<K, R> = [
+  IsSync<K> extends true
+    ? [NestedStates<R>] extends [StateRES<any, any, any>]
+      ? true
+      : false
+    : false,
+  IsOk<K> extends true
+    ? undefined extends R
+      ? false
+      : [NestedStates<R>] extends [StateROA<any, any, any>]
+        ? true
+        : false
+    : false,
+  undefined extends R
+    ? false
+    : [NestedPlain<R>] extends [never]
+      ? [NestedStates<R>] extends [never]
+        ? false
+        : [NestedStates<R>] extends [StateREAW<any, any, any>]
+          ? true
+          : false
+      : false,
+];
+/**The state type of a kind given as [sync, ok, writable]*/
+type StateOfFlags<F, T, W> = F extends [true, true, true]
+  ? StateROSW<T, Option<{}>, W>
+  : F extends [true, false, true]
+    ? StateRESW<T, Option<{}>, W>
+    : F extends [false, true, true]
+      ? StateROAW<T, Option<{}>, W>
+      : F extends [false, false, true]
+        ? StateREAW<T, Option<{}>, W>
+        : F extends [true, true, false]
+          ? StateROS<T>
+          : F extends [true, false, false]
+            ? StateRES<T>
+            : F extends [false, true, false]
+              ? StateROA<T>
+              : StateREA<T>;
+/**The state nested gives*/
+type Nested<S, R> = StateOfFlags<
+  NestedKind<KindOf<S>, R>,
+  ValueOfState<NestedStates<R>> | NestedPlain<R>,
+  WriteOfState<NestedStates<R>>
+>;
+
+/**The proxy methods of every state, they give the proxy with its owner, so it can be pointed at another state or get another transform.
+ * The same in all eight kinds, so they can be called on the union types like StateREA, this is the declared type of the state,
+ * and decides the kind of the proxy and what set_state takes.
  * proxy: transform gets the result and gives a result, the proxy can fail, it is sync when the state is.
- * proxy_map: map gets the plain value, an error of the state is passed on as it is, the proxy is of the same kind as the state*/
-interface ProxyMethods<RRT, RT, PROXY, MAP> {
+ * proxy_map: map gets the plain value, an error of the state is passed on as it is, the proxy is of the same kind as the state.
+ * proxy_ok: transform gets the result and gives an ok result, handling the error of a state that can fail, the proxy is ok*/
+interface ProxyMethods<RT, WT> {
+  /**A state of the state in the value of this state, select picks it from the value, like (person) => person.name.
+   * Follows the inner state, and moves to the new one when the value of this state changes.
+   * select can give a plain value, which is given as it is, or a state or plain value.
+   * When select can give undefined, error is given for it, and is needed.
+   * An error of this state or the inner state is passed on as it is, writes go to the inner state.
+   * The kind follows from this state and every inner state select can give*/
+  nested<S, R extends {} | null>(this: S, select: (value: RT) => R): Nested<S, R>;
+  /**The same as nested, for a select that can give undefined, error is given for it.
+   * Two overloads of fixed length, with a rest parameter TypeScript fixes R before it looks at select*/
+  nested<S, R>(
+    this: S,
+    select: (value: RT) => R,
+    error: undefined extends R ? NiceError : never,
+  ): Nested<S, R>;
   /**A read only proxy of the state, transform gets the result and gives a result, the proxy can fail, it is sync when the state is*/
-  proxy<T>(transform: (value: RRT) => StateResult<T>): PROXY extends "sync" ? StateRES<T> : StateREA<T>;
+  proxy<S, T>(
+    this: S,
+    transform: (value: ResultOf<KindOf<S>, RT>) => StateResult<T>,
+  ): ReadProxy<S, IsSync<KindOf<S>> extends true ? "RES" : "REA", RT, WT, T>;
   /**A read only proxy of the state, map gets the plain value and an error of the state is passed on as it is,
    * the proxy is of the same kind as the state*/
-  proxy_map<T>(map: (value: RT) => T): MAP extends "REA"
-    ? StateREA<T>
-    : MAP extends "ROA"
-      ? StateROA<T>
-      : MAP extends "RES"
-        ? StateRES<T>
-        : StateROS<T>;
+  proxy_map<S, T>(
+    this: S,
+    map: (value: RT) => T,
+  ): ReadProxy<S, ReadKind<KindOf<S>>, RT, WT, T>;
+  /**A read only ok proxy of the state, transform gets the result and gives an ok result, handling the error of a state that can fail.
+   * The proxy is sync when the state is*/
+  proxy_ok<S, T>(
+    this: S,
+    transform: (value: ResultOf<KindOf<S>, RT>) => ResultOk<T>,
+  ): ReadProxy<S, IsSync<KindOf<S>> extends true ? "ROS" : "ROA", RT, WT, T>;
 }
 
-/**proxy_w and proxy_w_map of a writable state, writable proxies.
+/**proxy_w, proxy_w_map and proxy_ok_w of a writable state, writable proxies, like the read only ones.
  * Without write, writes, check and limit go to the state as they are, and the proxy has the write type of the state.
- * With write, see StateProxyWrite, the proxy can have a write type of its own, which needs write, W is only inferred from it.
- * One signature each, not overloads, so they can be called on the union types like StateREAW*/
-interface WriteProxyMethods<RRT, RT, WT, PROXY, MAP> {
+ * With write, see StateProxyWrite, the proxy can have a write type of its own, which needs write, W is only inferred from it*/
+interface WriteProxyMethods<RT, WT> {
   /**A writable proxy of the state, transform gets the result and gives a result, the proxy can fail, it is sync when the state is.
    * Writes go to the state as they are, or through write, see StateProxyWrite*/
-  proxy_w<T, W = WT>(
-    transform: (value: RRT) => StateResult<T>,
+  proxy_w<S, T, W = WT>(
+    this: S,
+    transform: (value: ResultOf<KindOf<S>, RT>) => StateResult<T>,
     write?: StateProxyWrite<StateREAW<RT, any, WT>, W>,
-  ): WritableProxy<PROXY extends "sync" ? "RES" : "REA", T, NoInfer<W>>;
+  ): WriteProxy<S, IsSync<KindOf<S>> extends true ? "RESW" : "REAW", RT, WT, T, NoInfer<W>>;
   /**A writable proxy of the state, map gets the plain value and an error of the state is passed on as it is,
    * the proxy is of the same kind as the state. Writes go to the state as they are, or through write, see StateProxyWrite*/
-  proxy_w_map<T, W = WT>(
+  proxy_w_map<S, T, W = WT>(
+    this: S,
     map: (value: RT) => T,
     write?: StateProxyWrite<StateREAW<RT, any, WT>, W>,
-  ): WritableProxy<MAP, T, NoInfer<W>>;
+  ): WriteProxy<S, KindOf<S>, RT, WT, T, NoInfer<W>>;
+  /**A writable ok proxy of the state, like proxy_ok.
+   * Writes go to the state as they are, or through write, see StateProxyWrite*/
+  proxy_ok_w<S, T, W = WT>(
+    this: S,
+    transform: (value: ResultOf<KindOf<S>, RT>) => ResultOk<T>,
+    write?: StateProxyWrite<StateREAW<RT, any, WT>, W>,
+  ): WriteProxy<S, IsSync<KindOf<S>> extends true ? "ROSW" : "ROAW", RT, WT, T, NoInfer<W>>;
 }
-/**The writable state type of a kind*/
-type WritableProxy<KIND, T, W> = KIND extends "REA"
-  ? StateREAW<T, Option<{}>, W>
-  : KIND extends "ROA"
-    ? StateROAW<T, Option<{}>, W>
-    : KIND extends "RES"
-      ? StateRESW<T, Option<{}>, W>
-      : StateROSW<T, Option<{}>, W>;
 
 interface REA<RT, REL extends Option<StateRelated>, WT>
   extends StateBase<StateResult<RT>, REL, WT>,
-    ProxyMethods<StateResult<RT>, RT, "async", "REA"> {
+    ProxyMethods<RT, WT> {
   readonly rsync: false;
   readonly rok: false;
   readonly writable: false;
@@ -220,7 +380,7 @@ interface REA<RT, REL extends Option<StateRelated>, WT>
 
 interface ROA<RT, REL extends Option<StateRelated>, WT>
   extends StateBase<ResultOk<RT>, REL, WT>,
-    ProxyMethods<ResultOk<RT>, RT, "async", "ROA"> {
+    ProxyMethods<RT, WT> {
   readonly rsync: false;
   readonly rok: true;
   readonly writable: false;
@@ -228,7 +388,7 @@ interface ROA<RT, REL extends Option<StateRelated>, WT>
 
 interface RES<RT, REL extends Option<StateRelated>, WT>
   extends StateBase<StateResult<RT>, REL, WT>,
-    ProxyMethods<StateResult<RT>, RT, "sync", "RES"> {
+    ProxyMethods<RT, WT> {
   readonly rsync: true;
   get(): StateResult<RT>;
   readonly rok: false;
@@ -237,7 +397,7 @@ interface RES<RT, REL extends Option<StateRelated>, WT>
 
 interface ROS<RT, REL extends Option<StateRelated>, WT>
   extends StateBase<ResultOk<RT>, REL, WT>,
-    ProxyMethods<ResultOk<RT>, RT, "sync", "ROS"> {
+    ProxyMethods<RT, WT> {
   readonly rsync: true;
   get(): ResultOk<RT>;
   readonly rok: true;
@@ -247,8 +407,8 @@ interface ROS<RT, REL extends Option<StateRelated>, WT>
 
 interface REAW<RT, REL extends Option<StateRelated>, WT>
   extends StateBase<StateResult<RT>, REL, WT>,
-    ProxyMethods<StateResult<RT>, RT, "async", "REA">,
-    WriteProxyMethods<StateResult<RT>, RT, WT, "async", "REA"> {
+    ProxyMethods<RT, WT>,
+    WriteProxyMethods<RT, WT> {
   readonly rsync: false;
   readonly rok: false;
   readonly writable: true;
@@ -259,8 +419,8 @@ interface REAW<RT, REL extends Option<StateRelated>, WT>
 
 interface ROAW<RT, REL extends Option<StateRelated>, WT>
   extends StateBase<ResultOk<RT>, REL, WT>,
-    ProxyMethods<ResultOk<RT>, RT, "async", "ROA">,
-    WriteProxyMethods<ResultOk<RT>, RT, WT, "async", "ROA"> {
+    ProxyMethods<RT, WT>,
+    WriteProxyMethods<RT, WT> {
   readonly rsync: false;
   readonly rok: true;
   readonly writable: true;
@@ -271,8 +431,8 @@ interface ROAW<RT, REL extends Option<StateRelated>, WT>
 
 interface RESW<RT, REL extends Option<StateRelated>, WT>
   extends StateBase<StateResult<RT>, REL, WT>,
-    ProxyMethods<StateResult<RT>, RT, "sync", "RES">,
-    WriteProxyMethods<StateResult<RT>, RT, WT, "sync", "RES"> {
+    ProxyMethods<RT, WT>,
+    WriteProxyMethods<RT, WT> {
   readonly rsync: true;
   get(): StateResult<RT>;
   readonly rok: false;
@@ -284,8 +444,8 @@ interface RESW<RT, REL extends Option<StateRelated>, WT>
 
 interface ROSW<RT, REL extends Option<StateRelated>, WT>
   extends StateBase<ResultOk<RT>, REL, WT>,
-    ProxyMethods<ResultOk<RT>, RT, "sync", "ROS">,
-    WriteProxyMethods<ResultOk<RT>, RT, WT, "sync", "ROS"> {
+    ProxyMethods<RT, WT>,
+    WriteProxyMethods<RT, WT> {
   readonly rsync: true;
   get(): ResultOk<RT>;
   readonly rok: true;
