@@ -72,7 +72,7 @@ export async function reorder_widget(
 ): Promise<boolean> {
   const widgets = page.widgets;
   if (!state.is.state(widgets) || !widgets.writable) return false;
-  const current = await widgets;
+  const current = await widgets.read();
   if (!current.ok) return false;
   const moves = order_moves(current.value, selected, order);
   if (!moves.length) return false;
@@ -120,7 +120,7 @@ export async function remove_widgets(
 ): Promise<boolean> {
   const widgets = page.widgets;
   if (!state.is.state(widgets) || !widgets.writable) return false;
-  const current = await widgets;
+  const current = await widgets.read();
   if (!current.ok) return false;
   const removing = new Set(
     selected.filter((widget) => current.value.includes(widget)),

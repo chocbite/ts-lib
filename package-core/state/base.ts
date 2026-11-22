@@ -1,5 +1,6 @@
 import { sync_resolve } from "#common";
 import {
+  type NiceError,
   none,
   ok,
   Option,
@@ -20,13 +21,15 @@ import {
   type StateSub,
 } from "./types";
 
-/**Makes the proxies of the proxy, proxy_map, proxy_w and proxy_w_map methods.
- * map_ok true: transform gets the plain value and an error is passed on, the proxy is ok when the state is.
- * map_ok false: transform gets the result and gives a result, the proxy can fail.
- * writable: writes go to the state, through write when given, see StateProxyWrite*/
+/**How the transform of a proxy reads the state.
+ * result: transform gets the result and gives a result, the proxy can fail.
+ * map: transform gets the plain value and an error is passed on, the proxy is ok when the state is.
+ * ok: transform gets the result and gives an ok result, the proxy is ok*/
+export type StateProxyMode = "result" | "map" | "ok";
+/**Makes the proxies of the proxy methods, writable: writes go to the state, through write when given, see StateProxyWrite*/
 type ProxyMaker = (
   state: Base<any, any, any>,
-  map_ok: boolean,
+  mode: StateProxyMode,
   transform: (value: any) => any,
   writable: boolean,
   write?: unknown,
@@ -34,6 +37,28 @@ type ProxyMaker = (
 let proxy_maker: ProxyMaker = () => {
   throw new Error("The proxy module is not loaded, import states from the state module");
 };
+/**Marks the subscriber function of a derived state, a proxy or collected state, its value is called by invalidate_derived.
+ * Internal to the state module, a derived state subscribes with such a function only while it has subscribers itself*/
+export const STATE_DERIVED_KEY = Symbol("state_derived");
+/**The subscriber function of a derived state, see STATE_DERIVED_KEY*/
+export type StateDerivedSub = ((value: any) => void) & {
+  [STATE_DERIVED_KEY]?: () => void;
+};
+
+/**Makes the states of the nested method, see nested in types.ts*/
+type NestedMaker = (
+  state: Base<any, any, any>,
+  select: (value: any) => unknown,
+  error?: NiceError,
+) => unknown;
+let nested_maker: NestedMaker = () => {
+  throw new Error("The nested module is not loaded, import states from the state module");
+};
+/**Given by nested.ts when it loads, this file can not import it, as its class extends StateBase*/
+export function set_nested_maker(maker: NestedMaker): void {
+  nested_maker = maker;
+}
+
 /**Given by proxy.ts when it loads, this file can not import it, as its proxy class extends StateBase*/
 export function set_proxy_maker(maker: ProxyMaker): void {
   proxy_maker = maker;
@@ -49,32 +74,44 @@ export abstract class StateBase<
   }
 
   //#Reader Context
-  abstract then<TResult1 = RRT, TResult2 = never>(
-    on_fulfilled?: ((value: RRT) => TResult1 | PromiseLike<TResult1>) | null,
-    on_rejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
-  ): PromiseLike<TResult1 | TResult2>;
+  /**The current value of the state, the thenable resolves once the state has a value.
+   * On a sync state the then of the thenable calls its function at once, without waiting for a microtask.
+   * The state itself is not a thenable, so promises can resolve to it*/
+  abstract read(): PromiseLike<RRT>;
 
   async to_json(): Promise<string> {
-    return result_to_json(await this, "state");
+    return result_to_json(await this.read(), "state");
   }
 
+  /**A state of the state in the value of this state, see nested in types.ts for its type*/
+  nested(select: (value: ResultInferOk<RRT>) => unknown, error?: NiceError): any {
+    return nested_maker(this, select, error);
+  }
   /**A read only proxy of the state, transform gets the result and gives a result.
    * any as a class can not know its kind, the state types give the proxy its type, and subclasses fit them unchanged*/
   proxy(transform: (value: RRT) => SR<unknown>): any {
-    return proxy_maker(this, false, transform, false);
+    return proxy_maker(this, "result", transform, false);
   }
   /**A read only proxy of the state, map gets the plain value and an error is passed on as it is, see the state types for its type*/
   proxy_map(map: (value: ResultInferOk<RRT>) => unknown): any {
-    return proxy_maker(this, true, map, false);
+    return proxy_maker(this, "map", map, false);
+  }
+  /**A read only ok proxy of the state, transform gets the result and gives an ok result, handling the error of a state that can fail*/
+  proxy_ok(transform: (value: RRT) => ResultOk<unknown>): any {
+    return proxy_maker(this, "ok", transform, false);
   }
   /**A writable proxy of the state, like proxy, writes go to the state, through write when given, see StateProxyWrite.
    * The state types only give it to writable states*/
   proxy_w(transform: (value: RRT) => SR<unknown>, write?: unknown): any {
-    return proxy_maker(this, false, transform, true, write);
+    return proxy_maker(this, "result", transform, true, write);
   }
   /**A writable proxy of the state, like proxy_map, writes go to the state, through write when given, see StateProxyWrite*/
   proxy_w_map(map: (value: ResultInferOk<RRT>) => unknown, write?: unknown): any {
-    return proxy_maker(this, true, map, true, write);
+    return proxy_maker(this, "map", map, true, write);
+  }
+  /**A writable ok proxy of the state, like proxy_ok, writes go to the state, through write when given, see StateProxyWrite*/
+  proxy_ok_w(transform: (value: RRT) => ResultOk<unknown>, write?: unknown): any {
+    return proxy_maker(this, "ok", transform, true, write);
   }
 
   abstract readonly rsync: boolean;
@@ -85,32 +122,45 @@ export abstract class StateBase<
 
   abstract related(): REL;
 
-  #subscribers: Set<StateSub<RRT>> = new Set();
-  sub<T = StateSub<RRT>>(func: StateSub<RRT>, update?: boolean): T {
-    if (this.#subscribers.has(func)) {
+  /**Created on the first subscriber, an empty Set is about half the memory of a state, and most states are never subscribed*/
+  #subscribers?: Set<StateSub<RRT>>;
+  /**Subscribers that are derived states, proxies and collected states, marked with STATE_DERIVED_KEY.
+   * They are told before the other subscribers, so derived states read in those are current, see invalidate_derived*/
+  #derived?: Set<StateSub<RRT>>;
+  //The state types type sub and unsub by the state they are called on, see SubValue, a class only knows RRT
+  sub<F extends StateSub<any>>(func: F, update?: boolean): F {
+    const subscribers = (func as StateDerivedSub)[STATE_DERIVED_KEY]
+      ? (this.#derived ??= new Set())
+      : (this.#subscribers ??= new Set());
+    if (subscribers.has(func)) {
       console.error("Function already registered as subscriber", this, func);
-      return func as T;
+      return func;
     }
-    if (this.#subscribers.size === 0) this.on_sub();
-    this.#subscribers.add(func);
-    if (update) this.then(func);
-    return func as T;
+    if (this.amount() === 0) this.on_sub();
+    subscribers.add(func);
+    if (update) this.read().then(func);
+    return func;
   }
-  unsub<T = StateSub<RRT>>(func: T): T {
-    if (this.#subscribers.delete(func as StateSub<RRT>)) {
-      if (this.#subscribers.size == 0) this.on_unsub();
+  unsub<F extends StateSub<any>>(func: F): F {
+    const subscribers = (func as StateDerivedSub)[STATE_DERIVED_KEY]
+      ? this.#derived
+      : this.#subscribers;
+    if (subscribers?.delete(func)) {
+      if (this.amount() === 0) this.on_unsub();
     } else console.error("Subscriber not found with state", this, func);
     return func;
   }
 
   in_use(): this | undefined {
-    return this.#subscribers.size > 0 ? this : undefined;
+    return this.amount() > 0 ? this : undefined;
   }
   has(subscriber: StateSub<RRT>): this | undefined {
-    return this.#subscribers.has(subscriber) ? this : undefined;
+    return this.#subscribers?.has(subscriber) || this.#derived?.has(subscriber)
+      ? this
+      : undefined;
   }
   amount(): number {
-    return this.#subscribers.size;
+    return (this.#subscribers?.size ?? 0) + (this.#derived?.size ?? 0);
   }
 
   //#Writer Context
@@ -133,7 +183,7 @@ export abstract class StateBase<
   protected write_gated<T>(func: () => PromiseLike<SR<T>>): PromiseLike<SR<T>> {
     const gate = this.#write_enabled;
     if (!gate) return func();
-    return gate.then((res) =>
+    return gate.read().then((res) =>
       res.ok && res.value
         ? func()
         : err_nice(state_errors.WRITE_DISABLED, "writing is disabled"),
@@ -151,28 +201,49 @@ export abstract class StateBase<
   /**Called when last subscriber is removed*/
   protected on_unsub(): void {}
 
-  /**Updates all subscribers with a value */
+  /**Updates all subscribers with a value, the derived states first.
+   * Several are all invalidated before any is told, so a subscriber of one reads the others current,
+   * a single one is told before anything else can run*/
   protected update_subs(value: RRT): void {
-    for (const subscriber of this.#subscribers) {
+    const derived = this.#derived;
+    if (derived) {
+      if (derived.size > 1) this.invalidate_derived();
+      for (const subscriber of derived) this.#call(subscriber, value);
+    }
+    const subscribers = this.#subscribers;
+    if (subscribers)
+      for (const subscriber of subscribers) this.#call(subscriber, value);
+  }
+  #call(subscriber: StateSub<RRT>, value: RRT): void {
+    try {
+      subscriber(value);
+    } catch (e) {
+      console.error("Failed while calling subscribers ", e, this, subscriber);
+    }
+  }
+
+  /**Tells the derived states subscribed to this one that its value changed before they are told the value,
+   * which comes later in a microtask, until then their reads must go through to this state.
+   * Called by a collected state when one of its states changes, and passed on by every derived state*/
+  protected invalidate_derived(): void {
+    const derived = this.#derived;
+    if (!derived) return;
+    for (const subscriber of derived) {
       try {
-        subscriber(value);
+        (subscriber as StateDerivedSub)[STATE_DERIVED_KEY]!();
       } catch (e) {
-        console.error("Failed while calling subscribers ", e, this, subscriber);
+        console.error("Failed while invalidating derived state ", e, this, subscriber);
       }
     }
   }
 
   //Promises
   #read_promises?: ((val: RRT) => void)[];
-  /**Creates a promise which can be fulfilled later with fulRProm */
-  protected async append_r_prom<TResult1 = RRT>(
-    func: (value: RRT) => TResult1 | PromiseLike<TResult1>,
-  ): Promise<TResult1> {
-    return func(
-      await new Promise<RRT>((a) => {
-        (this.#read_promises ??= []).push(a);
-      }),
-    );
+  /**Creates a promise of the next value, fulfilled by ful_r_prom */
+  protected append_r_prom(): Promise<RRT> {
+    return new Promise<RRT>((a) => {
+      (this.#read_promises ??= []).push(a);
+    });
   }
   /**Fulfills all read promises with given value */
   protected ful_r_prom(value: RRT): RRT {
@@ -207,20 +278,23 @@ export class StateReadOnly<
   }
 
   //#Reader Context
-  then<TResult1 = RRT, TResult2 = never>(
-    on_fulfilled?: ((value: RRT) => TResult1 | PromiseLike<TResult1>) | null,
-    on_rejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
-  ): PromiseLike<TResult1 | TResult2> {
-    return this.#state.then(on_fulfilled, on_rejected);
+  read(): PromiseLike<RRT> {
+    return this.#state.read();
   }
   to_json(): Promise<string> {
     return this.#state.to_json();
   }
   proxy(transform: (value: RRT) => SR<unknown>): any {
-    return proxy_maker(this, false, transform, false);
+    return proxy_maker(this, "result", transform, false);
   }
   proxy_map(map: (value: ResultInferOk<RRT>) => unknown): any {
-    return proxy_maker(this, true, map, false);
+    return proxy_maker(this, "map", map, false);
+  }
+  proxy_ok(transform: (value: RRT) => ResultOk<unknown>): any {
+    return proxy_maker(this, "ok", transform, false);
+  }
+  nested(select: (value: ResultInferOk<RRT>) => unknown, error?: NiceError): any {
+    return nested_maker(this, select, error);
   }
   get rsync(): boolean {
     return this.#state.rsync;
@@ -239,11 +313,11 @@ export class StateReadOnly<
   related(): REL {
     return this.#state.related();
   }
-  sub<T = StateSub<RRT>>(func: StateSub<RRT>, update?: boolean): T {
-    return this.#state.sub<T>(func, update);
+  sub<F extends StateSub<any>>(func: F, update?: boolean): F {
+    return this.#state.sub(func, update);
   }
-  unsub<T = StateSub<RRT>>(func: T): T {
-    return this.#state.unsub<T>(func);
+  unsub<F extends StateSub<any>>(func: F): F {
+    return this.#state.unsub(func);
   }
   in_use(): this | undefined {
     return this.#state.in_use() ? this : undefined;
@@ -273,12 +347,8 @@ export class StateReadOnly<
 /**State that is always false, the write gate of states that can never be written*/
 class StateFalse extends StateBase<ResultOk<boolean>, never, OptionNone> {
   readonly #value = ok(false);
-  then<TResult1 = ResultOk<boolean>, TResult2 = never>(
-    on_fulfilled?:
-      | ((value: ResultOk<boolean>) => TResult1 | PromiseLike<TResult1>)
-      | null,
-  ): PromiseLike<TResult1 | TResult2> {
-    return sync_resolve(this.#value).then(on_fulfilled);
+  read(): PromiseLike<ResultOk<boolean>> {
+    return sync_resolve(this.#value);
   }
   get rsync(): true {
     return true;
@@ -337,7 +407,7 @@ async function value_to_json(val: unknown, path: string): Promise<string> {
           STATE_VIEWER_OVERRIDE_KEY
         ]?.() ?? val)
       : val;
-  if (IS.state(value)) return result_to_json(await value, path);
+  if (IS.state(value)) return result_to_json(await value.read(), path);
   if (Array.isArray(value)) {
     const items: string[] = [];
     for (let i = 0; i < value.length; i++)

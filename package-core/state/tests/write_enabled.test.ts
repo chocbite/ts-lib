@@ -73,14 +73,14 @@ describe("Write gate", function () {
     const gate = st.ok(false);
     const source = st.ok_w(1);
     source.set_write_enabled(gate);
-    const proxy = st.p.rosw(source);
+    const proxy = source.proxy_w_map((v) => v);
     expect(proxy.write_enabled).toBe(gate);
     expect(await proxy.write(2)).toEqual(err_nice(st.errors.WRITE_DISABLED, "writing is disabled"));
     expect(source.ok()).toBe(1);
   });
   it("Read only proxy has a gate that is always false", async function () {
-    const proxy = st.p.ros(st.ok_w(1));
-    expect(await proxy.write_enabled).toEqual(ok(false));
+    const proxy = st.ok_w(1).proxy_map((v) => v);
+    expect(await proxy.write_enabled?.read()).toEqual(ok(false));
   });
 });
 
@@ -95,7 +95,7 @@ describe("Read only view", function () {
     expect("setter" in view).toBe(false);
     expect_not_writable(await view.check!(2));
     expect_not_writable(await view.limit!(2));
-    expect(await view.write_enabled).toEqual(ok(false));
+    expect(await view.write_enabled?.read()).toEqual(ok(false));
     expect(st.is.reaw(view)).toBe(false);
   });
   it("Narrowing on writable does not give write access", function () {
@@ -113,7 +113,7 @@ describe("Read only view", function () {
     expect(st.is.ros(view)).toBe(true);
     expect(view.get()).toEqual(ok(1));
     expect(view.ok()).toBe(1);
-    expect(await view).toEqual(ok(1));
+    expect(await view.read()).toEqual(ok(1));
     expect(await view.to_json()).toBe("1");
     state.set_ok(2);
     expect(view.ok()).toBe(2);
@@ -140,7 +140,7 @@ describe("Read only view", function () {
     const state = st.reaw<number>(async () => ok(3), true);
     const view = state.read_only;
     expect(view.rsync).toBe(false);
-    expect(await view).toEqual(ok(3));
+    expect(await view.read()).toEqual(ok(3));
   });
   it("Remote, proxy and collected states give a view", function () {
     const remote = st.r.roaw.from<number>(
@@ -149,7 +149,7 @@ describe("Read only view", function () {
       () => {},
       async () => ok(undefined),
     );
-    const proxy = st.p.rosw(st.ok_w(1));
+    const proxy = st.ok_w(1).proxy_w_map((v) => v);
     const collected = st.c.ros(false, st.ok(1));
     for (const s of [remote, proxy, collected]) {
       expect(s.read_only).not.toBe(s);

@@ -15,7 +15,7 @@ import {
 } from "..";
 import {
   test_state_sub,
-  test_state_then,
+  test_state_read,
   test_state_write,
   type TestStateAll,
   type TestStateWrite,
@@ -42,27 +42,11 @@ describe("Initialize delayed states", function () {
     it("rsync is false before resolve, true after", async function () {
       const s = st.roa(() => sleep(1, ok(1)));
       expect(s.rsync).toBe(false);
-      await s;
+      await s.read();
       expect(s.rsync).toBe(true);
     });
     it("writable is false", function () {
       expect(st.roa(() => sleep(1, ok(1))).writable).toBe(false);
-    });
-    it("cleanup successfull", async function () {
-      const init = st.roa(() => sleep(1, ok(1)));
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      const then = init.then;
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      const set = init.set;
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      const write = init.write;
-      await init;
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(init.then).not.eq(then, "then");
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(init.set).not.eq(set, "set");
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(init.write).not.eq(write, "write");
     });
     //# Standard Tests
     const maker: TestStateAll = () => {
@@ -73,8 +57,8 @@ describe("Initialize delayed states", function () {
     it("Subscribing And Unsubscribing", async function () {
       await test_state_sub(maker, 5);
     });
-    describe("Then", async function () {
-      await test_state_then(maker, 5);
+    describe("Read", async function () {
+      await test_state_read(maker, 5);
     });
     const maker_delay: TestStateAll = () => {
       const state = st.roa(() => sleep(10, ok(1)));
@@ -85,7 +69,7 @@ describe("Initialize delayed states", function () {
       await test_state_sub(maker_delay, 20);
     });
     describe("Then With Actual Delay", async function () {
-      await test_state_then(maker_delay, 20);
+      await test_state_read(maker_delay, 20);
     });
   });
   //##################################################################################################################################################
@@ -112,27 +96,11 @@ describe("Initialize delayed states", function () {
     it("rsync is false before resolve, true after", async function () {
       const s = st.rea(() => sleep(1, ok(1)));
       expect(s.rsync).toBe(false);
-      await s;
+      await s.read();
       expect(s.rsync).toBe(true);
     });
     it("writable is false", function () {
       expect(st.rea(() => sleep(1, ok(1))).writable).toBe(false);
-    });
-    it("cleanup successfull", async function () {
-      const init = st.rea(() => sleep(1, ok(1)));
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      const then = init.then;
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      const set = init.set;
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      const write = init.write;
-      await init;
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(init.then).not.eq(then, "then");
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(init.set).not.eq(set, "set");
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(init.write).not.eq(write, "write");
     });
     //# Standard Tests
     const maker: TestStateAll = () => {
@@ -143,8 +111,8 @@ describe("Initialize delayed states", function () {
     it("Subscribing And Unsubscribing", async function () {
       await test_state_sub(maker, 5);
     });
-    describe("Then", async function () {
-      await test_state_then(maker, 5);
+    describe("Read", async function () {
+      await test_state_read(maker, 5);
     });
     const maker_delay: TestStateAll = () => {
       const state = st.rea(() => sleep(10, ok(1)));
@@ -155,7 +123,7 @@ describe("Initialize delayed states", function () {
       await test_state_sub(maker_delay, 20);
     });
     describe("Then With Actual Delay", async function () {
-      await test_state_then(maker_delay, 20);
+      await test_state_read(maker_delay, 20);
     });
   });
   //##################################################################################################################################################
@@ -177,27 +145,11 @@ describe("Initialize delayed states", function () {
     it("rsync is false before resolve, true after", async function () {
       const s = st.roaw(() => sleep(1, ok(1)));
       expect(s.rsync).toBe(false);
-      await s;
+      await s.read();
       expect(s.rsync).toBe(true);
     });
     it("writable is true", function () {
       expect(st.roaw(() => sleep(1, ok(1))).writable).toBe(true);
-    });
-    it("cleanup successfull", async function () {
-      const init = st.roaw(() => sleep(1, ok(1)));
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      const then = init.then;
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      const set = init.set;
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      const write = init.write;
-      await init;
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(init.then).not.eq(then, "then");
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(init.set).not.eq(set, "set");
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(init.write).not.eq(write, "write");
     });
     //# Standard Tests
     const maker: TestStateAll = () => {
@@ -208,8 +160,8 @@ describe("Initialize delayed states", function () {
     it("Subscribing And Unsubscribing", async function () {
       await test_state_sub(maker, 5);
     });
-    describe("Then", async function () {
-      await test_state_then(maker, 5);
+    describe("Read", async function () {
+      await test_state_read(maker, 5);
     });
     const maker_delay: TestStateAll = () => {
       const state = st.roaw(() => sleep(10, ok(1)));
@@ -220,7 +172,7 @@ describe("Initialize delayed states", function () {
       await test_state_sub(maker_delay, 20);
     });
     describe("Then With Actual Delay", async function () {
-      await test_state_then(maker_delay, 20);
+      await test_state_read(maker_delay, 20);
     });
     const maker_write: TestStateWrite = () => {
       const state = st.roaw(() => sleep(10, ok(1)), true);
@@ -255,27 +207,11 @@ describe("Initialize delayed states", function () {
     it("rsync is false before resolve, true after", async function () {
       const s = st.reaw(() => sleep(1, ok(1)));
       expect(s.rsync).toBe(false);
-      await s;
+      await s.read();
       expect(s.rsync).toBe(true);
     });
     it("writable is true", function () {
       expect(st.reaw(() => sleep(1, ok(1))).writable).toBe(true);
-    });
-    it("cleanup successfull", async function () {
-      const init = st.reaw(() => sleep(1, ok(1)));
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      const then = init.then;
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      const set = init.set;
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      const write = init.write;
-      await init;
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(init.then).not.eq(then, "then");
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(init.set).not.eq(set, "set");
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      expect(init.write).not.eq(write, "write");
     });
     //# Standard Tests
     const maker: TestStateAll = () => {
@@ -286,8 +222,8 @@ describe("Initialize delayed states", function () {
     it("Subscribing And Unsubscribing", async function () {
       await test_state_sub(maker, 5);
     });
-    describe("Then", async function () {
-      await test_state_then(maker, 5);
+    describe("Read", async function () {
+      await test_state_read(maker, 5);
     });
     const maker_delay: TestStateAll = () => {
       const state = st.reaw(() => sleep(10, ok(1)));
@@ -298,7 +234,7 @@ describe("Initialize delayed states", function () {
       await test_state_sub(maker_delay, 20);
     });
     describe("Then With Actual Delay", async function () {
-      await test_state_then(maker_delay, 20);
+      await test_state_read(maker_delay, 20);
     });
     const maker_write: TestStateWrite = () => {
       const state = st.reaw(() => sleep(10, ok(1)), true);
@@ -318,17 +254,17 @@ describe("Initialize delayed states", function () {
     it("Pending reads settle when the init function throws", async function () {
       const state = failing();
       const read = await Promise.race([
-        state.then((value) => value),
+        state.read().then((value) => value),
         sleep(50, "pending" as const),
       ]);
       expect(read).not.toBe("pending");
     });
     it("Reads after a failed init give a result", async function () {
       const state = failing();
-      state.then(() => {});
+      state.read().then(() => {});
       await sleep(10);
       const read = await Promise.race([
-        state.then((value) => value),
+        state.read().then((value) => value),
         sleep(50, "pending" as const),
       ]);
       expect(read).toHaveProperty("ok");
@@ -339,9 +275,9 @@ describe("Initialize delayed states", function () {
         if (attempts++ === 0) throw new Error("Init failed");
         return ok(5);
       });
-      const first = state.then((value) => value);
+      const first = state.read().then((value) => value);
       await sleep(10);
-      expect(await state.then((value) => value)).toEqual(ok(5));
+      expect(await state.read().then((value) => value)).toEqual(ok(5));
       expect(await first).toEqual(ok(5));
       expect(attempts).toBe(2);
     });
@@ -352,11 +288,11 @@ describe("Initialize delayed states", function () {
       const state = st.roa<number>(() => sleep(20, ok(3)));
       const values: number[] = [];
       state.sub((value) => values.push(value.value));
-      const first = state.then((value) => value);
+      const first = state.read().then((value) => value);
       state.set_ok(5);
       expect(await first).toEqual(ok(5));
       await sleep(40);
-      expect(await state.then((value) => value)).toEqual(ok(5));
+      expect(await state.read().then((value) => value)).toEqual(ok(5));
       expect(values).toEqual([5]);
     });
   });

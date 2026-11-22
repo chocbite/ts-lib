@@ -562,7 +562,7 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
     "Client removes first pump": () =>
       void parsed_all.pumps.write(state.a.write.splice(0, 1)).then(report("remove")),
     "Client moves first pump to end": async () => {
-      const pumps = await parsed_all.pumps;
+      const pumps = await parsed_all.pumps.read();
       if (pumps.ok)
         void parsed_all.pumps
           .write(state.a.write.move(0, pumps.value.length - 1))

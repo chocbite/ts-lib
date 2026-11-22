@@ -1,4 +1,4 @@
-import { is_promise_like, sync_reject, sync_resolve } from "#common";
+import { sync_reject, sync_resolve } from "#common";
 import {
   err,
   none,
@@ -59,6 +59,12 @@ type Setter<
   state: Owner<RRT, HEL, WT>,
   old?: RRT,
 ) => PromiseLike<StateResult<void>>;
+
+/**Init of a delayed state, func gives the first value, running while it does*/
+interface DelayedInit<RRT> {
+  func: (() => PromiseLike<RRT>) | undefined;
+  running: boolean;
+}
 
 export interface Owner<
   RRT extends StateResult<any>,
@@ -431,67 +437,13 @@ class RXXX<
     if (init[0] === 0) {
       if (setter === true) this.#setter = this.#make_setter(init[2]);
       this.set(init[2]);
-    } else if (init[0] === 1) {
-      if (setter === true) this.#setter = this.#make_setter(undefined);
-      const f = init[2];
-      this.get = () => this.#clean() ?? (this.#value = f());
-      this.set = (value) => this.set(this.#clean() ?? value);
-      const write = this.write.bind(this);
-      this.write = (value) =>
-        write(value).then((val) => val.map((valu) => this.#clean() ?? valu));
-    } else if (init[0] === 2) {
-      if (setter === true) this.#setter = this.#make_setter(undefined);
-      const f = init[2];
-      //Temporary override until first access
-      let initializing = false;
-      //A value set before init finishes wins over the init result
-      let set_during_init = false;
-      this.then = <TResult1 = RRT>(
-        func: (value: RRT) => TResult1 | PromiseLike<TResult1>,
-      ): Promise<TResult1> => {
-        if (f)
-          if (!initializing) {
-            initializing = true;
-            (async () => {
-              try {
-                const value = await f();
-                if (set_during_init) return;
-                this.ful_r_prom((this.#value = value));
-                this.#helper?.on_change(value);
-              } catch (e) {
-                console.error(
-                  "Failed to initialize delayed RO state: ",
-                  e,
-                  this,
-                );
-                if (set_during_init) return;
-                //Ok states have no error value, reads wait for a set or retry init on next read
-                if (this.#rok) return void (initializing = false);
-                this.ful_r_prom(
-                  (this.#value = err_nice(
-                    state_errors.INIT_FAILED,
-                    e instanceof Error ? e : `Failed to initialize state: ${String(e)}`,
-                  ) as RRT),
-                );
-              }
-              this.#clean();
-            })();
-          }
-        return this.append_r_prom(func);
-      };
-      this.set = (value) => {
-        set_during_init = true;
-        this.#clean();
-        this.set(this.ful_r_prom(value as RRT));
-      };
-      const write = this.write.bind(this);
-      this.write = async (value) =>
-        (await write(value)).map((val) => this.#clean() ?? val);
-    }
+    } else if (setter === true) this.#setter = this.#make_setter(undefined);
   }
 
-  #clean(): void {
-    (["then", "get", "set", "write"] as const).forEach((k) => delete this[k]);
+  /**Gives the state its first value from its init, without telling subscribers, used by RXXXInit*/
+  protected init_value(value: RRT, on_change: boolean): void {
+    this.#value = value;
+    if (on_change) this.#helper?.on_change(value);
   }
 
   #helper?: Helper<any, any, any>;
@@ -542,8 +494,8 @@ class RXXX<
       return (value, state, old) => {
         if (old && !old.err && value === old.value)
           return sync_resolve(ok(undefined));
-        if ((state as this).#helper)
-          return (state as this).#helper!.check(value).then((e) => {
+        if (this.#helper)
+          return this.#helper.check(value).then((e) => {
             if (e.err) return err(e.error);
             return ok(state.set_ok(e.value as RIOK<RRT>));
           });
@@ -606,6 +558,12 @@ class RXXX<
 
   //#Owner Context
   set(value: RRT | RO<SRT<RIOK<RRT>>>) {
+    //The same primitive value again changes nothing, objects and arrays can have changed in place, errors always tell
+    const old = this.#value;
+    if (old && old.ok && value.ok && old.value === value.value) {
+      const kind = typeof value.value;
+      if (value.value === null || (kind !== "object" && kind !== "function")) return;
+    }
     this.#helper?.on_change(value);
     this.update_subs((this.#value = value as RRT));
   }
@@ -635,11 +593,19 @@ class RXXX<
   set_write_enabled(gate: State<boolean> | undefined): void {
     super.set_write_enabled(gate);
   }
+  #on_sub?: () => void;
+  #on_unsub?: () => void;
   set_onsub(func: () => void): void {
-    this.on_sub = func;
+    this.#on_sub = func;
   }
   set_onunsub(func: () => void): void {
-    this.on_unsub = func;
+    this.#on_unsub = func;
+  }
+  protected on_sub(): void {
+    this.#on_sub?.();
+  }
+  protected on_unsub(): void {
+    this.#on_unsub?.();
   }
   #array?: LocalArrayOwner<RRT>;
   get array(): RRT extends SR<readonly any[]> ? LocalArrayOwner<RRT> : never {
@@ -674,23 +640,15 @@ class RXXX<
   get rsync(): boolean {
     return this.#sync || Boolean(this.#value);
   }
-  then<TResult1 = RRT, TResult2 = never>(
-    on_fulfilled?: ((value: RRT) => TResult1 | PromiseLike<TResult1>) | null,
-    on_rejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
-  ): PromiseLike<TResult1 | TResult2> {
+  read(): PromiseLike<RRT> {
     try {
-      const result = on_fulfilled ? on_fulfilled(this.get()) : this.get();
-      if (is_promise_like(result)) return result;
-      return sync_resolve(result as TResult1);
+      return sync_resolve(this.get());
     } catch (error) {
-      if (on_rejected) {
-        const rejected_result = on_rejected(error);
-        if (is_promise_like(rejected_result)) return rejected_result;
-        return sync_resolve(rejected_result);
-      }
+      //A lazy init function can throw
       return sync_reject(error);
     }
   }
+  /**Kept to the field alone, plain states are the most common and get is their most common read*/
   get(): RRT {
     return this.#value!;
   }
@@ -720,6 +678,103 @@ class RXXX<
   }
 }
 
+/**Lazy and delayed local states, plain states are RXXX, so their get stays a field read.
+ * One class for both, so a call site seeing any local state sees at most two shapes*/
+class RXXXInit<
+  RRT extends StateResult<any>,
+  HEL extends Helper<RRT, WT, OptionNone>,
+  WT,
+> extends RXXX<RRT, HEL, WT> {
+  constructor(
+    init: [1, boolean, () => RRT] | [2, boolean, (() => PromiseLike<RRT>) | undefined],
+    helper?: HEL,
+    setter?: Setter<RRT, HEL, WT> | true,
+  ) {
+    super(init, helper, setter);
+    this.#init = init[0] === 1 ? init[2] : { func: init[2], running: false };
+  }
+
+  /**Gives the state its first value, undefined once it has one.
+   * Lazy states, a function: run by the first get.
+   * Delayed states, a DelayedInit: started by the first read, readers wait until the state has a value.
+   * A field instead of methods put on the instance, so the state keeps one shape for V8*/
+  #init?: (() => RRT) | DelayedInit<RRT>;
+
+  get(): RRT {
+    const init = this.#init;
+    if (typeof init === "function") {
+      //Cleared first, an init function that throws is not run again
+      this.#init = undefined;
+      this.init_value(init(), false);
+    }
+    return super.get();
+  }
+  read(): PromiseLike<RRT> {
+    const init = this.#init;
+    if (init && typeof init !== "function") return this.#read_delayed(init);
+    return super.read();
+  }
+  set(value: RRT | RO<SRT<RIOK<RRT>>>) {
+    const init = this.#init;
+    if (init) {
+      //A delayed state tells its waiting readers, a lazy state never runs its init function
+      if (typeof init !== "function") this.ful_r_prom(value as RRT);
+      this.#init = undefined;
+    }
+    super.set(value);
+  }
+
+  /**A read of a delayed state before it has a value, starts the init function once*/
+  #read_delayed(init: DelayedInit<RRT>): PromiseLike<RRT> {
+    if (init.func && !init.running) {
+      init.running = true;
+      void this.#run_delayed(init, init.func);
+    }
+    return this.append_r_prom();
+  }
+
+  async #run_delayed(init: DelayedInit<RRT>, func: () => PromiseLike<RRT>) {
+    try {
+      const value = await func();
+      //A value set before init finishes wins over the init result
+      if (this.#init !== init) return;
+      this.#init = undefined;
+      this.init_value(value, true);
+      this.ful_r_prom(value);
+    } catch (e) {
+      console.error("Failed to initialize delayed RO state: ", e, this);
+      if (this.#init !== init) return;
+      //Ok states have no error value, reads wait for a set or retry init on next read
+      if (this.rok) return void (init.running = false);
+      this.#init = undefined;
+      const error = err_nice(
+        state_errors.INIT_FAILED,
+        e instanceof Error ? e : `Failed to initialize state: ${String(e)}`,
+      ) as RRT;
+      this.init_value(error, false);
+      this.ful_r_prom(error);
+    }
+  }
+}
+
+/**Makes a plain local state, or a lazy or delayed one*/
+function make_local<
+  RRT extends StateResult<any>,
+  HEL extends Helper<RRT, WT, OptionNone>,
+  WT,
+>(
+  init:
+    | [0, boolean, RRT]
+    | [1, boolean, () => RRT]
+    | [2, boolean, (() => PromiseLike<RRT>) | undefined],
+  helper?: HEL,
+  setter?: Setter<RRT, HEL, WT> | true,
+): RXXX<RRT, HEL, WT> {
+  return init[0] === 0
+    ? new RXXX<RRT, HEL, WT>(init, helper, setter)
+    : new RXXXInit<RRT, HEL, WT>(init, helper, setter);
+}
+
 //##################################################################################################################################################
 //       _______     ___   _  _____
 //      / ____\ \   / / \ | |/ ____|
@@ -727,6 +782,7 @@ class RXXX<
 //      \___ \  \   / | . ` | |
 //      ____) |  | |  | |\  | |____
 //     |_____/   |_|  |_| \_|\_____|
+
 
 /**Creates a sync ok state from an initial result.
  * @param init initial result for state or helper.*/
@@ -736,7 +792,7 @@ export function ros<
   WT = unknown,
 >(init: (RO<RT> | (() => RO<RT>)) | [RO<RT> | (() => RO<RT>), HEL]) {
   const [i, h] = Array.isArray(init) ? [init[0], init[1]] : [init, undefined];
-  return new RXXX<RO<RT>, HEL, SWT<WT>>(
+  return make_local<RO<RT>, HEL, SWT<WT>>(
     typeof i === "function" ? [1, true, i] : [0, true, i],
     h,
   ) as StateLocalROS<RT, HEL, SWT<WT>>;
@@ -753,7 +809,7 @@ export function rosw<
   setter: Setter<RO<RT>, HEL, SWT<WT>> | true = true,
 ) {
   const [i, h] = Array.isArray(init) ? [init[0], init[1]] : [init, undefined];
-  return new RXXX<RO<RT>, HEL, SWT<WT>>(
+  return make_local<RO<RT>, HEL, SWT<WT>>(
     typeof i === "function" ? [1, true, i] : [0, true, i],
     h,
     setter,
@@ -769,7 +825,7 @@ export function res<
   WT = unknown,
 >(init: (SR<RT> | (() => SR<RT>)) | [SR<RT> | (() => SR<RT>), HEL]) {
   const [i, h] = Array.isArray(init) ? [init[0], init[1]] : [init, undefined];
-  return new RXXX<SR<RT>, HEL, SWT<WT>>(
+  return make_local<SR<RT>, HEL, SWT<WT>>(
     typeof i === "function" ? [1, false, i] : [0, false, i],
     h,
   ) as StateLocalRES<RT, HEL, SWT<WT>>;
@@ -787,7 +843,7 @@ export function resw<
   setter: Setter<SR<RT>, HEL, SWT<WT>> | true = true,
 ) {
   const [i, h] = Array.isArray(init) ? [init[0], init[1]] : [init, undefined];
-  return new RXXX<SR<RT>, HEL, SWT<WT>>(
+  return make_local<SR<RT>, HEL, SWT<WT>>(
     typeof i === "function" ? [1, false, i] : [0, false, i],
     h,
     setter,
@@ -802,7 +858,7 @@ export function roa<
   WT = unknown,
 >(init?: (() => Promise<RO<RT>>) | [() => Promise<RO<RT>>, HEL]) {
   const [i, h] = Array.isArray(init) ? [init[0], init[1]] : [init, undefined];
-  return new RXXX<RO<RT>, HEL, SWT<WT>>([2, true, i], h) as StateLocalROA<
+  return make_local<RO<RT>, HEL, SWT<WT>>([2, true, i], h) as StateLocalROA<
     RT,
     HEL,
     SWT<WT>
@@ -820,7 +876,7 @@ export function roaw<
   setter: Setter<RO<RT>, HEL, SWT<WT>> | true = true,
 ) {
   const [i, h] = Array.isArray(init) ? [init[0], init[1]] : [init, undefined];
-  return new RXXX<RO<RT>, HEL, SWT<WT>>(
+  return make_local<RO<RT>, HEL, SWT<WT>>(
     [2, true, i],
     h,
     setter,
@@ -836,7 +892,7 @@ export function rea<
   WT = unknown,
 >(init?: (() => Promise<SR<RT>>) | [() => Promise<SR<RT>>, HEL]) {
   const [i, h] = Array.isArray(init) ? [init[0], init[1]] : [init, undefined];
-  return new RXXX<SR<RT>, HEL, SWT<WT>>([2, false, i], h) as StateLocalREA<
+  return make_local<SR<RT>, HEL, SWT<WT>>([2, false, i], h) as StateLocalREA<
     RT,
     HEL,
     SWT<WT>
@@ -855,7 +911,7 @@ export function reaw<
   setter: Setter<SR<RT>, HEL, SWT<WT>> | true = true,
 ) {
   const [i, h] = Array.isArray(init) ? [init[0], init[1]] : [init, undefined];
-  return new RXXX<SR<RT>, HEL, SWT<WT>>(
+  return make_local<SR<RT>, HEL, SWT<WT>>(
     [2, false, i],
     h,
     setter,

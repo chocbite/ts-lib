@@ -48,7 +48,7 @@ const yo = make_fetch_parser(
   } },
 );
 
-yo[FETCH_PARSE].then((v) => {
+yo[FETCH_PARSE].read().then((v) => {
   console.warn(v);
 });
 

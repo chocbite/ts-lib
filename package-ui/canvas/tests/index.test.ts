@@ -125,7 +125,7 @@ describe("Canvas module", () => {
       x.set_ok(30);
       await new Promise((r) => setTimeout(r, 30));
       const loaded = group.get("page", {}, canvas.page_from_json).value;
-      expect(await (loaded.width as StateROSW<number>)).toEqual(
+      expect(await (loaded.width as StateROSW<number>).read()).toEqual(
         expect.objectContaining({ value: 800 }),
       );
       const widgets = (loaded.widgets as StateROSW<CanvasWidget[]>).ok();

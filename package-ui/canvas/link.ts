@@ -234,8 +234,8 @@ export function option_value_state(
       ? err_nice(link_errors.LINKED, `Linked to ${result.value.path}`)
       : result;
   return option.writable
-    ? state.proxy.reaw(option as StateREAW<unknown>, read)
-    : state.proxy.rea(option, read);
+    ? (option as StateREAW<unknown>).proxy_w(read)
+    : option.proxy(read);
 }
 
 /**Converts a value to the type an option needs*/
@@ -287,7 +287,7 @@ export function linked_state(
   };
   const reverses = steps.map(([kind, transform]) => kind.reverse(transform));
   if (!linked.writable || !reverses.every((reverse) => reverse))
-    return state.proxy.rea(linked, read);
+    return linked.proxy(read);
   const to_linked = (value: unknown) =>
     like(
       raw,
@@ -297,7 +297,7 @@ export function linked_state(
     const result = read(ok(value));
     return result.ok ? result.value : value;
   };
-  return state.proxy.reaw(linked as StateREAW<unknown>, read, {
+  return (linked as StateREAW<unknown>).proxy_w(read, {
     write: (value: unknown, source) => source.write(to_linked(value)),
     check: (value, source) =>
       source
@@ -330,6 +330,6 @@ export async function link_value(
   link: CanvasLink,
   convert?: OptionConvert,
 ): Promise<ResultNice<unknown>> {
-  const node = await depot.get(link.path);
-  return await link_node_state(link, node, convert);
+  const node = await depot.get(link.path).read();
+  return await link_node_state(link, node, convert).read();
 }

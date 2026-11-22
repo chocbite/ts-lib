@@ -86,7 +86,7 @@ export async function test_state_sub(
     count += 100000000;
   };
   let count = 0;
-  const sub1 = state.sub<StateSub<SR<number>>>(() => {
+  const sub1 = state.sub(() => {
     count++;
   }, true);
   expect(state.in_use()).equal(state);
@@ -94,7 +94,7 @@ export async function test_state_sub(
   expect(state.amount()).equal(1);
   await sleep(wait ?? 1);
   expect(count).equal(1);
-  const sub2 = state.sub<StateSub<SR<number>>>(() => {
+  const sub2 = state.sub(() => {
     count += 10;
   });
   expect(state.in_use()).equal(state);
@@ -104,7 +104,7 @@ export async function test_state_sub(
   set(ok(8));
   await sleep(1);
   expect(count).equal(12);
-  const sub3 = state.sub<StateSub<SR<number>>>(() => {
+  const sub3 = state.sub(() => {
     count += 100;
     throw new Error("Gaurded against crash");
   });
@@ -153,96 +153,66 @@ export async function test_state_sub(
   console.error = warn_backup;
 }
 
-//      _______ _    _ ______ _   _
-//     |__   __| |  | |  ____| \ | |
-//        | |  | |__| | |__  |  \| |
-//        | |  |  __  |  __| | . ` |
-//        | |  | |  | | |____| |\  |
-//        |_|  |_|  |_|______|_| \_|
-/**Tests different cases of using then on a state
+//      _____  ______          _____
+//     |  __ \|  ____|   /\   |  __ \
+//     | |__) | |__     /  \  | |  | |
+//     |  _  /|  __|   / /\ \ | |  | |
+//     | | \ \| |____ / ____ \| |__| |
+//     |_|  \_\______/_/    \_\_____/
+/**Tests different cases of using read on a state
  * Expects initial value to be number 1
- * @param wait Time to wait for async states values
- */
-export async function test_state_then(
+ * @param wait the longest time the state may take to give its value*/
+export async function test_state_read(
   state_maker: TestStateAll,
   wait: number,
 ): Promise<void> {
-  it("awaiting then setting trice", async function () {
+  it("reading then setting trice", async function () {
     const { state, set } = state_maker();
-    let awaited = await Promise.race([state, sleep(wait)]);
-    expect(awaited).instanceOf(ResultOk);
-    expect(awaited).toEqual(ok(1));
+    let read = await Promise.race([state.read(), sleep(wait)]);
+    expect(read).instanceOf(ResultOk);
+    expect(read).toEqual(ok(1));
     set(ok(5));
-    awaited = await Promise.race([state, sleep(wait)]);
-    expect(awaited).instanceOf(ResultOk);
-    expect(awaited).toEqual(ok(5));
+    read = await Promise.race([state.read(), sleep(wait)]);
+    expect(read).toEqual(ok(5));
     set(ok(9999999999));
-    awaited = await Promise.race([state, sleep(wait)]);
-    expect(awaited).instanceOf(ResultOk);
-    expect(awaited).toEqual(ok(9999999999));
+    read = await Promise.race([state.read(), sleep(wait)]);
+    expect(read).toEqual(ok(9999999999));
   });
-  it("using then", async function () {
+  it("chaining then on the read", async function () {
     const { state } = state_maker();
-    await Promise.race([
-      new Promise((a) => {
-        state.then((val) => {
-          expect(val).instanceOf(ResultOk);
-          expect(val).toEqual(ok(1));
-          a(null);
-        });
-      }),
-      sleep(wait),
-    ]);
+    const chained = state
+      .read()
+      .then((val) => {
+        expect(val).toEqual(ok(1));
+        return 8;
+      })
+      .then((val) => val + 4);
+    expect(await Promise.race([chained, sleep(wait)])).equal(12);
   });
-  it("using then", async function () {
+  it("a sync state calls the function of then at once", async function () {
+    const { state, s } = state_maker();
+    if (!s) return;
+    let read: unknown;
+    void state.read().then((val) => (read = val));
+    expect(read).toEqual(ok(1));
+  });
+  it("a promise resolves to the state itself, as the state is not a thenable", async function () {
     const { state } = state_maker();
-    expect(
-      await new Promise((a) => {
-        state
-          .then((val) => {
-            expect(val).instanceOf(ResultOk);
-            expect(val).toEqual(ok(1));
-            return 8;
-          })
-          .then((val) => {
-            expect(val).equal(8);
-            a(12);
-          });
-      }),
-    ).equal(12);
+    expect("then" in state).toBe(false);
+    expect(await Promise.resolve(state)).toBe(state);
+    const passed = await (async () => state)();
+    expect(passed).toBe(state);
   });
-  it("using then", async function () {
-    const { state } = state_maker();
-    expect(
-      await new Promise((a) => {
-        state
-          .then((val) => {
-            expect(val).instanceOf(ResultOk);
-            expect(val).toEqual(ok(1));
-            throw new Error("8");
-          })
-          .then(
-            () => {},
-            (val) => {
-              expect(val).toEqual(new Error("8"));
-              a(12);
-            },
-          );
-      }),
-    ).equal(12);
-  });
-  it("setting then awaiting", async function () {
+  it("setting then reading", async function () {
     const { state, set } = state_maker();
     set(ok(7));
-    const awaited = await state;
-    expect(awaited).toEqual(ok(7));
+    expect(await state.read()).toEqual(ok(7));
   });
-  it("setting error then awaiting", async function () {
+  it("setting error then reading", async function () {
     const made = state_maker();
     if (made.o) return;
     made.set(err(err_gen()));
-    const awaited = await made.state;
-    expect(awaited).toEqual(err(err_gen()));
+    expect(await made.state.read()).toEqual(err(err_gen()));
   });
 }
 
@@ -300,6 +270,6 @@ export async function test_state_write(
   const { state } = state_maker();
   if (sync) state.write(15).then((e) => expect(e).toEqual(ok(undefined)));
   else expect(await state.write(15)).toEqual(ok(undefined));
-  const awaited = await state;
+  const awaited = await state.read();
   expect(awaited).toEqual(ok(15));
 }

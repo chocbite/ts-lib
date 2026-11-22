@@ -140,7 +140,7 @@ form.switch({ value: device.settings.eco }); // writable, nested
   });
   ```
 - **Polling only runs while something is subscribed** to any of the states. The first subscription fetches at once, then the next fetch starts `update_rate` ms after the previous one finished. When the last subscriber is gone, polling stops and a fetch still running is ignored.
-- **While polling, awaiting a state or subscribing another one sends no request.** It gets the result of the last poll, at most `update_rate` old, or the error of the last poll until the next one, like the subscribers. Before the first poll answers, it waits for that answer. Without a subscription every await fetches.
+- **While polling, reading a state or subscribing another one sends no request.** It gets the result of the last poll, at most `update_rate` old, or the error of the last poll until the next one, like the subscribers. Before the first poll answers, it waits for that answer. Without a subscription every read fetches.
 - **`timeout`** is the time in ms a request may take, 5000 by default. Then it is aborted and gives a `safe.fetch.errors.TIMED_OUT`, which counts as a failed read like any other, so polling goes on after `retry_rate`. It holds also for a `fetch` that ignores `init.signal`, so a server that never answers can not stop the polling.
 - **`retry_rate`** is the wait in ms after a read that gave an error, used in place of `update_rate`, so a server that is down isn't asked at full speed. Any error counts, including a response that fails to parse. After the next successful read, polling is back at `update_rate`. It defaults to `update_rate`. Awaiting a state without subscribing still fetches at once, whatever the last read gave.
 

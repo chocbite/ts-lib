@@ -1097,7 +1097,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
     transform: (result: StateResult<unknown>) => StateResult<unknown>,
     to_payload: (value: unknown) => unknown,
   ) =>
-    state.proxy.reaw(root as StateREAW<unknown, any, unknown>, transform, {
+    (root as StateREAW<unknown, any, unknown>).proxy_w(transform, {
       write: (value: unknown, source) => source.write(to_payload(value)),
       check: (value, source) =>
         source.check(to_payload(value)).then((checked) => checked.map(() => value)),
@@ -1147,7 +1147,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
       if (is_write_only(part_schema)) return;
       set_fetch_state(
         container,
-        state.proxy.rea(root as any, (result) => at_path(result, path, optional_at)),
+        root.proxy((result) => at_path(result, path, optional_at)),
       );
     };
 
@@ -1169,7 +1169,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
       const transform = (result: StateResult<unknown>) =>
         at_path(result, path, optional);
       if (!part_schema.endsWith("w"))
-        return state.proxy.rea(root as any, transform);
+        return root.proxy(transform);
       return writable(transform, (value) =>
         payload_for(path, value, encoder, all_path),
       );
@@ -1316,8 +1316,8 @@ export function make_fetch_parser<const S extends FetchSchema>(
             const [applied] = state.a.write_apply(values, [...(base.value as unknown[])]);
             return payload_for(path, applied, undefined, item_all_path);
           })
-        : state.proxy.rea(root as any, transform);
-      return new Proxy(array_state as object, {
+        : root.proxy(transform);
+      return new Proxy(array_state, {
         get(target, property) {
           if (typeof property !== "string" || !/^\d+$/.test(property)) {
             const member: unknown = Reflect.get(target, property, target);
@@ -1389,7 +1389,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
       return object;
     }
 
-    return state.proxy.rea(root as any, (result) =>
+    return root.proxy((result) =>
       at_path(result, path, optional_at),
     );
   };

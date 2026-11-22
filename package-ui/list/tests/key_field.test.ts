@@ -154,7 +154,7 @@ describe("List key field", () => {
       { icon: state.rosw(ok(svg), true), text: state.resw(ok("a"), true) },
       { icon: state.roa(async () => ok(svg)), text: state.rea(async () => ok("a")) },
       { icon: state.reaw(async () => ok(svg), true), text: state.roaw(async () => ok("a"), true) },
-      { icon: state.p.ros(state.ok(1), () => ok(svg)).state },
+      { icon: state.ok(1).proxy_map(() => svg).state },
       { text: state.ros(state.s.help(ok("a"), {})) },
     ];
     expect(options).toHaveLength(8);

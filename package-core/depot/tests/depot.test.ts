@@ -94,7 +94,7 @@ describe("registration", () => {
 describe("content", () => {
   it("wraps a value that is not a state in a state", async () => {
     const entry = depot.type<number>("t", "", "").add("e", "", "", 5);
-    expect((await entry.value).unwrap()).toBe(5);
+    expect((await entry.value.read()).unwrap()).toBe(5);
   });
 
   it("keeps a given state", async () => {
@@ -102,7 +102,7 @@ describe("content", () => {
     const entry = depot.type<number>("t", "", "").add("e", "", "", value);
     expect(entry.value).toBe(value);
     value.set_err(new NiceError(Symbol("Test error"), "gone"));
-    expect((await entry.value).err).toBe(true);
+    expect((await entry.value.read()).err).toBe(true);
   });
 
   it("types the content by the type", () => {

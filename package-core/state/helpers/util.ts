@@ -46,8 +46,8 @@ async function compare(
   state1: State<any>,
   state2: State<any>,
 ): Promise<boolean> {
-  const res1 = await state1;
-  const res2 = await state2;
+  const res1 = await state1.read();
+  const res2 = await state2.read();
   if (res1.err || res2.err) return false;
   return res1.value === res2.value;
 }

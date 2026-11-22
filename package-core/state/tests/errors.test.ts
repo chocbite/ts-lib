@@ -24,7 +24,7 @@ describe("state.errors", () => {
       { timeout: 30 },
     );
 
-    const error = error_of(await state);
+    const error = error_of(await state.read());
 
     expect(error.kind).toBe(st.errors.TIMED_OUT);
     expect(error.message).toBe("No response within 30ms");
@@ -55,7 +55,7 @@ describe("state.errors", () => {
       throw thrown;
     });
 
-    const read = await Promise.race([state.then((value) => value), sleep(100, "pending" as const)]);
+    const read = await Promise.race([state.read().then((value) => value), sleep(100, "pending" as const)]);
     if (read === "pending") throw new Error("The read did not settle");
 
     expect(error_of(read).kind).toBe(st.errors.INIT_FAILED);

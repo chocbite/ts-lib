@@ -47,8 +47,8 @@ counter.write(ok(2));
 console.log(counter.ok()); // 2
 console.log(counter.get()); // ResultOk<2>
 
-// Read the current value asynchronously
-console.log(await counter); // ResultOk<2>
+// Read the current value asynchronously, works on every kind of state
+console.log(await counter.read()); // ResultOk<2>
 ```
 
 ## State Methods
@@ -59,50 +59,53 @@ Every state has a common set of methods. The specific state type determines whic
 
 Available on every state type:
 
-| Method                           | Description                                                                                                                   |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `await state` / `state.then(fn)` | Get the current value. Returns `ResultOk<T>` on ok-only types, `ResultNice<T>` on error-capable types, see [Errors](#errors). |
-| `sub(fn, immediate?)`            | Subscribe to value changes. Pass `true` to also call `fn` immediately with the current value.                                 |
-| `unsub(fn)`                      | Remove a subscription.                                                                                                        |
-| `related()`                      | Returns helper metadata (e.g., number min/max, string max_length).                                                            |
-| `in_use()`                       | Returns the state if it has any subscribers, `undefined` otherwise.                                                           |
-| `has(fn)`                        | Returns the state if `fn` is a current subscriber.                                                                            |
-| `amount()`                       | Returns the subscriber count.                                                                                                 |
-| `proxy(fn)`                      | A read only proxy, `fn` gets the result and gives a result. The proxy can fail, and is sync when the state is, see [Proxy States](#proxy-states). |
-| `proxy_map(fn)`                  | A read only proxy, `fn` gets the plain value and an error is passed on as it is. The proxy is of the same kind as the state.  |
+| Method                   | Description                                                                                                                                                                                         |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read()`                 | The current value as a thenable, `await state.read()`. Gives `ResultOk<T>` on ok-only types, `ResultNice<T>` on error-capable types, see [Errors](#errors) and [Reading a state](#reading-a-state). |
+| `sub(fn, immediate?)`    | Subscribe to value changes. Pass `true` to also call `fn` immediately with the current value.                                                                                                       |
+| `unsub(fn)`              | Remove a subscription.                                                                                                                                                                              |
+| `related()`              | Returns helper metadata (e.g., number min/max, string max_length).                                                                                                                                  |
+| `in_use()`               | Returns the state if it has any subscribers, `undefined` otherwise.                                                                                                                                 |
+| `has(fn)`                | Returns the state if `fn` is a current subscriber.                                                                                                                                                  |
+| `amount()`               | Returns the subscriber count.                                                                                                                                                                       |
+| `proxy(fn)`              | A read only proxy, `fn` gets the result and gives a result. The proxy can fail, and is sync when the state is, see [Proxy States](#proxy-states).                                                   |
+| `proxy_map(fn)`          | A read only proxy, `fn` gets the plain value and an error is passed on as it is. The proxy is of the same kind as the state.                                                                        |
+| `proxy_ok(fn)`           | A read only ok proxy, `fn` gets the result and gives an ok result. The proxy is sync when the state is.                                                                                             |
+| `nested(select, error?)` | The state in the value of the state, `select` picks it, see [Nested States](#nested-states).                                                                                                        |
 
 ### Narrowed Methods
 
 These methods are only guaranteed on certain state types. TypeScript will error if you call them on the wrong type:
 
-| Method         | Available when               | Description                                        |
-| -------------- | ---------------------------- | -------------------------------------------------- |
-| `get()`        | Sync (`rsync: true`)         | Synchronously read the current `Result` value.     |
-| `ok()`         | Sync + OK-only (`rok: true`) | Synchronously read the unwrapped value directly.   |
-| `write(value)` | Writable (`writable: true`)  | Request a value change, rejected if `check` fails. |
-| `limit(value)` | Writable                     | Clamp a value to the valid range via the helper.   |
-| `check(value)` | Writable                     | Validate a value without applying it.              |
-| `proxy_w(fn, write?)`, `proxy_w_map(fn, write?)` | Writable | Writable versions of `proxy` and `proxy_map`, see [Proxy States](#proxy-states). |
+| Method                                           | Available when               | Description                                                                      |
+| ------------------------------------------------ | ---------------------------- | -------------------------------------------------------------------------------- |
+| `get()`                                          | Sync (`rsync: true`)         | Synchronously read the current `Result` value.                                   |
+| `ok()`                                           | Sync + OK-only (`rok: true`) | Synchronously read the unwrapped value directly.                                 |
+| `write(value)`                                   | Writable (`writable: true`)  | Request a value change, rejected if `check` fails.                               |
+| `limit(value)`                                   | Writable                     | Clamp a value to the valid range via the helper.                                 |
+| `check(value)`                                   | Writable                     | Validate a value without applying it.                                            |
+| `proxy_w(fn, write?)`, `proxy_w_map(fn, write?)` | Writable                     | Writable versions of `proxy` and `proxy_map`, see [Proxy States](#proxy-states). |
+| `proxy_ok_w(fn, write?)`                         | Writable                     | Writable version of `proxy_ok`.                                                  |
 
 ### Per-Type Narrowing
 
 Each of the eight state types narrows the available methods and result types:
 
-| Type        | `get()`       | `ok()` | `write()/ limit()/ check()` | `then` / `await` result |
-| ----------- | ------------- | ------ | --------------------------- | ----------------------- |
-| `StateROS`  | `ResultOk<T>` | `T`    | —                           | `ResultOk<T>`           |
-| `StateROSW` | `ResultOk<T>` | `T`    | ✓                           | `ResultOk<T>`           |
-| `StateRES`  | `Result<T>`   | —      | —                           | `Result<T>`             |
-| `StateRESW` | `Result<T>`   | —      | ✓                           | `Result<T>`             |
-| `StateROA`  | —             | —      | —                           | `ResultOk<T>`           |
-| `StateROAW` | —             | —      | ✓                           | `ResultOk<T>`           |
-| `StateREA`  | —             | —      | —                           | `Result<T>`             |
-| `StateREAW` | —             | —      | ✓                           | `Result<T>`             |
+| Type        | `get()`       | `ok()` | `write()/ limit()/ check()` | `read()` result |
+| ----------- | ------------- | ------ | --------------------------- | --------------- |
+| `StateROS`  | `ResultOk<T>` | `T`    | —                           | `ResultOk<T>`   |
+| `StateROSW` | `ResultOk<T>` | `T`    | ✓                           | `ResultOk<T>`   |
+| `StateRES`  | `Result<T>`   | —      | —                           | `Result<T>`     |
+| `StateRESW` | `Result<T>`   | —      | ✓                           | `Result<T>`     |
+| `StateROA`  | —             | —      | —                           | `ResultOk<T>`   |
+| `StateROAW` | —             | —      | ✓                           | `ResultOk<T>`   |
+| `StateREA`  | —             | —      | —                           | `Result<T>`     |
+| `StateREAW` | —             | —      | ✓                           | `Result<T>`     |
 
 The three boolean properties `rsync`, `rok`, and `writable` act as runtime discriminants matching the same axes:
 
 - **Sync** (`rsync: true`) — enables `get()`, and `ok()` when also ok-only
-- **OK-only** (`rok: true`) — narrows `then` result to `ResultOk<T>` (value is never an error)
+- **OK-only** (`rok: true`) — narrows the `read()` result to `ResultOk<T>` (value is never an error)
 - **Writable** (`writable: true`) — enables `write()`, `limit()`, and `check()`
 
 The types form a subtype hierarchy — more specific types are assignable to less specific ones. For example, a `StateROSW<number>` (sync + ok + writable) can be passed anywhere a `StateROS<number>`, `StateROA<number>`, or `State<number>` is expected.
@@ -115,8 +118,8 @@ function show_sync(s: StateROS<number>) {
 }
 
 async function show_async(s: StateROA<number>) {
-  // Async + OK → no get()/ok(), must await
-  const result = await s; // ResultOk<number>
+  // Async + OK → no get()/ok(), must read
+  const result = await s.read(); // ResultOk<number>
   console.log(result.value); // always ok, no error check needed
 }
 
@@ -216,7 +219,7 @@ const state = counter.state; // Returns as State<number>
 const state_type: State<number> = counter.state;
 ```
 
-`set` and `set_ok` bypass the setter/validation pipeline — they directly replace the state value and notify subscribers. In contrast, `.write()` is the public API that goes through the setter function, the default setter rejects values the helper's `check` fails. `write` never clamps, call `limit` first when clamping is wanted, like a slider does.
+`set` and `set_ok` bypass the setter/validation pipeline — they directly replace the state value and notify subscribers. Setting the number, string, boolean or `null` the state already has tells no one, an object or array always tells, as it can have been changed in place, and so does an error. In contrast, `.write()` is the public API that goes through the setter function, the default setter rejects values the helper's `check` fails. `write` never clamps, call `limit` first when clamping is wanted, like a slider does.
 
 You can also provide a custom setter to control how writes are applied:
 
@@ -269,26 +272,33 @@ counter.unsub(unsub);
 // Subscribe with immediate invocation
 counter.sub(callback, true);
 
-// Promise-style using then executes immediately
-counter.then((result) => {
+// Reading, the then of a sync state calls the function at once
+counter.read().then((result) => {
   console.log(result.value);
 });
-// Promise-style using await syntax executes in microloop
-console.log((await counter).value);
+// await always waits for a microtask
+console.log((await counter.read()).value);
 ```
+
+## Reading a state
+
+`read()` gives the current value of any state as a thenable, the one way to read that works on every kind. A sync state has its value at once, so the `then` of the thenable calls its function without waiting for a microtask, an async state resolves once it has a value, a remote state fetches it when needed. `get()` and `ok()` read sync states without a thenable.
+
+The state itself is not a thenable, so a promise can resolve to it: an async function can return a state, and `await` of a state gives the state, not its value. Always read with `read()`.
 
 ## Deriving a state
 
-A state made from other states is a proxy or a collected state:
+A state made from other states is a proxy, a collected state or a nested state:
 
-- **From one state, use a proxy**, `state.p`. It changes the value of that state, and can pass writes back to it, see [Proxy States](#proxy-states).
+- **From one state, use a proxy**, `state.proxy_map(...)` and the other proxy methods. It changes the value of that state, and can pass writes back to it, see [Proxy States](#proxy-states).
 - **From several states, use a collected state**, `state.c`. It combines their values into one, see [Collected States](#collected-states).
+- **From a state in the value of a state, use `nested`**, like the name of the selected person, see [Nested States](#nested-states).
 
-Both follow their states only while they have subscribers themselves, so a derived state nobody uses costs nothing. The states of `make_fetch_parser` of `@chocbite/ts-lib/parse` are async states that can fail, so values combined from several members are `state.c.rea_map`, one member changed is `member.proxy_map(...)`.
+They follow their states only while they have subscribers themselves, so a derived state nobody uses costs nothing. Without subscribers they run their transform on every read, subscribe or keep the value when reading one often. The states of `make_fetch_parser` of `@chocbite/ts-lib/parse` are async states that can fail, so values combined from several members are `state.c.rea_map`, one member changed is `member.proxy_map(...)`.
 
 ## Collected States
 
-Combines the values of several states into one. The transform gets the result of every state, in the order the states are given, and returns the result of the collected state. It runs as a microtask, so states changed in the same cycle call it once.
+Combines the values of several states into one. The transform gets the result of every state, in the order the states are given, and returns the result of the collected state. Its subscribers are told in a microtask, so states changed in the same cycle tell them once. Reads in between are current: `get()` and `read()` run the transform when a state changed since, and so do proxies and collected states made from it, also when read in a subscriber of one of the states.
 
 ```typescript
 const first_name = state.ok("Alice");
@@ -336,7 +346,10 @@ To report every error instead of the first, `result.all_nice(values, kind)` of `
 
 ```typescript
 const settings = state.c.rea(
-  (values) => result.all_nice(values, SETTINGS_INVALID).map(([speed, mode]) => ({ speed, mode })),
+  (values) =>
+    result
+      .all_nice(values, SETTINGS_INVALID)
+      .map(([speed, mode]) => ({ speed, mode })),
   device.speed,
   device.mode,
 );
@@ -353,10 +366,12 @@ All three go through the write gate, `set_write_enabled(gate)` sets it, see [Wri
 
 ```typescript
 const span = state.c.resw(
-  (values) => result.all_nice(values, RANGE_INVALID).map(([min, max]) => max - min),
+  (values) =>
+    result.all_nice(values, RANGE_INVALID).map(([min, max]) => max - min),
   {
     write: (value: number, [min, max]) => max.write(min.ok() + value),
-    check: async (value) => (value >= 0 ? ok(value) : err_nice(RANGE_INVALID, "Span below 0")),
+    check: async (value) =>
+      value >= 0 ? ok(value) : err_nice(RANGE_INVALID, "Span below 0"),
   },
   min,
   max,
@@ -371,57 +386,75 @@ Changes the value of one state, for several states use a [collected state](#coll
 
 ```typescript
 // The function gets the plain value, an error of the state is passed on as it is
-const fahrenheit = device.temperature.proxy_map((celsius) => celsius * 1.8 + 32);
+const fahrenheit = device.temperature.proxy_map(
+  (celsius) => celsius * 1.8 + 32,
+);
 
 // The function gets the result and gives a result, to handle or make errors
 const checked = device.temperature.proxy((result) =>
-  result.ok && result.value > 90 ? err_nice(TOO_HOT, `${result.value} °C is too hot`) : result,
+  result.ok && result.value > 90
+    ? err_nice(TOO_HOT, `${result.value} °C is too hot`)
+    : result,
 );
 ```
 
 - **`proxy_map(fn)`** gives a proxy of the same kind as the state: an ok state stays ok, a sync state stays sync.
 - **`proxy(fn)`** gives a proxy that can fail, as `fn` can return an error. It is sync when the state is sync.
-- **Both are read only.** Writable states also have **`proxy_w(fn, write?)`** and **`proxy_w_map(fn, write?)`**, the same with writes going to the state. Without `write` they keep the write type of the state, writes, `check` and `limit` go to it as they are. With a `StateProxyWrite`, see below, the proxy can have a write type of its own, and needs it for that:
+- **`proxy_ok(fn)`** gives an ok proxy, `fn` gets the result and gives an ok result, so it handles the error of a state that can fail. It is sync when the state is sync.
+
+```typescript
+// Shows 0 while the device is offline
+const speed = device.speed.proxy_ok((result) => (result.ok ? result : ok(0)));
+```
+
+- **They are read only.** Writable states also have **`proxy_w(fn, write?)`**, **`proxy_w_map(fn, write?)`** and **`proxy_ok_w(fn, write?)`**, the same with writes going to the state. Without `write` they keep the write type of the state, writes, `check` and `limit` go to it as they are. With a `StateProxyWrite` the proxy can have a write type of its own, and needs it for that, the types refuse a proxy with another write type without it:
 
 ```typescript
 const speed_text = device.speed.proxy_w_map((speed) => `${speed}`, {
   write: (text: string, source) => source.write(Number(text)),
+  check: async (text) =>
+    isNaN(Number(text))
+      ? err_nice(NOT_A_NUMBER, `${text} is not a number`)
+      : ok(text),
 });
 ```
 
-**The factories, `state.p`,** do the same, with the kind chosen by you. `rea_map`, `res_map`, `reaw_map` and `resw_map` take a function of the plain value like `proxy_map`, and the writable ones take an optional `StateProxyWrite`, see below:
+A `StateProxyWrite` has `write(value, source)`, which sends the value on, usually by writing it, changed, to the source. `check(value, source)` and `limit(value, source)` are optional, and give the value as it is when left out. All three go through the write gate of the source. It is the same form as the write of [collected states](#writable-collected-states), with the source in place of the collected states.
+
+**A proxy can be changed after it is made:**
+
+- `set_state(other)` makes it follow another state of the same kind, like a value shown for another device.
+- `set_transform_read(fn)` gives it another transform, a function of the result like the one of `proxy`, also for a proxy made with `proxy_map`.
+- `set_write(write)` gives it another `StateProxyWrite`, `undefined` writes to the source as it is again.
+
+Its subscribers are told the new value. A proxy given on as a plain state type, like `StateREA<number>`, has no access to these.
 
 ```typescript
-const speed_text = state.p.reaw_map(device.speed, (speed) => `${speed}`, {
-  write: (text: string, source) => source.write(Number(text)),
-});
+const shown = devices[0].temperature.proxy_map((celsius) => `${celsius} °C`);
+shown.set_state(devices[1].temperature);
 ```
 
-The read transform gets the result of the state, so with `res` and `rea` an error is passed on by returning it, `(val) => val.err ? val : ok(val.value * 2)`, or with `val.map((v) => v * 2)`, which passes an error on by itself. Without a transform the proxy gives the value of the state as it is. With write transforms it can also pass writes back to the state:
+## Nested States
+
+`nested(select)` gives the state in the value of a state, `select` picks it from the value. It follows the inner state, and moves to the new inner state when the outer state changes:
 
 ```typescript
-const source = state.ok_w(5);
+const selected = state.ok_w({ name: state.ok_w("Ada") });
+const name = selected.nested((person) => person.name);
+name.ok(); // "Ada"
+selected.set_ok({ name: state.ok_w("Bob") }); // name tells "Bob", and no longer follows the name of Ada
 
-// Read-only proxy that doubles the value
-const doubled = state.p.ros(source, (val) => ok(val.value * 2));
-// doubled.ok() === 10
+const inner = outer.nested((s) => s); // for a State<State<string>>
 
-// Writable proxy, writes, check and limit go to the source as they are
-const shown = state.p.rosw(source, (val) => ok(val.value * 2));
-
-// Writable proxy with a write of its own, here showing the value as text
-const text = state.p.rosw(source, (val) => ok(String(val.value)), {
-  write: (value: string, source) => source.write(Number(value)),
-  check: async (value) => (isNaN(Number(value)) ? err_nice(NOT_A_NUMBER, `${value} is not a number`) : ok(value)),
-});
+const place = state.ok({ address: state.ok({ city: state.ok_w("Paris") }) });
+const city = place.nested((p) => p.address).nested((a) => a.city); // deeper, by chaining
 ```
 
-The writable proxies `rosw`, `roaw`, `resw` and `reaw` take an optional `StateProxyWrite` after the read transform:
-
-- **Without it** the proxy has the write type of its source, and writes, `check` and `limit` go to the source as they are.
-- **With it** the proxy can have a write type of its own, and needs it for that, the types refuse a proxy with another write type without it. `write(value, source)` sends the value on, usually by writing it, changed, to the source. `check(value, source)` and `limit(value, source)` are optional, and give the value as it is when left out. All three go through the write gate of the source.
-
-It is the same form as the write of [collected states](#writable-collected-states), with the source in place of the collected states. `set_write(write)` changes it later, `undefined` writes to the source as it is again.
+- **`select` can give a plain value**, it is given as it is, or a state or a plain value, like `(p) => p.nickname ?? "none"`.
+- **When `select` can give `undefined`** an error is needed, given while there is no inner state, the types refuse it without: `selected.nested((p) => p.nickname, new NiceError(NO_NICKNAME, "has no nickname"))`.
+- **An error** of the outer state or the inner state is passed on as it is.
+- **The kind follows from the states**: sync when the outer state and every inner state are, ok when they all are and no inner state can be missing, plain values count as sync and ok.
+- **Writes go to the current inner state** as they are, through its write gate. It is writable when every inner value is a writable state, use `read_only` to hand it out read only.
 
 ## Remote States
 
@@ -429,14 +462,14 @@ Remote states represent asynchronous resources that are fetched on demand or str
 
 Each remote generator (`state.r.*.from`) takes three callback functions and an optional timing configuration:
 
-- **`once`** — called when the state value is awaited (one-shot fetch). Call `owner.update_single(value)` to deliver the result.
+- **`once`** — called when the state value is read (one-shot fetch). Call `owner.update_single(value)` to deliver the result.
 - **`setup`** — called when the first subscriber arrives. Use this to open a connection or start polling. Call `owner.update_value(value)` to push new values.
 - **`teardown`** — called when the last subscriber leaves. Clean up connections here.
 
 ```typescript
 let ws;
 const user_data = state.r.roa.from<User>(
-  // once: one-shot fetch when awaited
+  // once: one-shot fetch when read
   async (owner) => {
     const data = await fetch("/api/user").then((r) => r.json());
     owner.update_single(ok(data));
@@ -458,7 +491,7 @@ Timing options control debounce, validity caching, and retention:
 ```typescript
 state.r.rea.from(once, setup, teardown, {
   timeout: 1000, // ms before waiting reads get an error if no response, ok states (roa/roaw) keep waiting and the next read retries
-  debounce: 50, // ms to batch multiple awaits into one fetch
+  debounce: 50, // ms to batch multiple reads into one fetch
   validity: 5000, // ms the buffered value stays fresh (or true = while connected, until teardown after retention)
   retention: 200, // ms to keep the connection after last unsubscribe
 });
@@ -571,6 +604,13 @@ temperature.related().unwrap().min; // state holding 0
 
 Options: `min`, `max`, `step`, `start`, `decimals`, `unit` — each is itself a `State`, so limits can be reactive. `check` rejects values outside `min`/`max` and values not on `step`/`start`/`decimals`, except `min` and `max` themselves.
 
+Collected states of number states, as `ros`, `roa`, `res` and `rea` like [`state.c`](#collected-states), the ones that can fail pass the first error on as it is:
+
+```typescript
+const total = state.n.c.sum.ros(pump_a.flow, pump_b.flow); // the sum of the states
+const load = state.n.c.percentage.res(capacity, used); // how many percent used is of capacity, a capacity of 0 counts as 1
+```
+
 ### String
 
 ```typescript
@@ -588,6 +628,16 @@ await name.check("this is ææ"); // error TEXT_TOO_LONG, "the text is longer th
 ```
 
 Options: `max_length`, `max_length_bytes`.
+
+`state.s.c.concat` joins string states, without a separator, as `ros`, `roa`, `res` and `rea`:
+
+```typescript
+const title = state.s.c.concat.ros(
+  device.name,
+  state.ok(" - "),
+  device.location,
+);
+```
 
 ### Enum
 
@@ -685,14 +735,14 @@ view.unsub();
 ## Utilities
 
 ```typescript
-// Await the first emitted value from any state
-const value = await state.u.await_value(myState);
+// Wait until a state has a value, true when it did within the timeout (ms, default 500), false when not
+const reached = await state.u.await_value(5, myState, 1000);
 
-// Compare any two state values for equality, returns a promise
-const equal = state.u.compare(stateA, stateB);
+// Compare the values of any two states with ===, false when either is in error
+const equal = await state.u.compare(stateA, stateB);
 
-// Compare two states sync state values
-const equal = state.u.compare_sync(stateA, stateB);
+// The same for two sync states, without a promise
+const equal_sync = state.u.compare_sync(stateA, stateB);
 ```
 
 ## License

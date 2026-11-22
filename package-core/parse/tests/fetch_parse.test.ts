@@ -2,6 +2,7 @@ import { sleep } from "#common";
 import { err, err_nice, NiceError, ok, type Option, type Result } from "#result";
 import safe, { fetch_status_safe, fetch_text_safe } from "#safe";
 import state, {
+  type State,
   type StateArrayReadTypes,
   type StateREA,
   type StateREAW,
@@ -76,7 +77,7 @@ describe("make_fetch_parser", () => {
     const console_error = vi.spyOn(console, "error").mockImplementation(() => {});
     const parsed = make_fetch_parser(() => "/user", 1_000, { name: "s" });
 
-    const result = await parsed.name;
+    const result = await parsed.name.read();
 
     expect(!result.ok && result.error.kind).toBe(safe.fetch.errors.CONNECTION_FAILED);
     expect(!result.ok && result.error.message).toBe("offline");
@@ -93,7 +94,7 @@ describe("make_fetch_parser", () => {
     );
     const parsed = make_fetch_parser(() => "/user", 1_000, { name: "s" });
 
-    const result = await parsed.name;
+    const result = await parsed.name.read();
 
     expect(!result.ok && result.error.kind).toBe(safe.fetch.errors.REJECTED);
     expect(!result.ok && result.error.message).toBe("HTTP 500");
@@ -111,7 +112,7 @@ describe("make_fetch_parser", () => {
       { name: "s" },
     );
 
-    const result = await parsed.name;
+    const result = await parsed.name.read();
 
     expect(!result.ok && result.error).toEqual(new NiceError(errors.UNEXPECTED, thrown));
     expect(console_error).toHaveBeenCalledWith(expect.anything(), thrown);
@@ -147,7 +148,7 @@ describe("make_fetch_parser", () => {
       { fetch: custom_fetch },
     );
 
-    const result = await user.name;
+    const result = await user.name.read();
 
     expect(result.ok && result.value).toBe("Ada");
     expect(global_fetch).not.toHaveBeenCalled();
@@ -183,7 +184,7 @@ describe("make_fetch_parser", () => {
       fetch: async () => err_nice(TEST_ERROR, "Timed out"),
     });
 
-    const result = await user.name;
+    const result = await user.name.read();
 
     expect(!result.ok && result.error).toEqual(new NiceError(TEST_ERROR, "Timed out"));
     expect(console_error).not.toHaveBeenCalled();
@@ -197,7 +198,7 @@ describe("make_fetch_parser", () => {
       fetch: () => Promise.reject(thrown),
     });
 
-    const result = await user.name;
+    const result = await user.name.read();
 
     expect(!result.ok && result.error).toEqual(new NiceError(errors.UNEXPECTED, thrown));
     expect(console_error).toHaveBeenCalledWith(expect.anything(), thrown);
@@ -216,7 +217,7 @@ describe("make_fetch_parser", () => {
         fetch: async () => ok(value() as unknown as string),
       });
 
-      const result = await user.name;
+      const result = await user.name.read();
 
       expect(!result.ok && result.error.kind).toBe(errors.UNEXPECTED);
       expect(console_error.mock.calls[0]?.[0]).toContain(message);
@@ -230,7 +231,7 @@ describe("make_fetch_parser", () => {
       fetch: async () => '{"name":"Ada"}' as unknown as Result<string, NiceError>,
     });
 
-    const result = await user.name;
+    const result = await user.name.read();
 
     expect(!result.ok && result.error.kind).toBe(errors.UNEXPECTED);
     expect(console_error.mock.calls[0]?.[0]).toContain("must return a Result");
@@ -293,8 +294,8 @@ describe("make_fetch_parser", () => {
       obj: { test: "?b" },
     });
 
-    expect(parsed.test.then.bind(parsed.test)).toBeTypeOf("function");
-    expect(parsed.obj.test.then.bind(parsed.obj.test)).toBeTypeOf("function");
+    expect(parsed.test.read.bind(parsed.test)).toBeTypeOf("function");
+    expect(parsed.obj.test.read.bind(parsed.obj.test)).toBeTypeOf("function");
   });
 
   it("sends nested writable values as a partial object", async () => {
@@ -360,7 +361,7 @@ describe("make_fetch_parser", () => {
       .fn()
       .mockResolvedValue(new Response('{"fixed":[1,2],"dynamic":[3]}'));
     vi.stubGlobal("fetch", fetch_mock);
-    const dynamic_value = await parsed.dynamic;
+    const dynamic_value = await parsed.dynamic.read();
 
     expect(fixed_item).toBeDefined();
     expect(dynamic).toBeDefined();
@@ -391,8 +392,8 @@ describe("make_fetch_parser", () => {
         ),
     );
 
-    expect(await fixed).toMatchObject({ ok: true, value: [1, 2] });
-    expect(await parsed.nested.pairs[FETCH_PARSE]).toMatchObject({
+    expect(await fixed.read()).toMatchObject({ ok: true, value: [1, 2] });
+    expect(await parsed.nested.pairs[FETCH_PARSE].read()).toMatchObject({
       ok: true,
       value: [{ a: "x" }, { a: "y" }],
     });
@@ -441,13 +442,13 @@ describe("make_fetch_parser", () => {
     const name: StateREA<string> = parsed.users.a!.name;
 
     expect(parsed.scores.alice).toBe(alice);
-    const record_value = await record;
+    const record_value = await record.read();
     expect(record_value.ok && record_value.value).toEqual({ alice: 1, bob: 2 });
-    const alice_value = await alice;
+    const alice_value = await alice.read();
     expect(alice_value.ok && alice_value.value).toBe(1);
-    const name_value = await name;
+    const name_value = await name.read();
     expect(name_value.ok && name_value.value).toBe("A");
-    const missing = await parsed.scores.carol!;
+    const missing = await parsed.scores.carol!.read();
     expect(missing.ok).toBe(false);
     vi.unstubAllGlobals();
   });
@@ -461,7 +462,7 @@ describe("make_fetch_parser", () => {
     const flag: StateREA<boolean> = parsed.a!;
 
     expect(root).toBeDefined();
-    const flag_value = await flag;
+    const flag_value = await flag.read();
     expect(flag_value.ok && flag_value.value).toBe(true);
     vi.unstubAllGlobals();
   });
@@ -557,7 +558,8 @@ describe("make_fetch_parser array write options", () => {
       { pumps: [0, { id: "n", name: "sw", speed: "nw" }, options] },
       { write: send },
     );
-    await parsed.pumps;
+    //The type of pumps depends on O, which is not known in here, so its members are not either
+    await (parsed.pumps as State<unknown>).read();
     return { parsed, send };
   };
 
@@ -594,7 +596,7 @@ describe("make_fetch_parser array write options", () => {
         ],
       });
       //The received value is copied, not changed
-      const received = await parsed.pumps[1]!.speed;
+      const received = await parsed.pumps[1]!.speed.read();
       expect(received.ok && received.value).toBe(20);
     } finally {
       vi.unstubAllGlobals();
@@ -661,7 +663,7 @@ describe("make_fetch_parser array write options", () => {
         pumps: [PUMPS.pumps[1], PUMPS.pumps[0]],
       });
       //The received value is never changed by an instruction
-      const received = await parsed.pumps[0]!.name;
+      const received = await parsed.pumps[0]!.name.read();
       expect(received.ok && received.value).toBe("A");
     } finally {
       vi.unstubAllGlobals();
@@ -685,7 +687,7 @@ describe("make_fetch_parser array write options", () => {
         { plant: { lines: [0, { valves: [0, "bw"] }, { write: "all" }] } },
         { write: send },
       );
-      await parsed.plant.lines;
+      await parsed.plant.lines.read();
       await parsed.plant.lines[0]!.valves[1]!.write(true);
       expect(send).toHaveBeenCalledWith({
         plant: { lines: [{ valves: [true, true] }] },
@@ -767,7 +769,7 @@ describe("make_fetch_parser keyed arrays", () => {
     };
   };
   const name_of = async (item: { name: StateREA<string> }) => {
-    const name = await item.name;
+    const name = await item.name.read();
     return name.ok ? name.value : "error: " + name.error.message;
   };
 
@@ -914,8 +916,8 @@ describe("make_fetch_parser optional members", () => {
     const send = vi.fn().mockResolvedValue(ok(undefined));
     return { parsed: make_fetch_parser(() => "/x", 60_000, schema, { write: send }), send };
   };
-  const value_of = async (s: PromiseLike<StateResult<unknown>>) => {
-    const r = await s;
+  const value_of = async (s: { read(): PromiseLike<StateResult<unknown>> }) => {
+    const r = await s.read();
     return r.ok ? r.value : "error: " + r.error.message;
   };
 
@@ -1065,7 +1067,8 @@ describe("make_fetch_parser array_start", () => {
       { pumps: [0, { id: "n", name: "sw" }, { key: "id" }] },
       { pumps: [{ id: 7, name: "a" }, { id: 9, name: "b" }] },
     );
-    await parsed.pumps;
+    //The type of pumps depends on O, which is not known in here, so its members are not either
+    await (parsed.pumps as State<unknown>).read();
 
     await parsed.pumps[1]!.name.write("B");
 
@@ -1097,7 +1100,7 @@ describe("make_fetch_parser array_start", () => {
       { groups: [2, { items: [0, "sw", { write: "all" }] }] },
       { groups: [{ items: ["a"] }, { items: ["b", "c"] }] },
     );
-    await parsed[FETCH_PARSE];
+    await parsed[FETCH_PARSE].read();
 
     await parsed.groups[1].items[0]!.write("B");
 
@@ -1118,9 +1121,9 @@ describe("make_fetch_parser tuples", () => {
   it("gives a state per position and the whole tuple under FETCH_PARSE", async () => {
     const { parsed } = parser_from({ point: ["n", "s"] }, { point: [1, "a"] });
 
-    expect((await parsed.point[0]).unwrap()).toBe(1);
-    expect((await parsed.point[1]).unwrap()).toBe("a");
-    expect((await parsed.point[FETCH_PARSE]).unwrap()).toEqual([1, "a"]);
+    expect((await parsed.point[0].read()).unwrap()).toBe(1);
+    expect((await parsed.point[1].read()).unwrap()).toBe("a");
+    expect((await parsed.point[FETCH_PARSE].read()).unwrap()).toEqual([1, "a"]);
   });
 
   it("types the positions as states of their values", () => {
@@ -1228,7 +1231,7 @@ describe("make_fetch_parser write_debounce", () => {
       { list: ["a", "b", "c"] },
     );
     //Received with real timers, the batch is what this is about
-    await parsed[FETCH_PARSE];
+    await parsed[FETCH_PARSE].read();
     await with_timers(async () => {
 
       const writes = [
@@ -1270,7 +1273,7 @@ describe("make_fetch_parser NiceErrors", () => {
   it("gives a body that fails to parse as invalid data, with the parser message", async () => {
     const parsed = parser_with({ name: "s" }, "not json");
 
-    const result = await parsed.name;
+    const result = await parsed.name.read();
 
     expect(!result.ok && result.error.kind).toBe(errors.INVALID_DATA);
     expect(!result.ok && result.error.message).toBe("Failed to parse valid json");
@@ -1280,7 +1283,7 @@ describe("make_fetch_parser NiceErrors", () => {
   it("gives a missing record member as member missing", async () => {
     const parsed = parser_with(["{}", "n"], '{"a":1}');
 
-    const result = await parsed["b"]!;
+    const result = await parsed["b"]!.read();
 
     expect(!result.ok && result.error.kind).toBe(errors.MEMBER_MISSING);
     if (!result.ok) expect_created_here(result.error);
@@ -1316,7 +1319,7 @@ describe("make_fetch_parser NiceErrors", () => {
       fetch: async () => err("offline") as unknown as Result<string, NiceError>,
     });
 
-    const result = await parsed.name;
+    const result = await parsed.name.read();
 
     expect(!result.ok && result.error.kind).toBe(errors.UNEXPECTED);
     if (!result.ok) expect_created_here(result.error);
@@ -1328,7 +1331,7 @@ describe("make_fetch_parser NiceErrors", () => {
       fetch: async () => ok(['{"name":"Ada"}', new Response(null, { status: 200 })] as const),
     });
 
-    expect((await parsed.name).unwrap()).toBe("Ada");
+    expect((await parsed.name.read()).unwrap()).toBe("Ada");
   });
 
   it("takes fetch_text_safe as fetch without mapping", () => {
@@ -1376,8 +1379,8 @@ describe("make_fetch_parser reads while polling", () => {
       //Time passes after the poll, the clock of fake timers only moves when told to
       await vi.advanceTimersByTimeAsync(1);
 
-      expect(await user.age).toMatchObject({ ok: true, value: 36 });
-      expect(await user[FETCH_PARSE]).toMatchObject({ ok: true, value: { name: "Ada", age: 36 } });
+      expect(await user.age.read()).toMatchObject({ ok: true, value: 36 });
+      expect(await user[FETCH_PARSE].read()).toMatchObject({ ok: true, value: { name: "Ada", age: 36 } });
       expect(fetch).toHaveBeenCalledTimes(1);
       user.name.unsub(update);
     } finally {
@@ -1420,7 +1423,7 @@ describe("make_fetch_parser reads while polling", () => {
       answer(err_nice(TEST_ERROR, "offline"));
       await vi.advanceTimersByTimeAsync(1);
 
-      const age = await user.age;
+      const age = await user.age.read();
       expect(!age.ok && age.error.kind).toBe(TEST_ERROR);
       expect(fetch).toHaveBeenCalledTimes(1);
       user.name.unsub(update);
@@ -1436,7 +1439,7 @@ describe("make_fetch_parser reads while polling", () => {
       const user = user_of(fetch);
       const update = () => {};
       user.name.sub(update);
-      const age = user.age.then((result) => result);
+      const age = user.age.read().then((result) => result);
       await vi.advanceTimersByTimeAsync(0);
       expect(fetch).toHaveBeenCalledTimes(1);
 
@@ -1457,7 +1460,7 @@ describe("make_fetch_parser reads while polling", () => {
       const user = user_of(fetch);
       const update = () => {};
       user.name.sub(update);
-      const age = user.age.then((result) => result);
+      const age = user.age.read().then((result) => result);
       await vi.advanceTimersByTimeAsync(0);
 
       user.name.unsub(update);
@@ -1475,8 +1478,8 @@ describe("make_fetch_parser reads while polling", () => {
     const fetch = vi.fn<FetchFunction>(() => Promise.resolve(ADA));
     const user = user_of(fetch);
 
-    await user.age;
-    await user.age;
+    await user.age.read();
+    await user.age.read();
     expect(fetch).toHaveBeenCalledTimes(2);
 
     const update = () => {};
@@ -1484,7 +1487,7 @@ describe("make_fetch_parser reads while polling", () => {
     await sleep(0);
     user.name.unsub(update);
     expect(fetch).toHaveBeenCalledTimes(3);
-    await user.age;
+    await user.age.read();
     expect(fetch).toHaveBeenCalledTimes(4);
   });
 });
@@ -1508,7 +1511,7 @@ describe("make_fetch_parser timeout", () => {
       await vi.advanceTimersByTimeAsync(1);
       expect(names.length).toBe(1);
       expect(is_timed_out(names[0]!)).toBe(true);
-      expect(is_timed_out(await user.name)).toBe(true);
+      expect(is_timed_out(await user.name.read())).toBe(true);
 
       expect(fetch).toHaveBeenCalledTimes(1);
       await vi.advanceTimersByTimeAsync(1000);
@@ -1528,7 +1531,7 @@ describe("make_fetch_parser timeout", () => {
         return new Promise(() => {});
       });
       const user = make_fetch_parser(() => "/user", 100, { name: "s" }, { fetch, timeout: 300 });
-      const age = user.name.then((result) => result);
+      const age = user.name.read().then((result) => result);
 
       await vi.advanceTimersByTimeAsync(300);
 
@@ -1544,7 +1547,7 @@ describe("make_fetch_parser timeout", () => {
     fake_timers();
     try {
       const user = make_fetch_parser(() => "/user", 100, { name: "s" }, { fetch: hanging(), timeout: 2000 });
-      const name = user.name.then((result) => result);
+      const name = user.name.read().then((result) => result);
 
       await vi.advanceTimersByTimeAsync(2000);
 
@@ -1594,9 +1597,9 @@ describe("make_fetch_parser write only members", () => {
 
   it("parses a response without the member, and ignores it when the server sends it anyway", async () => {
     const without = parser_from({ id: "n", command: "nwo" }, { id: 1 });
-    expect(await without.parsed[FETCH_PARSE]).toEqual(ok({ id: 1 }));
+    expect(await without.parsed[FETCH_PARSE].read()).toEqual(ok({ id: 1 }));
     const with_it = parser_from({ id: "n", command: "nwo" }, { id: 1, command: "not a number" });
-    expect((await with_it.parsed.id).ok).toBe(true);
+    expect((await with_it.parsed.id.read()).ok).toBe(true);
   });
 
   it("sends a partial object like a writable member, without reading", async () => {
@@ -1692,7 +1695,8 @@ describe("make_fetch_parser write only members", () => {
         fetch: async () => ok(JSON.stringify({ pumps: [{ id: 7 }, { id: 9 }] })),
       },
     );
-    await parsed.pumps;
+    //The type of pumps depends on O, which is not known in here, so its members are not either
+    await (parsed.pumps as State<unknown>).read();
     expect((await parsed.pumps[1]!.start.write(true)).ok).toBe(true);
     expect(send).toHaveBeenCalledWith({ pumps: { 2: { start: true } } });
   });
@@ -1760,7 +1764,7 @@ describe("make_fetch_parser write only containers", () => {
 
   it("makes a parser of a fixed array of write only items, the server does not send it", async () => {
     const { parsed, send } = parser_from(SCHEMA, { access: ACCESS });
-    expect(await parsed[FETCH_PARSE]).toEqual(ok({ access: ACCESS }));
+    expect(await parsed[FETCH_PARSE].read()).toEqual(ok({ access: ACCESS }));
     expect((await parsed.passcode[2][FETCH_PARSE].write("1234")).ok).toBe(true);
     expect(send).toHaveBeenCalledWith({ passcode: { 2: "1234" } });
     expect((await parsed.access[1][0][FETCH_PARSE].write(true)).ok).toBe(true);
@@ -1798,7 +1802,7 @@ describe("make_fetch_parser write only containers", () => {
       },
       { id: 1 },
     );
-    expect(await parsed[FETCH_PARSE]).toEqual(ok({ id: 1 }));
+    expect(await parsed[FETCH_PARSE].read()).toEqual(ok({ id: 1 }));
     expectTypeOf<StateRV<(typeof parsed)[typeof FETCH_PARSE]>>().toEqualTypeOf<{ id: number }>();
     await parsed.settings.reboot.write(true);
     expect(send).toHaveBeenLastCalledWith({ settings: { reboot: true } });

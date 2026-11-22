@@ -338,10 +338,10 @@ class PropertiesEditor extends Base {
         : read_only(property_field(property, undefined));
     //The same value, shown from the first, written to all
     const first = option_value_state(options[0]!);
-    if (!writable) return property_field(property, state.proxy.rea(first));
+    if (!writable) return property_field(property, first.proxy((result) => result));
     return property_field(
       property,
-      state.proxy.reaw(first as StateREAW<unknown>, undefined, {
+      (first as StateREAW<unknown>).proxy_w((result) => result, {
         write: (value) => write_all(options, value),
       }),
     );
@@ -589,8 +589,8 @@ class PropertiesEditor extends Base {
       elements.every((element) =>
         needs.every((need) => element[WIDGET_CHANGEABLE](need)),
       );
-    if (!changeable) return state.proxy.rea(this.#box, read);
-    return state.proxy.reaw(this.#box, read, {
+    if (!changeable) return this.#box.proxy(read);
+    return this.#box.proxy_w(read, {
       write: (value: number) => {
         const geometries = elements.map((element) => ({
           ...element[WIDGET_GEOMETRY],
