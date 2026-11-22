@@ -20,7 +20,10 @@ import type {
   StateProxyROAW,
   StateProxyROS,
   StateProxyROSW,
+  StateProxyROSWS,
+  StateProxyRESWS,
   StateProxyWrite,
+  StateProxyWriteSync,
 } from "./proxy";
 
 export const STATE_VIEWER_OVERRIDE_KEY = Symbol("STATE_VIEWER_OVERRIDE_KEY");
@@ -85,6 +88,16 @@ export interface StateHelper<RRT, WT, REL extends StateRelated> {
   check(value: WT): PromiseLike<StateResult<WT>>;
   /**Called with every new value of the state, an empty function when not needed*/
   on_change(value: RRT): void;
+}
+
+/**A helper that can also check and limit synchronously, which the helper of a state with sync writes must be.
+ * The number, string and enum helpers are when every state in their options is a sync state*/
+export interface StateHelperSync<RRT, WT, REL extends StateRelated>
+  extends StateHelper<RRT, WT, REL> {
+  /**Limits given value to valid range if possible or error reason if not possible */
+  limit_sync(value: WT): StateResult<WT>;
+  /**Checks if the value is valid and returns reason for invalidity */
+  check_sync(value: WT): StateResult<WT>;
 }
 
 export type HelperRelated<HEL extends StateHelper<any, any, any>> = ReturnType<
@@ -180,11 +193,25 @@ export interface StateBase<
   limit?(value: WT): PromiseLike<StateResult<WT>>;
   /**Checks if the value is valid and returns reason for invalidity */
   check?(value: WT): PromiseLike<StateResult<WT>>;
+
+  /**Is state guarenteed to write synchronously, its write gate is then a sync state*/
+  readonly wsync: boolean;
+  /**Writes to the state synchronously, only when wsync is true, the value is set when it gives ok.
+   * Like write it is not guaranteed to succeed*/
+  write_sync?(value: WT): StateResult<void>;
+  /**Limits given value to valid range synchronously, only when wsync is true*/
+  limit_sync?(value: WT): StateResult<WT>;
+  /**Checks if the value is valid synchronously, only when wsync is true*/
+  check_sync?(value: WT): StateResult<WT>;
 }
 
-/**The kind of a state type, the most specific of the eight it fits.
+/**The kind of a state type, the most specific of the ten it fits.
  * Wrapped in [] so a union like StateREA is one kind, not one per member*/
-type KindOf<S> = [S] extends [StateROSW<any, any, any>]
+type KindOf<S> = [S] extends [StateROSWS<any, any, any>]
+  ? "ROSWS"
+  : [S] extends [StateRESWS<any, any, any>]
+    ? "RESWS"
+    : [S] extends [StateROSW<any, any, any>]
   ? "ROSW"
   : [S] extends [StateRESW<any, any, any>]
     ? "RESW"
@@ -199,18 +226,26 @@ type KindOf<S> = [S] extends [StateROSW<any, any, any>]
             : [S] extends [StateROA<any, any, any>]
               ? "ROA"
               : "REA";
-type ReadKind<K> = K extends "ROSW" | "ROS"
+type ReadKind<K> = K extends "ROSWS" | "ROSW" | "ROS"
   ? "ROS"
-  : K extends "RESW" | "RES"
+  : K extends "RESWS" | "RESW" | "RES"
     ? "RES"
     : K extends "ROAW" | "ROA"
       ? "ROA"
       : "REA";
-type IsSync<K> = K extends "ROS" | "ROSW" | "RES" | "RESW" ? true : false;
-type IsOk<K> = K extends "ROS" | "ROSW" | "ROA" | "ROAW" ? true : false;
+type IsSync<K> = K extends "ROS" | "ROSW" | "ROSWS" | "RES" | "RESW" | "RESWS"
+  ? true
+  : false;
+type IsOk<K> = K extends "ROS" | "ROSW" | "ROSWS" | "ROA" | "ROAW" ? true : false;
+/**Writes synchronously*/
+type IsWS<K> = K extends "ROSWS" | "RESWS" ? true : false;
+/**The kind without sync writes, of a proxy with an async write form*/
+type DropWS<K> = K extends "ROSWS" ? "ROSW" : K extends "RESWS" ? "RESW" : K;
 /**The result a state of a kind gives*/
 type ResultOf<K, RT> = IsOk<K> extends true ? ResultOk<RT> : StateResult<RT>;
-type IsWritable<K> = K extends "ROSW" | "RESW" | "ROAW" | "REAW" ? true : false;
+type IsWritable<K> = K extends "ROSWS" | "RESWS" | "ROSW" | "RESW" | "ROAW" | "REAW"
+  ? true
+  : false;
 /**A state a proxy can follow, what set_state of a proxy takes, narrowed to the kind of the proxy by SourceOf.
  * Made of StateBase, which has no proxy methods, the state types would make TypeScript recurse,
  * as their proxy methods give owners which take them again*/
@@ -222,9 +257,16 @@ type SourceOf<K, RT, WT> = StateProxySource<ResultOf<K, RT>, WT> &
   (IsOk<K> extends true ? { readonly rok: true } : unknown) &
   (IsWritable<K> extends true
     ? { readonly writable: true; write(value: WT): PromiseLike<StateResult<void>> }
+    : unknown) &
+  (IsWS<K> extends true
+    ? { readonly wsync: true; write_sync(value: WT): StateResult<void> }
     : unknown);
 /**The proxy of a kind with its owner, see the StateProxy types*/
-type ProxyOwner<K, SRC, RT, WT, T, W> = K extends "ROSW"
+type ProxyOwner<K, SRC, RT, WT, T, W> = K extends "ROSWS"
+  ? StateProxyROSWS<SRC, RT, WT, T, W>
+  : K extends "RESWS"
+    ? StateProxyRESWS<SRC, RT, WT, T, W>
+    : K extends "ROSW"
   ? StateProxyROSW<SRC, RT, WT, T, W>
   : K extends "RESW"
     ? StateProxyRESW<SRC, RT, WT, T, W>
@@ -241,7 +283,27 @@ type ProxyOwner<K, SRC, RT, WT, T, W> = K extends "ROSW"
               : StateProxyREA<SRC, RT, WT, T, W>;
 /**Read only proxies follow the read kind of the state, ROSW is followed as ROS*/
 type ReadProxy<S, K, RT, WT, T> = ProxyOwner<K, SourceOf<ReadKind<KindOf<S>>, RT, WT>, RT, WT, T, WT>;
-type WriteProxy<S, K, RT, WT, T, W> = ProxyOwner<K, SourceOf<KindOf<S>, RT, WT>, RT, WT, T, W>;
+/**A writable proxy of kind K, following states of kind SK*/
+type WriteProxy<SK, K, RT, WT, T, W> = ProxyOwner<K, SourceOf<SK, RT, WT>, RT, WT, T, W>;
+/**The kind of a writable proxy from the kind of the state, see the proxy methods.
+ * sync and ok decide the kind, else it is the kind of the state, it writes synchronously when the state does*/
+type WriteKind<K, OK> = IsSync<K> extends true
+  ? IsWS<K> extends true
+    ? OK extends true
+      ? "ROSWS"
+      : OK extends false
+        ? "RESWS"
+        : K
+    : OK extends true
+      ? "ROSW"
+      : OK extends false
+        ? "RESW"
+        : K
+  : OK extends true
+    ? "ROAW"
+    : OK extends false
+      ? "REAW"
+      : K;
 
 /**What nested can get from its select, a state, the rest are plain values*/
 type StateLike = StateBase<any, any, any>;
@@ -279,23 +341,39 @@ type NestedKind<K, R> = [
           ? true
           : false
       : false,
+  //Sync writes need the inner state at once, so the state must be sync
+  IsSync<K> extends true
+    ? undefined extends R
+      ? false
+      : [NestedPlain<R>] extends [never]
+        ? [NestedStates<R>] extends [never]
+          ? false
+          : [NestedStates<R>] extends [StateRESWS<any, any, any>]
+            ? true
+            : false
+        : false
+    : false,
 ];
-/**The state type of a kind given as [sync, ok, writable]*/
-type StateOfFlags<F, T, W> = F extends [true, true, true]
-  ? StateROSW<T, Option<{}>, W>
-  : F extends [true, false, true]
-    ? StateRESW<T, Option<{}>, W>
-    : F extends [false, true, true]
-      ? StateROAW<T, Option<{}>, W>
-      : F extends [false, false, true]
-        ? StateREAW<T, Option<{}>, W>
-        : F extends [true, true, false]
-          ? StateROS<T>
-          : F extends [true, false, false]
-            ? StateRES<T>
-            : F extends [false, true, false]
-              ? StateROA<T>
-              : StateREA<T>;
+/**The state type of a kind given as [sync, ok, writable, sync writes]*/
+type StateOfFlags<F, T, W> = F extends [true, true, true, true]
+  ? StateROSWS<T, Option<{}>, W>
+  : F extends [true, false, true, true]
+    ? StateRESWS<T, Option<{}>, W>
+    : F extends [true, true, true, boolean]
+      ? StateROSW<T, Option<{}>, W>
+      : F extends [true, false, true, boolean]
+        ? StateRESW<T, Option<{}>, W>
+        : F extends [false, true, true, boolean]
+          ? StateROAW<T, Option<{}>, W>
+          : F extends [false, false, true, boolean]
+            ? StateREAW<T, Option<{}>, W>
+            : F extends [true, true, false, boolean]
+              ? StateROS<T>
+              : F extends [true, false, false, boolean]
+                ? StateRES<T>
+                : F extends [false, true, false, boolean]
+                  ? StateROA<T>
+                  : StateREA<T>;
 /**The state nested gives*/
 type Nested<S, R> = StateOfFlags<
   NestedKind<KindOf<S>, R>,
@@ -345,29 +423,71 @@ interface ProxyMethods<RT, WT> {
 
 /**proxy_w, proxy_w_map and proxy_ok_w of a writable state, writable proxies, like the read only ones.
  * Without write, writes, check and limit go to the state as they are, and the proxy has the write type of the state.
- * With write, see StateProxyWrite, the proxy can have a write type of its own, which needs write, W is only inferred from it*/
+ * With write, see StateProxyWrite, the proxy can have a write type of its own, which needs write, W is only inferred from it.
+ * The proxy writes synchronously when the state does, and write, if given, is a StateProxyWriteSync, which only those states take*/
 interface WriteProxyMethods<RT, WT> {
   /**A writable proxy of the state, transform gets the result and gives a result, the proxy can fail, it is sync when the state is.
    * Writes go to the state as they are, or through write, see StateProxyWrite*/
+  proxy_w<S, T>(
+    this: S,
+    transform: (value: ResultOf<KindOf<S>, RT>) => StateResult<T>,
+  ): WriteProxy<KindOf<S>, WriteKind<KindOf<S>, false>, RT, WT, T, WT>;
+  proxy_w<S, T, W = WT>(
+    this: S & { readonly wsync: true },
+    transform: (value: ResultOf<KindOf<S>, RT>) => StateResult<T>,
+    write: StateProxyWriteSync<StateRESWS<RT, any, WT>, W>,
+  ): WriteProxy<KindOf<S>, WriteKind<KindOf<S>, false>, RT, WT, T, NoInfer<W>>;
   proxy_w<S, T, W = WT>(
     this: S,
     transform: (value: ResultOf<KindOf<S>, RT>) => StateResult<T>,
-    write?: StateProxyWrite<StateREAW<RT, any, WT>, W>,
-  ): WriteProxy<S, IsSync<KindOf<S>> extends true ? "RESW" : "REAW", RT, WT, T, NoInfer<W>>;
+    write: StateProxyWrite<StateREAW<RT, any, WT>, W>,
+  ): WriteProxy<
+    DropWS<KindOf<S>>,
+    DropWS<WriteKind<KindOf<S>, false>>,
+    RT,
+    WT,
+    T,
+    NoInfer<W>
+  >;
   /**A writable proxy of the state, map gets the plain value and an error of the state is passed on as it is,
    * the proxy is of the same kind as the state. Writes go to the state as they are, or through write, see StateProxyWrite*/
+  proxy_w_map<S, T>(
+    this: S,
+    map: (value: RT) => T,
+  ): WriteProxy<KindOf<S>, KindOf<S>, RT, WT, T, WT>;
+  proxy_w_map<S, T, W = WT>(
+    this: S & { readonly wsync: true },
+    map: (value: RT) => T,
+    write: StateProxyWriteSync<StateRESWS<RT, any, WT>, W>,
+  ): WriteProxy<KindOf<S>, KindOf<S>, RT, WT, T, NoInfer<W>>;
   proxy_w_map<S, T, W = WT>(
     this: S,
     map: (value: RT) => T,
-    write?: StateProxyWrite<StateREAW<RT, any, WT>, W>,
-  ): WriteProxy<S, KindOf<S>, RT, WT, T, NoInfer<W>>;
+    write: StateProxyWrite<StateREAW<RT, any, WT>, W>,
+  ): WriteProxy<DropWS<KindOf<S>>, DropWS<KindOf<S>>, RT, WT, T, NoInfer<W>>;
   /**A writable ok proxy of the state, like proxy_ok.
    * Writes go to the state as they are, or through write, see StateProxyWrite*/
+  proxy_ok_w<S, T>(
+    this: S,
+    transform: (value: ResultOf<KindOf<S>, RT>) => ResultOk<T>,
+  ): WriteProxy<KindOf<S>, WriteKind<KindOf<S>, true>, RT, WT, T, WT>;
+  proxy_ok_w<S, T, W = WT>(
+    this: S & { readonly wsync: true },
+    transform: (value: ResultOf<KindOf<S>, RT>) => ResultOk<T>,
+    write: StateProxyWriteSync<StateRESWS<RT, any, WT>, W>,
+  ): WriteProxy<KindOf<S>, WriteKind<KindOf<S>, true>, RT, WT, T, NoInfer<W>>;
   proxy_ok_w<S, T, W = WT>(
     this: S,
     transform: (value: ResultOf<KindOf<S>, RT>) => ResultOk<T>,
-    write?: StateProxyWrite<StateREAW<RT, any, WT>, W>,
-  ): WriteProxy<S, IsSync<KindOf<S>> extends true ? "ROSW" : "ROAW", RT, WT, T, NoInfer<W>>;
+    write: StateProxyWrite<StateREAW<RT, any, WT>, W>,
+  ): WriteProxy<
+    DropWS<KindOf<S>>,
+    DropWS<WriteKind<KindOf<S>, true>>,
+    RT,
+    WT,
+    T,
+    NoInfer<W>
+  >;
 }
 
 interface REA<RT, REL extends Option<StateRelated>, WT>
@@ -376,6 +496,7 @@ interface REA<RT, REL extends Option<StateRelated>, WT>
   readonly rsync: false;
   readonly rok: false;
   readonly writable: false;
+  readonly wsync: false;
 }
 
 interface ROA<RT, REL extends Option<StateRelated>, WT>
@@ -384,6 +505,7 @@ interface ROA<RT, REL extends Option<StateRelated>, WT>
   readonly rsync: false;
   readonly rok: true;
   readonly writable: false;
+  readonly wsync: false;
 }
 
 interface RES<RT, REL extends Option<StateRelated>, WT>
@@ -393,6 +515,7 @@ interface RES<RT, REL extends Option<StateRelated>, WT>
   get(): StateResult<RT>;
   readonly rok: false;
   readonly writable: false;
+  readonly wsync: false;
 }
 
 interface ROS<RT, REL extends Option<StateRelated>, WT>
@@ -403,6 +526,7 @@ interface ROS<RT, REL extends Option<StateRelated>, WT>
   readonly rok: true;
   ok(): RT;
   readonly writable: false;
+  readonly wsync: false;
 }
 
 interface REAW<RT, REL extends Option<StateRelated>, WT>
@@ -412,6 +536,7 @@ interface REAW<RT, REL extends Option<StateRelated>, WT>
   readonly rsync: false;
   readonly rok: false;
   readonly writable: true;
+  readonly wsync: false;
   write(value: WT): PromiseLike<StateResult<void>>;
   limit(value: WT): PromiseLike<StateResult<WT>>;
   check(value: WT): PromiseLike<StateResult<WT>>;
@@ -424,6 +549,7 @@ interface ROAW<RT, REL extends Option<StateRelated>, WT>
   readonly rsync: false;
   readonly rok: true;
   readonly writable: true;
+  readonly wsync: false;
   write(value: WT): PromiseLike<StateResult<void>>;
   limit(value: WT): PromiseLike<StateResult<WT>>;
   check(value: WT): PromiseLike<StateResult<WT>>;
@@ -437,6 +563,7 @@ interface RESW<RT, REL extends Option<StateRelated>, WT>
   get(): StateResult<RT>;
   readonly rok: false;
   readonly writable: true;
+  readonly wsync: false;
   write(value: WT): PromiseLike<StateResult<void>>;
   limit(value: WT): PromiseLike<StateResult<WT>>;
   check(value: WT): PromiseLike<StateResult<WT>>;
@@ -451,9 +578,47 @@ interface ROSW<RT, REL extends Option<StateRelated>, WT>
   readonly rok: true;
   ok(): RT;
   readonly writable: true;
+  readonly wsync: false;
   write(value: WT): PromiseLike<StateResult<void>>;
   limit(value: WT): PromiseLike<StateResult<WT>>;
   check(value: WT): PromiseLike<StateResult<WT>>;
+}
+
+interface RESWS<RT, REL extends Option<StateRelated>, WT>
+  extends StateBase<StateResult<RT>, REL, WT>,
+    ProxyMethods<RT, WT>,
+    WriteProxyMethods<RT, WT> {
+  readonly rsync: true;
+  get(): StateResult<RT>;
+  readonly rok: false;
+  readonly writable: true;
+  write(value: WT): PromiseLike<StateResult<void>>;
+  limit(value: WT): PromiseLike<StateResult<WT>>;
+  check(value: WT): PromiseLike<StateResult<WT>>;
+  readonly wsync: true;
+  readonly write_enabled?: StateRES<boolean>;
+  write_sync(value: WT): StateResult<void>;
+  limit_sync(value: WT): StateResult<WT>;
+  check_sync(value: WT): StateResult<WT>;
+}
+
+interface ROSWS<RT, REL extends Option<StateRelated>, WT>
+  extends StateBase<ResultOk<RT>, REL, WT>,
+    ProxyMethods<RT, WT>,
+    WriteProxyMethods<RT, WT> {
+  readonly rsync: true;
+  get(): ResultOk<RT>;
+  readonly rok: true;
+  ok(): RT;
+  readonly writable: true;
+  write(value: WT): PromiseLike<StateResult<void>>;
+  limit(value: WT): PromiseLike<StateResult<WT>>;
+  check(value: WT): PromiseLike<StateResult<WT>>;
+  readonly wsync: true;
+  readonly write_enabled?: StateRES<boolean>;
+  write_sync(value: WT): StateResult<void>;
+  limit_sync(value: WT): StateResult<WT>;
+  check_sync(value: WT): StateResult<WT>;
 }
 
 //###########################################################################################################################################################
@@ -527,13 +692,27 @@ export type StateRESW<
   RT,
   REL extends Option<StateRelated> = Option<{}>,
   WT = unknown,
-> = RESW<RT, REL, WT> | StateROSW<RT, REL, WT>;
+> = RESW<RT, REL, WT> | StateROSW<RT, REL, WT> | StateRESWS<RT, REL, WT>;
 
 export type StateROSW<
   RT,
   REL extends Option<StateRelated> = Option<{}>,
   WT = unknown,
-> = ROSW<RT, REL, WT>;
+> = ROSW<RT, REL, WT> | StateROSWS<RT, REL, WT>;
+
+/**A writable sync state that writes synchronously, see write_sync, its write gate is a sync state*/
+export type StateRESWS<
+  RT,
+  REL extends Option<StateRelated> = Option<{}>,
+  WT = unknown,
+> = RESWS<RT, REL, WT> | StateROSWS<RT, REL, WT>;
+
+/**A writable sync ok state that writes synchronously, see write_sync, its write gate is a sync state*/
+export type StateROSWS<
+  RT,
+  REL extends Option<StateRelated> = Option<{}>,
+  WT = unknown,
+> = ROSWS<RT, REL, WT>;
 
 //###########################################################################################################################################################
 //       _____ _______    _______ ______    ____  _____   __      __     _
@@ -593,6 +772,18 @@ export type StateOrValRESW<
   REL extends Option<StateRelated> = Option<{}>,
   WT = unknown,
 > = RT | StateRESW<RT, REL, WT>;
+/**An initial value or a writable sync errorable state that writes synchronously */
+export type StateOrValRESWS<
+  RT,
+  REL extends Option<StateRelated> = Option<{}>,
+  WT = unknown,
+> = RT | StateRESWS<RT, REL, WT>;
+/**An initial value or a writable sync ok state that writes synchronously */
+export type StateOrValROSWS<
+  RT,
+  REL extends Option<StateRelated> = Option<{}>,
+  WT = unknown,
+> = RT | StateROSWS<RT, REL, WT>;
 /**An initial value or a writable sync ok state */
 export type StateOrValROSW<
   RT,

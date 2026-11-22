@@ -1,9 +1,10 @@
 import { sync_resolve } from "#common";
 import { err, ok, OptionSome, some, err_nice } from "#result";
 import { state_errors } from "../errors";
-import { StateResult as SR, State } from "../types";
+import type { StateResult as SR, State, StateHelperSync, StateRES } from "../types";
 import {
   StateInit as Init,
+  sync_get,
   StateHelperBase,
   StateHelperBaseOptions,
   StateRelatedBase,
@@ -52,6 +53,53 @@ export interface StateEnumHelper<
   R extends StateRelatedBase = StateEnumRelated<L>,
 > extends StateHelperBase<SR<K>, K, OptionSome<R>> {}
 
+/**Options of an enum helper that checks synchronously, its list is a sync state*/
+export interface StateEnumHelperSyncOptions<
+  L extends StateEnumHelperList<any> = StateEnumHelperList<any>,
+> extends StateEnumHelperOptions<L> {
+  list: StateRES<L, any, any>;
+}
+
+/**An enum helper that also checks synchronously, what help gives when its list is a sync state*/
+export interface StateEnumHelperSync<
+  L extends StateEnumHelperList<string> = StateEnumHelperList<string>,
+  K extends string = keyof L & string,
+  R extends StateRelatedBase = StateEnumRelated<L>,
+> extends StateEnumHelper<L, K, R>,
+    StateHelperSync<SR<K>, K, OptionSome<R>> {}
+
+/**The value when it is in the list, otherwise the reason it is not*/
+function enum_check<K extends string>(
+  value: K,
+  list: SR<StateEnumHelperList<string>>,
+): SR<K> {
+  //The reason the list is missing is what the user needs to see
+  if (list.err) return err(list.error);
+  if (value in list.value) return ok(value);
+  return err_nice(state_errors.NOT_IN_LIST, String(value) + " is not in list");
+}
+
+/**Creates an enum helper struct, use list method to make a list with correct typing.
+ * It also checks synchronously when its list is a sync state*/
+function help<
+  L extends StateEnumHelperList<any>,
+  I extends Init<K>,
+  K extends string = keyof L & string,
+  R extends StateRelatedBase = StateEnumRelated<L>,
+>(init: I, options: StateEnumHelperSyncOptions<L>): [I, StateEnumHelperSync<L, K, R>];
+function help<
+  L extends StateEnumHelperList<any>,
+  I extends Init<K>,
+  K extends string = keyof L & string,
+  R extends StateRelatedBase = StateEnumRelated<L>,
+>(init: I, options: StateEnumHelperOptions<L>): [I, StateEnumHelper<L, K, R>];
+function help(
+  init: Init<string>,
+  options: StateEnumHelperOptions,
+): [Init<string>, StateEnumHelperSync] {
+  return [init, new StateEnumHelperBase(options)];
+}
+
 export class StateEnumHelperBase<
   L extends StateEnumHelperList<string> = StateEnumHelperList<string>,
   K extends string = keyof L & string,
@@ -79,11 +127,14 @@ export class StateEnumHelperBase<
   }
 
   async check(value: K): Promise<SR<K>> {
-    const list = await this.list.read();
-    //The reason the list is missing is what the user needs to see
-    if (list.err) return err(list.error);
-    if (value in list.value) return ok(value);
-    return err_nice(state_errors.NOT_IN_LIST, String(value) + " is not in list");
+    return enum_check(value, await this.list.read());
+  }
+  limit_sync(value: K): SR<K> {
+    return ok(value);
+  }
+  /**Only for a sync helper, see StateEnumHelperSync*/
+  check_sync(value: K): SR<K> {
+    return enum_check(value, sync_get(this.list)!);
   }
 
   related(): OptionSome<R> {
@@ -108,18 +159,9 @@ export const ENUM = {
       h && (h as { [STATE_ENUM_HELPER_KEY]: boolean })[STATE_ENUM_HELPER_KEY],
     );
   },
-  /**Creates an enum helper struct, use list method to make a list with correct typing*/
-  help<
-    L extends StateEnumHelperList<any>,
-    I extends Init<K>,
-    K extends string = keyof L & string,
-    R extends StateRelatedBase = StateEnumRelated<L>,
-  >(
-    init: I,
-    options: StateEnumHelperOptions<L>,
-  ): [I, StateEnumHelper<L, K, R>] {
-    return [init, new StateEnumHelperBase<L, K, R>(options)];
-  },
+  /**Creates an enum helper struct, use list method to make a list with correct typing.
+   * It also checks synchronously when its list is a sync state*/
+  help,
   /**Creates an enum description list, passing the enum as a generic type to this function makes things look a bit nicer */
   list<K extends string>(list: StateEnumHelperList<K>): typeof list {
     return list;

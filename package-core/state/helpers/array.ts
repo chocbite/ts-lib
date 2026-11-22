@@ -6,7 +6,7 @@ import {
   some,
 } from "#result";
 import { ros } from "../local";
-import { StateResult as SR, StateHelper, StateROS } from "../types";
+import { StateResult as SR, StateHelperSync, StateROS } from "../types";
 import {
   StateInitResult as SIR,
   StateHelperBase,
@@ -321,7 +321,7 @@ export interface StateArrayHelperOptions extends StateHelperBaseOptions {}
 export interface StateArrayHelper<
   RT extends any[],
   WT extends any[] = RT,
-> extends StateHelper<SR<RT>, WT, OptionSome<StateArrayRelated>> {}
+> extends StateHelperSync<SR<RT>, WT, OptionSome<StateArrayRelated>> {}
 
 export class StateArrayHelperBase<RT extends any[], WT extends any[]>
   extends StateHelperBase<SR<RT>, WT, OptionSome<StateArrayRelated>>
@@ -347,6 +347,14 @@ export class StateArrayHelperBase<RT extends any[], WT extends any[]>
 
   check(value: WT): PromiseLike<SR<WT>> {
     return sync_resolve(ok(value));
+  }
+
+  limit_sync(value: WT): SR<WT> {
+    return ok(value);
+  }
+
+  check_sync(value: WT): SR<WT> {
+    return ok(value);
   }
 
   related(): OptionSome<StateArrayRelated> {

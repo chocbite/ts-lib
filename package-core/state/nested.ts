@@ -203,6 +203,23 @@ class StateNested extends StateBase<SR<unknown>, unknown, OptionNone> {
       inner?.writable ? inner.check(value) : sync_resolve(not_writable()),
     );
   }
+  /**Writes synchronously when the inner state is known at once and does*/
+  get wsync(): boolean {
+    return this.#inner_now()?.wsync ?? false;
+  }
+  //The sync methods are only in the types of nested states that write synchronously, the others give the not writable error
+  write_sync(value: unknown): SR<void> {
+    const inner = this.#inner_now();
+    return inner?.wsync ? inner.write_sync(value) : not_writable();
+  }
+  limit_sync(value: unknown): SR<unknown> {
+    const inner = this.#inner_now();
+    return inner?.wsync ? inner.limit_sync(value) : not_writable();
+  }
+  check_sync(value: unknown): SR<unknown> {
+    const inner = this.#inner_now();
+    return inner?.wsync ? inner.check_sync(value) : not_writable();
+  }
   get read_only() {
     return this.read_only_view();
   }

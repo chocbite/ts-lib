@@ -64,6 +64,16 @@ export function set_proxy_maker(maker: ProxyMaker): void {
   proxy_maker = maker;
 }
 
+/**The error of a sync write while the gate does not allow writing, undefined when it does or there is no gate.
+ * Only for gates of states with sync writes, which are sync states*/
+export function gate_closed_sync(gate: State<boolean> | undefined): SR<never> | undefined {
+  if (!gate) return undefined;
+  const res = (gate as { get(): SR<boolean> }).get();
+  return res.ok && res.value
+    ? undefined
+    : err_nice(state_errors.WRITE_DISABLED, "writing is disabled");
+}
+
 export abstract class StateBase<
   RRT extends SR<any>,
   WT,
@@ -169,6 +179,11 @@ export abstract class StateBase<
   abstract limit(value: WT): PromiseLike<SR<WT>>;
   abstract check(value: WT): PromiseLike<SR<WT>>;
 
+  /**Is state guarenteed to write synchronously, local states made for it override this*/
+  get wsync(): boolean {
+    return false;
+  }
+
   #write_enabled?: State<boolean>;
   /**State that decides if writing is allowed right now, undefined when writing is not gated*/
   get write_enabled(): State<boolean> | undefined {
@@ -188,6 +203,12 @@ export abstract class StateBase<
         ? func()
         : err_nice(state_errors.WRITE_DISABLED, "writing is disabled"),
     );
+  }
+
+  /**The error of a sync write while the write gate does not allow writing, undefined when it does.
+   * Only for states with sync writes, their gate is a sync state*/
+  protected write_closed_sync(): SR<never> | undefined {
+    return gate_closed_sync(this.#write_enabled);
   }
 
   #read_only?: StateReadOnly<RRT, WT, REL>;
@@ -331,6 +352,9 @@ export class StateReadOnly<
 
   //#Writer Context
   get writable(): false {
+    return false;
+  }
+  get wsync(): false {
     return false;
   }
   get write_enabled(): State<boolean> {

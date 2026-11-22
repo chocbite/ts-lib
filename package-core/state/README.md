@@ -86,6 +86,8 @@ These methods are only guaranteed on certain state types. TypeScript will error 
 | `check(value)`                                   | Writable                     | Validate a value without applying it.                                            |
 | `proxy_w(fn, write?)`, `proxy_w_map(fn, write?)` | Writable                     | Writable versions of `proxy` and `proxy_map`, see [Proxy States](#proxy-states). |
 | `proxy_ok_w(fn, write?)`                         | Writable                     | Writable version of `proxy_ok`.                                                  |
+| `write_sync(value)`                              | Sync writes (`wsync: true`)  | `write` with the result given directly, see [Sync writes](#sync-writes).         |
+| `limit_sync(value)`, `check_sync(value)`         | Sync writes                  | `limit` and `check` with the result given directly.                              |
 
 ### Per-Type Narrowing
 
@@ -102,11 +104,14 @@ Each of the eight state types narrows the available methods and result types:
 | `StateREA`  | —             | —      | —                           | `Result<T>`     |
 | `StateREAW` | —             | —      | ✓                           | `Result<T>`     |
 
-The three boolean properties `rsync`, `rok`, and `writable` act as runtime discriminants matching the same axes:
+Below `StateROSW` and `StateRESW` are `StateROSWS` and `StateRESWS`, writable sync states that also write synchronously, see [Sync writes](#sync-writes).
+
+The four boolean properties `rsync`, `rok`, `writable` and `wsync` act as runtime discriminants matching the same axes:
 
 - **Sync** (`rsync: true`) — enables `get()`, and `ok()` when also ok-only
 - **OK-only** (`rok: true`) — narrows the `read()` result to `ResultOk<T>` (value is never an error)
 - **Writable** (`writable: true`) — enables `write()`, `limit()`, and `check()`
+- **Sync writes** (`wsync: true`) — enables `write_sync()`, `limit_sync()` and `check_sync()`, only on writable sync states
 
 The types form a subtype hierarchy — more specific types are assignable to less specific ones. For example, a `StateROSW<number>` (sync + ok + writable) can be passed anywhere a `StateROS<number>`, `StateROA<number>`, or `State<number>` is expected.
 
@@ -162,11 +167,11 @@ async function narrowing(s: State<number>) {
 
 ```typescript
 state.ok(value); // ROS  — read-only, sync, always ok
-state.ok_w(value); // ROSW — writable, sync, always ok
+state.ok_w(value); // ROSWS — writable, sync, always ok, writes synchronously
 state.from(value); // RES  — read-only, sync, error-capable
-state.from_w(value); // RESW — writable, sync, error-capable
+state.from_w(value); // RESWS — writable, sync, error-capable, writes synchronously
 state.err(error); // RES  — read-only, sync, starts with the NiceError error
-state.err_w(error); // RESW — writable, sync, starts with the NiceError error
+state.err_w(error); // RESWS — writable, sync, starts with the NiceError error, writes synchronously
 ```
 
 ### Local States
@@ -182,6 +187,8 @@ const a = state.ros(ok(42)); // ROS
 const b = state.rosw(ok(42)); // ROSW
 const c = state.res(ok(42)); // RES
 const d = state.resw(err_nice(NOT_CONNECTED, "n/a")); // RESW
+const g = state.rosws(ok(42)); // ROSWS, see Sync writes
+const h = state.resws(ok(42)); // RESWS
 ```
 
 State generators also accept a function which will be lazily executed at first access of state value:
@@ -255,6 +262,31 @@ name.set_write_enabled(undefined); // remove the gate
 ```
 
 Local and remote states have `set_write_enabled`. Writable proxies use the gate of their source, read only proxies and read only views have a gate that is always false. Custom states extending `state.class` run their write through `write_gated` to apply the gate.
+
+#### Sync writes
+
+A state of type `StateROSWS` or `StateRESWS` (`wsync: true`) writes synchronously. `write_sync` gives the result of the write directly, and the value is set and the subscribers are told before it returns. `check_sync` and `limit_sync` are the same for `check` and `limit`. A write can still be refused, by the gate, the helper or the setter, so the result must be checked like the result of `write`. Nothing else runs between two sync writes, apart from the subscribers of the states written, so code like moving an item from one list to another can put the item back when the second list refuses it:
+
+```typescript
+function move<T>(from: StateROSWS<T[]>, to: StateROSWS<T[]>, index: number): StateResult<void> {
+  const item = from.ok()[index];
+  const taken = from.write_sync(state.a.write.splice(index, 1));
+  if (taken.err) return taken;
+  const given = to.write_sync(state.a.write.push(item));
+  if (given.err) from.write_sync(state.a.write.splice(index, 0, item));
+  return given;
+}
+```
+
+`state.ok_w`, `state.from_w` and `state.err_w` write synchronously, and `state.rosws` and `state.resws` make such states with a helper or setter. What they take is limited to what can be done synchronously:
+
+- the setter gives its result directly instead of a promise, `(value, owner, old) => StateResult<void>`;
+- the helper checks synchronously, the number, string and enum helpers do when every state in their options that they check with is sync, the array and boolean helpers always do;
+- the write gate is a sync state, `StateRES<boolean>`.
+
+`write`, `check` and `limit` work on them as on any writable state. Their thenables call the function of `then` at once.
+
+Writable proxies of such states write synchronously too, and so can [collected](#writable-collected-states) and [nested](#nested-states) states, see their sections. Read only views and remote states never write synchronously.
 
 ## Subscribing to State
 
@@ -378,6 +410,17 @@ const span = state.c.resw(
 );
 ```
 
+**Sync writable forms, `rosws`, `resws` and `resws_map`,** write synchronously, see [Sync writes](#sync-writes). They take a `StateCollectedWriteSync`, the same with the results given directly, `write_sync(value, states)`, `check_sync(value, states)` and `limit_sync(value, states)`. Their write gate is a sync state.
+
+```typescript
+const span = state.c.resws(
+  (values) => result.all_nice(values, RANGE_INVALID).map(([min, max]) => max - min),
+  { write_sync: (value: number, [min, max]) => max.write_sync(min.ok() + value) },
+  min,
+  max,
+);
+```
+
 ## Proxy States
 
 Changes the value of one state, for several states use a [collected state](#collected-states).
@@ -421,11 +464,22 @@ const speed_text = device.speed.proxy_w_map((speed) => `${speed}`, {
 
 A `StateProxyWrite` has `write(value, source)`, which sends the value on, usually by writing it, changed, to the source. `check(value, source)` and `limit(value, source)` are optional, and give the value as it is when left out. All three go through the write gate of the source. It is the same form as the write of [collected states](#writable-collected-states), with the source in place of the collected states.
 
+**A writable proxy of a state that writes synchronously writes synchronously too**, see [Sync writes](#sync-writes), without `write`, or with a `StateProxyWriteSync`, the same form with the results given directly. A `StateProxyWrite` makes a proxy that does not:
+
+```typescript
+const speed_text = device.speed.proxy_w_map((speed) => `${speed}`, {
+  write_sync: (text: string, source) => source.write_sync(Number(text)),
+});
+speed_text.write_sync("12");
+```
+
 **A proxy can be changed after it is made:**
 
 - `set_state(other)` makes it follow another state of the same kind, like a value shown for another device.
 - `set_transform_read(fn)` gives it another transform, a function of the result like the one of `proxy`, also for a proxy made with `proxy_map`.
 - `set_write(write)` gives it another `StateProxyWrite`, `undefined` writes to the source as it is again.
+
+A proxy that writes synchronously keeps doing so, `set_state` only takes states that write synchronously and `set_write` only a `StateProxyWriteSync`.
 
 Its subscribers are told the new value. A proxy given on as a plain state type, like `StateREA<number>`, has no access to these.
 
@@ -454,7 +508,7 @@ const city = place.nested((p) => p.address).nested((a) => a.city); // deeper, by
 - **When `select` can give `undefined`** an error is needed, given while there is no inner state, the types refuse it without: `selected.nested((p) => p.nickname, new NiceError(NO_NICKNAME, "has no nickname"))`.
 - **An error** of the outer state or the inner state is passed on as it is.
 - **The kind follows from the states**: sync when the outer state and every inner state are, ok when they all are and no inner state can be missing, plain values count as sync and ok.
-- **Writes go to the current inner state** as they are, through its write gate. It is writable when every inner value is a writable state, use `read_only` to hand it out read only.
+- **Writes go to the current inner state** as they are, through its write gate. It is writable when every inner value is a writable state, use `read_only` to hand it out read only. It writes synchronously, see [Sync writes](#sync-writes), when the state is sync and every inner value is a state that writes synchronously.
 
 ## Remote States
 
@@ -602,7 +656,7 @@ await temperature.check(20.3); // error OFF_STEP, "20.3 is not on a step of 0.5"
 temperature.related().unwrap().min; // state holding 0
 ```
 
-Options: `min`, `max`, `step`, `start`, `decimals`, `unit` — each is itself a `State`, so limits can be reactive. `check` rejects values outside `min`/`max` and values not on `step`/`start`/`decimals`, except `min` and `max` themselves.
+Options: `min`, `max`, `step`, `start`, `decimals`, `unit` — each is itself a `State`, so limits can be reactive. `check` rejects values outside `min`/`max` and values not on `step`/`start`/`decimals`, except `min` and `max` themselves. When `min`, `max`, `step`, `start` and `decimals` are sync states, the helper also checks synchronously and can be the helper of a state with [sync writes](#sync-writes), `state.rosws(state.n.help(ok(20), { max: state.ok(100) }))`.
 
 Collected states of number states, as `ros`, `roa`, `res` and `rea` like [`state.c`](#collected-states), the ones that can fail pass the first error on as it is:
 
@@ -627,7 +681,7 @@ await name.limit("this is too long"); // returns ok("this is to")
 await name.check("this is ææ"); // error TEXT_TOO_LONG, "the text is longer than the limit of 10 bytes"
 ```
 
-Options: `max_length`, `max_length_bytes`.
+Options: `max_length`, `max_length_bytes`. When both are sync states, the helper also checks synchronously, see [Sync writes](#sync-writes).
 
 `state.s.c.concat` joins string states, without a separator, as `ros`, `roa`, `res` and `rea`:
 
@@ -670,6 +724,8 @@ const color = state.rosw(
 );
 ```
 
+When the list is a sync state, as here, the helper also checks synchronously, see [Sync writes](#sync-writes).
+
 ### Boolean
 
 ```typescript
@@ -686,13 +742,15 @@ state.is.ros(obj); // Is ROS?
 state.is.rosw(obj); // Is ROSW?
 state.is.res(obj); // Is RES?
 // ... and so on for all eight types
+state.is.rosws(obj); // Writes synchronously and is ok?
+state.is.resws(obj); // Writes synchronously?
 ```
 
 ## Initial Value or State
 
 `StateOrVal<T>` is either an initial value or a state giving the value. It is meant for inputs, like element options, where a user can give a value to start from or bind a state. An initial value is applied once and not followed, a state is followed, so a value changed from outside must be a state. A receiver that changes the value itself, like an element the user changes, starts from an initial value and keeps its changes.
 
-There is one variant per state type, `StateOrValROS<T>`, `StateOrValROSW<T>` and so on, each is `T | StateXXX<T>`. A writable variant lets the receiver write to the state when one is given, an initial value has nothing to write to.
+There is one variant per state type, `StateOrValROS<T>`, `StateOrValROSW<T>` and so on, also `StateOrValROSWS<T>` and `StateOrValRESWS<T>` for states that write synchronously, each is `T | StateXXX<T>`. A writable variant lets the receiver write to the state when one is given, an initial value has nothing to write to.
 
 The value type must not itself be a state, as it could not be told apart from the state.
 

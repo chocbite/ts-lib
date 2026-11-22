@@ -9,6 +9,7 @@ import {
 } from "#result";
 import { not_writable, state_errors } from "./errors";
 import {
+  gate_closed_sync,
   set_proxy_maker,
   STATE_DERIVED_KEY,
   STATE_WRITE_DISABLED,
@@ -23,6 +24,8 @@ import {
   StateRESW,
   StateROS,
   StateROSW,
+  StateRESWS,
+  StateROSWS,
   type State,
   type StateREA,
   type StateREAW,
@@ -46,6 +49,14 @@ export interface StateProxyWrite<S, WOUT> {
   write(value: WOUT, state: S): PromiseLike<SR<void>>;
   check?(value: WOUT, state: S): PromiseLike<SR<WOUT>>;
   limit?(value: WOUT, state: S): PromiseLike<SR<WOUT>>;
+}
+
+/**Writing of a writable proxy state that writes synchronously, like StateProxyWrite with the results given directly.
+ * Only states that write synchronously take it, the proxy then writes synchronously too*/
+export interface StateProxyWriteSync<S, WOUT> {
+  write_sync(value: WOUT, state: S): SR<void>;
+  check_sync?(value: WOUT, state: S): SR<WOUT>;
+  limit_sync?(value: WOUT, state: S): SR<WOUT>;
 }
 
 /**Runs func when the gate allows writing, otherwise resolves to a write disabled error, like the write gate of every state*/
@@ -73,6 +84,36 @@ interface Owner<S, ROUT, WOUT, RROUT> {
   set_write(write: StateProxyWrite<S, WOUT> | undefined): void;
   readonly state: State<ROUT, OptionNone, WOUT>;
 }
+
+/**Owner of a proxy that writes synchronously, its write form must be sync too*/
+type OwnerSync<S, ROUT, WOUT, RROUT> = Omit<Owner<S, ROUT, WOUT, RROUT>, "set_write"> & {
+  /**Changes how the proxy writes, see StateProxyWriteSync, undefined writes to the source as it is*/
+  set_write(write: StateProxyWriteSync<S, WOUT> | undefined): void;
+};
+
+export type StateProxyROSWS<
+  S,
+  RIN = S extends State<infer RT> ? RT : never,
+  WIN = S extends State<any, infer WT> ? WT : never,
+  ROUT = RIN,
+  WOUT = WIN,
+> = StateROSWS<ROUT, OptionNone, WOUT> &
+  OwnerSync<S, ROUT, WOUT, ResultOk<ROUT>> & {
+    readonly read_only: StateROS<ROUT, OptionNone, WOUT>;
+    readonly read_write: StateROSWS<ROUT, OptionNone, WOUT>;
+  };
+
+export type StateProxyRESWS<
+  S,
+  RIN = S extends State<infer RT> ? RT : never,
+  WIN = S extends State<any, infer WT> ? WT : never,
+  ROUT = RIN,
+  WOUT = WIN,
+> = StateRESWS<ROUT, OptionNone, WOUT> &
+  OwnerSync<S, ROUT, WOUT, SR<ROUT>> & {
+    readonly read_only: StateRES<ROUT, OptionNone, WOUT>;
+    readonly read_write: StateRESWS<ROUT, OptionNone, WOUT>;
+  };
 
 export type StateProxyROA<
   S,
@@ -194,7 +235,7 @@ class RXXX<
     writable: boolean,
     state: S,
     transform_read?: (value: StateInferResult<S>) => RROUT,
-    write?: StateProxyWrite<S, WOUT>,
+    write?: StateProxyWrite<S, WOUT> | StateProxyWriteSync<S, WOUT>,
   ) {
     super();
     this.#rok = rok;
@@ -207,8 +248,8 @@ class RXXX<
   #rok: boolean;
   #writable: boolean;
   #state: S;
-  /**How to write a value, undefined writes it to the source as it is*/
-  #write?: StateProxyWrite<S, WOUT>;
+  /**How to write a value, undefined writes it to the source as it is, a StateProxyWriteSync has write_sync*/
+  #write?: StateProxyWrite<S, WOUT> | StateProxyWriteSync<S, WOUT>;
   /**The subscriber to the source, made on the first subscribe, a proxy nobody uses has none*/
   #subscriber?: StateDerivedSub;
   #make_subscriber(): StateDerivedSub {
@@ -274,7 +315,7 @@ class RXXX<
       this.on_sub(true);
     } else this.transform_read = read;
   }
-  set_write(write: StateProxyWrite<S, WOUT> | undefined) {
+  set_write(write: StateProxyWrite<S, WOUT> | StateProxyWriteSync<S, WOUT> | undefined) {
     this.#write = write;
   }
   get state() {
@@ -324,12 +365,50 @@ class RXXX<
     if (!this.#writable || !this.#state.write)
       return sync_resolve(not_writable());
     const write = this.#write;
-    if (write)
+    if (write) {
+      if ("write_sync" in write) return sync_resolve(this.write_sync(value));
       return gated(this.#state.write_enabled, () =>
         write.write(value, this.#state),
       );
+    }
     //Without write the proxy has the write type of the source
     return this.#state.write(value as unknown as WIN);
+  }
+
+  /**Writes synchronously when the source does and the write form, if any, is sync*/
+  get wsync(): boolean {
+    return (
+      this.#writable &&
+      this.#state.wsync &&
+      (!this.#write || "write_sync" in this.#write)
+    );
+  }
+  //The sync methods are only in the types of proxies that write synchronously, the others give the not writable error
+  write_sync(value: WOUT): SR<void> {
+    if (!this.wsync) return not_writable();
+    const write = this.#write as StateProxyWriteSync<S, WOUT> | undefined;
+    if (!write) return this.#state.write_sync!(value as unknown as WIN);
+    return (
+      gate_closed_sync(this.#state.write_enabled) ??
+      write.write_sync(value, this.#state)
+    );
+  }
+  limit_sync(value: WOUT): SR<WOUT> {
+    return this.#sync_helper("limit_sync", value);
+  }
+  check_sync(value: WOUT): SR<WOUT> {
+    return this.#sync_helper("check_sync", value);
+  }
+  #sync_helper(name: "limit_sync" | "check_sync", value: WOUT): SR<WOUT> {
+    if (!this.wsync) return not_writable();
+    const write = this.#write as StateProxyWriteSync<S, WOUT> | undefined;
+    if (!write)
+      return this.#state[name]!(value as unknown as WIN) as unknown as SR<WOUT>;
+    return (
+      gate_closed_sync(this.#state.write_enabled) ??
+      write[name]?.(value, this.#state) ??
+      ok(value)
+    );
   }
 
   //@ts-expect-error typescript workaround
@@ -346,6 +425,8 @@ class RXXX<
     name: "limit" | "check",
   ): ((value: WOUT) => PromiseLike<SR<WOUT>>) | undefined {
     const write = this.#write;
+    if (write && "write_sync" in write)
+      return (value) => sync_resolve(this.#sync_helper(`${name}_sync`, value));
     if (write)
       return (value) => {
         if (!this.#writable) return sync_resolve(not_writable());
