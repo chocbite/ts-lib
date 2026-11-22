@@ -1,0 +1,44 @@
+//Fills the element it is put in, the root node covers it, the drop indicator floats above
+//When the smallest size of the root is bigger than the layout, the root keeps it and the layout scrolls
+composition-layout {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  user-select: none;
+
+  > composition-layoutsplit,
+  > composition-layouttabs {
+    position: absolute;
+    inset: 0;
+  }
+
+  //Where a dragged tab goes, a part of a group, a line in a tab bar, or a strip of the whole layout
+  > .indicator {
+    display: none;
+    position: absolute;
+    z-index: 10;
+    pointer-events: none;
+    box-sizing: border-box;
+    border-radius: 0.4rem;
+    border: 2px solid var(--composition-colors-shadowFocus);
+    background-color: color-mix(
+      in srgb,
+      var(--composition-colors-shadowFocus) 20%,
+      transparent
+    );
+
+    &.shown {
+      display: block;
+    }
+
+    .anim-all & {
+      transition:
+        left ease-out 0.08s,
+        top ease-out 0.08s,
+        width ease-out 0.08s,
+        height ease-out 0.08s;
+    }
+  }
+}

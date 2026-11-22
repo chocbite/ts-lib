@@ -18,7 +18,7 @@ import {
   type ContentBase,
 } from "./content";
 import "./panel.scss";
-import { anchor_fraction, CompAnchor } from "./shared";
+import { anchor_fraction, clamp, CompAnchor } from "./shared";
 
 /**Inputs of the panel*/
 const PANEL = {
@@ -109,9 +109,6 @@ interface ChangeableValues {
   hidden: boolean;
 }
 type Changeable = keyof ChangeableValues;
-
-const clamp = (value: number, min: number, max: number) =>
-  Math.max(min, Math.min(value, max));
 
 class Panel extends Base {
   static element_name() {
@@ -597,7 +594,8 @@ class Panel extends Base {
             e.clientY >= rect.top &&
             e.clientY <= rect.bottom
           )
-            this.close();
+            //Through the content, which closes the panel with it, or decides how it is closed
+            this.#content.content_close();
         };
       };
       button.oncontextmenu = (e) => {

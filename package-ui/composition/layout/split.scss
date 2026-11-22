@@ -1,0 +1,88 @@
+//       _____ _____  _      _____ _______
+//      / ____|  __ \| |    |_   _|__   __|
+//     | (___ | |__) | |      | |    | |
+//      \___ \|  ___/| |      | |    | |
+//      ____) | |    | |____ _| |_   | |
+//     |_____/|_|    |______|_____|  |_|
+composition-layoutsplit {
+  $sizer: 0.4rem;
+  $sizer_touch: 1rem;
+
+  display: flex;
+  overflow: hidden;
+  box-sizing: border-box;
+
+  &.row {
+    flex-direction: row;
+  }
+  &.column {
+    flex-direction: column;
+  }
+
+  //Shares from flex-grow, set by the split, the smallest sizes are set from the contents
+  > composition-layoutsplit,
+  > composition-layouttabs {
+    flex: 1 1 0;
+  }
+
+  > .sizer {
+    flex: 0 0 $sizer;
+    position: relative;
+    touch-action: none;
+    background-color: var(--composition-colors-titlebar);
+
+    .touch & {
+      flex-basis: $sizer_touch;
+    }
+
+    //A thin line in the middle, wider and in the accent color when hovered or moved
+    &::after {
+      content: "";
+      position: absolute;
+      background-color: var(--composition-colors-border);
+    }
+
+    &:hover::after,
+    &.joined::after,
+    &.active::after {
+      background-color: var(--composition-colors-shadowFocus);
+    }
+
+    //Where sizers cross, pressing moves them all
+    &.crossing {
+      cursor: move !important;
+    }
+  }
+
+  &.row > .sizer {
+    cursor: col-resize;
+    &::after {
+      top: 0;
+      bottom: 0;
+      left: calc(50% - 0.5px);
+      width: 1px;
+    }
+    &:hover::after,
+    &.joined::after,
+    &.active::after {
+      left: calc(50% - 1.5px);
+      width: 3px;
+    }
+  }
+
+  &.column > .sizer {
+    cursor: row-resize;
+    &::after {
+      left: 0;
+      right: 0;
+      top: calc(50% - 0.5px);
+      height: 1px;
+    }
+    &:hover::after,
+    &.joined::after,
+    &.active::after {
+      top: calc(50% - 1.5px);
+      height: 3px;
+    }
+  }
+}

@@ -92,6 +92,7 @@ Work is done on a branch, not on `main`. At the start of a task that changes fil
 
 ## Conventions
 
+- Temporary files, like scripts that drive the dev pages with Playwright, go in `tmp/` in the repo root, which git ignores. Scripts there resolve `playwright` from the repo's `node_modules`. Never put them in the repo root or other tracked folders.
 - `*.trials.ts` and `trials/` folders are old manual demo code, kept as reference. Do not add new ones, use dev pages. Never export them from an `index.ts`, they must not end up in builds.
 - ts-lib enforces DOM-free code three ways: tsconfig `lib` has no `DOM`, eslint `no-restricted-globals`, and Node-only tests.
 - Enum icons in `state` are typed through the global `ChocbiteStateRegister` interface. ts-lib-ui augments it with `icon: SVGFunc` (see `package-ui/svg/index.ts`). Without ts-lib-ui no icon can be given.
