@@ -1,5 +1,6 @@
 import { BLUE, GREY, RED } from "@chocbite/ts-lib/colors";
 import { px_to_rem, theme_init_variable_root } from "#theme";
+import type { StateROS } from "@chocbite/ts-lib/state";
 
 /** Type to store a position related to composition
  * position is always in rem*/
@@ -17,6 +18,14 @@ export const CompAnchor = {
   CENTER: "center",
 } as const;
 export type CompAnchor = (typeof CompAnchor)[keyof typeof CompAnchor];
+
+export const clamp = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(value, max));
+
+/**Writes the state when it is writable, writes of local states apply at once*/
+export function write(target: StateROS<unknown>, value: unknown): void {
+  if (target.writable) void target.write?.(value);
+}
 
 /**Where the anchor is in a box, as parts of its width and height from the top left*/
 export function anchor_fraction(anchor: CompAnchor): [number, number] {

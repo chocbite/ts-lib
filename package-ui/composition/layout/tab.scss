@@ -1,0 +1,160 @@
+composition-layouttab {
+  display: flex;
+  align-items: center;
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 3rem;
+  max-width: 14rem;
+  padding-left: 0.6rem;
+  box-sizing: border-box;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+  color: var(--composition-colors-titlebarText);
+  border-right: 1px solid var(--composition-colors-border);
+  font-size: 0.9rem;
+
+  .touch & {
+    font-size: 1.1rem;
+  }
+
+  &:hover {
+    background-color: var(--composition-colors-titlebarHover);
+  }
+
+  &.selected {
+    background-color: var(--composition-colors-background);
+  }
+
+  //The active tab of the group with focus is marked in the accent color, the others in the border color
+  &.selected::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background-color: var(--composition-colors-border);
+  }
+  composition-layouttabs:focus-within > .bar > &.selected::before {
+    background-color: var(--composition-colors-shadowFocus);
+  }
+  //The line is on the side away from the content
+  composition-layouttabs.side-bottom > .bar > &.selected::before {
+    top: auto;
+    bottom: 0;
+  }
+  composition-layouttabs.side-left > .bar > &.selected::before,
+  composition-layouttabs.side-right > .bar > &.selected::before {
+    bottom: 0;
+    width: 2px;
+    height: auto;
+  }
+  composition-layouttabs.side-right > .bar > &.selected::before {
+    left: auto;
+    right: 0;
+  }
+
+  //Above each other the tabs fill the width of the bar
+  composition-layouttabs.side-left > .bar > &,
+  composition-layouttabs.side-right > .bar > & {
+    flex: 0 0 var(--titlebar-height);
+    max-width: none;
+    border-right: none;
+    border-bottom: 1px solid var(--composition-colors-border);
+  }
+
+  //Compact tabs show only the icon, or the first letter of the title without one
+  > .letter {
+    display: none;
+  }
+  composition-layouttabs.compact > .bar > & {
+    flex: 0 0 var(--titlebar-height);
+    min-width: 0;
+    padding: 0;
+    justify-content: center;
+
+    > .title,
+    > .close {
+      display: none;
+    }
+    > .icon {
+      margin: 0;
+    }
+    &.no-icon > .letter {
+      display: block;
+      font-weight: 600;
+    }
+  }
+
+  &:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--composition-colors-shadowFocus);
+  }
+
+  &.dragging {
+    opacity: 0.5;
+    cursor: grabbing;
+  }
+
+  > .icon {
+    display: flex;
+    flex-shrink: 0;
+    margin-right: 0.4rem;
+
+    > svg {
+      height: 1.1rem;
+      width: auto;
+      fill: var(--composition-colors-icons);
+
+      .touch & {
+        height: 1.5rem;
+      }
+    }
+  }
+
+  > .title {
+    flex-grow: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-right: 0.6rem;
+  }
+
+  //Shown on the active tab and when hovering, the space is kept so the tab does not change width
+  > .close {
+    flex-shrink: 0;
+    width: 1.4rem;
+    height: 1.4rem;
+    margin-right: 0.3rem;
+    margin-left: -0.3rem;
+    border-radius: 0.3rem;
+    line-height: 1.4rem;
+    text-align: center;
+    font-size: 1.1rem;
+    color: var(--composition-colors-icons);
+    visibility: hidden;
+
+    .touch & {
+      width: 2rem;
+      height: 2rem;
+      line-height: 2rem;
+      font-size: 1.5rem;
+    }
+
+    &:hover {
+      background-color: var(--composition-colors-titlebarCloseHover);
+      color: #ffffff;
+    }
+  }
+
+  &.selected > .close,
+  &:hover > .close,
+  .touch & > .close {
+    visibility: visible;
+  }
+
+  //Read only tabs can not be closed
+  composition-layouttabs.locked > .bar > & > .close {
+    display: none;
+  }
+}

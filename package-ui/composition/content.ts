@@ -42,6 +42,16 @@ export type ContentCreateOptions = ContentOptions &
 /**Called by the container when it closes the content, internal to this module*/
 export const CONTENT_CLOSED = Symbol("content_closed");
 
+/**The container showing the content, set by containers that move content between them, internal to this module*/
+export const CONTENT_HOST = Symbol("content_host");
+/**Called on the host by content_close, the host closes the content, internal to this module*/
+export const HOST_CLOSE_CONTENT = Symbol("host_close_content");
+/**A container showing content that knows it by reference, like a layout, the content may not be in the document,
+ * like an inactive tab, so it can not reach its container with an event*/
+export interface ContentHost {
+  [HOST_CLOSE_CONTENT](content: ContentBase): void;
+}
+
 /**The context menu of content as it is right now, for ctm.combine, internal to this module*/
 export function content_context_lines(content: ContentBase) {
   const group = content.content_context_menu;
@@ -68,6 +78,8 @@ export abstract class ContentBase extends Base {
   #min_height: InputOf<typeof CONTENT_CREATE.min_height> = 0;
   #context_menu: ContextMenuGroup = undefined;
   #on_close: (() => void)[] = [];
+  /**Container showing the content, when it is one that knows it by reference*/
+  [CONTENT_HOST]?: ContentHost;
 
   constructor() {
     super();
@@ -133,6 +145,8 @@ export abstract class ContentBase extends Base {
 
   /**Closes the content, its container closes with it*/
   content_close(): void {
+    const host = this[CONTENT_HOST];
+    if (host) return host[HOST_CLOSE_CONTENT](this);
     this[CONTENT_CLOSED]();
     this.dispatchEvent(new CustomEvent("content_closed", { bubbles: true }));
   }

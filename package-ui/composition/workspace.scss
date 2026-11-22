@@ -1,0 +1,8 @@
+//Fills the element it is put in with the main layout, the panels are in a panel container
+composition-workspace {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
