@@ -1,6 +1,6 @@
 import { sync_resolve } from "#common";
 import { ok, OptionSome, some } from "#result";
-import { StateResult as SR } from "../types";
+import type { StateResult as SR, StateHelperSync } from "../types";
 import {
   StateInit as Init,
   StateHelperBase,
@@ -17,11 +17,9 @@ export interface StateBoolRelated extends StateRelatedBase {
 
 export interface StateBoolHelperOptions extends StateHelperBaseOptions {}
 
-export interface StateBoolHelper extends StateHelperBase<
-  SR<boolean>,
-  boolean,
-  OptionSome<StateBoolRelated>
-> {}
+export interface StateBoolHelper
+  extends StateHelperBase<SR<boolean>, boolean, OptionSome<StateBoolRelated>>,
+    StateHelperSync<SR<boolean>, boolean, OptionSome<StateBoolRelated>> {}
 
 export class StateBoolHelperBase
   extends StateHelperBase<SR<boolean>, boolean, OptionSome<StateBoolRelated>>
@@ -40,6 +38,14 @@ export class StateBoolHelperBase
 
   check(value: boolean): PromiseLike<SR<boolean>> {
     return sync_resolve(ok(value));
+  }
+
+  limit_sync(value: boolean): SR<boolean> {
+    return ok(value);
+  }
+
+  check_sync(value: boolean): SR<boolean> {
+    return ok(value);
   }
 
   related(): OptionSome<StateBoolRelated> {

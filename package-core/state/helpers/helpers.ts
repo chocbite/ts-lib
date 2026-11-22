@@ -1,5 +1,12 @@
 import { Option, OptionNone } from "#result";
-import { StateResult as SR, StateHelper, StateRelated } from "../types";
+import type {
+  State,
+  StateHelper,
+  StateHelperSync,
+  StateRelated,
+  StateRES,
+  StateResult as SR,
+} from "../types";
 
 export type StateInit<T = any> =
   | SR<T>
@@ -37,3 +44,11 @@ export abstract class StateHelperBase<
 }
 
 export type StateNoHelper = StateHelper<any, any, OptionNone>;
+
+/**No helper, for states with sync writes*/
+export type StateNoHelperSync = StateHelperSync<any, any, OptionNone>;
+
+/**The current result of a limit state of a helper, for the sync checks of helpers whose limit states are sync*/
+export function sync_get<T>(state: State<T> | undefined): SR<T> | undefined {
+  return (state as StateRES<T> | undefined)?.get();
+}

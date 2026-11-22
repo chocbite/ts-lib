@@ -8,7 +8,11 @@ import {
   err_nice,
 } from "#result";
 import { not_writable, state_errors } from "./errors";
-import { STATE_DERIVED_KEY, StateBase, type StateDerivedSub } from "./base";
+import {
+  STATE_DERIVED_KEY,
+  StateBase,
+  type StateDerivedSub,
+} from "./base";
 import {
   StateInferResult as SIR,
   StateResult as SR,
@@ -22,6 +26,8 @@ import {
   type StateROAW,
   type StateROS,
   type StateROSW,
+  type StateRESWS,
+  type StateROSWS,
 } from "./types";
 
 //##################################################################################################################################################
@@ -56,6 +62,13 @@ export interface StateCollectedWrite<IN extends State<any>[], WT> {
   write(value: WT, states: IN): PromiseLike<SR<void>>;
   check?(value: WT, states: IN): PromiseLike<SR<WT>>;
   limit?(value: WT, states: IN): PromiseLike<SR<WT>>;
+}
+
+/**Writing of a writable collected state that writes synchronously, like StateCollectedWrite with the results given directly*/
+export interface StateCollectedWriteSync<IN extends State<any>[], WT> {
+  write_sync(value: WT, states: IN): SR<void>;
+  check_sync?(value: WT, states: IN): SR<WT>;
+  limit_sync?(value: WT, states: IN): SR<WT>;
 }
 
 export type StateCollectedSubs<IN extends State<any>[]> = {
@@ -129,6 +142,29 @@ export type StateCollectedROSW<
   Owner<RT, IN, WT, ResultOk<RT>> &
   WriteOwner & {
     get read_only(): StateROS<RT, any, WT>;
+  };
+/**Owner of a collected state that writes synchronously, its write gate is a sync state*/
+interface WriteOwnerSync {
+  /**Sets the sync state that decides if writing is allowed right now, undefined removes the gate*/
+  set_write_enabled(gate: StateRES<boolean> | undefined): void;
+}
+export type StateCollectedROSWS<
+  RT,
+  IN extends [StateRES<any>, ...StateRES<any>[]],
+  WT,
+> = StateROSWS<RT, OptionNone, WT> &
+  Owner<RT, IN, WT, ResultOk<RT>> &
+  WriteOwnerSync & {
+    get read_only(): StateROS<RT, any, WT>;
+  };
+export type StateCollectedRESWS<RT, IN extends StateRES<any>[], WT> = StateRESWS<
+  RT,
+  OptionNone,
+  WT
+> &
+  Owner<RT, IN, WT, SR<RT>> &
+  WriteOwnerSync & {
+    get read_only(): StateRES<RT, any, WT>;
   };
 export type StateCollectedROAW<
   RT,
@@ -478,9 +514,10 @@ export class RXX<RT, IN extends State<any>[], WT, RRT extends SR<RT>>
   }
 
   //#Writer Context
-  #write?: StateCollectedWrite<IN, WT>;
+  /**A StateCollectedWriteSync, with write_sync, when the state writes synchronously*/
+  #write?: StateCollectedWrite<IN, WT> | StateCollectedWriteSync<IN, WT>;
   /**Makes the state writable, used by the writable factories*/
-  [SET_WRITE](write: StateCollectedWrite<IN, WT>): this {
+  [SET_WRITE](write: StateCollectedWrite<IN, WT> | StateCollectedWriteSync<IN, WT>): this {
     this.#write = write;
     return this;
   }
@@ -490,14 +527,19 @@ export class RXX<RT, IN extends State<any>[], WT, RRT extends SR<RT>>
   set_write_enabled(gate: State<boolean> | undefined): void {
     super.set_write_enabled(gate);
   }
+  get wsync(): boolean {
+    return Boolean(this.#write && "write_sync" in this.#write);
+  }
   write(value: WT): PromiseLike<SR<void>> {
     const write = this.#write;
     if (!write) return sync_resolve(not_writable());
+    if ("write_sync" in write) return sync_resolve(this.write_sync(value));
     return this.write_gated(() => write.write(value, this.#states));
   }
   limit(value: WT): PromiseLike<SR<WT>> {
     const write = this.#write;
     if (!write) return sync_resolve(not_writable());
+    if ("write_sync" in write) return sync_resolve(this.limit_sync(value));
     return this.write_gated(
       () => write.limit?.(value, this.#states) ?? sync_resolve(ok(value)),
     );
@@ -505,8 +547,37 @@ export class RXX<RT, IN extends State<any>[], WT, RRT extends SR<RT>>
   check(value: WT): PromiseLike<SR<WT>> {
     const write = this.#write;
     if (!write) return sync_resolve(not_writable());
+    if ("write_sync" in write) return sync_resolve(this.check_sync(value));
     return this.write_gated(
       () => write.check?.(value, this.#states) ?? sync_resolve(ok(value)),
+    );
+  }
+  //The sync methods are only in the types of collected states that write synchronously, the others give the not writable error
+  #write_sync(): StateCollectedWriteSync<IN, WT> | undefined {
+    const write = this.#write;
+    return write && "write_sync" in write ? write : undefined;
+  }
+  write_sync(value: WT): SR<void> {
+    const write = this.#write_sync();
+    if (!write) return not_writable();
+    return this.write_closed_sync() ?? write.write_sync(value, this.#states);
+  }
+  limit_sync(value: WT): SR<WT> {
+    const write = this.#write_sync();
+    if (!write) return not_writable();
+    return (
+      this.write_closed_sync() ??
+      write.limit_sync?.(value, this.#states) ??
+      ok(value)
+    );
+  }
+  check_sync(value: WT): SR<WT> {
+    const write = this.#write_sync();
+    if (!write) return not_writable();
+    return (
+      this.write_closed_sync() ??
+      write.check_sync?.(value, this.#states) ??
+      ok(value)
     );
   }
 }
@@ -624,6 +695,43 @@ export const COLLECTED = {
     return new RXX<RT, IN, WT, SR<RT>>(false, true, transform, ...states)[
       SET_WRITE
     ](write) as unknown as StateCollectedRESW<RT, IN, WT>;
+  },
+  /**Like ros, and writable synchronously through write, see StateCollectedWriteSync, the write gate is a sync state.
+   * @param transform - Function to translate value of collected states, false means first states values is used.
+   * @param write - Writes, checks and limits a value synchronously, given the collected states.
+   * @param states - The states to collect.*/
+  rosws<RT, IN extends [StateRES<any>, ...StateRES<any>[]], WT = RT>(
+    transform: ((values: StateCollectedTransVal<IN>) => ResultOk<RT>) | false,
+    write: StateCollectedWriteSync<IN, WT>,
+    ...states: IN
+  ) {
+    return new RXX<RT, IN, WT, ResultOk<RT>>(true, true, transform, ...states)[
+      SET_WRITE
+    ](write) as unknown as StateCollectedROSWS<RT, IN, WT>;
+  },
+  /**Like res, and writable synchronously through write, see StateCollectedWriteSync, the write gate is a sync state.
+   * @param transform - Function to translate value of collected states, false means first states values is used.
+   * @param write - Writes, checks and limits a value synchronously, given the collected states.
+   * @param states - The states to collect.*/
+  resws<RT, IN extends StateRES<any>[], WT = RT>(
+    transform: ((values: StateCollectedTransVal<IN>) => SR<RT>) | false,
+    write: StateCollectedWriteSync<IN, WT>,
+    ...states: IN
+  ) {
+    return new RXX<RT, IN, WT, SR<RT>>(false, true, transform, ...states)[
+      SET_WRITE
+    ](write) as unknown as StateCollectedRESWS<RT, IN, WT>;
+  },
+  /**Like resws, the transform gets the plain values and gives a plain value, the first error of the states is passed on as it is.
+   * @param transform - Function to translate the values of the collected states.
+   * @param write - Writes, checks and limits a value synchronously, given the collected states.
+   * @param states - The states to collect.*/
+  resws_map<RT, IN extends StateRES<any>[], WT = RT>(
+    transform: (values: StateCollectedOkVal<IN>) => RT,
+    write: StateCollectedWriteSync<IN, WT>,
+    ...states: IN
+  ) {
+    return COLLECTED.resws<RT, IN, WT>(ok_values(transform), write, ...states);
   },
   /**Like rea, and writable through write, see StateCollectedWrite.
    * @param transform - Function to translate value of collected states, false means first states values is used.

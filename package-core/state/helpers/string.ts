@@ -4,12 +4,14 @@ import { state_errors } from "../errors";
 import {
   StateResult as SR,
   State,
+  type StateHelperSync,
   StateRES,
   StateROA,
   StateROS,
 } from "../types";
 import {
   StateInit as Init,
+  sync_get,
   StateHelperBase,
   StateHelperBaseOptions,
   StateRelatedBase,
@@ -37,6 +39,61 @@ export interface StateStringHelper extends StateHelperBase<
   OptionSome<StateStringRelated>
 > {}
 
+/**Options of a string helper that checks synchronously, every state it checks with is sync*/
+export interface StateStringHelperSyncOptions extends StateStringHelperOptions {
+  max_length?: StateRES<number>;
+  max_length_bytes?: StateRES<number>;
+}
+
+/**A string helper that also checks synchronously, what help gives when every state it checks with is sync*/
+export interface StateStringHelperSync
+  extends StateStringHelper,
+    StateHelperSync<SR<string>, string, OptionSome<StateStringRelated>> {}
+
+/**The results of max_length and max_length_bytes, undefined for those not given*/
+type StringLimits = [SR<number> | undefined, SR<number> | undefined];
+
+/**The text shortened to the limits*/
+function string_limit(
+  value: string,
+  [max_length, max_length_bytes]: StringLimits,
+): SR<string> {
+  if (max_length?.ok && value.length > max_length.value)
+    value = value.slice(0, max_length.value);
+  if (max_length_bytes?.ok) {
+    value = new TextDecoder().decode(
+      new TextEncoder().encode(value).slice(0, max_length_bytes.value),
+    );
+    if (value.at(-1)?.charCodeAt(0) === 65533) value = value.slice(0, -1);
+  }
+  return ok(value);
+}
+
+/**The text when it is within the limits, otherwise the reason it is not*/
+function string_check(
+  value: string,
+  [max_length, max_length_bytes]: StringLimits,
+): SR<string> {
+  if (max_length?.ok && value.length > max_length.value)
+    return err_nice(
+      state_errors.TEXT_TOO_LONG,
+      "the text is longer than the limit of " +
+        max_length.value +
+        " characters",
+    );
+  if (
+    max_length_bytes?.ok &&
+    new TextEncoder().encode(value).length > max_length_bytes.value
+  )
+    return err_nice(
+      state_errors.TEXT_TOO_LONG,
+      "the text is longer than the limit of " +
+        max_length_bytes.value +
+        " bytes",
+    );
+  return ok(value);
+}
+
 export class StateStringHelperBase
   extends StateHelperBase<SR<string>, string, OptionSome<StateStringRelated>>
   implements StateStringRelated
@@ -57,44 +114,28 @@ export class StateStringHelperBase
       this.max_length_bytes = options.max_length_bytes;
   }
 
+  /**The current results of the limit states, the async methods wait for them*/
+  #read(): Promise<StringLimits> {
+    return Promise.all([this.max_length?.read(), this.max_length_bytes?.read()]);
+  }
+  /**The current results of the limit states, only for a sync helper, whose limit states are sync*/
+  #get(): StringLimits {
+    return [sync_get(this.max_length), sync_get(this.max_length_bytes)];
+  }
+
   async limit(value: string): Promise<SR<string>> {
-    const [max_length, max_length_bytes] = await Promise.all([
-      this.max_length?.read(),
-      this.max_length_bytes?.read(),
-    ]);
-    if (max_length?.ok && value.length > max_length.value)
-      value = value.slice(0, max_length.value);
-    if (max_length_bytes?.ok) {
-      value = new TextDecoder().decode(
-        new TextEncoder().encode(value).slice(0, max_length_bytes.value),
-      );
-      if (value.at(-1)?.charCodeAt(0) === 65533) value = value.slice(0, -1);
-    }
-    return ok(value);
+    return string_limit(value, await this.#read());
   }
   async check(value: string): Promise<SR<string>> {
-    const [max_length, max_length_bytes] = await Promise.all([
-      this.max_length?.read(),
-      this.max_length_bytes?.read(),
-    ]);
-    if (max_length?.ok && value.length > max_length.value)
-      return err_nice(
-        state_errors.TEXT_TOO_LONG,
-        "the text is longer than the limit of " +
-          max_length.value +
-          " characters",
-      );
-    if (
-      max_length_bytes?.ok &&
-      new TextEncoder().encode(value).length > max_length_bytes.value
-    )
-      return err_nice(
-        state_errors.TEXT_TOO_LONG,
-        "the text is longer than the limit of " +
-          max_length_bytes.value +
-          " bytes",
-      );
-    return ok(value);
+    return string_check(value, await this.#read());
+  }
+  /**Only for a sync helper, see StateStringHelperSync*/
+  limit_sync(value: string): SR<string> {
+    return string_limit(value, this.#get());
+  }
+  /**Only for a sync helper, see StateStringHelperSync*/
+  check_sync(value: string): SR<string> {
+    return string_check(value, this.#get());
   }
   related(): OptionSome<StateStringRelated> {
     return some(this);
@@ -165,11 +206,14 @@ export const STRING = {
       (h as { [STATE_STRING_HELPER_KEY]: boolean })[STATE_STRING_HELPER_KEY],
     );
   },
-  /**String helper*/
-  help<I extends Init<string>>(
+  /**String helper, it also checks synchronously when max_length and max_length_bytes are sync states*/
+  help<I extends Init<string>, O extends StateStringHelperOptions>(
     init: I,
-    options: StateStringHelperOptions,
-  ): [I, StateStringHelper] {
+    options: O,
+  ): [
+    I,
+    O extends StateStringHelperSyncOptions ? StateStringHelperSync : StateStringHelper,
+  ] {
     return [init, new StateStringHelperBase(options)];
   },
 };

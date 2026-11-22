@@ -49,7 +49,8 @@ describe("Write gate", function () {
     expect(await state.write(2)).toEqual(ok(undefined));
   });
   it("Async gate is awaited", async function () {
-    const state = st.ok_w(1);
+    //A state with sync writes takes only sync gates
+    const state = st.rosw(ok(1));
     state.set_write_enabled(st.roa(async () => ok(false)));
     expect(await state.write(2)).toEqual(err_nice(st.errors.WRITE_DISABLED, "writing is disabled"));
   });

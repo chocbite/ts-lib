@@ -7,13 +7,21 @@ import {
   type StateREAW,
   type StateRES,
   type StateRESW,
+  type StateRESWS,
   type StateROA,
   type StateROAW,
   type StateROS,
   type StateROSW,
+  type StateROSWS,
 } from "../types";
 
 type REL = Option<StateRelated>;
+function state_of<RT = never, L extends REL = Option<{}>, WT = unknown>(
+  sov: NoInfer<RT> | StateROSWS<RT, L, WT>,
+): sov is StateROSWS<RT, L, WT>;
+function state_of<RT = never, L extends REL = Option<{}>, WT = unknown>(
+  sov: NoInfer<RT> | StateRESWS<RT, L, WT>,
+): sov is StateRESWS<RT, L, WT>;
 function state_of<RT = never, L extends REL = Option<{}>, WT = unknown>(
   sov: NoInfer<RT> | StateROSW<RT, L, WT>,
 ): sov is StateROSW<RT, L, WT>;
@@ -98,6 +106,19 @@ export const IS = {
       Boolean(s && (s as { [STATE_KEY]: boolean })[STATE_KEY]) &&
       (s as State<any>).writable &&
       (s as State<any>).rsync &&
+      (s as State<any>).rok
+    );
+  },
+  resws(s: any): s is StateRESWS<any> {
+    return (
+      Boolean(s && (s as { [STATE_KEY]: boolean })[STATE_KEY]) &&
+      (s as State<any>).wsync
+    );
+  },
+  rosws(s: any): s is StateROSWS<any> {
+    return (
+      Boolean(s && (s as { [STATE_KEY]: boolean })[STATE_KEY]) &&
+      (s as State<any>).wsync &&
       (s as State<any>).rok
     );
   },

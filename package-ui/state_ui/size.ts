@@ -55,6 +55,9 @@ class SizeState extends state.class<ResultOk<number>, never, OptionNone> {
   get writable(): false {
     return false;
   }
+  get wsync(): false {
+    return false;
+  }
   limit(_value: never): PromiseLike<ResultNice<never>> {
     return sync_resolve(not_writable());
   }

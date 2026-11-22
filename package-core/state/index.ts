@@ -20,7 +20,7 @@ import { as_state } from "./helpers/state_or_val";
 import { STRING } from "./helpers/string";
 import { UTIL } from "./helpers/util";
 import { VIEWER } from "./helpers/viewer";
-import { rea, reaw, res, resw, roa, roaw, ros, rosw } from "./local";
+import { rea, reaw, res, resw, resws, roa, roaw, ros, rosw, rosws } from "./local";
 //Registers the proxy maker the proxy methods of every state use, see set_proxy_maker
 import "./proxy";
 //Registers the maker of the nested method of every state, see set_nested_maker
@@ -42,17 +42,17 @@ export const state = {
   from<RT>(init: RT) {
     return res(ok(init) as SR<RT>);
   },
-  /**Creates a writable ok state with the given initial value */
+  /**Creates a writable ok state with the given initial value, it writes synchronously */
   ok_w<RT>(init: RT) {
-    return rosw(ok(init));
+    return rosws(ok(init));
   },
-  /**Creates a writable error state with the given initial error */
+  /**Creates a writable error state with the given initial error, it writes synchronously */
   err_w<RT>(init: NiceError) {
-    return resw(err(init) as SR<RT>);
+    return resws(err(init) as SR<RT>);
   },
-  /**Creates a writable errorable state with the given initial value */
+  /**Creates a writable errorable state with the given initial value, it writes synchronously */
   from_w<RT>(init: RT) {
-    return resw(ok(init) as SR<RT>);
+    return resws(ok(init) as SR<RT>);
   },
   //Local
   /**Creates a sync ok state from an initial result */
@@ -63,6 +63,10 @@ export const state = {
   res,
   /**Creates a writable sync errorable state from an initial result */
   resw,
+  /**Creates a writable sync ok state that writes synchronously, see write_sync */
+  rosws,
+  /**Creates a writable sync errorable state that writes synchronously, see write_sync */
+  resws,
   /**Creates an async ok state from an initial result */
   roa,
   /**Creates a writable async ok state from an initial result */
@@ -145,7 +149,10 @@ export {
   type StateCollectedROAW,
   type StateCollectedROS,
   type StateCollectedROSW,
+  type StateCollectedROSWS,
+  type StateCollectedRESWS,
   type StateCollectedWrite,
+  type StateCollectedWriteSync,
 } from "./collected";
 export {
   STATE_ARRAY_HELPER_KEY,
@@ -168,12 +175,14 @@ export {
   STATE_ENUM_HELPER_KEY,
   STATE_ENUM_RELATED_KEY,
   type StateEnumHelper,
+  type StateEnumHelperSync,
   type StateEnumRelated,
 } from "./helpers/enum";
 export {
   STATE_NUMBER_HELPER_KEY,
   STATE_NUMBER_RELATED_KEY,
   type StateNumberHelper,
+  type StateNumberHelperSync,
   type StateNumberRelated,
 } from "./helpers/number";
 export {
@@ -190,6 +199,7 @@ export {
   STATE_STRING_HELPER_KEY,
   STATE_STRING_RELATED_KEY,
   type StateStringHelper,
+  type StateStringHelperSync,
   type StateStringRelated,
 } from "./helpers/string";
 export { viewer as observe } from "./helpers/viewer";
@@ -202,6 +212,8 @@ export {
   type StateLocalROAW,
   type StateLocalROS,
   type StateLocalROSW,
+  type StateLocalRESWS,
+  type StateLocalROSWS,
 } from "./local";
 export {
   type StateProxyREA,
@@ -212,7 +224,10 @@ export {
   type StateProxyROAW,
   type StateProxyROS,
   type StateProxyROSW,
+  type StateProxyROSWS,
+  type StateProxyRESWS,
   type StateProxyWrite,
+  type StateProxyWriteSync,
 } from "./proxy";
 export {
   type StateRemote,
@@ -237,6 +252,8 @@ export type {
   StateOrValROAW,
   StateOrValROS,
   StateOrValROSW,
+  StateOrValRESWS,
+  StateOrValROSWS,
   StateProxySource,
   StateREA,
   StateReadType,
@@ -244,10 +261,13 @@ export type {
   StateRES,
   StateResult,
   StateRESW,
+  StateRESWS,
   StateROA,
   StateROAW,
   StateROS,
   StateROSW,
+  StateROSWS,
+  StateHelperSync,
   StateSub,
   StateWriteType,
 } from "./types";

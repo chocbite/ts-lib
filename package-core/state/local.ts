@@ -17,7 +17,10 @@ import {
   type StateArrayRead as SAR,
   type StateArrayReadTypes as SART,
 } from "./helpers/array";
-import { type StateNoHelper as NoHelper } from "./helpers/helpers";
+import {
+  type StateNoHelper as NoHelper,
+  type StateNoHelperSync as NoHelperSync,
+} from "./helpers/helpers";
 import {
   OBJECT,
   STATE_OBJECT_READ_KEY as SORK,
@@ -26,6 +29,7 @@ import {
 } from "./helpers/object";
 import type {
   StateHelper as Helper,
+  StateHelperSync as HelperSync,
   HelperRelated as HELToREL,
   StateResult as SR,
   StateReadType as SRT,
@@ -39,6 +43,8 @@ import type {
   StateROAW,
   StateROS,
   StateROSW,
+  StateRESWS,
+  StateROSWS,
   StateWriteType as SWT,
 } from "./types";
 
@@ -59,6 +65,17 @@ type Setter<
   state: Owner<RRT, HEL, WT>,
   old?: RRT,
 ) => PromiseLike<StateResult<void>>;
+
+/**The setter of a state with sync writes, it gives its result directly*/
+type SetterSync<
+  RRT extends StateResult<any>,
+  HEL extends Helper<RRT, WT, any>,
+  WT,
+> = (
+  value: WT,
+  state: Owner<RRT, HEL, WT>,
+  old?: RRT,
+) => StateResult<void>;
 
 /**Init of a delayed state, func gives the first value, running while it does*/
 interface DelayedInit<RRT> {
@@ -94,6 +111,18 @@ export interface Owner<
       ? LocalObjectOwner<RRT>
       : never;
 }
+
+/**The owner of a state with sync writes, its setter is sync and its write gate a sync state*/
+export type OwnerSync<
+  RRT extends StateResult<any>,
+  HEL extends Helper<RRT, WT, any>,
+  WT,
+> = Omit<Owner<RRT, HEL, WT>, "setter" | "set_write_enabled"> & {
+  /**Changes state setter function, it must give its result directly */
+  setter: SetterSync<RRT, HEL, WT>;
+  /**Sets the sync state that decides if writing is allowed right now, undefined removes the gate */
+  set_write_enabled(gate: StateRES<boolean> | undefined): void;
+};
 
 export type StateLocalROS<
   RT,
@@ -157,6 +186,27 @@ export type StateLocalRESW<
     set_err(error: NiceError): void;
     readonly read_only: StateRES<RT, HELToREL<HEL>, WT>;
     readonly read_write: StateRESW<RT, HELToREL<HEL>, WT>;
+  };
+
+export type StateLocalROSWS<
+  RT,
+  HEL extends HelperSync<RO<RT>, WT, any> = any,
+  WT = RT,
+> = StateROSWS<RT, HELToREL<HEL>, WT> &
+  OwnerSync<RO<RT>, HEL, WT> & {
+    readonly read_only: StateROS<RT, HELToREL<HEL>, WT>;
+    readonly read_write: StateROSWS<RT, HELToREL<HEL>, WT>;
+  };
+
+export type StateLocalRESWS<
+  RT,
+  HEL extends HelperSync<RO<RT>, WT, any> = any,
+  WT = RT,
+> = StateRESWS<RT, HELToREL<HEL>, WT> &
+  OwnerSync<StateResult<RT>, HEL, WT> & {
+    set_err(error: NiceError): void;
+    readonly read_only: StateRES<RT, HELToREL<HEL>, WT>;
+    readonly read_write: StateRESWS<RT, HELToREL<HEL>, WT>;
   };
 
 export type StateLocalROAW<
@@ -413,6 +463,13 @@ export class LocalObjectOwner<RT extends StateResult<Record<string, any>>> {
 //     | |____| |____ / ____ \ ____) |___) |
 //      \_____|______/_/    \_\_____/_____/
 
+/**Flags of a local state, in one field so a state with sync writes is no bigger than one without*/
+const ROK = 1;
+/**Sync from the start, lazy states included, a delayed state is sync once it has a value*/
+const RSYNC = 2;
+/**Writes synchronously, its setter is a SetterSync*/
+const WSYNC = 4;
+
 class RXXX<
   RRT extends StateResult<any>,
   HEL extends Helper<RRT, WT, OptionNone>,
@@ -427,17 +484,21 @@ class RXXX<
       | [1, boolean, () => RRT]
       | [2, boolean, (() => PromiseLike<RRT>) | undefined],
     helper?: HEL,
-    setter?: Setter<RRT, HEL, WT> | true,
+    setter?: Setter<RRT, HEL, WT> | SetterSync<RRT, HEL, WT> | true,
+    wsync?: boolean,
   ) {
     super();
     if (helper) this.#helper = helper;
-    this.#rok = init[1];
-    this.#sync = init[0] !== 2;
+    this.#flags = (init[1] ? ROK : 0) | (init[0] !== 2 ? RSYNC : 0) | (wsync ? WSYNC : 0);
     if (setter !== true) this.#setter = setter;
     if (init[0] === 0) {
-      if (setter === true) this.#setter = this.#make_setter(init[2]);
+      if (setter === true) this.#setter = this.#default_setter(init[2]);
       this.set(init[2]);
-    } else if (setter === true) this.#setter = this.#make_setter(undefined);
+    } else if (setter === true) this.#setter = this.#default_setter(undefined);
+  }
+
+  #default_setter(type?: StateResult<any>): Setter<RRT, HEL, WT> | SetterSync<RRT, HEL, WT> {
+    return this.#flags & WSYNC ? this.#make_setter_sync(type) : this.#make_setter(type);
   }
 
   /**Gives the state its first value from its init, without telling subscribers, used by RXXXInit*/
@@ -449,7 +510,8 @@ class RXXX<
   #helper?: Helper<any, any, any>;
 
   #value?: RRT;
-  #setter?: Setter<RRT, HEL, WT>;
+  /**A SetterSync when the state writes synchronously, see WSYNC*/
+  #setter?: Setter<RRT, HEL, WT> | SetterSync<RRT, HEL, WT>;
 
   #make_setter(type?: StateResult<any>): Setter<RRT, HEL, WT> {
     if (type === undefined || type.err) {
@@ -556,6 +618,80 @@ class RXXX<
     }
   }
 
+  /**The default setter of a state with sync writes, like make_setter, with the sync checks of the helper.
+   * Kept apart from make_setter, so writes of the other states do not get slower*/
+  #make_setter_sync(type?: StateResult<any>): SetterSync<RRT, HEL, WT> {
+    if (type === undefined || type.err) {
+      return (value, state, old) => {
+        if (old && !old.err && value === old.value) return ok(undefined);
+        if (this.#helper) {
+          const e = (this.#helper as HelperSync<RRT, WT, any>).check_sync(value);
+          if (e.err) return err(e.error);
+          value = e.value;
+        }
+        if (ARRAY.is_write(value))
+          ARRAY.read_set(
+            ARRAY.write_apply(value, old?.unwrap_or(undefined) as never),
+            state.set_ok.bind(state) as (value: any[] | SAR<any>) => void,
+          );
+        else if (OBJECT.is_write(value))
+          OBJECT.read_set(
+            OBJECT.write_apply(value, old?.unwrap_or(undefined) as never),
+            state.set_ok.bind(state) as (
+              value: Record<PropertyKey, any> | SOR<any>,
+            ) => void,
+          );
+        else state.set_ok(value as RIOK<RRT>);
+        return ok(undefined);
+      };
+    } else if (typeof type.value !== "object") {
+      return (value, state, old) => {
+        if (old && !old.err && value === old.value) return ok(undefined);
+        if (this.#helper) {
+          const e = (this.#helper as HelperSync<RRT, WT, any>).check_sync(value);
+          if (e.err) return err(e.error);
+          value = e.value;
+        }
+        state.set_ok(value as RIOK<RRT>);
+        return ok(undefined);
+      };
+    } else if (Array.isArray(type.value)) {
+      return (value, state, old) => {
+        if (old && !old.err && value === old.value) return ok(undefined);
+        if (this.#helper) {
+          const e = (this.#helper as HelperSync<RRT, WT, any>).check_sync(value);
+          if (e.err) return err(e.error);
+          value = e.value;
+        }
+        if (ARRAY.is_write(value))
+          ARRAY.read_set(
+            ARRAY.write_apply(value, old?.unwrap_or([]) as never),
+            state.set_ok.bind(state) as (value: any[] | SAR<any>) => void,
+          );
+        else state.set_ok(value as RIOK<RRT>);
+        return ok(undefined);
+      };
+    } else {
+      return (value, state, old) => {
+        if (old && !old.err && value === old.value) return ok(undefined);
+        if (this.#helper) {
+          const e = (this.#helper as HelperSync<RRT, WT, any>).check_sync(value);
+          if (e.err) return err(e.error);
+          value = e.value;
+        }
+        if (OBJECT.is_write(value))
+          OBJECT.read_set(
+            OBJECT.write_apply(value, old?.unwrap_or({}) as never),
+            state.set_ok.bind(state) as (
+              value: Record<PropertyKey, any> | SOR<any>,
+            ) => void,
+          );
+        else state.set_ok(value as RIOK<RRT>);
+        return ok(undefined);
+      };
+    }
+  }
+
   //#Owner Context
   set(value: RRT | RO<SRT<RIOK<RRT>>>) {
     //The same primitive value again changes nothing, objects and arrays can have changed in place, errors always tell
@@ -573,11 +709,12 @@ class RXXX<
   set_err(error: NiceError): void {
     this.set(err(error) as RRT);
   }
+  //A SetterSync on a state with sync writes, the owner types decide which
   set setter(setter: Setter<RRT, HEL, WT> | undefined) {
     this.#setter = setter;
   }
   get setter(): Setter<RRT, HEL, WT> | undefined {
-    return this.#setter;
+    return this.#setter as Setter<RRT, HEL, WT> | undefined;
   }
   get state() {
     return this as State<RIOK<RRT>, HELToREL<HEL>, WT>;
@@ -631,14 +768,14 @@ class RXXX<
   }
 
   //#Reader Context
-  #rok: boolean;
+  /**ROK, RSYNC and WSYNC*/
+  #flags: number;
   get rok(): boolean {
-    return this.#rok;
+    return (this.#flags & ROK) !== 0;
   }
   //Lazy states are sync before their first read, delayed states once they have a value
-  #sync: boolean;
   get rsync(): boolean {
-    return this.#sync || Boolean(this.#value);
+    return (this.#flags & RSYNC) !== 0 || Boolean(this.#value);
   }
   read(): PromiseLike<RRT> {
     try {
@@ -663,10 +800,32 @@ class RXXX<
   get writable(): boolean {
     return this.#setter !== undefined;
   }
+  get wsync(): boolean {
+    return (this.#flags & WSYNC) !== 0;
+  }
   write(value: WT): PromiseLike<StateResult<void>> {
-    const setter = this.#setter;
+    if (this.#flags & WSYNC) return sync_resolve(this.write_sync(value));
+    const setter = this.#setter as Setter<RRT, HEL, WT> | undefined;
     if (!setter) return sync_resolve(not_writable());
     return this.write_gated(() => setter(value, this, this.#value));
+  }
+  //The sync methods are only in the types of states with sync writes, the others give the not writable error
+  write_sync(value: WT): StateResult<void> {
+    const setter = this.#setter as SetterSync<RRT, HEL, WT> | undefined;
+    if (!setter || !(this.#flags & WSYNC)) return not_writable();
+    return this.write_closed_sync() ?? setter(value, this, this.#value);
+  }
+  limit_sync(value: WT): StateResult<WT> {
+    if (!(this.#flags & WSYNC)) return not_writable();
+    return (this.#helper as HelperSync<RRT, WT, any> | undefined)?.limit_sync(value) ?? ok(value);
+  }
+  check_sync(value: WT): StateResult<WT> {
+    if (!(this.#flags & WSYNC)) return not_writable();
+    return (
+      this.write_closed_sync() ??
+      (this.#helper as HelperSync<RRT, WT, any> | undefined)?.check_sync(value) ??
+      ok(value)
+    );
   }
   limit(value: WT): PromiseLike<StateResult<WT>> {
     return this.#helper?.limit(value) ?? sync_resolve(ok(value));
@@ -688,9 +847,10 @@ class RXXXInit<
   constructor(
     init: [1, boolean, () => RRT] | [2, boolean, (() => PromiseLike<RRT>) | undefined],
     helper?: HEL,
-    setter?: Setter<RRT, HEL, WT> | true,
+    setter?: Setter<RRT, HEL, WT> | SetterSync<RRT, HEL, WT> | true,
+    wsync?: boolean,
   ) {
-    super(init, helper, setter);
+    super(init, helper, setter, wsync);
     this.#init = init[0] === 1 ? init[2] : { func: init[2], running: false };
   }
 
@@ -768,11 +928,12 @@ function make_local<
     | [1, boolean, () => RRT]
     | [2, boolean, (() => PromiseLike<RRT>) | undefined],
   helper?: HEL,
-  setter?: Setter<RRT, HEL, WT> | true,
+  setter?: Setter<RRT, HEL, WT> | SetterSync<RRT, HEL, WT> | true,
+  wsync?: boolean,
 ): RXXX<RRT, HEL, WT> {
   return init[0] === 0
-    ? new RXXX<RRT, HEL, WT>(init, helper, setter)
-    : new RXXXInit<RRT, HEL, WT>(init, helper, setter);
+    ? new RXXX<RRT, HEL, WT>(init, helper, setter, wsync)
+    : new RXXXInit<RRT, HEL, WT>(init, helper, setter, wsync);
 }
 
 //##################################################################################################################################################
@@ -848,6 +1009,46 @@ export function resw<
     h,
     setter,
   ) as StateLocalRESW<RT, HEL, SWT<WT>>;
+}
+
+/**Creates a writable sync ok state that writes synchronously, see write_sync.
+ * Its setter gives its result directly, a helper must check synchronously, and its write gate is a sync state.
+ * @param init initial result for state or helper.*/
+export function rosws<
+  RT,
+  WT = RT,
+  HEL extends HelperSync<RO<RT>, SWT<WT>, any> = NoHelperSync,
+>(
+  init: (RO<RT> | (() => RO<RT>)) | [RO<RT> | (() => RO<RT>), HEL],
+  setter: SetterSync<RO<RT>, HEL, SWT<WT>> | true = true,
+) {
+  const [i, h] = Array.isArray(init) ? [init[0], init[1]] : [init, undefined];
+  return make_local<RO<RT>, HEL, SWT<WT>>(
+    typeof i === "function" ? [1, true, i] : [0, true, i],
+    h,
+    setter,
+    true,
+  ) as unknown as StateLocalROSWS<RT, HEL, SWT<WT>>;
+}
+
+/**Creates a writable sync state that writes synchronously, see write_sync.
+ * Its setter gives its result directly, a helper must check synchronously, and its write gate is a sync state.
+ * @param init initial result for state or helper.*/
+export function resws<
+  RT,
+  WT = RT,
+  HEL extends HelperSync<SR<RT>, SWT<WT>, any> = NoHelperSync,
+>(
+  init: (SR<RT> | (() => SR<RT>)) | [SR<RT> | (() => SR<RT>), HEL],
+  setter: SetterSync<SR<RT>, HEL, SWT<WT>> | true = true,
+) {
+  const [i, h] = Array.isArray(init) ? [init[0], init[1]] : [init, undefined];
+  return make_local<SR<RT>, HEL, SWT<WT>>(
+    typeof i === "function" ? [1, false, i] : [0, false, i],
+    h,
+    setter,
+    true,
+  ) as unknown as StateLocalRESWS<RT, HEL, SWT<WT>>;
 }
 
 /**Creates an async ok state from an init function, called on first read.

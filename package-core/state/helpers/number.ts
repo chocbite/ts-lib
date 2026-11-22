@@ -5,12 +5,14 @@ import { COLLECTED } from "../collected";
 import {
   StateResult as SR,
   State,
+  type StateHelperSync,
   StateRES,
   StateROA,
   StateROS,
 } from "../types";
 import {
   StateInit as Init,
+  sync_get,
   StateHelperBase,
   StateHelperBaseOptions,
   StateRelatedBase,
@@ -137,6 +139,86 @@ export interface StateNumberHelper extends StateHelperBase<
   OptionSome<StateNumberRelated>
 > {}
 
+/**Options of a number helper that checks synchronously, every state it checks with is sync*/
+export interface StateNumberHelperSyncOptions extends StateNumberHelperOptions {
+  min?: StateRES<number>;
+  max?: StateRES<number>;
+  decimals?: StateRES<number>;
+  step?: StateRES<number>;
+  start?: StateRES<number>;
+}
+
+/**A number helper that also checks synchronously, what help gives when every state it checks with is sync*/
+export interface StateNumberHelperSync
+  extends StateNumberHelper,
+    StateHelperSync<SR<number>, number, OptionSome<StateNumberRelated>> {}
+
+/**The results of min, max, step, start and decimals, undefined for those not given*/
+type NumberLimits = [
+  SR<number> | undefined,
+  SR<number> | undefined,
+  SR<number> | undefined,
+  SR<number> | undefined,
+  SR<number> | undefined,
+];
+
+/**The value moved to the closest valid value*/
+function number_limit(
+  value: number,
+  [min, max, step, start, decimals]: NumberLimits,
+): SR<number> {
+  return ok(
+    Math.min(
+      max?.unwrap_or(Infinity) ?? Infinity,
+      Math.max(
+        min?.unwrap_or(-Infinity) ?? -Infinity,
+        number_step_start_decimal(
+          value,
+          step?.unwrap_or(undefined),
+          start?.unwrap_or(undefined),
+          decimals?.unwrap_or(undefined),
+        ),
+      ),
+    ),
+  );
+}
+
+/**The value when it is valid, otherwise the reason it is not*/
+function number_check(
+  value: number,
+  [min, max, step, start, decimals]: NumberLimits,
+): SR<number> {
+  if (max?.ok && value > max.value)
+    return err_nice(state_errors.ABOVE_MAX, value + " is bigger than the limit of " + max.value);
+  if (min?.ok && value < min.value)
+    return err_nice(state_errors.BELOW_MIN, value + " is smaller than the limit of " + min.value);
+  //limit clamps to min and max after snapping to step, so those are valid even when not on a step
+  if (value === max?.unwrap_or(undefined) || value === min?.unwrap_or(undefined))
+    return ok(value);
+  const step_val = step?.unwrap_or(undefined);
+  const start_val = start?.unwrap_or(undefined);
+  const decimals_val = decimals?.unwrap_or(undefined);
+  const snapped = number_step_start_decimal(
+    value,
+    step_val,
+    start_val,
+    decimals_val,
+  );
+  //Tiny differences are floating point noise, like 0.1 + 0.2, so they are accepted
+  if (Math.abs(snapped - value) > 1e-9 * Math.max(1, Math.abs(value))) {
+    if (step_val)
+      return err_nice(
+        state_errors.OFF_STEP,
+        value +
+          " is not on a step of " +
+          step_val +
+          (start_val ? " starting from " + start_val : ""),
+      );
+    return err_nice(state_errors.TOO_MANY_DECIMALS, value + " has more than " + decimals_val + " decimals");
+  }
+  return ok(snapped);
+}
+
 export class StateNumberHelperBase
   extends StateHelperBase<SR<number>, number, OptionSome<StateNumberRelated>>
   implements StateNumberRelated
@@ -165,67 +247,40 @@ export class StateNumberHelperBase
     if (options.decimals) this.decimals = options.decimals;
   }
 
-  async limit(value: number): Promise<SR<number>> {
-    const [min, max, step, start, decimals] = await Promise.all([
+  /**The current results of the limit states, the async methods wait for them*/
+  #read(): Promise<NumberLimits> {
+    return Promise.all([
       this.min?.read(),
       this.max?.read(),
       this.step?.read(),
       this.start?.read(),
       this.decimals?.read(),
     ]);
-    return ok(
-      Math.min(
-        max?.unwrap_or(Infinity) ?? Infinity,
-        Math.max(
-          min?.unwrap_or(-Infinity) ?? -Infinity,
-          number_step_start_decimal(
-            value,
-            step?.unwrap_or(undefined),
-            start?.unwrap_or(undefined),
-            decimals?.unwrap_or(undefined),
-          ),
-        ),
-      ),
-    );
+  }
+  /**The current results of the limit states, only for a sync helper, whose limit states are sync*/
+  #get(): NumberLimits {
+    return [
+      sync_get(this.min),
+      sync_get(this.max),
+      sync_get(this.step),
+      sync_get(this.start),
+      sync_get(this.decimals),
+    ];
   }
 
+  async limit(value: number): Promise<SR<number>> {
+    return number_limit(value, await this.#read());
+  }
   async check(value: number): Promise<SR<number>> {
-    const [min, max, step, start, decimals] = await Promise.all([
-      this.min?.read(),
-      this.max?.read(),
-      this.step?.read(),
-      this.start?.read(),
-      this.decimals?.read(),
-    ]);
-    if (max?.ok && value > max.value)
-      return err_nice(state_errors.ABOVE_MAX, value + " is bigger than the limit of " + max.value);
-    if (min?.ok && value < min.value)
-      return err_nice(state_errors.BELOW_MIN, value + " is smaller than the limit of " + min.value);
-    //limit clamps to min and max after snapping to step, so those are valid even when not on a step
-    if (value === max?.unwrap_or(undefined) || value === min?.unwrap_or(undefined))
-      return ok(value);
-    const step_val = step?.unwrap_or(undefined);
-    const start_val = start?.unwrap_or(undefined);
-    const decimals_val = decimals?.unwrap_or(undefined);
-    const snapped = number_step_start_decimal(
-      value,
-      step_val,
-      start_val,
-      decimals_val,
-    );
-    //Tiny differences are floating point noise, like 0.1 + 0.2, so they are accepted
-    if (Math.abs(snapped - value) > 1e-9 * Math.max(1, Math.abs(value))) {
-      if (step_val)
-        return err_nice(
-          state_errors.OFF_STEP,
-          value +
-            " is not on a step of " +
-            step_val +
-            (start_val ? " starting from " + start_val : ""),
-        );
-      return err_nice(state_errors.TOO_MANY_DECIMALS, value + " has more than " + decimals_val + " decimals");
-    }
-    return ok(snapped);
+    return number_check(value, await this.#read());
+  }
+  /**Only for a sync helper, see StateNumberHelperSync*/
+  limit_sync(value: number): SR<number> {
+    return number_limit(value, this.#get());
+  }
+  /**Only for a sync helper, see StateNumberHelperSync*/
+  check_sync(value: number): SR<number> {
+    return number_check(value, this.#get());
   }
 
   related(): OptionSome<StateNumberRelated> {
@@ -264,11 +319,14 @@ export const NUMBER = {
       (h as { [STATE_NUMBER_HELPER_KEY]: boolean })[STATE_NUMBER_HELPER_KEY],
     );
   },
-  /**Number helper*/
-  help<I extends Init<number>>(
+  /**Number helper, it also checks synchronously when min, max, decimals, step and start are sync states*/
+  help<I extends Init<number>, O extends StateNumberHelperOptions>(
     init: I,
-    options: StateNumberHelperOptions,
-  ): [I, StateNumberHelper] {
+    options: O,
+  ): [
+    I,
+    O extends StateNumberHelperSyncOptions ? StateNumberHelperSync : StateNumberHelper,
+  ] {
     return [init, new StateNumberHelperBase(options)];
   },
 };
