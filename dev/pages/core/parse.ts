@@ -266,6 +266,10 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
       delete patch["pin"];
       delete patch["restart"];
       delete patch["boost"];
+      //Commands written whole, the log shows each as one PATCH
+      delete patch["move"];
+      if ("clear_log" in patch) device.log = [];
+      delete patch["clear_log"];
       merge(device, patch);
       write_log(`PATCH ${String(init.body)}`, "#e83");
       return respond(200, "");
@@ -328,6 +332,8 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
       restart: "bwo",
       boost: ["?", "nwo", () => 0],
       pin: ["?", "swo", () => "", { reset: true }],
+      move: { from: "nwo", to: "nwo", count: "?nwo" },
+      clear_log: ["wo", {}],
     },
     { write: patch_device, fetch: api_fetch, retry_rate: RETRY_MS, write_debounce: WRITE_DEBOUNCE_MS },
   );
@@ -387,6 +393,21 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
   boost.appendChild(form.number_input({ min: 0, max: 60, unit: "min" }).set({ value: parsed.boost }));
   const pin = box(write_only, "pin: reset, back to empty after each write, 1234 is accepted", WIDTH);
   pin.appendChild(form.password().set({ value: parsed.pin }));
+
+  //Write only containers written whole, one PATCH per command, also with write_debounce
+  const commands = row(sec);
+  commands.style.marginTop = "0.75rem";
+  const move = box(commands, "move: { from, to, count: ?nwo } written whole with move[FETCH_PARSE]", WIDTH);
+  const move_button = form.button({ text: "Move 2 to 5" });
+  move_button.addEventListener("click", () => void parsed.move[FETCH_PARSE].write({ from: 2, to: 5 }));
+  move.appendChild(move_button);
+  const move_count = form.button({ text: "Move 3 from 1 to 4" });
+  move_count.addEventListener("click", () => void parsed.move[FETCH_PARSE].write({ from: 1, to: 4, count: 3 }));
+  move.appendChild(move_count);
+  const clear = box(commands, "clear_log: [\"wo\", {}], a command without parameters, sends {}", WIDTH);
+  const clear_button = form.button({ text: "Clear log on server" });
+  clear_button.addEventListener("click", () => void parsed.clear_log[FETCH_PARSE].write({}));
+  clear.appendChild(clear_button);
 
   const read_only = row(sec);
   read_only.style.marginTop = "0.75rem";

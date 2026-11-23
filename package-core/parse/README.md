@@ -182,6 +182,7 @@ The fetch parser makes these kinds, in `parse.fetch.errors`:
 | `"n"`, `"?s"`, …        | A read-only state of the member.                                                                 |
 | `"nw"`, `"?sw"`, …      | A writable state of the member, see [Writing](#writing).                                         |
 | `"nwo"`, `["?", "nwo", () => v]` | A write-only state, the server doesn't send the member, see [Write-only members](#write-only-members). |
+| `["wo", {}]`            | A write-only command without parameters, written as `{}`, see [Written whole](#written-whole). |
 | `{ key: spec }`         | An object with a node per key.                                                                   |
 | `["{}", spec]`          | An object that gives a node for any key you read.                                                |
 | `[3, spec]`             | A real array of 3 nodes, and the whole array under `FETCH_PARSE`, see the note on primitive items below. `[3, spec, { start }]` gives it a start of its own, see `array_start` in [Writing](#writing). |
@@ -191,7 +192,7 @@ The fetch parser makes these kinds, in `parse.fetch.errors`:
 | `["?", spec, () => v]`  | What `spec` gives, filled in by the default while the member is missing.                         |
 | function or parser      | One read-only state of the parsed member.                                                        |
 
-- **A container's own value:** every object, record, tuple, fixed array and fixed-array item also has the state of its whole value under the `FETCH_PARSE` symbol, `device.settings[FETCH_PARSE]`. On the root, `device[FETCH_PARSE]` is the state of the whole response. Schema keys never collide with it.
+- **A container's own value:** every object, record, tuple, fixed array and fixed-array item also has the state of its whole value under the `FETCH_PARSE` symbol, `device.settings[FETCH_PARSE]`. On the root, `device[FETCH_PARSE]` is the state of the whole response. Schema keys never collide with it. For a write-only container it is the state that writes it whole, see [Written whole](#written-whole).
 - **Primitive items of a fixed array** are wrapped, so their state is `fixed[0][FETCH_PARSE]`.
 - **A missing optional member reads as `undefined`.** That covers a `"?n"` the server leaves out and everything in a missing `["?", spec]`. A missing optional dynamic array has no items. A missing required member, such as a record key the server doesn't have, reads as a `MEMBER_MISSING` error.
 
@@ -235,8 +236,31 @@ device.restart.write(true); // write({ restart: true })
   - **With a default,** `["?", "nwo", () => v]`, it reads the default, which must be of the write type, `make_fetch_parser` throws otherwise, as nothing parses it. A written value is read at once, so an input shows what you sent, also while `write_debounce` collects it. When the write finishes, the state reads the last value written successfully, so a failed write goes back to the one before it.
   - **With `{ reset: true }`** as the fourth entry, the state reads the default again when a write finishes, whether it succeeded or failed. This suits PINs and commands.
 - **When writes overlap,** only the last one decides what the state reads when it finishes.
-- **Write-only containers:** a fixed array, tuple, record or object of only write-only members is write-only as a whole. The server doesn't send it, so it's left out of parsing and has no `FETCH_PARSE` state of its own. `passcode: [3, "swo"]` writes `{ passcode: { 2: "1234" } }` through `passcode[2][FETCH_PARSE]`, as primitive items of a fixed array are wrapped.
-- **Only as a member of an object or in a write-only container,** also inside the items of a dynamic array. A received tuple, fixed array or dynamic array can't have write-only items, as the server sends every position, and nothing in an `"all"` array can be write-only, as it sends the whole array built from the received value. A `?` prefix isn't allowed either. `make_fetch_parser` throws for these.
+- **Write-only containers:** a fixed array, tuple, record or object of only write-only members is write-only as a whole. The server doesn't send it, so it's left out of parsing. Its members can be written one by one, `passcode: [3, "swo"]` writes `{ passcode: { 2: "1234" } }` through `passcode[2][FETCH_PARSE]`, as primitive items of a fixed array are wrapped, or the container is written whole, see below.
+- **Only as a member of an object or in a write-only container,** also inside the items of a dynamic array. A received tuple, fixed array or dynamic array can't have write-only items, as the server sends every position, and nothing in an `"all"` array can be write-only, as it sends the whole array built from the received value. `make_fetch_parser` throws for these.
+
+#### Written whole
+
+The `FETCH_PARSE` state of a write-only container writes it whole, as one payload. That suits commands whose parameters belong together, which the server must get in one request. `["wo", {}]` is a command without parameters, sent as an empty object.
+
+```ts
+const data = make_fetch_parser(() => "/api/batch", 1000, {
+  amount: "n",
+  move: { start: "nwo", end: "nwo", offset: "nwo" },
+  auto: { start: "nwo", count: "?nwo" },
+  delete_all: ["wo", {}],
+}, { write });
+
+data.move[FETCH_PARSE].write({ start: 3, end: 9, offset: -2 }); // write({ move: { start: 3, end: 9, offset: -2 } })
+data.auto[FETCH_PARSE].write({ start: 1 });                      // write({ auto: { start: 1 } })
+data.delete_all[FETCH_PARSE].write({});                          // write({ delete_all: {} })
+```
+
+- **The write type is the members with their write types.** Every member is required, except one with a `?` prefix, `"?nwo"`, which a whole write can leave out. A missing, extra or wrong member is a type error. Its own state still writes `number`, the prefix only matters to the whole write. A command without parameters takes `{}`.
+- **Only the members of the schema are sent,** at the paths their own writes use, so `array_start`, `start` and keyed items apply like for a member write. A fixed array or tuple is sent as an object of positions, `{ passcode: { 1: "a", 2: "b", 3: "c" } }` with `array_start: 1`.
+- **It reads `undefined`.** The member states stay, and a whole write doesn't change what they read.
+- **With `write_debounce` a command is never merged with a write in its container or lost.** A write in the container, or the same command again, sends the waiting writes first, so each command arrives as it was written. Writes of other members are merged with it as usual.
+- `["wo", spec]` only takes `{}`, `make_fetch_parser` throws for anything else.
 
 ### Dynamic arrays
 

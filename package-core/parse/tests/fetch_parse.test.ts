@@ -1810,8 +1810,8 @@ describe("make_fetch_parser write only members", () => {
     expect(made({ list: [0, "nwo"] })).toThrow("write only");
     expect(made({ items: [0, { cmd: "nwo" }, { write: "all" }] })).toThrow("write only");
     expect(made({ outer: [0, { inner: { cmd: "nwo" } }, { write: "all" }] })).toThrow("write only");
-    //An optional prefix means nothing for a member that is never received
-    expect(made({ cmd: "?nwo" as "nwo" })).toThrow("write only");
+    //An optional prefix only makes a member optional in a whole write, see the whole write tests
+    expect(made({ cmd: "?nwo" })).not.toThrow();
   });
 });
 
@@ -1847,15 +1847,16 @@ describe("make_fetch_parser write only containers", () => {
     expect(send).toHaveBeenLastCalledWith({ access: { 1: { 0: true } } });
   });
 
-  it("types the items of a write only fixed array, with no state of the whole array", () => {
+  it("types the items of a write only fixed array, and its whole write in place of a whole value", () => {
     const { parsed } = parser_from(SCHEMA, {});
     expectTypeOf<Parameters<(typeof parsed.passcode)[0][typeof FETCH_PARSE]["write"]>[0]>().toEqualTypeOf<string>();
     expectTypeOf(parsed.passcode[0][FETCH_PARSE].ok()).toEqualTypeOf<undefined>();
-    expectTypeOf<typeof FETCH_PARSE extends keyof typeof parsed.passcode ? true : false>().toEqualTypeOf<false>();
+    expectTypeOf<Parameters<(typeof parsed.passcode)[typeof FETCH_PARSE]["write"]>[0]>().toEqualTypeOf<[string, string, string]>();
+    expectTypeOf(parsed.passcode[FETCH_PARSE].ok()).toEqualTypeOf<undefined>();
     expectTypeOf<StateRV<(typeof parsed)[typeof FETCH_PARSE]>>().toEqualTypeOf<{
       access: [[boolean, boolean], [boolean, boolean], [boolean, boolean]];
     }>();
-    expect(FETCH_PARSE in parsed.passcode).toBe(false);
+    expect(parsed.passcode[FETCH_PARSE].ok()).toBe(undefined);
   });
 
   it("reads the default, then goes back to it after a write with reset", async () => {
@@ -1953,5 +1954,229 @@ describe("make_fetch_parser defaults", () => {
     expect(made({ new: ["?", "swo", () => false, { reset: true }] })).toThrow("default");
     expect(made({ count: ["?", "nwo", () => "1"] })).toThrow("default");
     expect(made({ mode: ["?", "nlwo", () => null] })).not.toThrow();
+  });
+});
+
+describe("make_fetch_parser whole writes of write only containers", () => {
+  const SCHEMA = {
+    amount: "n",
+    move: { start: "nwo", end: "nwo", offset: "nwo" },
+    delete: { start: "nwo", end: "nwo" },
+    delete_all: ["wo", {}],
+    auto: { start: "nwo", count: "?nwo" },
+  } as const satisfies FetchSchema;
+  /**A parser whose fetch gives body, and its write mock*/
+  const parser_from = <const S extends FetchSchema>(
+    schema: S,
+    body: unknown = {},
+    options: { array_start?: number; write_debounce?: number } = {},
+  ) => {
+    const send = vi.fn<FetchWrite>(async () => ok(undefined));
+    const parsed = make_fetch_parser(() => "/x", 60_000, schema, {
+      write: send,
+      fetch: async () => ok(JSON.stringify(body)),
+      ...options,
+    });
+    return { parsed, send };
+  };
+
+  it("sends a write only object written whole as one payload, and reads undefined", async () => {
+    const { parsed, send } = parser_from(SCHEMA);
+
+    expect((await parsed.move[FETCH_PARSE].write({ start: 3, end: 9, offset: -2 })).ok).toBe(true);
+    expect(send).toHaveBeenCalledWith({ move: { start: 3, end: 9, offset: -2 } });
+    expect(parsed.move[FETCH_PARSE].ok()).toBe(undefined);
+    //The member states stay
+    await parsed.move.start.write(4);
+    expect(send).toHaveBeenLastCalledWith({ move: { start: 4 } });
+  });
+
+  it("sends an empty object for a command without parameters", async () => {
+    const { parsed, send } = parser_from(SCHEMA);
+
+    expect((await parsed.delete_all[FETCH_PARSE].write({})).ok).toBe(true);
+
+    expect(send).toHaveBeenCalledWith({ delete_all: {} });
+  });
+
+  it("leaves out an optional member that is not written, and sends it when it is", async () => {
+    const { parsed, send } = parser_from(SCHEMA);
+
+    await parsed.auto[FETCH_PARSE].write({ start: 1 });
+    await parsed.auto[FETCH_PARSE].write({ start: 1, count: 5 });
+    await parsed.auto.count.write(2);
+
+    expect(send).toHaveBeenNthCalledWith(1, { auto: { start: 1 } });
+    expect(send).toHaveBeenNthCalledWith(2, { auto: { start: 1, count: 5 } });
+    expect(send).toHaveBeenNthCalledWith(3, { auto: { count: 2 } });
+  });
+
+  it("writes a write only object nested in a received one", async () => {
+    const { parsed, send } = parser_from(
+      { device: { name: "s", reset: { hard: "bwo", delay: "nwo" }, stop: ["wo", {}] } },
+      { device: { name: "A" } },
+    );
+
+    await parsed.device.reset[FETCH_PARSE].write({ hard: true, delay: 5 });
+    await parsed.device.stop[FETCH_PARSE].write({});
+
+    expect(send).toHaveBeenNthCalledWith(1, { device: { reset: { hard: true, delay: 5 } } });
+    expect(send).toHaveBeenNthCalledWith(2, { device: { stop: {} } });
+  });
+
+  it("writes a write only object in a keyed dynamic array item, shifted by array_start", async () => {
+    const { parsed, send } = parser_from(
+      { pumps: [0, { id: "n", move: { to: "nwo" }, stop: ["wo", {}] }, { key: "id" }] },
+      { pumps: [{ id: 7 }, { id: 9 }] },
+      { array_start: 1 },
+    );
+    await (parsed.pumps as State<unknown>).read();
+
+    await parsed.pumps[1]!.move[FETCH_PARSE].write({ to: 4 });
+    await parsed.pumps[0]!.stop[FETCH_PARSE].write({});
+
+    expect(send).toHaveBeenNthCalledWith(1, { pumps: { 2: { move: { to: 4 } } } });
+    expect(send).toHaveBeenNthCalledWith(2, { pumps: { 1: { stop: {} } } });
+  });
+
+  it("writes a write only fixed array, tuple and record whole, with their starts", async () => {
+    const { parsed, send } = parser_from(
+      {
+        passcode: [3, "swo", { start: 1 }],
+        point: ["nwo", "swo"],
+        users: ["{}", { password: "swo" }],
+        nested: [2, { level: "nwo" }],
+      },
+      {},
+      { array_start: 10 },
+    );
+
+    await parsed.passcode[FETCH_PARSE].write(["a", "b", "c"]);
+    await parsed.point[FETCH_PARSE].write([1, "x"]);
+    await parsed.users[FETCH_PARSE].write({ anna: { password: "p" }, bo: { password: "q" } });
+    await parsed.nested[FETCH_PARSE].write([{ level: 1 }, { level: 2 }]);
+
+    expect(send).toHaveBeenNthCalledWith(1, { passcode: { 1: "a", 2: "b", 3: "c" } });
+    expect(send).toHaveBeenNthCalledWith(2, { point: { 10: 1, 11: "x" } });
+    expect(send).toHaveBeenNthCalledWith(3, { users: { anna: { password: "p" }, bo: { password: "q" } } });
+    expect(send).toHaveBeenNthCalledWith(4, { nested: { 10: { level: 1 }, 11: { level: 2 } } });
+  });
+
+  it("ignores the containers when the server sends them anyway", async () => {
+    const { parsed } = parser_from(SCHEMA, {
+      amount: 1,
+      move: { start: "x" },
+      delete_all: 5,
+      auto: [],
+    });
+
+    expect(await parsed[FETCH_PARSE].read()).toEqual(
+      ok({ amount: 1, move: { start: "x" }, delete_all: 5, auto: [] }),
+    );
+    expect(await parsed.amount.read()).toEqual(ok(1));
+  });
+
+  describe("with write_debounce", () => {
+    const debounced = () => parser_from(SCHEMA, {}, { write_debounce: 50 });
+    const with_timers = async (fn: () => Promise<void>) => {
+      vi.useFakeTimers();
+      try {
+        await fn();
+      } finally {
+        vi.useRealTimers();
+      }
+    };
+
+    it("merges a whole write with the writes of other members", () =>
+      with_timers(async () => {
+        const { parsed, send } = parser_from({ name: "sw", ...SCHEMA }, {}, { write_debounce: 50 });
+
+        void parsed.name.write("A");
+        void parsed.move[FETCH_PARSE].write({ start: 1, end: 2, offset: 3 });
+        await vi.advanceTimersByTimeAsync(50);
+
+        expect(send).toHaveBeenCalledTimes(1);
+        expect(send).toHaveBeenCalledWith({ name: "A", move: { start: 1, end: 2, offset: 3 } });
+      }));
+
+    it("sends the batch first when a member of a container written whole is written, and the other way around", () =>
+      with_timers(async () => {
+        const { parsed, send } = debounced();
+
+        void parsed.move[FETCH_PARSE].write({ start: 1, end: 2, offset: 3 });
+        void parsed.move.end.write(5);
+        void parsed.auto.count.write(2);
+        void parsed.auto[FETCH_PARSE].write({ start: 1 });
+        await vi.advanceTimersByTimeAsync(50);
+
+        expect(send.mock.calls).toEqual([
+          [{ move: { start: 1, end: 2, offset: 3 } }],
+          [{ move: { end: 5 }, auto: { count: 2 } }],
+          [{ auto: { start: 1 } }],
+        ]);
+      }));
+
+    it("never loses a command written twice in one batch", () =>
+      with_timers(async () => {
+        const { parsed, send } = debounced();
+
+        void parsed.delete_all[FETCH_PARSE].write({});
+        void parsed.delete_all[FETCH_PARSE].write({});
+        void parsed.move[FETCH_PARSE].write({ start: 1, end: 2, offset: 3 });
+        void parsed.move[FETCH_PARSE].write({ start: 4, end: 5, offset: 6 });
+        await vi.advanceTimersByTimeAsync(50);
+
+        expect(send.mock.calls).toEqual([
+          [{ delete_all: {} }],
+          [{ delete_all: {}, move: { start: 1, end: 2, offset: 3 } }],
+          [{ move: { start: 4, end: 5, offset: 6 } }],
+        ]);
+      }));
+  });
+
+  it("types the whole write from the members, optional ones from the ? prefix", () => {
+    const { parsed } = parser_from(SCHEMA);
+    type WriteOf<S> = S extends { write(value: infer W): unknown } ? W : never;
+
+    expectTypeOf<WriteOf<(typeof parsed.move)[typeof FETCH_PARSE]>>().toEqualTypeOf<{
+      start: number;
+      end: number;
+      offset: number;
+    }>();
+    expectTypeOf<WriteOf<(typeof parsed.auto)[typeof FETCH_PARSE]>>().toEqualTypeOf<{
+      start: number;
+      count?: number;
+    }>();
+    expectTypeOf<WriteOf<(typeof parsed.delete_all)[typeof FETCH_PARSE]>>().toEqualTypeOf<Record<string, never>>();
+    expectTypeOf(parsed.move[FETCH_PARSE].ok()).toEqualTypeOf<undefined>();
+    //The member with the prefix writes its type, not undefined
+    expectTypeOf<WriteOf<typeof parsed.auto.count>>().toEqualTypeOf<number>();
+    //They are not received, so not in the value
+    expectTypeOf<StateRV<(typeof parsed)[typeof FETCH_PARSE]>>().toEqualTypeOf<{ amount: number }>();
+
+    const compile_only = () => {
+      // @ts-expect-error offset is missing
+      void parsed.move[FETCH_PARSE].write({ start: 1, end: 2 });
+      // @ts-expect-error start is a number
+      void parsed.move[FETCH_PARSE].write({ start: "1", end: 2, offset: 3 });
+      // @ts-expect-error extra is not a member
+      void parsed.move[FETCH_PARSE].write({ start: 1, end: 2, offset: 3, extra: 4 });
+      // @ts-expect-error a command without parameters takes an empty object
+      void parsed.delete_all[FETCH_PARSE].write(5);
+      // @ts-expect-error a command without parameters takes no members
+      void parsed.delete_all[FETCH_PARSE].write({ a: 1 });
+    };
+    expect(compile_only).toBeTypeOf("function");
+  });
+
+  it("takes only an empty object after wo, and keeps its placement rules", () => {
+    const write = async () => ok(undefined);
+    const made = (schema: unknown) => () =>
+      make_fetch_parser(() => "/x", 1_000, schema as FetchSchema, { write });
+
+    expect(made({ cmd: ["wo", { a: "n" }] })).toThrow('["wo", {}]');
+    expect(made({ point: ["n", ["wo", {}]] })).toThrow("write only");
+    expect(made({ items: [0, { cmd: ["wo", {}] }, { write: "all" }] })).toThrow("write only");
+    expect(made({ cmd: ["wo", {}] })).not.toThrow();
   });
 });
