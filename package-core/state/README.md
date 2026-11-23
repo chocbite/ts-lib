@@ -312,6 +312,8 @@ counter.read().then((result) => {
 console.log((await counter.read()).value);
 ```
 
+A subscriber added while the state tells its subscribers of a change, for example by an element made in a subscriber, is not told that change, it only gets the value from `sub(fn, true)`. That value is whole, `state.a.read` and `state.o.read` give it as `fresh`, never the change being told to the others.
+
 ## Reading a state
 
 `read()` gives the current value of any state as a thenable, the one way to read that works on every kind. A sync state has its value at once, so the `then` of the thenable calls its function without waiting for a microtask, an async state resolves once it has a value, a remote state fetches it when needed. `get()` and `ok()` read sync states without a thenable.
