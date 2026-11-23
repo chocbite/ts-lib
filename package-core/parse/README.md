@@ -184,7 +184,7 @@ The fetch parser makes these kinds, in `parse.fetch.errors`:
 | `"nwo"`, `["?", "nwo", () => v]` | A write-only state, the server doesn't send the member, see [Write-only members](#write-only-members). |
 | `{ key: spec }`         | An object with a node per key.                                                                   |
 | `["{}", spec]`          | An object that gives a node for any key you read.                                                |
-| `[3, spec]`             | A real array of 3 nodes, and the whole array under `FETCH_PARSE`, see the note on primitive items below. |
+| `[3, spec]`             | A real array of 3 nodes, and the whole array under `FETCH_PARSE`, see the note on primitive items below. `[3, spec, { start }]` gives it a start of its own, see `array_start` in [Writing](#writing). |
 | `["n", "sw"]`         | A tuple: a real array with a state per position, `point[0]`, and the whole tuple under `FETCH_PARSE`. |
 | `[0, spec]`             | A state of the array of item nodes, plus index access, see [Dynamic arrays](#dynamic-arrays).    |
 | `["?", spec]`           | What `spec` gives. Everything in it reads `undefined` while the member is missing.               |
@@ -204,6 +204,8 @@ A type string ending in `w` makes the member writable. A schema with writable me
 - **Nothing changes locally until the next poll** shows what the server kept.
 - **Writable states have `limit` and `check`** like any state, so every form element can write through them.
 - **`array_start`** is added to every array index a write sends, for servers that count from 1. With `array_start: 1`, writing the first pump sends `{ pumps: { 1: { name } } }`, and an `encode` function gets the shifted index too. Reading isn't affected, since received arrays are JSON arrays. A `"all"` array is sent whole, so only indexes outside it are shifted. The default is 0.
+
+  **An array can have a start of its own**, used in place of `array_start` for its own positions: `[0, item, { start: 1 }]` for a dynamic array, `[3, item, { start: 1 }]` for a fixed one. Arrays inside it use `array_start`, or their own `start`, not that of the array around them. A tuple has no place for options and always uses `array_start`.
 - **`write_debounce`** collects writes for that many ms, counted from the first, and sends them as one payload. The writes of different members are merged, `{ name: "A" }` and `{ settings: { eco: true } }` become `{ name: "A", settings: { eco: true } }`, and a member written twice sends only its last value. Every write gets the result of the one `write` call. Two cases are handled so no write is lost:
   - A write that would overwrite another member's write sends the collected writes first. This happens with `encode`, where every item goes to the same key of its array.
   - A `"all"` array is built on the array already waiting, so two writes in it both get through.
@@ -238,7 +240,7 @@ device.restart.write(true); // write({ restart: true })
 
 ### Dynamic arrays
 
-`[0, item]` takes an options object as a third entry: `[0, item, { write, key, encode }]`.
+`[0, item]` takes an options object as a third entry: `[0, item, { write, key, encode, start }]`. `start` is described with `array_start` in [Writing](#writing).
 
 **Without a key, item states follow positions.** `items[0]` is always "whatever is at position 0", and the array only reports items added or removed at the end. That is right for arrays whose positions mean something, like the channels of a device. When the server inserts, removes or reorders items, every row after the change switches to showing another item. Anything tied to a row stays with the position: focus, an edit in progress, selection.
 

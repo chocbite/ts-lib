@@ -59,14 +59,20 @@ export type ArrayWriteEncoder<T = any> = (value: T, index: number) => unknown;
  *   A change on the server since the last poll is overwritten by such a write.
  * - key: member of the object items that identifies them, like "id". Without it the states of an item follow its position,
  *   meant for arrays where positions do not change. With it they follow the item, the array reports real inserts, removals and moves,
- *   and writes find the item by key in the last received value. Index access gives undefined until a value is received.*/
+ *   and writes find the item by key in the last received value. Index access gives undefined until a value is received.
+ * - start: number of the first item on the server, added to the index of an item a write sends, in place of the array_start option*/
 export type FetchArrayOptions<T = any> =
   | {
       readonly write?: "single";
       readonly encode?: ArrayWriteEncoder<T>;
       readonly key?: string;
+      readonly start?: number;
     }
-  | { readonly write: "all"; readonly key?: string };
+  | { readonly write: "all"; readonly key?: string; readonly start?: number };
+
+/**Options for a fixed array, the third entry of [count, item, options].
+ * - start: number of the first item on the server, added to the index of an item a write sends, in place of the array_start option*/
+export type FetchFixedArrayOptions = { readonly start?: number };
 export const FETCH_PARSE: unique symbol = Symbol("FETCH_PARSE");
 
 export type FetchSchema = FetchPrimitiveSpec | FetchSchemaContainer;
@@ -89,6 +95,7 @@ type FetchSchemaContainer =
   | readonly ["?", FetchSchemaContainer, () => unknown]
   | readonly ["{}", FetchSchema]
   | readonly [number, FetchSchema]
+  | readonly [number, FetchSchema, FetchFixedArrayOptions]
   | readonly [0, FetchSchema, ArrayWriteEncoder | FetchArrayOptions]
   | readonly FetchSchema[]
   | { readonly [key: string]: FetchSchema };
@@ -110,7 +117,7 @@ type FetchDefaultErrors<S, P extends string = ""> =
           ? FetchDefaultErrors<Item, P>
           : S extends readonly [0, infer Item, ...unknown[]]
             ? FetchDefaultErrors<Item, `${P}[]`>
-            : S extends readonly ["{}" | number, infer Item]
+            : S extends readonly ["{}" | number, infer Item, ...unknown[]]
               ? FetchDefaultErrors<Item, `${P}[]`>
               : S extends readonly unknown[]
                 ? FetchDefaultErrors<S[number], `${P}[]`>
@@ -135,7 +142,7 @@ type RemoveWritableEach<S> = S extends string
     : S
   : S extends readonly [0, infer Item, ArrayWriteEncoder | FetchArrayOptions]
     ? readonly [0, RemoveWritable<Item>]
-    : S extends readonly [infer Count extends number, infer Item]
+    : S extends readonly [infer Count extends number, infer Item, ...unknown[]]
       ? readonly [Count, RemoveWritable<Item>]
       : S extends readonly ["?", infer Item, infer Default]
         ? readonly ["?", RemoveWritable<Item>, Default]
@@ -175,7 +182,7 @@ type ResolveSchemaEach<S> = S extends string
           ? ResolveSchema<Item>[]
           : S extends readonly [0, infer Item]
             ? ResolveSchema<Item>[]
-            : S extends readonly [infer Count extends number, infer Item]
+            : S extends readonly [infer Count extends number, infer Item, ...unknown[]]
               ? Repeat<ResolveSchema<Item>, Count>
               : S extends readonly unknown[]
                 ? { [K in keyof S]: ResolveSchema<S[K]> }
@@ -207,7 +214,7 @@ type IsWriteOnly<S> =
           ? false
           : S extends readonly ["{}", infer Item]
             ? IsWriteOnly<Item>
-            : S extends readonly [number, infer Item]
+            : S extends readonly [number, infer Item, ...unknown[]]
               ? IsWriteOnly<Item>
               : S extends readonly unknown[]
                 ? false extends IsWriteOnly<S[number]>
@@ -303,7 +310,7 @@ type FetchNodeEach<S, Value> = S extends FetchWriteOnlySpec
             ? WithFetchState<S, Value, {
                 readonly [key: string]: FetchNode<Item, RecordItem<Value>>;
               }>
-            : S extends readonly [infer Count extends number, infer Item]
+            : S extends readonly [infer Count extends number, infer Item, ...unknown[]]
             ? WithFetchState<S, Value,
                 FetchRepeat<FetchArrayItem<Item, ArrayItem<Value>>, Count>>
             : S extends Parser
@@ -427,12 +434,21 @@ function unexpected(where: string, cause: unknown): ResultErr<NiceError> {
   );
 }
 
-/**Path part of a keyed array item, the occurrence-th item whose key member equals value*/
+/**Path part of an array position, index is read in received arrays, the server gets index + start*/
+class Position {
+  constructor(
+    readonly index: number,
+    readonly start: number,
+  ) {}
+}
+
+/**Path part of a keyed array item, the occurrence-th item whose key member equals value, start is the one of its array*/
 class ItemKey {
   constructor(
     readonly key: string,
     readonly value: unknown,
     readonly occurrence: number,
+    readonly start: number,
   ) {}
   /**Index of the item in the array, -1 when it is not there*/
   index_in(array: readonly unknown[]): number {
@@ -451,7 +467,7 @@ class ItemKey {
   }
 }
 
-type PathPart = string | number | ItemKey;
+type PathPart = string | Position | ItemKey;
 type RuntimeSchema =
   | Record<string, unknown>
   | readonly unknown[]
@@ -473,19 +489,20 @@ function set_fetch_state(target: object, fetch_state: StateREA<unknown>): void {
 function array_options(
   schema: unknown,
 ):
-  | { write: "single" | "all"; encode?: ArrayWriteEncoder<unknown>; key?: string }
+  | { write: "single" | "all"; encode?: ArrayWriteEncoder<unknown>; key?: string; start?: number }
   | undefined {
   if (!Array.isArray(schema) || schema[0] !== 0 || schema.length !== 3)
     return undefined;
   const options: unknown = schema[2];
   if (typeof options === "function")
     return { write: "single", encode: options as ArrayWriteEncoder<unknown> };
-  const { write, encode, key } = options as {
+  const { write, encode, key, start } = options as {
     write?: "single" | "all";
     encode?: ArrayWriteEncoder<unknown>;
     key?: string;
+    start?: number;
   };
-  return { write: write ?? "single", encode, key };
+  return { write: write ?? "single", encode, key, start };
 }
 
 /**True for a spec the server does not send, a write only type string, "nwo" or ["?", "nwo", ...],
@@ -568,7 +585,7 @@ function check_write_only_default(
   );
   if (!fits)
     throw new Error(
-      `The default of the write only member at ${path.map((part) => (part instanceof ItemKey ? `${part.key}=${String(part.value)}` : String(part))).join(".")} gives ${JSON.stringify(value)}, which is not of the type "${type_chars}"`,
+      `The default of the write only member at ${path.map(part_text).join(".")} gives ${JSON.stringify(value)}, which is not of the type "${type_chars}"`,
     );
 }
 
@@ -604,6 +621,8 @@ function strip_writable(schema: unknown): unknown {
     return schema;
   }
   if (array_options(schema)) return [0, strip_writable(schema[1])];
+  //The options of a fixed array are not for the parser
+  if (typeof schema[0] === "number") return [schema[0], strip_writable(schema[1])];
   return schema.map(strip_writable);
 }
 
@@ -636,11 +655,26 @@ function result_at_path(
       : err(failure(fetch_parse_errors.MEMBER_MISSING, resolved.message, created_at));
   let current: unknown = value.value;
   for (const part of resolved)
-    current = (current as Record<IndexPart, unknown>)[part];
+    current = (current as Record<string | number, unknown>)[index_of(part)];
   return ok(current);
 }
 
-type IndexPart = string | number;
+/**A path part with keyed items found, string keys and array positions*/
+type IndexPart = string | Position;
+/**A part of a path as the server addresses it, positions with their start added*/
+type SentPart = string | number;
+
+/**The key of a part in the received value*/
+const index_of = (part: IndexPart): string | number =>
+  part instanceof Position ? part.index : part;
+
+/**A path part for messages*/
+const part_text = (part: PathPart): string =>
+  part instanceof Position
+    ? String(part.index)
+    : part instanceof ItemKey
+      ? `${part.key}=${String(part.value)}`
+      : part;
 
 /**Where a path could not be followed*/
 class MissingPart {
@@ -664,22 +698,23 @@ function resolve_path(
         at,
         part instanceof ItemKey
           ? `Failed to read missing item with ${part.key} ${String(part.value)}`
-          : `Failed to read missing member ${String(part)}`,
+          : `Failed to read missing member ${part_text(part)}`,
       );
     if (current === null || typeof current !== "object") return missing();
     let index: IndexPart;
     if (part instanceof ItemKey) {
-      index = Array.isArray(current) ? part.index_in(current) : -1;
-      if (index === -1) return missing();
-    } else if (Object.hasOwn(current, part)) index = part;
+      const found = Array.isArray(current) ? part.index_in(current) : -1;
+      if (found === -1) return missing();
+      index = new Position(found, part.start);
+    } else if (Object.hasOwn(current, index_of(part))) index = part;
     else return missing();
     resolved.push(index);
-    current = (current as Record<IndexPart, unknown>)[index];
+    current = (current as Record<string | number, unknown>)[index_of(index)];
   }
   return resolved;
 }
 
-function payload_at_path(path: readonly IndexPart[], value: unknown): unknown {
+function payload_at_path(path: readonly SentPart[], value: unknown): unknown {
   let payload = value;
   for (let index = path.length - 1; index >= 0; index--) {
     payload = { [path[index]!]: payload };
@@ -696,18 +731,19 @@ function with_value_at(
 ): unknown {
   if (path.length === 0) return value;
   if (base === null || typeof base !== "object") return undefined;
-  const [part, ...rest] = path as [IndexPart, ...IndexPart[]];
+  const [first, ...rest] = path as [IndexPart, ...IndexPart[]];
+  const part = index_of(first);
   if (rest.length > 0 && !Object.hasOwn(base, part)) return undefined;
   const child = with_value_at(
-    (base as Record<IndexPart, unknown>)[part],
+    (base as Record<string | number, unknown>)[part],
     rest,
     value,
   );
   if (child === undefined && rest.length > 0) return undefined;
   const copy = Array.isArray(base)
     ? [...(base as unknown[])]
-    : { ...(base as Record<IndexPart, unknown>) };
-  (copy as Record<IndexPart, unknown>)[part] = child;
+    : { ...(base as Record<string | number, unknown>) };
+  (copy as Record<string | number, unknown>)[part] = child;
   return copy;
 }
 
@@ -926,8 +962,8 @@ export function make_fetch_parser<const S extends FetchSchema>(
 
   const array_start = options?.array_start ?? 0;
   /**A path as the server numbers it, numbers in a path are always array positions, object and record keys are strings*/
-  const to_server = (path: readonly IndexPart[]): IndexPart[] =>
-    path.map((part) => (typeof part === "number" ? part + array_start : part));
+  const to_server = (path: readonly IndexPart[]): SentPart[] =>
+    path.map((part) => (part instanceof Position ? part.index + part.start : part));
 
   /**Calls write once, expected failures are its error, a throw or a wrong return value is a bug*/
   const send = async (payload: unknown): Promise<StateResult<void>> => {
@@ -1205,6 +1241,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
       const item_all_path = all_path ?? (own_all ? path : undefined);
       const array_encoder = item_all_path ? undefined : options?.encode;
       const key = options?.key;
+      const start = options?.start ?? array_start;
       //Without a key the states of an item are kept per index, with a key per key value and occurrence of that value
       const by_index = new Map<number, unknown>();
       let by_key = new Map<unknown, unknown[]>();
@@ -1220,7 +1257,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
             if (!item_state) {
               item_state = node(
                 item,
-                [...path, index],
+                [...path, new Position(index, start)],
                 array_encoder,
                 item_all_path,
                 optional_at,
@@ -1244,7 +1281,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
               by_key.get(key_value)?.[occurrence] ??
               node(
                 item,
-                [...path, new ItemKey(key, key_value, occurrence)],
+                [...path, new ItemKey(key, key_value, occurrence, start)],
                 array_encoder,
                 item_all_path,
                 optional_at,
@@ -1265,7 +1302,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
           if (!item_state) {
             item_state = node(
               item,
-              [...path, index],
+              [...path, new Position(index, start)],
               array_encoder,
               item_all_path,
               optional_at,
@@ -1358,8 +1395,10 @@ export function make_fetch_parser<const S extends FetchSchema>(
     if (Array.isArray(part_schema) && typeof part_schema[0] === "number") {
       const count = part_schema[0];
       const item: unknown = part_schema[1];
+      const start =
+        (part_schema[2] as FetchFixedArrayOptions | undefined)?.start ?? array_start;
       const fixed = Array.from({ length: count }, (_value, index) =>
-        array_item(item, [...path, index]),
+        array_item(item, [...path, new Position(index, start)]),
       );
       whole_value(fixed);
       return fixed;
@@ -1371,7 +1410,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
       part_schema.every((entry) => typeof entry === "string")
     ) {
       const tuple = part_schema.map((entry, index) =>
-        node(entry, [...path, index], undefined, all_path, optional_at),
+        node(entry, [...path, new Position(index, array_start)], undefined, all_path, optional_at),
       );
       whole_value(tuple);
       return tuple;
