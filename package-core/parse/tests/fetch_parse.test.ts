@@ -1106,6 +1106,82 @@ describe("make_fetch_parser array_start", () => {
 
     expect(send).toHaveBeenCalledWith({ groups: { 2: { items: ["B", "c"] } } });
   });
+  it("uses the start of a dynamic array in place of array_start, other arrays keep array_start", async () => {
+    const { parsed, send } = parser_from({
+      pumps: [0, { name: "sw" }, { start: 0 }],
+      valves: [0, { name: "sw" }],
+    });
+
+    await parsed.pumps[0]!.name.write("A");
+    await parsed.valves[0]!.name.write("B");
+
+    expect(send).toHaveBeenNthCalledWith(1, { pumps: { 0: { name: "A" } } });
+    expect(send).toHaveBeenNthCalledWith(2, { valves: { 1: { name: "B" } } });
+  });
+
+  it("uses the start of a fixed array", async () => {
+    const { parsed, send } = parser_from({ outputs: [4, "bw", { start: 10 }], zones: [2, { setpoint: "nw" }, { start: 0 }] });
+
+    await parsed.outputs[2][FETCH_PARSE].write(true);
+    await parsed.zones[1].setpoint.write(21);
+
+    expect(send).toHaveBeenNthCalledWith(1, { outputs: { 12: true } });
+    expect(send).toHaveBeenNthCalledWith(2, { zones: { 1: { setpoint: 21 } } });
+  });
+
+  it("shifts each position of nested arrays by the start of its own array", async () => {
+    const { parsed, send } = parser_from({
+      groups: [2, { items: [0, { name: "sw" }, { start: 5 }], outputs: [2, "bw"] }, { start: 0 }],
+    });
+
+    await parsed.groups[1].items[0]!.name.write("A");
+    await parsed.groups[1].outputs[1][FETCH_PARSE].write(true);
+
+    expect(send).toHaveBeenNthCalledWith(1, { groups: { 1: { items: { 5: { name: "A" } } } } });
+    expect(send).toHaveBeenNthCalledWith(2, { groups: { 1: { outputs: { 2: true } } } });
+  });
+
+  it("uses the start of the array of a keyed item and of an encoder", async () => {
+    const { parsed, send } = parser_from(
+      {
+        pumps: [0, { id: "n", name: "sw" }, { key: "id", start: 100 }],
+        tags: [0, "sw", { encode: (tag: string, index: number) => ({ index, tag }), start: 0 }],
+      },
+      { pumps: [{ id: 7, name: "a" }, { id: 9, name: "b" }], tags: [] },
+    );
+    await (parsed.pumps as State<unknown>).read();
+
+    await parsed.pumps[1]!.name.write("B");
+    await parsed.tags[3]!.write("x");
+
+    expect(send).toHaveBeenNthCalledWith(1, { pumps: { 101: { name: "B" } } });
+    expect(send).toHaveBeenNthCalledWith(2, { tags: { index: 3, tag: "x" } });
+  });
+
+  it("uses the start of the arrays outside a write all array", async () => {
+    const { parsed, send } = parser_from(
+      { groups: [2, { items: [0, "sw", { write: "all", start: 7 }] }, { start: 0 }] },
+      { groups: [{ items: ["a"] }, { items: ["b", "c"] }] },
+    );
+    await parsed[FETCH_PARSE].read();
+
+    await parsed.groups[1].items[0]!.write("B");
+
+    expect(send).toHaveBeenCalledWith({ groups: { 1: { items: ["B", "c"] } } });
+  });
+
+  it("uses the start of a fixed array of write only items, and reads arrays from 0", async () => {
+    const { parsed, send } = parser_from(
+      { codes: [3, "swo", { start: 0 }], levels: [2, "n", { start: 5 }] },
+      { levels: [4, 6] },
+    );
+
+    await parsed.codes[2][FETCH_PARSE].write("1234");
+
+    expect(send).toHaveBeenCalledWith({ codes: { 2: "1234" } });
+    expect(await parsed.levels[1][FETCH_PARSE].read()).toEqual(ok(6));
+    expect(await parsed[FETCH_PARSE].read()).toEqual(ok({ levels: [4, 6] }));
+  });
 });
 
 describe("make_fetch_parser tuples", () => {
