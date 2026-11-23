@@ -472,11 +472,7 @@ class Viewport extends Base {
       if (!state.is.state(widgets)) return;
       const symbol = Symbol("level");
       this.#path_followed.push(symbol);
-      //After the state has told every subscriber, while it tells them its array carries the change,
-      //which the page element made for the level would apply as if it was its own
-      this.attach_state_to_symbol(symbol, widgets, () =>
-        queueMicrotask(() => this.#check_path()),
-      );
+      this.attach_state_to_symbol(symbol, widgets, () => this.#check_path());
     });
   }
 

@@ -1,4 +1,5 @@
 import { sync_resolve } from "#common";
+import { STATE_OBJECT_READ_KEY } from "./read_keys";
 import {
   ok,
   OptionSome,
@@ -21,7 +22,7 @@ import {
 //     |  _  /|  __|   / /\ \ | |  | |
 //     | | \ \| |____ / ____ \| |__| |
 //     |_|  \_\______/_/    \_\_____/
-export const STATE_OBJECT_READ_KEY = Symbol("state_object_read_key");
+export { STATE_OBJECT_READ_KEY };
 
 export type StateObjectReadTypes<TYPE> =
   | {

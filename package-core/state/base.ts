@@ -11,6 +11,7 @@ import {
 } from "#result";
 import { not_writable, state_errors } from "./errors";
 import { IS } from "./helpers/is";
+import { STATE_ARRAY_READ_KEY, STATE_OBJECT_READ_KEY } from "./helpers/read_keys";
 import {
   StateResult as SR,
   STATE_KEY,
@@ -37,6 +38,44 @@ type ProxyMaker = (
 let proxy_maker: ProxyMaker = () => {
   throw new Error("The proxy module is not loaded, import states from the state module");
 };
+/**The states telling their subscribers right now, innermost last, a state telling again from one of its subscribers is in it twice.
+ * An entry is the state, or once something subscribes to it while it tells, a record with the subscribers added since it started,
+ * they were given the value or chose not to be, so that telling skips them, see update_subs*/
+interface Telling {
+  state: unknown;
+  added: Set<StateSub<any>>;
+}
+const TELLING: unknown[] = [];
+
+/**Notes a subscriber added to a state while it tells its subscribers, for every telling of it going on*/
+function added_while_telling(state: unknown, func: StateSub<any>): void {
+  for (let i = 0; i < TELLING.length; i++) {
+    const entry = TELLING[i];
+    if (entry === state) TELLING[i] = { state, added: new Set([func]) } satisfies Telling;
+    else if ((entry as Telling).state === state) (entry as Telling).added.add(func);
+  }
+}
+
+/**Calls a new subscriber with the whole value of its state.
+ * While a state tells its subscribers of an array or object change, the value carries the change list,
+ * which the new subscriber must not apply, it gets the value without it, put back for the subscribers still to be told*/
+function call_whole(func: StateSub<any>, value: unknown): void {
+  const inner = (value as { value?: unknown }).value;
+  if (typeof inner !== "object" || inner === null) return void func(value);
+  const keyed = inner as { [STATE_ARRAY_READ_KEY]?: unknown; [STATE_OBJECT_READ_KEY]?: unknown };
+  const array = keyed[STATE_ARRAY_READ_KEY];
+  const object = keyed[STATE_OBJECT_READ_KEY];
+  if (array === undefined && object === undefined) return void func(value);
+  delete keyed[STATE_ARRAY_READ_KEY];
+  delete keyed[STATE_OBJECT_READ_KEY];
+  try {
+    func(value);
+  } finally {
+    if (array !== undefined) keyed[STATE_ARRAY_READ_KEY] = array;
+    if (object !== undefined) keyed[STATE_OBJECT_READ_KEY] = object;
+  }
+}
+
 /**Marks the subscriber function of a derived state, a proxy or collected state, its value is called by invalidate_derived.
  * Internal to the state module, a derived state subscribes with such a function only while it has subscribers itself*/
 export const STATE_DERIVED_KEY = Symbol("state_derived");
@@ -148,7 +187,8 @@ export abstract class StateBase<
     }
     if (this.amount() === 0) this.on_sub();
     subscribers.add(func);
-    if (update) this.read().then(func);
+    if (TELLING.length) added_while_telling(this, func);
+    if (update) this.read().then((value) => call_whole(func, value));
     return func;
   }
   unsub<F extends StateSub<any>>(func: F): F {
@@ -226,14 +266,27 @@ export abstract class StateBase<
    * Several are all invalidated before any is told, so a subscriber of one reads the others current,
    * a single one is told before anything else can run*/
   protected update_subs(value: RRT): void {
+    //The Sets are iterated live, which also visits subscribers added meanwhile, those are skipped, see TELLING
+    //Nothing between the push and the pop may throw, a state left in TELLING would skip its later subscribers,
+    //subscribers are called through #call and invalidate_derived, which catch
+    const at = TELLING.push(this) - 1;
     const derived = this.#derived;
     if (derived) {
       if (derived.size > 1) this.invalidate_derived();
-      for (const subscriber of derived) this.#call(subscriber, value);
+      for (const subscriber of derived) {
+        const entry = TELLING[at];
+        if (entry === this || !(entry as Telling).added.has(subscriber))
+          this.#call(subscriber, value);
+      }
     }
     const subscribers = this.#subscribers;
     if (subscribers)
-      for (const subscriber of subscribers) this.#call(subscriber, value);
+      for (const subscriber of subscribers) {
+        const entry = TELLING[at];
+        if (entry === this || !(entry as Telling).added.has(subscriber))
+          this.#call(subscriber, value);
+      }
+    TELLING.pop();
   }
   #call(subscriber: StateSub<RRT>, value: RRT): void {
     try {
