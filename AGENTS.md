@@ -85,6 +85,7 @@ Packages are published from `dist/ts-lib` and `dist/ts-lib-ui` in the repo root,
 - The trial frame calls `theme_init` and applies theme, input mode, scale and animation level from the shell, pages must not call `theme_init`.
 - The shell (`dev/index.html`, `dev/shell.ts`) must never import from the libraries, so it keeps working while they are broken.
 - Check with `npm run typecheck:dev` (not part of `npm run typecheck`) and by loading the page.
+- Agents only use ports 50000 and up for anything they start for testing, the dev server included: `npm run dev -- --port 50000`. The lower ports, like the default 9998, belong to the user's own servers. Other agents use the same range, so let the server move on to a free port and use the port it prints. Address it as `127.0.0.1`, since `localhost` can reach another server on the same port.
 
 ## Git
 
