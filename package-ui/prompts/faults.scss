@@ -1,3 +1,4 @@
+//The faults are form elements, which bring the colors of the theme, this only lays them out
 .prompts-faults {
   display: flex;
   flex-direction: column;
@@ -12,47 +13,36 @@
     -webkit-user-select: text;
     user-select: text;
 
-    //Inner errors, indented under the error they make up
-    section > .inner {
-      margin-left: 0.75rem;
-      padding-left: 0.5rem;
-      border-left: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+    > .kind {
+      margin-bottom: 0.75rem;
 
-      > section > h4 {
-        margin: 0.25rem 0 0;
-        font-size: 0.9rem;
+      &:last-child {
+        margin-bottom: 0;
       }
     }
 
-    > section {
-      margin-bottom: 0.75rem;
+    .kind > .heading {
+      font-size: 1rem;
+      font-weight: bold;
+    }
 
-      > h3 {
-        margin: 0;
-        font-size: 1rem;
-      }
+    .inner .kind > .heading {
+      font-size: 0.9rem;
+    }
 
-      > p {
-        margin: 0.2rem 0;
-        overflow-wrap: anywhere;
-      }
+    .kind > .message {
+      overflow-wrap: anywhere;
+    }
 
-      > details > summary {
-        cursor: pointer;
-      }
-
-      //Follows the text color, so it fits the light and the dark theme without variables of its own
-      > details > pre {
-        max-height: 20rem;
-        overflow: auto;
-        margin: 0.25rem 0 0;
-        padding: 0.5rem;
-        font-size: 0.75rem;
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
-        border-radius: 0.2rem;
-        background-color: color-mix(in srgb, currentColor 10%, transparent);
-      }
+    .stack {
+      display: block;
+      max-height: 20rem;
+      overflow: auto;
+      margin: 0;
+      font-family: monospace;
+      font-size: 0.75rem;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
   }
 }

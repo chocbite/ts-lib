@@ -10,7 +10,7 @@ import {
 } from "@chocbite/ts-lib-ui/icons";
 import { prompts, type PromptFormValues } from "@chocbite/ts-lib-ui/prompts";
 import { IPAddress, IPVersion } from "@chocbite/ts-lib/common";
-import type { NiceError, Option, Result } from "@chocbite/ts-lib/result";
+import { NiceError, type Option, type Result } from "@chocbite/ts-lib/result";
 import state from "@chocbite/ts-lib/state";
 import { controls, section } from "../../helpers";
 
@@ -204,5 +204,61 @@ const answer_line = (sec: HTMLElement) => {
         ),
       );
     },
+  });
+}
+
+//      ______      _    _ _   _______ _____
+//     |  ____/\   | |  | | | |__   __/ ____|
+//     | |__ /  \  | |  | | |    | | | (___
+//     |  __/ /\ \ | |  | | |    | |  \___ \
+//     | | / ____ \| |__| | |____| |  ____) |
+//     |_|/_/    \_\____/|______|_| |_____/
+{
+  const OFFLINE = Symbol("Connection failed");
+  const INVALID = Symbol("Invalid data from server");
+  const MISSING = Symbol("Value missing");
+  const NO_VALUE = Symbol("No value");
+  /**An Error with a cause, as a parser failing on data it got would make*/
+  const parse_failure = () =>
+    new Error("Failed to parse speed", {
+      cause: new Error("Expected number, got string"),
+    });
+  const sec = section(
+    "Faults",
+    "What the fault icon of an element opens. Check that every text is readable in the light and the dark theme, that Details opens the stack and Hide details closes it, that inner errors start folded under Sub error details and sit in a line under their error when opened, also nested ones, and that the text can be selected. With many faults only the list scrolls and Close stays in view",
+  );
+  controls(sec, {
+    "Simple faults": () =>
+      prompts.faults([
+        new NiceError(OFFLINE, "Failed to fetch"),
+        new NiceError(MISSING, "Failed to read missing member speed"),
+        new NiceError(MISSING, "Failed to read missing member unit"),
+      ]),
+    "With stack and inner errors": () =>
+      prompts.faults([
+        new NiceError(INVALID, parse_failure()),
+        new NiceError(
+          Symbol("Invalid values"),
+          "Elements without a valid value: speed, unit, mode",
+          [
+            new NiceError(OFFLINE, "Failed to fetch"),
+            new NiceError(NO_VALUE, "No value yet"),
+            new NiceError(INVALID, parse_failure(), [
+              new NiceError(MISSING, "Failed to read missing member speed"),
+            ]),
+          ],
+        ),
+      ]),
+    "Many faults": () =>
+      prompts.faults(
+        Array.from(
+          { length: 60 },
+          (_, i) =>
+            new NiceError(
+              i % 3 ? MISSING : INVALID,
+              i % 3 ? `Failed to read missing member value_${i}` : parse_failure(),
+            ),
+        ),
+      ),
   });
 }
