@@ -27,6 +27,8 @@ interface Item {
   name: string;
   sub?: Item[];
   selectable?: boolean;
+  /**Opened state of the row */
+  opened?: State<boolean>;
   invalid?: boolean;
   menu?: boolean;
   /**Own menu from a function giving an option of a menu, with one line */
@@ -62,6 +64,7 @@ function create(
           ? err("invalid")
           : ok({
               openable: Boolean(data.sub),
+              opened: data.opened,
               sub_rows: sub_rows ? () => data.sub ?? [] : undefined,
               selectable: data.selectable,
               context_menu: data.menu_fn
@@ -1082,6 +1085,25 @@ describe("List selection of a row that can only be opened", () => {
     key(key_field(row), " ");
     expect(row.open).toBe(false);
     expect(warning(container)).toBe("");
+  });
+
+  it("writes its opened state when a click or space opens and closes it", () => {
+    const opened = state.ok_w(false);
+    const container = create(
+      [{ ...item(1, [item(10)]), selectable: false, opened }],
+      { mode: "single" },
+      true,
+    );
+    const row = rows_of(container)[0];
+    click(cell(row));
+    expect(opened.get().value).toBe(true);
+    expect(row.open).toBe(true);
+    click(cell(row));
+    expect(opened.get().value).toBe(false);
+    expect(row.open).toBe(false);
+    key(key_field(row), " ");
+    expect(opened.get().value).toBe(true);
+    expect(row.open).toBe(true);
   });
 
   it("still warns for a click on its checkbox", () => {

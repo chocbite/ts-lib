@@ -1,5 +1,6 @@
 import { theme_init } from "#theme";
 import { ok } from "@chocbite/ts-lib/result";
+import { state, type State } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it } from "vitest";
 import list from "..";
 import type { ListRow } from "../row";
@@ -16,6 +17,7 @@ type AnyRow = ListRow<any, any, any, any>;
 interface Node {
   name: string;
   sub?: Node[];
+  opened?: State<boolean>;
 }
 const node = (name: string, sub?: Node[]): Node => ({ name, sub });
 
@@ -36,6 +38,7 @@ function make(rows: Node[], headless = false) {
       transform: (data: Node) =>
         ok({
           openable: Boolean(data.sub),
+          opened: data.opened,
           sub_rows: () => data.sub ?? [],
           values: { name: data.name },
         }),
@@ -139,6 +142,55 @@ describe("List open all and close all", () => {
       if (depth(row) < deepest - 1) expect(row.open).toBe(true);
     click(button(container, "open"));
     expect(rows_of(container).length).toBeGreaterThan(first + 900);
+  });
+
+  it("writes the opened states of the rows it opens", () => {
+    const a = state.ok_w(false);
+    const b = state.ok_w(false);
+    const container = make([
+      {
+        name: "a",
+        opened: a,
+        sub: [{ name: "b", opened: b, sub: [node("c")] }],
+      },
+      node("d"),
+    ]);
+    click(button(container, "open"));
+    expect(names(container)).toEqual(["a", "b", "c", "d"]);
+    expect(a.get().value).toBe(true);
+    expect(b.get().value).toBe(true);
+  });
+
+  it("writes false to the opened states of every open row when closing all, sub rows included", () => {
+    const a = state.ok_w(true);
+    const b = state.ok_w(true);
+    const container = make([
+      {
+        name: "a",
+        opened: a,
+        sub: [{ name: "b", opened: b, sub: [node("c")] }],
+      },
+      node("d"),
+    ]);
+    expect(names(container)).toEqual(["a", "b", "c", "d"]);
+    click(button(container, "close"));
+    expect(names(container)).toEqual(["a", "d"]);
+    expect(a.get().value).toBe(false);
+    //Otherwise b would open again with a
+    expect(b.get().value).toBe(false);
+  });
+
+  it("leaves rows with a read only opened state as they are", () => {
+    const a = state.ok(false);
+    const d = state.ok(true);
+    const container = make([
+      { name: "a", opened: a.read_only, sub: [node("b")] },
+      { name: "d", opened: d.read_only, sub: [node("e")] },
+    ]);
+    click(button(container, "open"));
+    expect(names(container)).toEqual(["a", "d", "e"]);
+    click(button(container, "close"));
+    expect(names(container)).toEqual(["a", "d", "e"]);
   });
 
   it("does not warn when everything is open within the limit", () => {

@@ -77,7 +77,8 @@ list-keyfield {
     border-right: 1px solid;
   }
 
-  &.openable {
+  //A locked row can not be opened or closed by the user, so it has no arrow, the tree lines of the opener show instead
+  &.openable:not(.locked) {
     > span.opener {
       > div {
         display: block;

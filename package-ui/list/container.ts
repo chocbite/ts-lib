@@ -439,9 +439,17 @@ class Container<
     }
   }
 
-  /**Closes every open row, closing the top rows removes everything below them */
+  /**Closes every open row, sub rows before their parents, so every open row writes its opened state
+   * Closing only the top rows would remove the rows below them with their states still open, which would open them again with their parents*/
   close_all() {
-    for (const row of this.#open_rows()) row.open = false;
+    const open: ListRow<R, T, A, S>[] = [];
+    const collect = (row: ListRow<R, T, A, S>) => {
+      if (!row.open) return;
+      open.push(row);
+      for (let sub = row.first_sub_row; sub; sub = sub.next_row) collect(sub);
+    };
+    for (const row of this.#top_rows()) collect(row);
+    for (let i = open.length - 1; i >= 0; i--) open[i].open = false;
   }
 
   #top_rows(): ListRow<R, T, A, S>[] {

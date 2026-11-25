@@ -54,11 +54,45 @@ Row options besides `values`: `openable`, `opened`, `sub_rows` (with the `sub_ro
 
 With sub rows, add rows and error texts sit in the key field after the tree lines and run from the key column to the end of the row. A list can therefore have no value columns at all, `{}` as columns with the names as key field text.
 
+### Open rows
+
+`opened` is whether a row is open, an input the user changes, like the selected keys:
+
+- **A plain value** is where the row starts, applied when the row is not open already. The row keeps the user's opening and closing itself.
+- **A writable state** is written when the user opens or closes the row: with the opener, the keys of the key field, a click on a row that can only be opened, the "Open" and "Close" lines of the row menu, open all, close all and a drag that opens a row. The row opens and closes when the state gives the value back, so a state that rejects a write leaves the row as it is.
+- **A read only state** is only followed. The user can not open or close the row: it has no opener arrow, the tree lines show in its place and an open row keeps its line down to the sub rows, its row menu has no "Open" or "Close" line, and open all and close all leave it as it is.
+
+A row opens to its state whenever it can be opened: an `openable` state that is false first, or turns false and back to true, opens the row again while the state is true. Closing because the row can not be opened, or has no sub rows, does not write the state, the list only writes it on user actions. An error of the state closes the row.
+
+Because the state belongs to the data and not to the row element, a list that rebuilds its rows keeps them open. Keep one state per entry and give it in the transform. A row reused for other data follows the state of the new data and lets go of the old one.
+
+```ts
+const open = new Map<string, StateROSW<boolean>>();
+const opened = (name: string) =>
+  open.get(name) ?? open.set(name, state.ok_w(false)).get(name)!;
+
+list.container(
+  {
+    transform: (section: Section) =>
+      ok({
+        openable: true,
+        opened: opened(section.name),
+        sub_rows: () => section.properties,
+        values: {},
+      }),
+    sub_rows: true,
+  },
+  { columns: {}, rows: sections },
+);
+```
+
 ## Opening and closing all rows
 
 With sub rows the key column header has an open all and a close all button, also in its context menu. While a row is open, every row menu has "Close all", so lists without a header can close all too. `container.open_all()` and `container.close_all()` do the same for buttons of the app.
 
 Open all opens level by level, so the upper levels are open first. It stops after opening 1000 rows and warns at the key column header, opening all again continues. That keeps a mistake that makes the sub rows recursive from freezing the app. Rows whose sub rows come from a state that delivers later open with what they have.
+
+Close all closes every open row, sub rows included, so every writable `opened` state is set to false and sub rows do not open again with their parent.
 
 ## Resizing columns
 
@@ -132,7 +166,7 @@ The keyboard works in the key field (lists with sub rows), or else in the radio 
 
 The list adds lines in front of the row's own `context_menu`, each group with a divider after it:
 
-1. "Open" or "Close" for a row that can be opened, in lists with sub rows, with or without selection.
+1. "Open" or "Close" for a row that can be opened, in lists with sub rows, with or without selection. Not for a row with a read only `opened` state.
 2. "Select" or "Deselect" for a selectable row, and in multi mode "Select all" and "Deselect all".
 3. The row's own lines.
 

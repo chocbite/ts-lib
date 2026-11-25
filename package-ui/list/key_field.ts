@@ -134,5 +134,11 @@ export class ListKeyField<A extends ListType<any>> extends Base {
   get openable(): boolean {
     return this.classList.contains("openable");
   }
+
+  /**Hides the opener arrow of a row the user can not open or close, like one following a read only opened state
+   * The tree lines show in its place, and an open row keeps its line down to the sub rows */
+  set locked(value: boolean) {
+    this.classList.toggle("locked", value);
+  }
 }
 define_element(ListKeyField);

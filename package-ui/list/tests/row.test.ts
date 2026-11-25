@@ -77,7 +77,7 @@ describe("ListRow open", () => {
 interface Item {
   name: string;
   openable?: boolean | State<boolean>;
-  opened?: boolean;
+  opened?: boolean | State<boolean>;
   sub?: () => Item[] | State<Item[]>;
   icon?: SVGFunc | State<SVGFunc>;
   add_row?: ListAddRowOptions;
@@ -404,6 +404,211 @@ describe("ListRow opening", () => {
     rows.array.change(0, { name: "b", openable: true });
     expect(row.open).toBe(false);
     expect(row.amount_rows()).toBe(0);
+  });
+});
+
+describe("ListRow opened state", () => {
+  const opener_of = (row: AnyRow) =>
+    key_field_of(row).querySelector(":scope > span > div") as HTMLElement;
+  const right_click = (row: AnyRow) =>
+    (row.anchor as HTMLElement).dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+    );
+  const options = () => [
+    ...document.documentElement.querySelectorAll<HTMLElement>(
+      "contextmenu-option",
+    ),
+  ];
+  const texts = () => options().map((o) => o.textContent);
+  const choose = (text: string) =>
+    options()
+      .find((o) => o.textContent.startsWith(text))!
+      .click();
+
+  it("opens and closes when a writable state is set", () => {
+    const opened = state.ok_w(false);
+    const { container } = item_list([{ ...tree("a"), opened }]);
+    const row = find(container, "a");
+    expect(row.open).toBe(false);
+    opened.set_ok(true);
+    expect(row.open).toBe(true);
+    expect(names(sub_rows_of(row))).toEqual(["a1", "a2"]);
+    opened.set_ok(false);
+    expect(row.open).toBe(false);
+    expect(row.amount_rows()).toBe(0);
+  });
+
+  it("opens on creation when the state is true", () => {
+    const { container } = item_list([
+      { ...tree("a"), opened: state.ok_w(true) },
+    ]);
+    expect(find(container, "a").open).toBe(true);
+  });
+
+  it("writes the state when the opener is clicked", () => {
+    const opened = state.ok_w(false);
+    const { container } = item_list([{ ...tree("a"), opened }]);
+    const row = find(container, "a");
+    opener_of(row).click();
+    expect(opened.get().value).toBe(true);
+    expect(row.open).toBe(true);
+    opener_of(row).click();
+    expect(opened.get().value).toBe(false);
+    expect(row.open).toBe(false);
+  });
+
+  it("writes the state with the keys of the key field", () => {
+    const opened = state.ok_w(false);
+    const { container } = item_list([{ ...tree("a"), opened }]);
+    const row = find(container, "a");
+    press(key_field_of(row), "Enter");
+    expect(opened.get().value).toBe(true);
+    press(key_field_of(row), "ArrowLeft");
+    expect(opened.get().value).toBe(false);
+    press(key_field_of(row), "ArrowRight");
+    expect(opened.get().value).toBe(true);
+    expect(row.open).toBe(true);
+  });
+
+  it("writes the state with the Open and Close lines of the row menu", () => {
+    const opened = state.ok_w(false);
+    const { container } = item_list([{ ...tree("a"), opened }]);
+    const row = find(container, "a");
+    right_click(row);
+    choose("Open");
+    expect(opened.get().value).toBe(true);
+    expect(row.open).toBe(true);
+    right_click(row);
+    choose("Close");
+    expect(opened.get().value).toBe(false);
+    expect(row.open).toBe(false);
+  });
+
+  it("follows a read only state, and the user can not open or close the row", () => {
+    const opened = state.ok(false);
+    const { container } = item_list([
+      { ...tree("a"), opened: opened.read_only },
+    ]);
+    const row = find(container, "a");
+    expect(row.open).toBe(false);
+    opener_of(row).click();
+    press(key_field_of(row), "Enter");
+    expect(row.open).toBe(false);
+    opened.set_ok(true);
+    expect(row.open).toBe(true);
+    opener_of(row).click();
+    press(key_field_of(row), "ArrowLeft");
+    expect(row.open).toBe(true);
+    expect(opened.get().value).toBe(true);
+  });
+
+  it("hides the opener arrow with a read only state, and shows it again for other data", () => {
+    const arrow = (row: AnyRow) => getComputedStyle(opener_of(row)).display;
+    const read_only = state.ok(true).read_only;
+    const rows = state.ok_w<Item[]>([
+      { ...tree("a"), opened: read_only },
+      { ...tree("b"), opened: state.ok_w(false) },
+      { ...tree("c"), opened: true },
+    ]);
+    const { container } = item_list(rows);
+    const a = find(container, "a");
+    expect(arrow(a)).toBe("none");
+    //The row stays open, its line down to the sub rows shows without the arrow
+    expect(a.open).toBe(true);
+    expect(arrow(find(container, "b"))).not.toBe("none");
+    expect(arrow(find(container, "c"))).not.toBe("none");
+    //Its sub rows have no opened state, so they keep their arrows
+    expect(arrow(find(container, "a1"))).not.toBe("none");
+    rows.array.change(0, { ...tree("d"), opened: state.ok_w(false) });
+    expect(arrow(a)).not.toBe("none");
+    rows.array.change(0, { ...tree("e"), opened: read_only });
+    expect(arrow(a)).toBe("none");
+  });
+
+  it("has no Open or Close line in the row menu with a read only state", () => {
+    const opened = state.ok(false);
+    const { container } = item_list([
+      { ...tree("a"), opened: opened.read_only },
+    ]);
+    const row = find(container, "a");
+    right_click(row);
+    expect(texts()).toEqual([]);
+    opened.set_ok(true);
+    right_click(row);
+    expect(texts()).toEqual(["Close all"]);
+  });
+
+  it("follows the state of new data and lets go of the old one", () => {
+    const first = state.ok_w(true);
+    const second = state.ok_w(false);
+    const rows = state.ok_w<Item[]>([{ ...tree("a"), opened: first }]);
+    const { container } = item_list(rows);
+    const row = find(container, "a");
+    expect(row.open).toBe(true);
+    rows.array.change(0, { ...tree("b"), opened: second });
+    //The row element is reused for the new data
+    expect(find(container, "b")).toBe(row);
+    expect(row.open).toBe(false);
+    expect(first.amount()).toBe(0);
+    first.set_ok(false);
+    first.set_ok(true);
+    expect(row.open).toBe(false);
+    opener_of(row).click();
+    expect(second.get().value).toBe(true);
+    opener_of(row).click();
+    expect(second.get().value).toBe(false);
+    expect(first.get().value).toBe(true);
+  });
+
+  it("keeps following the same state when the data of the row changes", () => {
+    const opened = state.ok_w(true);
+    const rows = state.ok_w<Item[]>([{ ...tree("a"), opened }]);
+    const { container } = item_list(rows);
+    const row = find(container, "a");
+    rows.array.change(0, { ...tree("b"), opened });
+    expect(row.open).toBe(true);
+    expect(names(sub_rows_of(row))).toEqual(["b1", "b2"]);
+    opened.set_ok(false);
+    expect(row.open).toBe(false);
+  });
+
+  it("stops following the state when new data gives a plain value", () => {
+    const opened = state.ok_w(false);
+    const rows = state.ok_w<Item[]>([{ ...tree("a"), opened }]);
+    const { container } = item_list(rows);
+    const row = find(container, "a");
+    rows.array.change(0, { ...tree("b"), opened: false });
+    expect(opened.amount()).toBe(0);
+    opener_of(row).click();
+    expect(row.open).toBe(true);
+    expect(opened.get().value).toBe(false);
+  });
+
+  it("waits for an openable state, and opens again when it is openable again", () => {
+    const openable = state.ok_w(false);
+    const opened = state.ok_w(true);
+    const { container } = item_list([{ ...tree("a"), openable, opened }]);
+    const row = find(container, "a");
+    expect(row.open).toBe(false);
+    openable.set_ok(true);
+    expect(row.open).toBe(true);
+    //Closing because the row can not be opened is not the user's, the state keeps its value
+    openable.set_ok(false);
+    expect(row.open).toBe(false);
+    expect(opened.get().value).toBe(true);
+    openable.set_ok(true);
+    expect(row.open).toBe(true);
+  });
+
+  it("closes while the state has an error", () => {
+    const opened = state.from_w(true);
+    const { container } = item_list([{ ...tree("a"), opened }]);
+    const row = find(container, "a");
+    expect(row.open).toBe(true);
+    opened.set_err(nice_err("fail"));
+    expect(row.open).toBe(false);
+    opened.set_ok(true);
+    expect(row.open).toBe(true);
   });
 });
 

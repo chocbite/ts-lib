@@ -31,8 +31,15 @@ const not_selectable = () =>
 
 export type ListSubRows<R> = () => StateOrVal<R[]>;
 
+/**Key of the subscription of the opened state of a row */
+const OPENED = Symbol("opened");
+
 export interface ListRowOptions<R, T extends {}, S extends boolean> {
-  opened?: boolean;
+  /**Whether the row is open, a plain value is where the row starts when it is not open already
+   * A writable state is written when the user opens or closes the row, the row opens and closes when the state changes
+   * A read only state is only followed, the user can not open or close the row, and it has no opener arrow
+   * The row opens to the state whenever it can be opened, an error of the state closes it */
+  opened?: boolean | State<boolean>;
   openable?: boolean | State<boolean>;
   key_field?: ListKeyFieldOptions;
   sub_rows?: S extends true ? ListSubRows<R> : never;
@@ -80,7 +87,12 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   #invalid?: ListError;
   /**Shown instead of the sub rows while their state has an error */
   #error?: ListRowsError<A>;
+  /**Opens the row once it is openable, for a plain opened true given while it is not openable yet */
   #open_pending = false;
+  /**Opened state the row follows, written when the user opens or closes the row */
+  #opened?: State<boolean>;
+  /**Last value of the opened state, the row opens to it whenever it becomes openable */
+  #opened_value = false;
   #sub_row_menu = false;
   #state_sub?: StateInferSub<State<R[]>>;
   state!: ListParentRows<A>;
@@ -300,11 +312,17 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     this.#values = row_options.values;
     this.#apply_values();
 
-    //Setup openable
+    //Setup opened and openable
     const was_open = this.open;
+    const opened = row_options.opened;
+    const opened_state = state.is.state(opened) ? opened : undefined;
+    //Kept for the same state, a new one is attached after openable, so it opens the row by the openable of the new data
+    const new_state = opened_state !== this.#opened;
+    if (new_state) this.#opened_detach();
+    const start = !opened_state && !was_open && Boolean(opened);
     if (state.is.state(row_options.openable)) {
       //Opening waits for the first value of the state, which is immediate when connected
-      this.#open_pending = !was_open && Boolean(row_options.opened);
+      this.#open_pending = start;
       this.attach_state_to_prop("openable", row_options.openable, () =>
         some(false),
       );
@@ -312,13 +330,21 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
       this.#open_pending = false;
       this.detach_state_from_prop("openable");
       this.openable = Boolean(row_options.openable);
-      if (!was_open && row_options.opened) this.open = true;
+      if (start) this.#show_open(true);
     }
+    if (opened_state && new_state) {
+      this.#opened = opened_state;
+      this.attach_state_to_symbol(OPENED, opened_state, (value) => {
+        this.#opened_value = value.ok && value.value;
+        this.#show_open(this.#opened_value);
+      });
+    }
+    if (this.#key_field) this.#key_field.locked = !this.#user_opens;
 
     //Refresh the sub rows of an open row
     if (was_open && this.open) {
       if (this.#sub_rows) this.rows = this.#sub_rows();
-      else if (!row_options.opened) this.open = false;
+      else if (!opened) this.#show_open(false);
     }
 
     //Setup context menu, blocked for right clicks bubbling up from sub rows
@@ -349,6 +375,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     this.#sub_rows = undefined;
     this.add_row = undefined;
     this.#open_pending = false;
+    this.#opened_detach();
     this.detach_state_from_prop("openable");
     this.openable = false;
     ctm.detach(this);
@@ -384,18 +411,37 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   //      \____/|_|    |______|_| \_|_____|_| \_|\_____|
 
   set openable(value: boolean) {
-    if (!value) this.open = false;
+    if (!value) this.#show_open(false);
     if (this.#key_field) this.#key_field.openable = value;
-    if (this.#open_pending) {
-      this.#open_pending = false;
-      if (value) this.open = true;
-    }
+    //A plain opened waits only for the first openable, an opened state is followed whenever the row is openable
+    if (value && (this.#open_pending || this.#opened_value))
+      this.#show_open(true);
+    this.#open_pending = false;
   }
   get openable(): boolean {
     return this.#key_field?.openable ?? false;
   }
 
+  /**Opens or closes the row as the user does, used by the opener, the keys, clicks, the row menu, open and close all and drags
+   * With a writable opened state the state is written and the row follows it, a read only state can not be changed */
   set open(open: boolean) {
+    if (!this.openable) return;
+    const opened = this.#opened;
+    //What the state says already is only shown again, like opening a row whose sub rows were empty
+    if (!opened || open === this.#opened_value) this.#show_open(open);
+    else if (opened.writable) void opened.write?.(open);
+  }
+  get open(): boolean {
+    return this.classList.contains("open");
+  }
+
+  /**Whether the user can open and close the row, false for a read only opened state */
+  get #user_opens(): boolean {
+    return !this.#opened || this.#opened.writable;
+  }
+
+  /**Shows or removes the sub rows, without writing the opened state */
+  #show_open(open: boolean) {
     if (!this.openable) return;
     if (open && this.#child_box.childElementCount === 0) {
       const rows = this.#drop_rows ?? this.#sub_rows?.();
@@ -403,8 +449,13 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
       if (rows) this.rows = rows;
     } else if (!open && this.open) this.rows = [];
   }
-  get open(): boolean {
-    return this.classList.contains("open");
+
+  /**Stops following the opened state */
+  #opened_detach() {
+    if (!this.#opened) return;
+    this.detach_state_from_symbol(OPENED);
+    this.#opened = undefined;
+    this.#opened_value = false;
   }
 
   //      _____   ______          _______
@@ -514,10 +565,11 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   }
 
   /**Context menu lines to open or close the sub rows of an openable row, and to close all rows while one is open
-   * Close all is on every row, so a list without header can close all */
+   * Close all is on every row, so a list without header can close all
+   * A row with a read only opened state has no open or close line, the user can not change it */
   #open_lines(): ContextMenuLines {
     const lines: ContextMenuLines = [];
-    if (this.openable)
+    if (this.openable && this.#user_opens)
       lines.push(
         this.open
           ? ctm.line({ text: "Close", on_click: () => (this.open = false) })

@@ -7,7 +7,11 @@ import {
 import list from "@chocbite/ts-lib-ui/list";
 import { array_from_length } from "@chocbite/ts-lib/common";
 import { err, ok, type Option } from "@chocbite/ts-lib/result";
-import state, { type State, type StateROSW } from "@chocbite/ts-lib/state";
+import state, {
+  type State,
+  type StateROS,
+  type StateROSW,
+} from "@chocbite/ts-lib/state";
 import { box, controls, row, section, demo_error } from "../../helpers";
 
 const WORDS = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf"];
@@ -453,6 +457,90 @@ const word = (i: number) => WORDS[i % WORDS.length];
     height: "20rem",
     display: "grid",
   }).appendChild(tree_list([endless("x")], false));
+}
+
+{
+  const sec = section(
+    "Opened as a state",
+    "Open some folders in both lists. Rebuild empties the rows and gives new ones, like an editor showing other data: the state list keeps its folders open, the plain list closes them. Reverse gives the rows in the other order, rows are reused by position, so in the plain list the open state stays at the position, in the state list it stays with the folder. Open, close, open all, close all and the row menu all change the state text under the list. The read only list only follows the buttons under it: its folders have no opener arrow, the tree lines show in its place and an open folder keeps its line down to the sub rows, keys and open all do nothing and its row menu has no open or close line",
+  );
+  interface Folder {
+    name: string;
+    sub?: Folder[];
+  }
+  const folders = (): Folder[] => [
+    {
+      name: "Documents",
+      sub: [{ name: "Old", sub: [{ name: "2019.txt" }] }, { name: "notes.md" }],
+    },
+    { name: "Pictures", sub: [{ name: "cat.png" }] },
+    { name: "Music", sub: [{ name: "song.mp3" }] },
+  ];
+  const names = ["Documents", "Old", "Pictures", "Music"];
+  //One state per folder name, kept by the app across rebuilds
+  const writable = new Map(names.map((n) => [n, state.ok_w(false)]));
+  const read_only = new Map(names.map((n) => [n, state.ok(n === "Pictures")]));
+  const folder_list = (
+    rows: State<Folder[]>,
+    opened?: (name: string) => State<boolean>,
+  ) =>
+    list.container(
+      {
+        transform: (data: Folder) =>
+          ok({
+            openable: Boolean(data.sub),
+            //Only folders have a state, the files can not be opened
+            opened: (data.sub && opened?.(data.name)) ?? false,
+            key_field: { text: data.name },
+            sub_rows: () => data.sub ?? [],
+            values: {},
+          }),
+        sub_rows: true,
+      },
+      { columns: {}, rows },
+    );
+  const show = (
+    parent: HTMLElement,
+    states: Map<string, StateROS<boolean>>,
+  ) => {
+    const text = parent.appendChild(document.createElement("div"));
+    const update = () => {
+      const open = names.filter((n) => states.get(n)!.get().value);
+      text.textContent = "Open: " + (open.join(", ") || "none");
+    };
+    for (const s of states.values()) s.sub(update);
+    update();
+  };
+  const rows = state.ok_w<Folder[]>(folders());
+  const read_only_rows = state.ok_w<Folder[]>(folders());
+  const r = row(sec);
+  const b1 = box(r, "writable states", { width: "14rem" });
+  b1.appendChild(folder_list(rows, (n) => writable.get(n)!));
+  show(b1, writable);
+  box(r, "plain opened", { width: "14rem" }).appendChild(folder_list(rows));
+  const b3 = box(r, "read only states", { width: "14rem" });
+  b3.appendChild(
+    folder_list(read_only_rows, (n) => read_only.get(n)!.read_only),
+  );
+  show(b3, read_only);
+  controls(b3, {
+    "Toggle Documents": () => {
+      const s = read_only.get("Documents")!;
+      s.set_ok(!s.get().value);
+    },
+    "Toggle Pictures": () => {
+      const s = read_only.get("Pictures")!;
+      s.set_ok(!s.get().value);
+    },
+  });
+  controls(sec, {
+    Rebuild: () => {
+      rows.set_ok([]);
+      rows.set_ok(folders());
+    },
+    Reverse: () => rows.set_ok([...rows.get().value].reverse()),
+    "Open Music from app": () => void writable.get("Music")!.write(true),
+  });
 }
 
 //     _  __________     __  ______ _____ ______ _      _____
