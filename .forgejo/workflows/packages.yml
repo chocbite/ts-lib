@@ -32,7 +32,7 @@ jobs:
       - name: Publish
         env:
           #Of the Authorized Integration, shown once it is saved, not a secret
-          AUDIENCE: PASTE_THE_AUDIENCE_HERE
+          AUDIENCE: u:2:24787623-c51c-4798-80ef-74c6e1a530ea
           REGISTRY: ${{ forgejo.server_url }}/api/packages/${{ forgejo.repository_owner }}/npm/
         run: |
           set -eo pipefail
