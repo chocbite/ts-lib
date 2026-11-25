@@ -41,7 +41,8 @@ jobs:
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" \
             | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).value')
           echo "::add-mask::$token"
-          npm config set "${REGISTRY#https:}:_authToken" "$token"
+          #npm finds the token by the registry without its scheme, //host/path/, the runner can reach Forgejo by http
+          npm config set "${REGISTRY#*:}:_authToken" "$token"
           for dir in dist/ts-lib dist/ts-lib-ui; do
             id=$(node -p "const p = require('./$dir/package.json'); p.name + '@' + p.version")
             if npm view "$id" version --registry "$REGISTRY" > /dev/null 2>&1; then
