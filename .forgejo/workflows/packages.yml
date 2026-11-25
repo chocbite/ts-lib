@@ -1,0 +1,52 @@
+#Tests every push to main, and publishes each package whose version is not in the npm registry of Forgejo yet,
+#the Forgejo side of .github/workflows/release.yml, which publishes to npm.
+#No stored token: an Authorized Integration of the Forgejo Actions (Local) type, in the settings of the user owning the packages,
+#lets this workflow file, packages.yml, of this repository on refs/heads/main write packages,
+#with a token Forgejo makes for each run, which expires after an hour.
+name: Packages
+
+on:
+  push:
+    branches: [main]
+
+#Lets the job ask Forgejo for that token
+enable-openid-connect: true
+
+jobs:
+  packages:
+    runs-on: docker
+    #git is in the full node image, the build writes the commit into the docs
+    container: node:22-bookworm
+    steps:
+      - uses: actions/checkout@v4
+
+      #Chromium for the ts-lib-ui tests, the version the installed Playwright needs
+      - run: npm ci && npx playwright install --with-deps chromium
+
+      - run: npm test
+
+      - run: npm run build && node config/write-dist-package.js package-core package-ui
+
+      #ts-lib first, ts-lib-ui depends on it, a package already in the registry is skipped,
+      #so a run that failed half way publishes the rest the next time
+      - name: Publish
+        env:
+          #Of the Authorized Integration, shown once it is saved, not a secret
+          AUDIENCE: PASTE_THE_AUDIENCE_HERE
+          REGISTRY: ${{ forgejo.server_url }}/api/packages/${{ forgejo.repository_owner }}/npm/
+        run: |
+          set -eo pipefail
+          token=$(curl --fail --silent --show-error \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$AUDIENCE" \
+            | node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).value')
+          echo "::add-mask::$token"
+          npm config set "${REGISTRY#https:}:_authToken" "$token"
+          for dir in dist/ts-lib dist/ts-lib-ui; do
+            id=$(node -p "const p = require('./$dir/package.json'); p.name + '@' + p.version")
+            if npm view "$id" version --registry "$REGISTRY" > /dev/null 2>&1; then
+              echo "$id is already in the registry of Forgejo"
+            else
+              npm publish "./$dir" --registry "$REGISTRY"
+            fi
+          done
