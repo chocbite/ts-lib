@@ -9,7 +9,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "ssh://git@forgejo.nsns.dk:2222/chocbite/ts-lib.git"
+    "url": "git+https://github.com/chocbite/ts-lib.git"
   },
   "description": "Browser UI TypeScript libraries, builds on @chocbite/ts-lib",
   "exports": {

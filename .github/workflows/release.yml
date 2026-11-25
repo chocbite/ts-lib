@@ -1,0 +1,48 @@
+#Tests every push to main, and publishes each package whose version is not on npm yet,
+#so bumping the version in the root package.json on main is a release.
+#Runs on GitHub, which Forgejo mirrors the repo to, as npm trusted publishing does not support Forgejo.
+#No npm token: each package on npmjs.com trusts this workflow file, by its name, release.yml,
+#with direct publishing allowed, and npm adds provenance, for which repository.url must be the GitHub repo.
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  #The OIDC token npm trusted publishing logs in with
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      #Trusted publishing needs npm 11.5.1 or later, which comes with Node 24
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      #Chromium for the ts-lib-ui tests, the version the installed Playwright needs
+      - run: npm ci && npx playwright install --with-deps chromium
+
+      - run: npm test
+
+      - run: npm run build && node config/write-dist-package.js package-core package-ui
+
+      #ts-lib first, ts-lib-ui depends on it, a package already on npm is skipped,
+      #so a run that failed half way publishes the rest the next time
+      - name: Publish
+        run: |
+          for dir in dist/ts-lib dist/ts-lib-ui; do
+            id=$(node -p "const p = require('./$dir/package.json'); p.name + '@' + p.version")
+            if npm view "$id" version > /dev/null 2>&1; then
+              echo "$id is already on npm"
+            else
+              npm publish "./$dir"
+            fi
+          done
