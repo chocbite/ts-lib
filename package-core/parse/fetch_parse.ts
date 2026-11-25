@@ -207,38 +207,90 @@ type WriteOnlyType<S> = S extends `?${infer Rest}`
     : S extends readonly ["?", infer Item, ...unknown[]]
       ? WriteOnlyType<Item>
       : never;
-/**Members of a write only object that a whole write can leave out, the ones with the ? prefix*/
-type OptionalWriteOnlyKeys<S> = {
-  [K in keyof S]-?: S[K] extends `?${string}` ? K : never;
-}[keyof S];
-/**Type of a whole write of a write only container, the members with their write types*/
-type WriteOnlyValue<S> =
+/**True for a spec a whole write of its container writes: a writable or write only type string, a command,
+ * or a record, fixed array, tuple or object with such members. A tuple only when every position is writable,
+ * dynamic arrays, parsers and unions are left out*/
+type WholeWritable<S> =
+  IsWholeSchema<S> extends true
+    ? false
+    : S extends string
+      ? S extends `${string}w` | `${string}wo`
+        ? true
+        : false
+      : S extends readonly ["wo", ...unknown[]]
+        ? true
+        : S extends readonly ["?", infer Item, ...unknown[]]
+          ? WholeWritable<Item>
+          : S extends readonly [0, ...unknown[]]
+            ? false
+            : S extends readonly ["{}", infer Item]
+              ? WholeWritable<Item>
+              : S extends readonly [number, infer Item, ...unknown[]]
+                ? WholeWritable<Item>
+                : S extends readonly []
+                  ? false
+                  : S extends readonly string[]
+                    ? false extends { [K in keyof S]: WholeWritable<S[K]> }[number]
+                      ? false
+                      : true
+                    : S extends readonly unknown[] | Parser
+                      ? false
+                      : S extends object
+                        ? true extends { [K in keyof S]-?: WholeWritable<S[K]> }[keyof S]
+                          ? true
+                          : false
+                        : false;
+/**True for a spec with the ? prefix, a whole write can leave it out*/
+type IsOptionalSpec<S> = S extends `?${string}` | readonly ["?", ...unknown[]] ? true : false;
+/**Write type of a writable or write only type string, without the prefix*/
+type WholeLeafType<S extends string> = S extends `?${infer Rest}`
+  ? WholeLeafType<Rest>
+  : S extends `${infer Type}wo`
+    ? ResolveString<Type>
+    : S extends `${infer Type}w`
+      ? ResolveString<Type>
+      : never;
+/**Type of a whole write of a container, its members a whole write writes with their write types.
+ * Every member is required, except one with the ? prefix*/
+type WholeWriteValue<S> =
   IsWholeSchema<S> extends true
     ? unknown
-    : S extends FetchWriteOnlySpec
-      ? WriteOnlyType<S>
+    : S extends string
+      ? WholeLeafType<S>
       : S extends readonly ["wo", ...unknown[]]
         ? Record<string, never>
         : S extends readonly ["?", infer Item, ...unknown[]]
-          ? WriteOnlyValue<Item>
+          ? WholeWriteValue<Item>
           : S extends readonly ["{}", infer Item]
-            ? Record<string, WriteOnlyValue<Item>>
+            ? Record<string, WholeWriteValue<Item>>
             : S extends readonly [infer Count extends number, infer Item, ...unknown[]]
-              ? Repeat<WriteOnlyValue<Item>, Count>
+              ? Repeat<WholeWriteValue<Item>, Count>
               : S extends readonly unknown[]
-                ? { -readonly [K in keyof S]: WriteOnlyValue<S[K]> }
+                ? {
+                    -readonly [K in keyof S]: IsOptionalSpec<S[K]> extends true
+                      ? WholeWriteValue<S[K]> | undefined
+                      : WholeWriteValue<S[K]>;
+                  }
                 : S extends object
                   ? Prettify<
                       {
-                        -readonly [K in Exclude<keyof S, OptionalWriteOnlyKeys<S>>]: WriteOnlyValue<S[K]>;
+                        -readonly [K in keyof S as WholeWritable<S[K]> extends true
+                          ? IsOptionalSpec<S[K]> extends true
+                            ? never
+                            : K
+                          : never]: WholeWriteValue<S[K]>;
                       } & {
-                        -readonly [K in OptionalWriteOnlyKeys<S>]?: WriteOnlyValue<S[K]>;
+                        -readonly [K in keyof S as WholeWritable<S[K]> extends true
+                          ? IsOptionalSpec<S[K]> extends true
+                            ? K
+                            : never
+                          : never]?: WholeWriteValue<S[K]>;
                       }
                     >
                   : never;
 /**The state of a whole write of a write only container, it reads undefined*/
 type WholeWrite<S> = {
-  readonly [FETCH_PARSE]: StateROSW<undefined, Option<{}>, WriteOnlyValue<S>>;
+  readonly [FETCH_PARSE]: StateROSW<undefined, Option<{}>, WholeWriteValue<S>>;
 };
 /**True for a spec the server does not send, a write only type string,
  * or a fixed array, tuple, record or object of only write only members*/
@@ -276,7 +328,12 @@ type WriteOnlyKeys<S> = {
 }[keyof S];
 /**A container with the state of its whole value under FETCH_PARSE, for a write only container the state of a whole write*/
 type WithFetchState<S, Value, T> =
-  IsWriteOnly<S> extends true ? WholeWrite<S> & T : FetchContainer<Value> & T;
+  IsWriteOnly<S> extends true ? WholeWrite<S> & T : ContainerState<S, Value> & T;
+/**The state of the whole value of a received container, it writes the container whole when it has members a whole write writes*/
+type ContainerState<S, Value> =
+  WholeWritable<S> extends true
+    ? { readonly [FETCH_PARSE]: StateREAW<Value, Option<{}>, WholeWriteValue<S>> }
+    : FetchContainer<Value>;
 
 /**Value type of an object schema, keys that may be missing are optional.
  * An index signature, like the generic FetchSchema constraint, keeps the lazy mapped type,
@@ -376,7 +433,7 @@ type ValueForKey<T, K> = T extends unknown
     : undefined
   : never;
 
-export type FetchParsed<S extends FetchSchema> = FetchContainer<ResolveSchema<S>> &
+export type FetchParsed<S extends FetchSchema> = ContainerState<S, ResolveSchema<S>> &
   (S extends readonly ["{}", infer Item]
     ? {
         readonly [key: string]: FetchNode<Item, RecordItem<ResolveSchema<S>>>;
@@ -570,6 +627,26 @@ function is_write_only(schema: unknown): boolean {
 function is_write_only_leaf(schema: unknown): boolean {
   if (typeof schema === "string") return schema.endsWith("wo");
   return Array.isArray(schema) && schema[0] === "?" && typeof schema[1] === "string" && schema[1].endsWith("wo");
+}
+
+/**True for a spec a whole write of its container writes: a writable or write only type string, a command,
+ * or a record, fixed array, tuple or object with such members. A tuple only when every position is writable,
+ * dynamic arrays, parsers and unions are left out. A container is written whole when it is one*/
+function is_whole_writable(schema: unknown): boolean {
+  if (typeof schema === "string") return schema.endsWith("w") || schema.endsWith("wo");
+  if (Array.isArray(schema)) {
+    if (schema[0] === "wo") return true;
+    if (schema[0] === "?") return is_whole_writable(schema[1]);
+    if (schema[0] === 0) return false;
+    if (schema[0] === "{}" || typeof schema[0] === "number") return is_whole_writable(schema[1]);
+    return (
+      schema.length > 0 &&
+      schema.every((entry) => typeof entry === "string" && is_whole_writable(entry))
+    );
+  }
+  //A parser is a function, it is not an object
+  if (schema && typeof schema === "object") return Object.values(schema).some(is_whole_writable);
+  return false;
 }
 
 /**Throws for a write only member where it can not be. It must be a member of an object, or inside a write only container,
@@ -840,7 +917,7 @@ class UnsentWrite {
 }
 
 /**Payload of a write with the path of the member it writes, as the server addresses it, so a batch can tell members apart.
- * command: a whole write of a write only container, it covers everything in the container, and is never replaced by a later write*/
+ * command: a whole write of a container, it covers everything in the container, and is never replaced by a later write*/
 class Outgoing {
   constructor(
     readonly payload: unknown,
@@ -1128,18 +1205,8 @@ export function make_fetch_parser<const S extends FetchSchema>(
     encoder?: ArrayWriteEncoder<unknown>,
     all_path?: readonly PathPart[],
   ): unknown => {
-    //Keyed items are found by key in the last received value, the members after the last item are kept as they are
-    const last_key = path.findLastIndex((part) => part instanceof ItemKey);
-    let concrete = path as readonly IndexPart[];
-    if (last_key !== -1) {
-      if (latest.err) return new UnsentWrite(latest.error);
-      const items = resolve_path(latest.value, path.slice(0, last_key + 1));
-      if (items instanceof MissingPart)
-        return new UnsentWrite(
-          failure(fetch_parse_errors.ITEM_GONE, "Failed to write, the item no longer exists", created_at),
-        );
-      concrete = [...items, ...(path.slice(last_key + 1) as IndexPart[])];
-    }
+    const concrete = concrete_path(path);
+    if (concrete instanceof UnsentWrite) return concrete;
     if (!all_path) {
       const sent = to_server(concrete);
       return new Outgoing(
@@ -1150,15 +1217,39 @@ export function make_fetch_parser<const S extends FetchSchema>(
         sent,
       );
     }
-    const all_concrete = concrete.slice(0, all_path.length);
+    return all_payload(concrete.slice(0, all_path.length), [[concrete.slice(all_path.length), value]]);
+  };
+
+  /**The path with its keyed items found by key in the last received value, the members after the last item are kept as they are*/
+  const concrete_path = (path: readonly PathPart[]): IndexPart[] | UnsentWrite => {
+    const last_key = path.findLastIndex((part) => part instanceof ItemKey);
+    if (last_key === -1) return path as IndexPart[];
+    if (latest.err) return new UnsentWrite(latest.error);
+    const items = resolve_path(latest.value, path.slice(0, last_key + 1));
+    if (items instanceof MissingPart)
+      return new UnsentWrite(
+        failure(fetch_parse_errors.ITEM_GONE, "Failed to write, the item no longer exists", created_at),
+      );
+    return [...items, ...(path.slice(last_key + 1) as IndexPart[])];
+  };
+
+  /**Payload of values set in a write "all" array, it is sent whole with the values set in a copy of the array it builds on.
+   * Positions inside the array sent stay as they are.
+   * @param sets the paths in the array and the values set there*/
+  const all_payload = (
+    all_concrete: readonly IndexPart[],
+    sets: readonly (readonly [readonly IndexPart[], unknown])[],
+  ): unknown => {
     const base = array_base_at(all_concrete);
     if (base.err) return new UnsentWrite(base.error);
-    //Positions inside the array sent stay as they are, it is sent whole
-    const array = with_value_at(base.value, concrete.slice(all_path.length), value);
-    if (array === undefined)
-      return new UnsentWrite(
+    let array: unknown = base.value;
+    for (const [at, value] of sets) {
+      array = with_value_at(array, at, value);
+      if (array === undefined)
+        return new UnsentWrite(
           failure(fetch_parse_errors.ITEM_GONE, "Failed to write, the item no longer exists", created_at),
         );
+    }
     //The whole array is one member, a later write in it is built on this one and replaces it
     const sent_path = to_server(all_concrete);
     return new Outgoing(payload_at_path(sent_path, array), sent_path);
@@ -1224,7 +1315,8 @@ export function make_fetch_parser<const S extends FetchSchema>(
     });
   };
 
-  /**The writes of the members of a write only container written whole, the written value walked with the schema of the container.
+  /**The writes of the members of a container written whole, the written value walked with the schema of the container.
+   * Only the members a whole write writes are written, see is_whole_writable, read only ones and dynamic arrays are not.
    * A member the value leaves out is not written, a command, ["wo", {}], is written as an empty object*/
   const member_writes = (
     spec: unknown,
@@ -1232,8 +1324,8 @@ export function make_fetch_parser<const S extends FetchSchema>(
     value: unknown,
     writes: [PathPart[], unknown][],
   ): void => {
-    if (value === undefined) return;
-    if (is_write_only_leaf(spec)) {
+    if (value === undefined || !is_whole_writable(spec)) return;
+    if (typeof spec === "string") {
       writes.push([spec_path, value]);
       return;
     }
@@ -1266,13 +1358,32 @@ export function make_fetch_parser<const S extends FetchSchema>(
     );
   };
 
-  /**Payload of a whole write of a write only container, the container as an empty object at its path with the member writes merged in.
-   * Built from the payloads of the members, so keyed items, array_start and start are found like for a member write*/
-  const whole_payload = (spec: unknown, path: readonly PathPart[], value: unknown): unknown => {
-    const container = payload_for(path, {});
-    if (!(container instanceof Outgoing)) return container;
+  /**Payload of a whole write of a container, the container as an empty object at its path with the member writes merged in.
+   * Built from the payloads of the members, so keyed items, array_start and start are found like for a member write.
+   * In a write "all" array the members are set in the array, which is sent whole like for a member write*/
+  const whole_payload = (
+    spec: unknown,
+    path: readonly PathPart[],
+    value: unknown,
+    all_path?: readonly PathPart[],
+  ): unknown => {
     const writes: [PathPart[], unknown][] = [];
     member_writes(spec, [...path], value, writes);
+    if (all_path) {
+      const concrete = concrete_path(path);
+      if (concrete instanceof UnsentWrite) return concrete;
+      //The members are under the container, past its keyed items
+      const in_array = concrete.slice(all_path.length);
+      return all_payload(
+        concrete.slice(0, all_path.length),
+        writes.map(([member_path, member_value]) => [
+          [...in_array, ...(member_path.slice(path.length) as IndexPart[])],
+          member_value,
+        ]),
+      );
+    }
+    const container = payload_for(path, {});
+    if (!(container instanceof Outgoing)) return container;
     let payload = container.payload;
     for (const [member_path, member_value] of writes) {
       const member = payload_for(member_path, member_value);
@@ -1298,13 +1409,17 @@ export function make_fetch_parser<const S extends FetchSchema>(
     all_path?: PathPart[],
     optional_at?: number,
   ): unknown => {
-    /**Gives a container the state of its whole value, a write only container the state of a whole write, the server does not send it*/
+    /**Gives a container the state of its whole value, a write only container the state of a whole write, the server does not send it.
+     * The state of a received container with members a whole write writes also writes it whole, so does the one of the root*/
     const whole_value = (container: object) => {
+      const transform = (result: StateResult<unknown>) => at_path(result, path, optional_at);
       set_fetch_state(
         container,
-        is_write_only(part_schema)
+        is_write_only(part_schema) && path.length > 0
           ? whole_write(part_schema, path)
-          : root.proxy((result) => at_path(result, path, optional_at)),
+          : is_whole_writable(part_schema)
+            ? writable(transform, (value) => whole_payload(part_schema, path, value, all_path))
+            : root.proxy(transform),
       );
     };
 
@@ -1562,6 +1677,7 @@ export function make_fetch_parser<const S extends FetchSchema>(
   };
 
   const result = node(schema, []) as object;
-  set_fetch_state(result, root);
+  //The root itself is the state of the whole response, unless it was given one that writes it whole
+  if (!is_whole_writable(schema) || !Object.hasOwn(result, FETCH_PARSE)) set_fetch_state(result, root);
   return result as unknown as FetchParsed<S>;
 }

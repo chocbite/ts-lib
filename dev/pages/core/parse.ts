@@ -180,6 +180,7 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
     pumps: { id: number; name: string; running: boolean; speed: number }[];
     zones: { name: string; setpoint: number }[];
     tags: string[];
+    limits: { low: number; high: number; unit: string };
   } = {
     name: "Pump 1",
     running: true,
@@ -200,6 +201,7 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
       { name: "South", setpoint: 22 },
     ],
     tags: ["alpha", "bravo"],
+    limits: { low: 10, high: 20, unit: "°C" },
   };
   let next_pump_id = 4;
   let polls = 0;
@@ -262,6 +264,12 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
       if ("pin" in patch && patch["pin"] !== "1234") {
         write_log(`PATCH ${String(init.body)} rejected`, "#d33");
         return respond(400, "Wrong PIN, it is 1234");
+      }
+      //Limits must stay in order after the write, moving both past each other needs a whole write
+      const limits = { ...device.limits, ...(patch["limits"] as object | undefined) };
+      if (limits.low > limits.high) {
+        write_log(`PATCH ${String(init.body)} rejected`, "#d33");
+        return respond(400, `Low ${limits.low} is above high ${limits.high}`);
       }
       delete patch["pin"];
       delete patch["restart"];
@@ -334,6 +342,7 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
       pin: ["?", "swo", () => "", { reset: true }],
       move: { from: "nwo", to: "nwo", count: "?nwo" },
       clear_log: ["wo", {}],
+      limits: { low: "nw", high: "nw", unit: "sw" },
     },
     { write: patch_device, fetch: api_fetch, retry_rate: RETRY_MS, write_debounce: WRITE_DEBOUNCE_MS },
   );
@@ -408,6 +417,28 @@ function readout<T>(parent: HTMLElement, label: string, value: StateREA<T>) {
   const clear_button = form.button({ text: "Clear log on server" });
   clear_button.addEventListener("click", () => void parsed.clear_log[FETCH_PARSE].write({}));
   clear.appendChild(clear_button);
+
+  //A received object written whole, the server rejects limits where low is above high
+  const limits = box(
+    commands,
+    "limits: { low: nw, high: nw, unit: sw }, the server rejects low above high. Moving from 10..20 to 25..30 one member at a time fails, written whole with limits[FETCH_PARSE] it is one PATCH",
+    { width: "32rem" },
+  );
+  readout(limits, "limits[FETCH_PARSE]", parsed.limits[FETCH_PARSE]);
+  limits.appendChild(form.number_input({ unit: "low" }).set({ value: parsed.limits.low }));
+  limits.appendChild(form.number_input({ unit: "high" }).set({ value: parsed.limits.high }));
+  const limits_high = form.button({ text: "Write 25..30 °C whole" });
+  limits_high.addEventListener(
+    "click",
+    () => void parsed.limits[FETCH_PARSE].write({ low: 25, high: 30, unit: "°C" }),
+  );
+  limits.appendChild(limits_high);
+  const limits_low = form.button({ text: "Write 10..20 °C whole" });
+  limits_low.addEventListener(
+    "click",
+    () => void parsed.limits[FETCH_PARSE].write({ low: 10, high: 20, unit: "°C" }),
+  );
+  limits.appendChild(limits_low);
 
   const read_only = row(sec);
   read_only.style.marginTop = "0.75rem";

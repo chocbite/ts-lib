@@ -2180,3 +2180,251 @@ describe("make_fetch_parser whole writes of write only containers", () => {
     expect(made({ cmd: ["wo", {}] })).not.toThrow();
   });
 });
+
+describe("make_fetch_parser whole writes of received containers", () => {
+  const SETPOINT = { min: "nw", max: "nw", unit: "sw", azimuth: "bw", neutral: "nw" } as const;
+  const BODY = { setpoint: { min: 1, max: 2, unit: "m", azimuth: true, neutral: 0 }, name: "A" };
+  /**A parser whose fetch gives body, and its write mock*/
+  const parser_from = <const S extends FetchSchema>(
+    schema: S,
+    body: unknown = {},
+    options: { array_start?: number; write_debounce?: number } = {},
+  ) => {
+    const send = vi.fn<FetchWrite>(async () => ok(undefined));
+    const parsed = make_fetch_parser(() => "/x", 60_000, schema, {
+      write: send,
+      fetch: async () => ok(JSON.stringify(body)),
+      ...options,
+    });
+    return { parsed, send };
+  };
+  type WriteOf<S> = S extends { write(value: infer W): unknown } ? W : never;
+
+  it("sends a container written whole as one payload, and reads the received value", async () => {
+    const { parsed, send } = parser_from({ setpoint: SETPOINT, name: "s" }, BODY);
+
+    expect(await parsed.setpoint[FETCH_PARSE].read()).toEqual(ok(BODY.setpoint));
+    expect(parsed.setpoint[FETCH_PARSE].writable).toBe(true);
+    const written = await parsed.setpoint[FETCH_PARSE].write({ min: 5, max: 9, unit: "cm", azimuth: false, neutral: 7 });
+
+    expect(written.ok).toBe(true);
+    expect(send.mock.calls).toEqual([[{ setpoint: { min: 5, max: 9, unit: "cm", azimuth: false, neutral: 7 } }]]);
+    //The member states stay
+    await parsed.setpoint.min.write(3);
+    expect(send).toHaveBeenLastCalledWith({ setpoint: { min: 3 } });
+  });
+
+  it("gives the error of a failed write", async () => {
+    const { parsed, send } = parser_from({ setpoint: SETPOINT }, BODY);
+    send.mockResolvedValueOnce(err_nice(TEST_ERROR, "rejected"));
+
+    const written = await parsed.setpoint[FETCH_PARSE].write({ min: 5, max: 9, unit: "cm", azimuth: false, neutral: 7 });
+
+    expect(written.err && written.error.kind).toBe(TEST_ERROR);
+  });
+
+  it("sends only the writable and write only members, and leaves out ? members not given", async () => {
+    const { parsed, send } = parser_from({
+      motor: { name: "s", speed: "nw", limit: "?nw", mode: ["?", "sw", () => "auto"], pin: "?swo" },
+    });
+
+    await parsed.motor[FETCH_PARSE].write({ speed: 5 });
+    await parsed.motor[FETCH_PARSE].write({ speed: 6, limit: 2, mode: "manual", pin: "1234" });
+    //A read only member is not sent, also when a cast gets it past the type
+    await parsed.motor[FETCH_PARSE].write({ speed: 7, name: "x" } as never);
+
+    expect(send.mock.calls).toEqual([
+      [{ motor: { speed: 5 } }],
+      [{ motor: { speed: 6, limit: 2, mode: "manual", pin: "1234" } }],
+      [{ motor: { speed: 7 } }],
+    ]);
+  });
+
+  it("writes nested objects, fixed arrays, tuples and records whole, with their starts", async () => {
+    const { parsed, send } = parser_from(
+      {
+        config: {
+          limits: { low: "nw", high: "nw" },
+          gains: [2, "nw", { start: 1 }],
+          point: ["nw", "sw"],
+          names: ["{}", { label: "sw", id: "n" }],
+        },
+      },
+      {},
+      { array_start: 10 },
+    );
+
+    await parsed.config[FETCH_PARSE].write({
+      limits: { low: 1, high: 2 },
+      gains: [3, 4],
+      point: [5, "x"],
+      names: { a: { label: "A" } },
+    });
+    await parsed.config.limits[FETCH_PARSE].write({ low: 0, high: 9 });
+
+    expect(send.mock.calls).toEqual([
+      [
+        {
+          config: {
+            limits: { low: 1, high: 2 },
+            gains: { 1: 3, 2: 4 },
+            point: { 10: 5, 11: "x" },
+            names: { a: { label: "A" } },
+          },
+        },
+      ],
+      [{ config: { limits: { low: 0, high: 9 } } }],
+    ]);
+  });
+
+  it("leaves out dynamic arrays and tuples with read only positions", async () => {
+    const { parsed, send } = parser_from(
+      { panel: { level: "nw", list: [0, "nw"], all: [0, "nw", { write: "all" }], point: ["n", "sw"] } },
+      { panel: { level: 0, list: [1], all: [2], point: [1, "a"] } },
+    );
+
+    await parsed.panel[FETCH_PARSE].write({ level: 1, list: [5], all: [6], point: [2, "b"] } as never);
+
+    expect(send.mock.calls).toEqual([[{ panel: { level: 1 } }]]);
+  });
+
+  it("keeps the state of a container without such members read only", () => {
+    const { parsed } = parser_from({ info: { name: "s", list: [0, "nw"] }, point: ["n", "sw"] });
+
+    expect(parsed.info[FETCH_PARSE].writable).toBe(false);
+    expect(parsed.point[FETCH_PARSE].writable).toBe(false);
+    //Not a writable state, so its write may not exist
+    expectTypeOf(parsed.info[FETCH_PARSE]).toEqualTypeOf<StateREA<{ name: string; list: number[] }>>();
+    expectTypeOf(parsed.point[FETCH_PARSE]).toEqualTypeOf<StateREA<readonly [number, string]>>();
+  });
+
+  it("writes an item of a keyed dynamic array whole, found by its key", async () => {
+    const { parsed, send } = parser_from(
+      { pumps: [0, { id: "n", speed: "nw", on: "bw" }, { key: "id" }] },
+      { pumps: [{ id: 7, speed: 1, on: false }, { id: 9, speed: 2, on: true }] },
+      { array_start: 1 },
+    );
+    await (parsed.pumps as State<unknown>).read();
+
+    await parsed.pumps[1]![FETCH_PARSE].write({ speed: 5, on: false });
+
+    expect(send.mock.calls).toEqual([[{ pumps: { 2: { speed: 5, on: false } } }]]);
+  });
+
+  it("sends the whole array with the members set for an item of a write all array", async () => {
+    const { parsed, send } = parser_from(
+      { zones: [0, { name: "s", low: "nw", high: "nw" }, { write: "all" }] },
+      { zones: [{ name: "a", low: 1, high: 2 }, { name: "b", low: 3, high: 4 }] },
+    );
+    await (parsed.zones as State<unknown>).read();
+
+    await parsed.zones[1]![FETCH_PARSE].write({ low: 5, high: 6 });
+
+    expect(send.mock.calls).toEqual([
+      [{ zones: [{ name: "a", low: 1, high: 2 }, { name: "b", low: 5, high: 6 }] }],
+    ]);
+  });
+
+  it("writes the root whole", async () => {
+    const { parsed, send } = parser_from(
+      { name: "sw", count: "n", limits: { low: "nw" } },
+      { name: "A", count: 1, limits: { low: 0 } },
+    );
+
+    expect(await parsed[FETCH_PARSE].read()).toEqual(ok({ name: "A", count: 1, limits: { low: 0 } }));
+    await parsed[FETCH_PARSE].write({ name: "B", limits: { low: 1 } });
+
+    expect(send.mock.calls).toEqual([[{ name: "B", limits: { low: 1 } }]]);
+  });
+
+  it("reads an empty object for a root of only write only members, and writes it whole", async () => {
+    const { parsed, send } = parser_from({ restart: "bwo", pin: "?swo" }, {});
+
+    expect(await parsed[FETCH_PARSE].read()).toEqual(ok({}));
+    await parsed[FETCH_PARSE].write({ restart: true });
+
+    expect(send.mock.calls).toEqual([[{ restart: true }]]);
+    expectTypeOf<WriteOf<(typeof parsed)[typeof FETCH_PARSE]>>().toEqualTypeOf<{ restart: boolean; pin?: string }>();
+  });
+
+  it("with write_debounce, is never merged with writes in its container", async () => {
+    vi.useFakeTimers();
+    try {
+      const { parsed, send } = parser_from({ setpoint: SETPOINT, other: "nw" }, BODY, { write_debounce: 50 });
+
+      void parsed.setpoint.min.write(1);
+      void parsed.other.write(2);
+      void parsed.setpoint[FETCH_PARSE].write({ min: 5, max: 9, unit: "cm", azimuth: false, neutral: 7 });
+      void parsed.setpoint.max.write(3);
+      await vi.advanceTimersByTimeAsync(50);
+
+      expect(send.mock.calls).toEqual([
+        [{ setpoint: { min: 1 }, other: 2 }],
+        [{ setpoint: { min: 5, max: 9, unit: "cm", azimuth: false, neutral: 7 } }],
+        [{ setpoint: { max: 3 } }],
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("types the whole write from the writable and write only members, optional ones from the ? prefix", () => {
+    const { parsed } = parser_from({
+      setpoint: SETPOINT,
+      motor: {
+        name: "s",
+        speed: "nw",
+        limit: "?nw",
+        mode: ["?", "sw", () => "auto"],
+        pin: "swo",
+        list: [0, "nw"],
+        point: ["n", "sw"],
+        gains: [2, "nw"],
+        sub: ["?", { a: "nw" }],
+      },
+      count: "n",
+    });
+
+    expectTypeOf<WriteOf<(typeof parsed.setpoint)[typeof FETCH_PARSE]>>().toEqualTypeOf<{
+      min: number;
+      max: number;
+      unit: string;
+      azimuth: boolean;
+      neutral: number;
+    }>();
+    expectTypeOf<StateRV<(typeof parsed.setpoint)[typeof FETCH_PARSE]>>().toEqualTypeOf<{
+      min: number;
+      max: number;
+      unit: string;
+      azimuth: boolean;
+      neutral: number;
+    }>();
+    expectTypeOf<WriteOf<(typeof parsed.motor)[typeof FETCH_PARSE]>>().toEqualTypeOf<{
+      speed: number;
+      pin: string;
+      gains: [number, number];
+      limit?: number;
+      mode?: string;
+      sub?: { a: number };
+    }>();
+    expectTypeOf<keyof WriteOf<(typeof parsed)[typeof FETCH_PARSE]>>().toEqualTypeOf<"setpoint" | "motor">();
+
+    const compile_only = () => {
+      // @ts-expect-error neutral is missing
+      void parsed.setpoint[FETCH_PARSE].write({ min: 1, max: 2, unit: "m", azimuth: true });
+      // @ts-expect-error unit is a string
+      void parsed.setpoint[FETCH_PARSE].write({ min: 1, max: 2, unit: 3, azimuth: true, neutral: 0 });
+      // @ts-expect-error extra is not a member
+      void parsed.setpoint[FETCH_PARSE].write({ min: 1, max: 2, unit: "m", azimuth: true, neutral: 0, extra: 1 });
+      // @ts-expect-error name is read only
+      void parsed.motor[FETCH_PARSE].write({ speed: 1, pin: "1", gains: [1, 2], name: "x" });
+    };
+    expect(compile_only).toBeTypeOf("function");
+  });
+
+  it("makes defaulted write only members optional in the whole write of a write only container", () => {
+    const { parsed } = parser_from({ cmd: { to: "nwo", speed: ["?", "nwo", () => 1] } });
+
+    expectTypeOf<WriteOf<(typeof parsed.cmd)[typeof FETCH_PARSE]>>().toEqualTypeOf<{ to: number; speed?: number }>();
+  });
+});

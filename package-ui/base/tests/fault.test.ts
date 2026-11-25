@@ -184,8 +184,9 @@ describe("Fault prompt", () => {
 
     icon_of(element)!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 
-    //The prompt is loaded when first needed
-    await vi.waitFor(() => expect(document.querySelector("composition-panel")).not.toBeNull());
+    //The prompt is loaded when first needed, in a full run building its modules can take well over the default second of waitFor.
+    //Below the 5s test timeout, so a prompt that never opens fails here with this assertion
+    await vi.waitFor(() => expect(document.querySelector("composition-panel")).not.toBeNull(), { timeout: 4000 });
     const text = document.querySelector("composition-panel")!.textContent;
     expect(text).toContain("Connection failed");
     expect(text).toContain("Invalid data from server");
