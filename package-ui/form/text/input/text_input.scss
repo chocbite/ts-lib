@@ -7,10 +7,11 @@ form-textinput {
   text-align: start;
   display: block;
   position: relative;
+  //Not squeezed below the least width of the input, like in a grid or flex row
+  min-width: min-content;
   user-select: none;
   -webkit-user-select: none;
   outline: none;
-  overflow-x: auto;
 
   //No value, hidden while typing
   &[no-value]:not(:focus-within)::after {
@@ -28,11 +29,13 @@ form-textinput {
     padding-inline: base.$field_padding;
     box-sizing: border-box;
     outline: none;
-    width: max-content;
-    min-width: 100%;
+    //Fills the field and scrolls a longer text itself, the width of an input is not its text but its size attribute, about 20 characters
+    width: 100%;
+    min-width: 4rem;
     height: calc(#{base.$size_height} - #{base.$border_thickness * 2});
 
     .touch & {
+      min-width: 5rem;
       height: calc(#{base.$size_touchHeight} - #{base.$border_thickness * 2});
     }
   }

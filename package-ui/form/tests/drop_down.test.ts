@@ -1,9 +1,14 @@
 import { DOCUMENT_HANDLER } from "#document";
 import { material_close_rounded, material_home_rounded } from "#icons";
+import { theme_init } from "#theme";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { form_dropdown } from "../selectors/drop_down/drop_down";
+import { form_dropdown_multi } from "../selectors/drop_down/drop_down_multi";
+
+//The field sizes and fonts come from the theme
+theme_init();
 
 const wait = (ms: number = 10) =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -154,6 +159,34 @@ describe("Dropdown display", () => {
     element.clear();
     expect(text()).toBe("Select something");
     expect(element.buffer).toBeUndefined();
+  });
+
+  it("is as high as a field, the single and the multi dropdown", () => {
+    const { element } = make({ value: 1 });
+    const multi = document.body.appendChild(
+      form_dropdown_multi<number, undefined>({
+        selections: SELECTIONS,
+        value: [1],
+      }),
+    );
+    expect(element.getBoundingClientRect().height).toBe(24);
+    expect(multi.getBoundingClientRect().height).toBe(24);
+    multi.remove();
+  });
+
+  it("breaks a word wider than the field, keeping the chevron inside", () => {
+    const { element } = make({
+      selections: [{ value: 1, text: "Pneumonoultramicroscopic" }],
+      value: 1,
+    });
+    element.style.width = "6rem";
+    const field = element.getBoundingClientRect();
+    const text = element.querySelector(":scope > div")!.getBoundingClientRect();
+    const chevron = element
+      .querySelector(":scope > svg:nth-last-child(2)")!
+      .getBoundingClientRect();
+    expect(text.right).toBeLessThanOrEqual(chevron.left);
+    expect(chevron.right).toBeLessThanOrEqual(field.right);
   });
 });
 

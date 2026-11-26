@@ -47,13 +47,17 @@ form-dropdownmulti {
   > div {
     color: base.$color_text;
     padding-left: $padding;
-    padding-block: 0.15rem;
+    //One line fits in the height of a field, a long text wraps and makes it higher
+    padding-block: 0.1rem;
     font-size: base.$font_size;
     line-height: calc(base.$font_size + 0.2rem);
     box-sizing: border-box;
     vertical-align: middle;
     align-items: baseline;
     flex-grow: 1;
+    //A word wider than the field breaks, instead of pushing the chevron out
+    min-width: 0;
+    overflow-wrap: break-word;
 
     .touch & {
       font-size: base.$touch_font_size;
@@ -66,7 +70,9 @@ form-dropdownmulti {
     fill: base.$color_text_unselected;
     box-sizing: border-box;
     flex-shrink: 0;
+    //Without a height the svg is 24px high, which makes the dropdown higher than a field
     width: 1.4rem;
+    height: 1.2rem;
     padding-right: 0.2rem;
   }
 }

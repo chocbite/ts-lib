@@ -1,7 +1,11 @@
 import { NiceError, ok } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
+import { theme_init } from "#theme";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { form_text_input } from "../text/input/text_input";
+
+//The scrollbar and field sizes come from the theme
+theme_init();
 
 /**A test error whose nice text is its message*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);
@@ -139,7 +143,9 @@ describe("Text input user input", () => {
     expect(change).not.toHaveBeenCalled();
     expect(element.buffer).toBeUndefined();
     expect(input.value).toBe("");
-    expect(input.validationMessage).toBe("Text too long: A maximum of 4 bytes is allowed");
+    expect(input.validationMessage).toBe(
+      "Text too long: A maximum of 4 bytes is allowed",
+    );
     await enter("ææ");
     expect(change).toHaveBeenCalledWith("ææ");
   });
@@ -357,6 +363,36 @@ describe("Text input look", () => {
     expect(getComputedStyle(element.querySelector("input")!).textAlign).toBe(
       "start",
     );
+    parent.remove();
+  });
+
+  it("does not scroll in a container narrower than its input, and keeps the height of a field", () => {
+    const parent = document.body.appendChild(document.createElement("div"));
+    parent.style.width = "6rem";
+    const element = parent.appendChild(form_text_input({ value: "30" }));
+    expect(element.scrollWidth).toBe(element.clientWidth);
+    expect(element.getBoundingClientRect().height).toBe(24);
+    parent.remove();
+  });
+
+  it("keeps the least width of its input in a container as narrow as its content", () => {
+    const parent = document.body.appendChild(document.createElement("div"));
+    parent.style.width = "min-content";
+    const element = parent.appendChild(form_text_input({ value: "30" }));
+    //4rem of input and the border
+    expect(element.getBoundingClientRect().width).toBe(66);
+    expect(element.scrollWidth).toBe(element.clientWidth);
+    parent.remove();
+  });
+
+  it("does not scroll with a text longer than the field, the input scrolls its text", () => {
+    const parent = document.body.appendChild(document.createElement("div"));
+    parent.style.width = "6rem";
+    const element = parent.appendChild(
+      form_text_input({ value: "a long text that does not fit in the field" }),
+    );
+    expect(element.scrollWidth).toBe(element.clientWidth);
+    expect(element.getBoundingClientRect().height).toBe(24);
     parent.remove();
   });
 });
