@@ -78,7 +78,7 @@ Packages are published from `dist/ts-lib` and `dist/ts-lib-ui` in the repo root,
 
 `npm run dev` serves `dev/`, where the user tries out the libraries by hand: how things look and feel, sizes, hover effects, what is missing. See `dev/README.md`.
 
-- When adding or changing a feature, add or update its page in `dev/pages/<package>/<module>.ts` (e.g. `dev/pages/ui/list.ts`). Big modules get a folder with several pages, e.g. `dev/pages/ui/form/`.
+- When adding or changing a feature, add or update its page in `dev/pages/<package>/<module>.ts` (e.g. `dev/pages/ui/theme.ts`). Big modules get a folder with several pages, e.g. `dev/pages/ui/form/` and `dev/pages/ui/list/`.
 - A page is a plain module that builds into `document.body` when imported, no exports. Every `.ts` file in `dev/pages/` is a page, so shared code goes in `dev/helpers.ts`.
 - Import the libraries like a consumer, `@chocbite/ts-lib-ui/list`, never `#` imports or relative paths into the package folders.
 - Show variations side by side with `section`, `row`, `box` and `controls` from `dev/helpers.ts`, with a note per section on what to look at. Deterministic data, expensive cases (thousands of elements) behind a button.

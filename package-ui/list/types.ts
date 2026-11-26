@@ -1,10 +1,13 @@
 import type { Base, BaseIntersectObserver } from "#base";
+import type { ContextMenuLines } from "#context_menu";
+import type { SVGFunc } from "#svg";
 import { type Option, type Result } from "@chocbite/ts-lib/result";
 import type { State, StateOrVal } from "@chocbite/ts-lib/state";
 import list from ".";
 import type { ListTextField } from "./field";
 import type { ListRow, ListRowOptions } from "./row";
 import type { ListReorder } from "./drag";
+import type { ListSearchQuery, ListSearchValue } from "./search";
 import type { ListSelection } from "./selection";
 
 /**Rows of a list or of the sub rows of a row, a fixed array or an array state*/
@@ -24,10 +27,17 @@ export const ListDataType = {
   number: "number",
   string: "string",
   bool: "bool",
+  enum: "enum",
 } as const;
 export type ListDataType = (typeof ListDataType)[keyof typeof ListDataType];
 
 export type ListColumnAlign = "left" | "center" | "right";
+
+/**Choices of an enum column by value, with the name each is shown by, like the list of an enum of the state module
+ * The values are the keys, so they are strings, a number value of a row matches the key it is written as*/
+export type ListEnumChoices = {
+  readonly [value: string]: { readonly name: string; readonly icon?: SVGFunc };
+};
 
 /**Options of a column, its fields can be any element, like the list fields or form elements*/
 export interface ListColumnOptions<V, C extends Base> {
@@ -40,8 +50,11 @@ export interface ListColumnOptions<V, C extends Base> {
   order?: number;
   /**Whether the column is reorderable by the user*/
   reorderable?: boolean;
-  /**Data type of the column, used for sorting, will attempt auto detect if undefined*/
+  /**Data type of the values, decides the cell of the column in the column search, without it the column has none
+   * The column search compares the value the search reads, see search_value*/
   type?: ListDataType;
+  /**Choices of a column of the enum type, the cell of the column search lets the user pick from them, and the search text matches their names*/
+  choices?: ListEnumChoices;
   /**Horizontal alignment of the title and the fields, center when undefined
    * Text, number and node fields follow it, more complex fields like form fields do not */
   align?: ListColumnAlign;
@@ -51,6 +64,10 @@ export interface ListColumnOptions<V, C extends Base> {
   field_gen(): C;
   /**Applies the value to the field */
   field_apply(field: C, value: V): void;
+  /**The value of the column the search of the list looks at, for values it can not read itself, like an object a node field shows
+   * Without it a string, number or boolean is used as it is, a sync state of one by its value, and anything else is left out
+   * Strings and numbers are matched as text, return undefined to leave the column out of the search */
+  search_value?(value: V): ListSearchValue;
 }
 
 /**Helper to create a column object */
@@ -68,6 +85,7 @@ export function column_string(
 ): ListColumnOptions<string, ListTextField> {
   return {
     title,
+    type: ListDataType.string,
     align: options?.align,
     field_gen: () => list.text_field(),
     field_apply: (field, value) => (field.text = value),
@@ -111,6 +129,16 @@ export interface ListRoot<
   selection?: ListSelection<any>;
   /**Moving of rows, when enabled */
   reorder?: ListReorder<R>;
+  /**The search of the list, undefined while it does not search */
+  search?: ListSearchQuery;
+  /**Runs the function with the rows the search opens waiting, they open breadth first once the outermost hold ends, see search_queue */
+  search_hold<F>(func: () => F): F;
+  /**Opens a row the search found something below, once the running hold ends or right away without one, breadth first and a limited amount at a time */
+  search_queue(row: ListRow<R, T, A, S>): void;
+  /**Whether the menus of the list have the search lines */
+  readonly search_menu: boolean;
+  /**Lines of the menus of the list to search the columns and clear the search, empty without search_menu */
+  search_lines(): ContextMenuLines;
   /**Opens every openable row, a limited amount of rows at a time */
   open_all(): void;
   /**Closes every open row */

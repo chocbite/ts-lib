@@ -1,0 +1,404 @@
+@use "../icons/mixins" as icons;
+
+list-container {
+  --list-search-bar-height: var(--list-size-row_min);
+  .touch & {
+    --list-search-bar-height: var(--list-size-touch_row_min);
+  }
+
+  //The header sticks below the bar
+  &.search-bar > div > list-headerrow > * {
+    top: var(--list-search-bar-height);
+  }
+}
+
+//Above the rows and the header, sticky at the top left, so it stays in view when the list scrolls either way
+list-searchbar {
+  position: sticky;
+  top: 0;
+  left: 0;
+  //Above the sticky header cells
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: var(--list-search-bar-height);
+  border-bottom: 1px solid var(--list-colors-border-header);
+  background-color: var(--list-colors-background-row_even);
+
+  &:focus-within {
+    outline: 2px solid var(--list-colors-focus-normal);
+    outline-offset: -2px;
+  }
+
+  > span {
+    @include icons.material-symbols-rounded;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: var(--list-search-bar-height);
+    height: 100%;
+    font-size: 1.2rem;
+    color: var(--list-colors-icon-sub_opener);
+
+    .touch & {
+      font-size: 2rem;
+    }
+  }
+
+  > .glyph::before {
+    content: "\e8b6";
+  }
+
+  > .clear {
+    cursor: pointer;
+    border-radius: 0.2rem;
+
+    &::before {
+      content: "\e5cd";
+    }
+
+    &:hover {
+      background-color: var(--list-colors-background-row_hover);
+    }
+  }
+
+  &.empty > .clear,
+  &.read-only > .clear {
+    visibility: hidden;
+  }
+
+  > input {
+    all: unset;
+    flex-grow: 1;
+    min-width: 0;
+    height: 100%;
+    color: var(--list-colors-text-field);
+  }
+}
+
+//Laid over the row background, so even, odd, hover and selected rows keep their color under it
+list-row > div > .search-found,
+list-keyfield.search-found-text > span.text {
+  background-image: linear-gradient(
+    var(--list-colors-background-found),
+    var(--list-colors-background-found)
+  );
+}
+
+list-searchempty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  grid-column: 1 / -1;
+  min-height: var(--list-size-row_min);
+  color: var(--list-colors-text-field);
+  background-color: var(--list-colors-background-row_odd);
+
+  .touch & {
+    min-height: var(--list-size-touch_row_min);
+  }
+}
+
+//      _____ ____  _     _    _ __  __ _   _
+//     / ____/ __ \| |   | |  | |  \/  | \ | |
+//    | |   | |  | | |   | |  | | \  / |  \| |
+//    | |   | |  | | |   | |  | | |\/| | . ` |
+//    | |___| |__| | |___| |__| | |  | | |\  |
+//     \_____\____/|______\____/|_|  |_|_| \_|
+
+list-container {
+  --list-search-cell-height: var(--list-size-row_min);
+  .touch & {
+    --list-search-cell-height: var(--list-size-touch_row_min);
+  }
+}
+
+//The column search, a cell under the title of every column
+list-container > div > list-headerrow.column-search {
+  > list-headerfield {
+    display: flex;
+    flex-direction: column;
+
+    //The title, which filled the header before
+    > div {
+      height: auto;
+      flex-grow: 1;
+    }
+  }
+
+  //Their glyphs stay at the height of the titles, above the cells
+  > list-checkfield,
+  > list-dragfield {
+    padding-bottom: var(--list-search-cell-height);
+  }
+}
+
+//A headless list shows only the cells, the lead columns only their background
+list-container > div > list-headerrow.titleless {
+  > list-headerfield > div {
+    display: none;
+  }
+
+  > list-checkfield,
+  > list-dragfield {
+    padding-bottom: 0;
+    min-height: 0;
+    pointer-events: none;
+
+    &::before {
+      visibility: hidden;
+    }
+  }
+}
+
+.list-search-cell {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  //Its inputs and summary do not count for the width of the column, it takes the width of the title
+  contain: inline-size;
+  box-sizing: border-box;
+  height: var(--list-search-cell-height);
+  border-top: 1px solid var(--list-colors-border-header);
+  border-right: 1px solid var(--list-colors-border-column);
+  color: var(--list-colors-text-field);
+
+  list-headerrow.titleless & {
+    border-top: none;
+  }
+
+  &:focus-within,
+  &:focus-visible {
+    outline: 2px solid var(--list-colors-focus-normal);
+    outline-offset: -2px;
+  }
+
+  > input {
+    all: unset;
+    flex-grow: 1;
+    min-width: 0;
+    height: 100%;
+    box-sizing: border-box;
+    padding: 0 0.3rem;
+  }
+
+  //A value it can not read, like a number with a letter in it, does not filter
+  &.invalid > input {
+    color: var(--list-colors-text-error);
+  }
+
+  //Conditions the cell can not edit
+  > .summary {
+    display: none;
+    flex-grow: 1;
+    min-width: 0;
+    padding: 0 0.3rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &.summary-shown {
+    > .summary {
+      display: block;
+    }
+
+    > :not(.summary, .clear) {
+      display: none;
+    }
+  }
+
+  > .clear,
+  > .glyph {
+    @include icons.material-symbols-rounded;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: var(--list-search-cell-height);
+    height: 100%;
+    font-size: 1.2rem;
+    color: var(--list-colors-icon-sub_opener);
+
+    .touch & {
+      font-size: 2rem;
+    }
+  }
+
+  > .clear {
+    cursor: pointer;
+
+    &::before {
+      content: "\e5cd";
+    }
+
+    &:hover {
+      background-color: var(--list-colors-background-row_hover);
+    }
+  }
+
+  &.empty > .clear,
+  &.read-only > .clear {
+    display: none;
+  }
+}
+
+//Any shows a faint dash, yes a check and no a cross
+list-searchbool {
+  cursor: pointer;
+  outline: none;
+
+  > .glyph {
+    flex-grow: 1;
+
+    &::before {
+      content: "\e15b";
+      opacity: 0.4;
+    }
+  }
+
+  &.yes > .glyph::before {
+    content: "\e5ca";
+    opacity: 1;
+  }
+
+  &.no > .glyph::before {
+    content: "\e5cd";
+    opacity: 1;
+  }
+
+  //Cycling back to any clears, the button is only for a summary
+  &:not(.summary-shown) > .clear {
+    display: none;
+  }
+
+  &.read-only {
+    cursor: default;
+  }
+}
+
+//The names of the picked choices, any when none
+list-searchenum {
+  position: relative;
+  cursor: pointer;
+  outline: none;
+
+  > .text {
+    flex-grow: 1;
+    min-width: 0;
+    padding: 0 0.3rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &.empty > .text {
+    opacity: 0.5;
+  }
+
+  //Leaving out every choice clears, the button is only for a summary
+  &:not(.summary-shown) > .clear {
+    display: none;
+  }
+
+  &.read-only {
+    cursor: default;
+  }
+}
+
+//The choices folded down under an enum cell, over the rows
+list-searchchoices {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 1;
+  box-sizing: border-box;
+  min-width: 100%;
+  overflow-y: auto;
+  background-color: var(--list-colors-background-row_odd);
+  border: 1px solid var(--list-colors-border-header);
+  box-shadow: 0 0.2rem 0.5rem rgb(0 0 0 / 0.25);
+  cursor: default;
+
+  //At the right side of the list it opens to the left
+  &.right {
+    left: auto;
+    right: 0;
+  }
+
+  //Leaves out every choice, faint while none is picked
+  > .clear-all {
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    min-height: var(--list-search-cell-height);
+    padding: 0 0.6rem;
+    white-space: nowrap;
+    cursor: pointer;
+    outline: none;
+    border-bottom: 1px solid var(--list-colors-border-row);
+
+    &:hover {
+      background-color: var(--list-colors-background-row_hover);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--list-colors-focus-normal);
+      outline-offset: -2px;
+    }
+  }
+
+  &.none > .clear-all {
+    opacity: 0.5;
+    cursor: default;
+
+    &:hover {
+      background-color: transparent;
+    }
+  }
+
+  > .choice {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    box-sizing: border-box;
+    min-height: var(--list-search-cell-height);
+    padding: 0 0.6rem 0 0.3rem;
+    white-space: nowrap;
+    cursor: pointer;
+    outline: none;
+
+    &::before {
+      @include icons.material-symbols-rounded;
+      content: "\e835";
+      font-size: 1.2rem;
+      color: var(--list-colors-icon-check);
+
+      .touch & {
+        font-size: 1.8rem;
+      }
+    }
+
+    &.picked::before {
+      content: "\e834";
+    }
+
+    &:hover {
+      background-color: var(--list-colors-background-row_hover);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--list-colors-focus-normal);
+      outline-offset: -2px;
+    }
+
+    > svg {
+      flex-shrink: 0;
+      width: 1.2rem;
+      height: 1.2rem;
+      fill: var(--list-colors-icon-key_icon);
+    }
+  }
+}

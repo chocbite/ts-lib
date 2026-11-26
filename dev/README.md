@@ -14,7 +14,7 @@ npm run dev
 
 ## Pages
 
-A page is any file in `pages/`, for example `pages/ui/list.ts` shows up as `list` under `ui`. No exports or registration, a page is a module that builds into `document.body` when imported. Import the libraries the way a consumer would, `@chocbite/ts-lib-ui/list`.
+A page is any file in `pages/`, for example `pages/ui/theme.ts` shows up as `theme` under `ui`, and `pages/ui/list/search.ts` as `search` under `ui/list`. No exports or registration, a page is a module that builds into `document.body` when imported. Import the libraries the way a consumer would, `@chocbite/ts-lib-ui/list`.
 
 `helpers.ts` has plain DOM helpers for laying out a page: `section`, `row`, `box` and `controls`. Show variations side by side, that is where differences are easiest to judge.
 

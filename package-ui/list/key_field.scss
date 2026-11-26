@@ -110,8 +110,16 @@ list-keyfield {
       list-addrow > &,
       div:not(.addrow) > list-rowserror > &,
       list-row:not(.addrow) > list-rowserror > &,
-      list-row:not(.addrow) > span > list-row:last-child > div > &,
-      div:not(.addrow) > div > list-row:last-child > div > & {
+      list-row:not(.addrow)
+        > span
+        > list-row:nth-last-child(1 of :not(.search-hidden))
+        > div
+        > &,
+      div:not(.addrow)
+        > div
+        > list-row:nth-last-child(1 of :not(.search-hidden))
+        > div
+        > & {
         height: 50%;
       }
     }

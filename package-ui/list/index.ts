@@ -28,5 +28,23 @@ export type {
   ListContainerOptions,
 } from "./container";
 export type { ListAddRowOptions } from "./add_row";
+export type { ListDataType, ListEnumChoices } from "./types";
+export type {
+  ListCondition,
+  ListFilter,
+  ListFilterGroup,
+  ListFilterItem,
+  ListFilterMode,
+  ListNumberOperator,
+  ListRangeCondition,
+  ListRangeOperator,
+  ListStringOperator,
+  ListSearchFound,
+  ListSearchQuery,
+  ListSearchResult,
+  ListSearchShown,
+  ListSearchValue,
+  ListSearchValues,
+} from "./search";
 
 export default list;

@@ -15,6 +15,13 @@ import { list_rows_error_update, ListError, type ListRowsError } from "./error";
 import { list_align_apply, list_cell } from "./field";
 import { ListKeyField, type ListKeyFieldOptions } from "./key_field";
 import "./row.scss";
+import {
+  list_search_plain,
+  type ListSearchMode,
+  type ListSearchQuery,
+  type ListSearchResult,
+  type ListSearchValue,
+} from "./search";
 import { ListCheckField, type ListSelection } from "./selection";
 import type {
   ListParentRows,
@@ -47,6 +54,10 @@ export interface ListRowOptions<R, T extends {}, S extends boolean> {
   context_menu?: ContextMenu | (() => Option<ContextMenu>);
   /**Whether the row can be selected when the list has selection, true when undefined */
   selectable?: boolean;
+  /**Answers a search of the list for the row, called when the search or the data of the row changes, see ListSearchResult
+   * Without it the row matches when the text is in one of its values or its key field text, and the search never opens it
+   * Rows below a row that is not open can only be found through it, as the list does not open rows to search them */
+  search?: (query: ListSearchQuery) => ListSearchResult<T>;
   values: T;
 }
 
@@ -95,6 +106,20 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   #opened?: State<boolean>;
   /**Last value of the opened state, the row opens to it whenever it becomes openable */
   #opened_value = false;
+  /**Search answer of the row options */
+  #search?: (query: ListSearchQuery) => ListSearchResult<T>;
+  /**Key field text of the row options, searched for rows without a search answer */
+  #key_text?: string | State<string>;
+  /**Whether the row options let the row be selected */
+  #selectable = false;
+  /**Answer of the row to the search of the list, undefined while its parent does not filter it */
+  #found?: ListSearchResult<T>;
+  /**Whether cells or the key field text may be highlighted as found by the search */
+  #marked = false;
+  /**Hidden by the search, by its own answer or as its parent is hidden */
+  #hidden = false;
+  /**Opened by the search, closed again when the search no longer opens it */
+  #search_opened = false;
   #sub_row_menu = false;
   #state_sub?: StateInferSub<State<R[]>>;
   state!: ListParentRows<A>;
@@ -163,6 +188,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     else {
       this.#show_cells(this.#cells);
       this.#apply_values();
+      this.#search_mark();
     }
     this.#add_row?.columns_changed();
     this.#error?.columns_changed();
@@ -194,30 +220,50 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     field: Option<number>,
   ) {
     if (!this.#key_field && !this.#check) return;
-    //Open is not enough, an open row can show an error instead of sub rows
-    const has_rows = this.#child_box.childElementCount > 0;
+    //Rows the search hides are skipped, open is not enough, an open row can show an error instead of sub rows
     if (direction === "next" || direction === "p_next") {
-      if (direction === "next" && has_rows)
-        (this.#child_box.firstElementChild! as ListRow<R, T, A, S>).#focus();
+      const first =
+        direction === "next" ? this.#shown_sub_row(true) : undefined;
+      if (first) first.#focus();
       else {
-        const sibling = this.nextElementSibling;
-        if (sibling instanceof ListRow) sibling.#focus();
+        const sibling = this.adjacent_shown(1);
+        if (sibling) sibling.#focus();
         else this.#parent.select_adjacent("p_next", field);
       }
     } else if (direction === "previous") {
-      const sibling = this.previousElementSibling;
-      if (sibling instanceof ListRow) {
+      const sibling = this.adjacent_shown(-1);
+      if (sibling) {
         if (sibling.open) sibling.select_adjacent("last", field);
         else sibling.#focus();
       } else this.#parent.select_adjacent("p_previous", field);
     } else if (direction === "p_previous") this.#focus();
     else if (direction === "last") {
-      if (has_rows) {
-        (
-          this.#child_box.lastElementChild as ListRow<R, T, A, S>
-        ).select_adjacent("last", field);
-      } else this.#focus();
+      const last = this.#shown_sub_row(false);
+      if (last) last.select_adjacent("last", field);
+      else this.#focus();
     }
+  }
+
+  /**The next or previous row of the same parent the search does not hide */
+  adjacent_shown(direction: 1 | -1): ListRow<R, T, A, S> | undefined {
+    const step = (element: Element) =>
+      direction > 0
+        ? element.nextElementSibling
+        : element.previousElementSibling;
+    let sibling = step(this);
+    while (sibling instanceof ListRow && sibling.#hidden)
+      sibling = step(sibling);
+    return sibling instanceof ListRow ? sibling : undefined;
+  }
+
+  /**The first or last sub row the search does not hide */
+  #shown_sub_row(first: boolean): ListRow<R, T, A, S> | undefined {
+    let row = first
+      ? this.#child_box.firstElementChild
+      : this.#child_box.lastElementChild;
+    while (row instanceof ListRow && row.#hidden)
+      row = first ? row.nextElementSibling : row.previousElementSibling;
+    return row instanceof ListRow ? row : undefined;
   }
 
   /**Focuses the cell used for keyboard navigation, the key field or else the checkbox */
@@ -305,13 +351,19 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
       if (this.#key_field) this.#key_field.tail = undefined;
       this.#show_cells(this.#cells);
     }
-    this.#selection_update(row_options.selectable ?? true, data);
+    this.#values = row_options.values;
+    this.#search = row_options.search;
+    this.#key_text = row_options.key_field?.text;
+    this.#selectable = row_options.selectable ?? true;
+    //Before the sub rows are refreshed, they are searched by how the search applies to them now
+    const rows_mode = this.#rows_mode;
+    this.#search_find();
+    this.#selection_update();
     if (this.#key_field) this.#key_field.options = row_options.key_field;
     this.#sub_rows = row_options.sub_rows;
 
     this.add_row = row_options.add_row;
 
-    this.#values = row_options.values;
     this.#apply_values();
 
     //Setup opened and openable
@@ -340,27 +392,38 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
       this.#opened = opened_state;
       this.attach_state_to_symbol(OPENED, opened_state, (value) => {
         this.#opened_value = value.ok && value.value;
-        this.#show_open(this.#opened_value);
+        //A row the search opened stays open until the search ends or the user closes it
+        if (this.#opened_value || !this.#search_opened)
+          this.#show_open(this.#opened_value);
       });
     }
     if (this.#key_field) this.#key_field.locked = !this.#user_opens;
 
     //Refresh the sub rows of an open row
+    let refreshed = false;
     if (was_open && this.open) {
-      if (this.#sub_rows) this.rows = this.#sub_rows();
-      else if (!opened) this.#show_open(false);
+      if (this.#sub_rows) {
+        this.rows = this.#sub_rows();
+        refreshed = true;
+      } else if (!opened) this.#show_open(false);
     }
+    this.#search_open_update();
+    //Refreshed sub rows were searched when they got their data
+    if (!refreshed && this.#rows_mode !== rows_mode) this.#search_sub_rows();
 
     //Setup context menu, blocked for right clicks bubbling up from sub rows
     ctm.detach(this);
     this.#sub_row_menu = false;
-    //With sub rows a row gets open, close and close all lines and a selectable row select lines, in front of its own menu
+    //With sub rows a row gets open, close and close all lines, a selectable row select lines and with search_menu the search lines, in front of its own menu
     //Openable can be a state and rows open and close, the lines are made when the menu opens
     const menu =
-      this.#root.sub_rows || this.selection_key !== undefined
+      this.#root.sub_rows ||
+      this.selection_key !== undefined ||
+      this.#root.search_menu
         ? ctm.combine(
             () => this.#open_lines(),
             () => this.#selection_lines(),
+            () => this.#root.search_lines(),
             row_options.context_menu,
           )
         : row_options.context_menu;
@@ -374,7 +437,9 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
 
   /**Replaces the fields with the text and removes everything else the row options gave */
   #set_invalid(text: string) {
-    this.#selection_update(false);
+    this.#selectable = false;
+    this.#search = undefined;
+    this.#key_text = undefined;
     if (this.#key_field) this.#key_field.options = undefined;
     this.#sub_rows = undefined;
     this.add_row = undefined;
@@ -389,6 +454,10 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
       this.#show_invalid();
     }
     this.#invalid.text = text;
+    //Invalid rows are hidden while searching
+    this.#search_find();
+    this.#selection_update();
+    this.#search_open_update();
   }
 
   /**Makes a new add row for new options, so options a transform leaves out are gone, as they would stay with set*/
@@ -421,6 +490,9 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     if (value && (this.#open_pending || this.#opened_value))
       this.#show_open(true);
     this.#open_pending = false;
+    //A row the search found something below opens once it can be opened
+    if (value && this.#found === "below" && !this.open)
+      this.#root.search_queue(this);
   }
   get openable(): boolean {
     return this.#key_field?.openable ?? false;
@@ -430,6 +502,8 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
    * With a writable opened state the state is written and the row follows it, a read only state can not be changed */
   set open(open: boolean) {
     if (!this.openable) return;
+    //A row the user closes is no longer the search's to close
+    if (!open) this.#search_opened = false;
     const opened = this.#opened;
     //What the state says already is only shown again, like opening a row whose sub rows were empty
     if (!opened || open === this.#opened_value) this.#show_open(open);
@@ -460,6 +534,118 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     this.detach_state_from_symbol(OPENED);
     this.#opened = undefined;
     this.#opened_value = false;
+  }
+
+  //       _____ ______          _____   _____ _    _
+  //      / ____|  ____|   /\   |  __ \ / ____| |  | |
+  //     | (___ | |__     /  \  | |__) | |    | |__| |
+  //      \___ \|  __|   / /\ \ |  _  /| |    |  __  |
+  //      ____) | |____ / ____ \| | \ \| |____| |  | |
+  //     |_____/|______/_/    \_\_|  \_\\_____|_|  |_|
+
+  /**Whether the search hides the row, by its own answer or as its parent is hidden */
+  get search_hidden(): boolean {
+    return this.#hidden;
+  }
+
+  /**How the search applies to the row, decided by its parent */
+  get #search_mode(): ListSearchMode {
+    const parent = this.#parent;
+    if (parent instanceof ListRow) return parent.#rows_mode;
+    return this.#root.search ? "filter" : "all";
+  }
+
+  /**How the search applies to the sub rows */
+  get #rows_mode(): ListSearchMode {
+    if (this.#hidden) return "hide";
+    return this.#found === "below" ? "filter" : "all";
+  }
+
+  /**Gets the answer of the row to the search and hides or shows it */
+  #search_find() {
+    const mode = this.#search_mode;
+    const query = this.#root.search;
+    this.#found =
+      mode === "filter" && query ? this.#search_answer(query) : undefined;
+    this.#search_mark();
+    const hidden = mode === "hide" || this.#found === "none";
+    if (hidden === this.#hidden) return;
+    this.#hidden = hidden;
+    this.classList.toggle("search-hidden", hidden);
+    this.#selection_update();
+  }
+
+  /**Highlights the cells and the key field text the answer of the row found the text in */
+  #search_mark() {
+    const found = typeof this.#found === "object" ? this.#found : undefined;
+    if (!found && !this.#marked) return;
+    this.#marked = Boolean(found);
+    this.#root.columns_visible.forEach((key, i) =>
+      this.#cells[i]?.classList.toggle(
+        "search-found",
+        Boolean(found?.columns?.includes(key)),
+      ),
+    );
+    if (this.#key_field) this.#key_field.found = Boolean(found?.key);
+  }
+
+  /**The answer of the search row option, or else the values and the key field text that have the text */
+  #search_answer(query: ListSearchQuery): ListSearchResult<T> {
+    if (this.#invalid) return "none";
+    if (this.#search) return this.#search(query);
+    const values: Partial<Record<keyof T, ListSearchValue>> = {};
+    for (const key of this.#root.columns_visible) {
+      const column = this.#root.columns.get(key)!;
+      const raw = this.#values[key];
+      const value = column.search_value
+        ? column.search_value(raw)
+        : list_search_plain(raw);
+      //An enum value is shown by its name, which the search text matches
+      values[key] =
+        column.type === "enum" &&
+        column.choices &&
+        (typeof value === "string" || typeof value === "number")
+          ? { value, text: column.choices[value]?.name ?? String(value) }
+          : value;
+    }
+    const key = list_search_plain(this.#key_text);
+    return (
+      query.match(values, typeof key === "string" ? key : undefined) ?? "none"
+    );
+  }
+
+  /**Opens the row through the root when the search found something below it, or closes a row the search opened once it no longer does */
+  #search_open_update() {
+    if (this.#found === "below") {
+      if (!this.open && this.openable) this.#root.search_queue(this);
+    } else if (this.#search_opened) {
+      this.#search_opened = false;
+      //An opened state that is true keeps it open
+      if (!this.#opened_value) this.#show_open(false);
+    }
+  }
+
+  /**Opens the row for the search, called by the root breadth first, returns whether it opened */
+  search_open(): boolean {
+    if (this.#found !== "below" || this.open || !this.openable) return false;
+    this.#search_opened = true;
+    this.#show_open(true);
+    return true;
+  }
+
+  /**Applies a changed search of the list to the row and the rows below it */
+  search_apply() {
+    const before = this.#rows_mode;
+    this.#search_find();
+    this.#search_open_update();
+    const mode = this.#rows_mode;
+    //Sub rows that stay all shown or all hidden do not change, filtered sub rows are asked again
+    if (mode !== before || mode === "filter") this.#search_sub_rows();
+  }
+
+  #search_sub_rows() {
+    for (let row = this.first_sub_row; row; row = row.next_row)
+      row.search_apply();
   }
 
   //      _____   ______          _______
@@ -555,11 +741,13 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     };
   }
 
-  /**Registers the row in the selection with the key of its data, or removes it when not selectable */
-  #selection_update(selectable: boolean, data?: R) {
+  /**Registers the row in the selection with the key of its data, or removes it when not selectable or hidden by the search
+   * A hidden row is not visible, its key stays in the state like that of a row that is closed away */
+  #selection_update() {
     const selection = this.#root.selection;
     if (!selection) return;
-    const key: unknown = selectable ? selection.key(data) : undefined;
+    const key: unknown =
+      this.#selectable && !this.#hidden ? selection.key(this.#data) : undefined;
     if (key === this.selection_key) return;
     if (this.selection_key !== undefined)
       selection.unregister(this.selection_key, this);
@@ -709,7 +897,8 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
 }
 define_element(ListRow);
 
-/**Applies rows to a row box, removed rows leave the selection, which updates once after all changes */
+/**Applies rows to a row box, removed rows leave the selection, which updates once after all changes
+ * Rows the search opens wait until all rows are applied, so the search opens breadth first instead of deep into the first row */
 export function list_rows_apply<
   R,
   T extends {},
@@ -727,6 +916,7 @@ export function list_rows_apply<
       update: (element, row) => (element.data = row),
       destroy: (element) => element.selection_leave(),
     });
-  if (root.selection) root.selection.batch(apply);
-  else apply();
+  root.search_hold(() =>
+    root.selection ? root.selection.batch(apply) : apply(),
+  );
 }

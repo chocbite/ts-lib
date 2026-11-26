@@ -24,6 +24,8 @@ export interface ListMovableRow extends HTMLElement {
   open: boolean;
   drop_rows(): unknown;
   focus_cell(): void;
+  /**The next or previous row of the same parent the search does not hide */
+  adjacent_shown(direction: 1 | -1): ListMovableRow | undefined;
 }
 
 type AnyRow = ListMovableRow;
@@ -422,9 +424,11 @@ export class ListReorder<R> {
   async key_move(row: AnyRow, direction: -1 | 1) {
     const rows = row.parent_rows;
     if (!row.movable || !writable(rows)) return;
+    //Past the rows the search hides, so the row moves where the user sees it move
+    const target = row.adjacent_shown(direction);
+    if (!target) return;
     const from = row.index;
-    const to = from + direction;
-    if (to < 0 || to >= row.parentElement!.childElementCount) return;
+    const to = target.index;
     const result = await rows.write(state.a.write.move(from, to, 1));
     //Moving takes the row out of the document for a moment, which loses the focus
     row.focus_cell();

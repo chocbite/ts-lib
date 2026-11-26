@@ -127,6 +127,11 @@ export class ListKeyField<A extends ListType<any>> extends Base {
   //     | |__| | |    | |____| |\  |_| |_| |\  | |__| |
   //      \____/|_|    |______|_| \_|_____|_| \_|\_____|
 
+  /**Highlights the text as found by the search of the list, a class of its own, as search-found on a cell highlights the whole cell */
+  set found(value: boolean) {
+    this.classList.toggle("search-found-text", value);
+  }
+
   set openable(value: boolean) {
     if (value) this.classList.add("openable");
     else this.classList.remove("openable");

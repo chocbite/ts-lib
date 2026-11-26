@@ -1,0 +1,161 @@
+@use "../form/base" as form;
+
+//The dialog of the advanced search, the root group of the filter and the buttons
+//The panel shows content as a block at least as big as the panel, so the padding is inside and the parts are spaced with margins
+list-advancedsearch {
+  box-sizing: border-box;
+  padding: 0.5rem;
+
+  > * + * {
+    margin-top: 0.5rem;
+  }
+
+  //The root group, spaced from the buttons by the margin above them
+  > list-advancedgroup {
+    margin-bottom: 0;
+  }
+
+  > .buttons {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+
+    //Pushes cancel and apply to the right
+    > span {
+      flex-grow: 1;
+    }
+
+    //Form elements stack with a margin, but not the last, here they are in a row
+    > * {
+      margin: 0;
+    }
+  }
+}
+
+//A group, its header with the mode and buttons, then its items, a nested group is indented with a line down its left like the tree of a list
+//Spaced in the array of its parent like the elements of form, with a margin under it but not the last
+list-advancedgroup {
+  @include form.base;
+  display: flex;
+  flex-direction: column;
+  gap: form.$element_spacing;
+
+  list-advancedgroup & {
+    padding-left: 0.6rem;
+    border-left: 2px solid var(--list-colors-border-column);
+  }
+
+  > .header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+
+    > * {
+      margin: 0;
+    }
+  }
+
+  > form-grouparray,
+  > form-group-collapser {
+    margin: 0;
+  }
+
+  //The button of the collapser shows what is in a collapsed group, on one line, so a long summary does not widen the dialog
+  > form-group-collapser > span > span {
+    contain: inline-size;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  > .none {
+    padding: 0.3rem;
+    opacity: 0.6;
+  }
+
+  //The collapser of form hides the items and names an empty group on its button
+  &.collapsed > .none {
+    display: none;
+  }
+}
+
+//A condition, the column, the operator, the value and a button that removes it
+//Spaced in the array of its group like the elements of form, with a margin under it but not the last
+list-advancedcondition {
+  @include form.base;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+
+  > * {
+    margin: 0;
+  }
+
+  > .fields {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.3rem;
+    min-width: 0;
+
+    > * {
+      margin: 0;
+    }
+
+    //The widths are the bases as well, the dialog is as wide as its content says it needs, which is the widths, not the bases
+    > form-dropdown {
+      flex: 0 0 9rem;
+      width: 9rem;
+    }
+
+    > .value {
+      display: flex;
+      flex: 1 1 10rem;
+      width: 10rem;
+      min-width: 0;
+
+      > * {
+        flex-grow: 1;
+        min-width: 0;
+        margin: 0;
+      }
+
+      //Two ends with and between them
+      > .range {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+
+        > * {
+          flex-grow: 1;
+          min-width: 0;
+          margin: 0;
+        }
+
+        > span {
+          flex-grow: 0;
+        }
+      }
+    }
+  }
+
+  //A condition the dialog can not edit, shown as it is
+  > .fixed {
+    display: none;
+    flex: 1 1 auto;
+    opacity: 0.7;
+  }
+
+  &.fixed {
+    > .fields {
+      display: none;
+    }
+
+    > .fixed {
+      display: block;
+    }
+  }
+}

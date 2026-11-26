@@ -1,5 +1,9 @@
-list-container > div:not(.addrow) > div > :last-child,
-list-row:not(.addrow) > span > :last-child {
+//The last row the search does not hide ends the lines
+list-container
+  > div:not(.addrow)
+  > div
+  > :nth-last-child(1 of :not(.search-hidden)),
+list-row:not(.addrow) > span > :nth-last-child(1 of :not(.search-hidden)) {
   --c: transparent;
 }
 list-row {
@@ -11,14 +15,19 @@ list-row {
   }
   --c: var(--list-colors-border-column);
 
-  &:nth-child(even) > div > * {
+  &.search-hidden {
+    display: none;
+  }
+
+  //Counted over the rows the search shows, so they keep alternating
+  &:nth-child(even of :not(.search-hidden)) > div > * {
     background-color: var(--list-colors-background-row_even);
   }
-  &:nth-child(odd) > div > * {
+  &:nth-child(odd of :not(.search-hidden)) > div > * {
     background-color: var(--list-colors-background-row_odd);
   }
 
-  &:last-child {
+  &:nth-last-child(1 of :not(.search-hidden)) {
     > div > div > span::before {
       height: 50%;
     }

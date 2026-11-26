@@ -209,7 +209,11 @@ describe("to_json", function () {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       const json = await st
-        .ok({ a: NaN, b: [Infinity], c: st.err<number>(new NiceError(TEST_ERROR, "Broken")) })
+        .ok({
+          a: NaN,
+          b: [Infinity],
+          c: st.err<number>(new NiceError(TEST_ERROR, "Broken")),
+        })
         .to_json();
       expect(JSON.parse(json)).toEqual({ a: null, b: [null], c: null });
       const logged = error.mock.calls.map((call) => String(call[0]));
@@ -240,9 +244,15 @@ describe("to_json", function () {
     expectTypeOf<
       StateJsonCompatible<StateROS<{ inner: StateROS<boolean> }>>
     >().toEqualTypeOf<true>();
-    expectTypeOf<StateJsonCompatible<(number | undefined)[]>>().toEqualTypeOf<false>();
-    expectTypeOf<StateJsonCompatible<Map<string, number>>>().toEqualTypeOf<false>();
-    expectTypeOf<StateJsonCompatible<{ f: () => void }>>().toEqualTypeOf<false>();
+    expectTypeOf<
+      StateJsonCompatible<(number | undefined)[]>
+    >().toEqualTypeOf<false>();
+    expectTypeOf<
+      StateJsonCompatible<Map<string, number>>
+    >().toEqualTypeOf<false>();
+    expectTypeOf<
+      StateJsonCompatible<{ f: () => void }>
+    >().toEqualTypeOf<false>();
     expectTypeOf<StateJsonCompatible<bigint>>().toEqualTypeOf<false>();
   });
 
@@ -266,7 +276,59 @@ describe("to_json", function () {
     }
     expectTypeOf<StateJsonCompatible<Unsaveable>>().toEqualTypeOf<false>();
     //Without the key a class with methods is not JSON
-    expectTypeOf<StateJsonCompatible<{ grow(): void }>>().toEqualTypeOf<false>();
+    expectTypeOf<
+      StateJsonCompatible<{ grow(): void }>
+    >().toEqualTypeOf<false>();
+  });
+
+  it("StateJsonCompatible checks types that hold themselves, like a tree", function () {
+    //Plain data holding itself, groups of conditions holding groups
+    type Condition = { column: string; value: number };
+    interface Group {
+      mode: "all" | "any";
+      items: (Condition | Group)[];
+    }
+    expectTypeOf<StateJsonCompatible<Group>>().toEqualTypeOf<true>();
+    expectTypeOf<StateJsonCompatible<StateROS<Group>>>().toEqualTypeOf<true>();
+    //Two types holding each other
+    interface A {
+      b?: B;
+      n: number;
+    }
+    interface B {
+      a?: A;
+      s: string;
+    }
+    expectTypeOf<StateJsonCompatible<A>>().toEqualTypeOf<true>();
+    //A tree of classes giving what is stored with the key
+    class Branch {
+      children: Branch[] = [];
+      walk(): void {}
+      [st.v.OVERRIDE_KEY]() {
+        return { children: this.children };
+      }
+    }
+    expectTypeOf<StateJsonCompatible<Branch>>().toEqualTypeOf<true>();
+    //A function in a type holding itself, also below the first level
+    interface Bad {
+      next?: Bad;
+      run: () => void;
+    }
+    interface Node {
+      children: Node[];
+      meta: { run?: () => void };
+    }
+    expectTypeOf<StateJsonCompatible<Bad>>().toEqualTypeOf<false>();
+    expectTypeOf<StateJsonCompatible<Node>>().toEqualTypeOf<false>();
+    //Plain data nested deep is checked all the way down
+    type Deep = {
+      a: {
+        b: {
+          c: { d: { e: { f: { g: { h: { i: { j: { k: () => void } } } } } } } };
+        };
+      };
+    };
+    expectTypeOf<StateJsonCompatible<Deep>>().toEqualTypeOf<false>();
   });
 });
 
@@ -304,9 +366,15 @@ describe("Type declarations", function () {
 
 describe("read", function () {
   it("gives the result type of each kind", async function () {
-    expectTypeOf(st.ros(ok(1)).read()).toEqualTypeOf<PromiseLike<ResultOk<number>>>();
-    expectTypeOf(st.res(ok(1)).read()).toEqualTypeOf<PromiseLike<StateResult<number>>>();
-    expectTypeOf(st.roa(async () => ok(1)).read()).toEqualTypeOf<PromiseLike<ResultOk<number>>>();
+    expectTypeOf(st.ros(ok(1)).read()).toEqualTypeOf<
+      PromiseLike<ResultOk<number>>
+    >();
+    expectTypeOf(st.res(ok(1)).read()).toEqualTypeOf<
+      PromiseLike<StateResult<number>>
+    >();
+    expectTypeOf(st.roa(async () => ok(1)).read()).toEqualTypeOf<
+      PromiseLike<ResultOk<number>>
+    >();
     //State is a union of the kinds, reading it gives what awaiting it gives
     const any: State<number> = st.ok(1);
     expectTypeOf(await any.read()).toEqualTypeOf(await any.read());
@@ -320,7 +388,8 @@ describe("read", function () {
 
 describe("Shape of local states", function () {
   const noop = () => {};
-  type Local = State<number> & Pick<StateLocalROA<number>, "set_onsub" | "set_onunsub" | "set_ok">;
+  type Local = State<number> &
+    Pick<StateLocalROA<number>, "set_onsub" | "set_onunsub" | "set_ok">;
   const kinds: [string, () => Local][] = [
     ["plain", () => st.rosw(ok(1))],
     ["lazy ros", () => st.ros(() => ok(1))],

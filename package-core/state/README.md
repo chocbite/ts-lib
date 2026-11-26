@@ -831,6 +831,8 @@ class Point {
 }
 ```
 
+`StateJsonCompatible` also takes types that hold themselves, like a tree of groups holding groups. It checks 30 levels deep, a type holding itself is cut off there, and deeper levels count as JSON, so a function nested deeper than that in plain data is not found.
+
 ## Utilities
 
 ```typescript

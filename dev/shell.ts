@@ -3,7 +3,7 @@
 
 const STORAGE_KEY = "dev-shell";
 
-/**Page ids like "ui/list", from the files in pages, the pages are only loaded by the trial frame.
+/**Page ids like "ui/list/search", from the files in pages, the pages are only loaded by the trial frame.
  * Sorted by folder first, so each folder is one group in the list*/
 const PAGES = Object.keys(import.meta.glob("./pages/**/*.ts"))
   .map((path) => path.slice("./pages/".length, -".ts".length))

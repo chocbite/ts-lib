@@ -1,5 +1,5 @@
 import { theme_init_variable_root } from "#theme";
-import { BLUE, GREY, RED } from "@chocbite/ts-lib/colors";
+import { AMBER, BLUE, GREY, RED } from "@chocbite/ts-lib/colors";
 
 const theme_root = theme_init_variable_root(
   "list",
@@ -200,6 +200,15 @@ colors_background.make_variable(
   "Color of selected row element backgrounds",
   BLUE["50"],
   "#1A2C42",
+  "Color",
+  undefined,
+);
+colors_background.make_variable(
+  "found",
+  "Search Found Background Color",
+  "Color laid over the background of the cells the search found its text in, see through so the color of the row shows under it",
+  AMBER["500"] + "59",
+  AMBER["500"] + "40",
   "Color",
   undefined,
 );

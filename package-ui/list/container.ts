@@ -5,7 +5,7 @@ import {
   type BaseIntersectObserver,
   type BaseOptions,
 } from "#base";
-import ctm from "#context_menu";
+import ctm, { type ContextMenuLines } from "#context_menu";
 import { px_to_rem } from "#theme";
 import {
   state,
@@ -19,6 +19,18 @@ import "./container.scss";
 import { list_rows_error_update, type ListRowsError } from "./error";
 import { list_align_apply } from "./field";
 import { list_rows_apply, ListRow } from "./row";
+import {
+  list_filter_prune,
+  list_is_group,
+  list_search_query,
+  type ListCondition,
+  type ListFilterItem,
+  ListSearchBar,
+  ListSearchEmpty,
+  type ListFilter,
+} from "./search";
+import { list_search_cell, type ListSearchCell } from "./search_cell";
+import { list_advanced_search, type ListAdvancedColumn } from "./advanced";
 import {
   ListCheckField,
   ListSelection,
@@ -34,8 +46,8 @@ import type {
   ListType,
 } from "./types.ts";
 
-/**Most rows open all opens at a time, a mistake making the sub rows recursive would otherwise never end */
-const OPEN_ALL_LIMIT = 1000;
+/**Most rows open all or the search opens at a time, a mistake making the sub rows recursive would otherwise never end */
+const OPEN_LIMIT = 1000;
 
 class HeaderField extends Base {
   static element_name() {
@@ -48,6 +60,7 @@ class HeaderField extends Base {
   #box = this.appendChild(document.createElement("div"));
   #text = this.#box.appendChild(document.createElement("span"));
   #sizer?: HTMLDivElement;
+  #search_cell?: Element;
 
   constructor(text?: string) {
     super();
@@ -61,6 +74,13 @@ class HeaderField extends Base {
 
   set text(value: string) {
     this.#text.textContent = value;
+  }
+
+  /**Cell of the column search under the title, undefined removes it */
+  set search_cell(cell: Element | undefined) {
+    this.#search_cell?.remove();
+    this.#search_cell = cell;
+    if (cell) this.appendChild(cell);
   }
 
   sizable(sizeable: boolean, sizer: (width: number | undefined) => void) {
@@ -128,7 +148,7 @@ class HeaderRow<
   }
 
   /**Header of the key field column, only with sub rows */
-  get key_header(): HTMLElement | undefined {
+  get key_header(): HeaderField | undefined {
     return this.#key_header;
   }
 
@@ -139,11 +159,14 @@ class HeaderRow<
   /**Header of the checkbox or radio button column, in multi mode it selects or deselects all rows */
   #check_header?: ListCheckField;
 
+  /**@param titles false for a row of only the column search, in a headless list */
   constructor(
     root: ListRoot<R, T, A, S>,
     key_sizer: (width: number | undefined) => void,
+    titles: boolean,
   ) {
     super();
+    this.classList.toggle("titleless", !titles);
     if (root.sub_rows) {
       const key = (this.#key_header = new HeaderField());
       key.classList.add("key");
@@ -159,10 +182,13 @@ class HeaderRow<
       ];
       ctm.attach(
         key,
-        ctm.menu([
-          ctm.line({ text: "Open all", on_click: () => root.open_all() }),
-          ctm.line({ text: "Close all", on_click: () => root.close_all() }),
-        ]),
+        ctm.combine(
+          ctm.menu([
+            ctm.line({ text: "Open all", on_click: () => root.open_all() }),
+            ctm.line({ text: "Close all", on_click: () => root.close_all() }),
+          ]),
+          () => root.search_lines(),
+        ),
       );
       key.sizable(true, key_sizer);
     }
@@ -177,18 +203,21 @@ class HeaderRow<
       };
       ctm.attach(
         check,
-        ctm.menu([
-          ctm.line({
-            text: "Select all",
-            on_click: () => selection.select_all(),
-            shortcut: "Ctrl+A",
-          }),
-          ctm.line({
-            text: "Deselect all",
-            on_click: () => selection.clear(),
-            shortcut: "Esc",
-          }),
-        ]),
+        ctm.combine(
+          ctm.menu([
+            ctm.line({
+              text: "Select all",
+              on_click: () => selection.select_all(),
+              shortcut: "Ctrl+A",
+            }),
+            ctm.line({
+              text: "Deselect all",
+              on_click: () => selection.clear(),
+              shortcut: "Esc",
+            }),
+          ]),
+          () => root.search_lines(),
+        ),
       );
       selection.on_change = () => {
         const selected = selection.amount_selected;
@@ -198,7 +227,11 @@ class HeaderRow<
           selected > 0 && selected === selection.amount_selectable,
         );
       };
-    }
+    } else if (this.#check_header && root.search_menu)
+      ctm.attach(
+        this.#check_header,
+        ctm.combine(() => root.search_lines()),
+      );
   }
 }
 define_element(HeaderRow);
@@ -222,6 +255,11 @@ export interface ListContainerConfig<T extends {}, R, S extends boolean, K> {
   selection?: ListSelectionOptions<R, K>;
   /**Lets the user move rows with a drag handle in front of the rows, rows in a writable array state can be moved */
   reorder?: ListReorderOptions<R>;
+  /**Milliseconds the search waits after its text changes, so typing searches once the user pauses instead of at every key, 200 by default, 0 searches right away
+   * The first text of the search input, and enter, the clear button and escape in the search bar search without waiting */
+  search_delay?: number;
+  /**Adds lines to the menus of the list, of the rows, the headers and the list itself, to show or hide the column search and to clear the search */
+  search_menu?: boolean;
 }
 
 /**Inputs of a list, written by hand as the list is generic in its rows and columns*/
@@ -237,6 +275,18 @@ export interface ListContainerOptions<T extends {}, R, K> extends BaseOptions {
    * A writable state is written with array write instructions when the user changes the selection, so it must apply them, like a local writable state
    * A read only state is only shown, a change by the user is refused with a warning */
   selected?: K[] | StateREA<K[], any, any>;
+  /**Text the rows are searched for, an input the user changes like selected
+   * A fixed value is where the search starts and the search bar changes it, a writable state is written by the search bar, a read only state locks the bar
+   * Each row answers with its search row option, or matches when the text is in one of its values or its key field text, an empty or blank text shows all rows */
+  search?: StateOrVal<string>;
+  /**Shows a search bar above the list, which changes the search input, without it the search still applies */
+  search_bar?: StateOrVal<boolean>;
+  /**Conditions on the values of the columns, a row matches when it meets all of them and has the search text, an input the user changes like selected
+   * The cells of the column search write it, conditions of columns the list does not have are left out, plain JSON so the app can store it */
+  filter?: StateOrVal<ListFilter>;
+  /**Shows the cells of the column search under the titles of the columns, an input the user changes, the lines of search_menu write it
+   * Without it the filter still applies, in a headless list the cells show without titles */
+  column_search?: StateOrVal<boolean>;
 }
 
 /**Inputs of the list, loosely typed as keys can not be generic */
@@ -245,6 +295,10 @@ const CONTAINER = {
   rows: input_key<StateOrVal<unknown[]>>(),
   add_row: input_key<ListAddRowOptions | null>(),
   selected: input_key<StateOrVal<unknown[]>>(),
+  search: input_key<StateOrVal<string>>(),
+  search_bar: input_key<StateOrVal<boolean>>(),
+  filter: input_key<StateOrVal<ListFilter>>(),
+  column_search: input_key<StateOrVal<boolean>>(),
 };
 
 class Container<
@@ -273,6 +327,33 @@ class Container<
   #key_width?: number;
   /**Shows why a write failed, or that open all stopped */
   #warn?: ListWarn;
+  #search_bar?: ListSearchBar;
+  /**Text of the search input */
+  #search_text = "";
+  /**Shown while the search hides every row */
+  #search_empty?: ListSearchEmpty;
+  /**Rows the search opens once the holds end, breadth first, see search_queue of the root */
+  #search_queued: ListRow<R, T, A, S>[] = [];
+  #search_holds = 0;
+  /**See search_delay of the configuration */
+  readonly #search_delay: number;
+  /**Timer of a text waiting for the delay, 0 for none */
+  #search_timer = 0;
+  /**The next value of the search input is its first, searched without waiting */
+  #search_first = false;
+  /**Conditions of the filter input */
+  #search_filter: ListFilter = { conditions: [] };
+  /**The next value of the filter input is its first, searched without waiting */
+  #filter_first = false;
+  /**Text and conditions of the search the rows have, to skip searching the same again */
+  #search_done = "";
+  readonly #search_menu: boolean;
+  readonly #headless: boolean;
+  #column_search = false;
+  /**Header fields of the visible columns */
+  #header_fields: HeaderField[] = [];
+  /**Cells of the column search by column key, while it is shown */
+  #search_cells = new Map<string, ListSearchCell>();
 
   /**Builds the list from its configuration, the inputs come with set */
   constructor(config: ListContainerConfig<T, R, S, K>) {
@@ -283,6 +364,10 @@ class Container<
       columns_visible: [],
       transform: config.transform,
       observer: config.observer,
+      search_hold: (func) => this.#search_hold(func),
+      search_queue: (row) => this.#search_queue(row),
+      search_menu: Boolean(config.search_menu),
+      search_lines: () => this.#search_lines(),
       open_all: () => this.open_all(),
       close_all: () => this.close_all(),
       any_open: () => this.#open_rows().length > 0,
@@ -301,6 +386,9 @@ class Container<
         ? new ListWarn(this)
         : undefined;
     this.#warn = warn;
+    this.#search_delay = config.search_delay ?? 200;
+    this.#search_menu = Boolean(config.search_menu);
+    this.#headless = Boolean(config.headless);
     if (config.reorder) {
       this.#root.reorder = new ListReorder(this, config.reorder, warn!);
       this.#box.classList.add("drag");
@@ -323,14 +411,14 @@ class Container<
       Number(Boolean(this.#selection?.column));
     if (lead) this.#box.classList.add("lead-" + lead);
 
-    if (!config.headless)
-      this.#header = this.#box.appendChild(
-        new HeaderRow(this.#root, (width) => {
-          this.#key_width = width;
-          this.#update_column_widths();
-        }),
-      );
     this.#box.appendChild(this.#child_box);
+    if (!config.headless) this.#make_header(true);
+    //Right clicks on the list outside the rows and headers, which have menus of their own
+    if (this.#search_menu)
+      ctm.attach(
+        this,
+        ctm.combine(() => this.#search_lines()),
+      );
     if (config.sub_rows) this.#box.classList.add("sub-rows");
     //Without a selected input the selection is kept in a state of the list, under the key of the input so one given later replaces it
     const selection = this.#selection;
@@ -359,6 +447,26 @@ class Container<
       this.#set_add_row(add_row.value),
     );
     if (options.selected !== undefined) this.#set_selected(options.selected);
+    if (options.search !== undefined) this.#search_first = true;
+    this.set_input(CONTAINER.search, options.search, (text) => {
+      const first = this.#search_first;
+      this.#search_first = false;
+      this.#search_input(text.ok ? text.value : "", first);
+    });
+    if (options.search !== undefined) this.#search_lock();
+    this.set_input(CONTAINER.search_bar, options.search_bar, (bar) =>
+      this.#show_search_bar(bar.ok && bar.value),
+    );
+    if (options.filter !== undefined) this.#filter_first = true;
+    this.set_input(CONTAINER.filter, options.filter, (filter) => {
+      const first = this.#filter_first;
+      this.#filter_first = false;
+      this.#filter_input(filter.ok ? filter.value : { conditions: [] }, first);
+    });
+    if (options.filter !== undefined) this.#search_cells_update();
+    this.set_input(CONTAINER.column_search, options.column_search, (show) =>
+      this.#show_column_search(show.ok && show.value),
+    );
     return this;
   }
 
@@ -376,8 +484,39 @@ class Container<
       (a, b) => order.get(a)! - order.get(b)!,
     );
 
-    if (this.#header) {
-      const headers = this.#root.columns_visible.map((key) => {
+    this.#header_fields_build();
+    this.#update_column_widths();
+
+    for (let i = 0; i < this.#child_box.childElementCount; i++)
+      (this.#child_box.children[i] as ListRow<R, T, A, S>).columns_changed();
+    this.#add_row?.columns_changed();
+    this.#error?.columns_changed();
+    //Conditions of columns the list no longer has, or now has, change the search
+    this.#search();
+  }
+
+  /**Makes the header row, with titles, or in a headless list with only the column search */
+  #make_header(titles: boolean) {
+    this.#header = this.#box.insertBefore(
+      new HeaderRow(
+        this.#root,
+        (width) => {
+          this.#key_width = width;
+          this.#update_column_widths();
+        },
+        titles,
+      ),
+      this.#box.firstChild,
+    );
+    this.#header_fields_build();
+  }
+
+  /**Makes the header fields of the visible columns and their cells of the column search */
+  #header_fields_build() {
+    const header_row = this.#header;
+    if (!header_row) return;
+    const headers = (this.#header_fields = this.#root.columns_visible.map(
+      (key) => {
         const column = this.#root.columns.get(key)!;
         const header = new HeaderField(column.title);
         list_align_apply(header, column.align);
@@ -386,16 +525,16 @@ class Container<
           column.init_width = width;
           this.#update_column_widths();
         });
+        if (this.#search_menu)
+          ctm.attach(
+            header,
+            ctm.combine(() => this.#search_lines()),
+          );
         return header;
-      });
-      this.#header.fields = headers;
-    }
-    this.#update_column_widths();
-
-    for (let i = 0; i < this.#child_box.childElementCount; i++)
-      (this.#child_box.children[i] as ListRow<R, T, A, S>).columns_changed();
-    this.#add_row?.columns_changed();
-    this.#error?.columns_changed();
+      },
+    ));
+    header_row.fields = headers;
+    this.#search_cells_build();
   }
 
   /**Gives the auto width columns their current width, so resizing one column does not resize the others
@@ -414,18 +553,20 @@ class Container<
   }
 
   /**Opens every openable row, level by level so the upper levels are open first
-   * Stops with a warning after opening OPEN_ALL_LIMIT rows, against huge or recursive sub rows, opening all again continues */
+   * Stops with a warning after opening OPEN_LIMIT rows, against huge or recursive sub rows, opening all again continues */
   open_all() {
     let opened = 0;
     let level = this.#top_rows();
     while (level.length) {
       const next: ListRow<R, T, A, S>[] = [];
       for (const row of level) {
+        //Open all opens what can be seen
+        if (row.search_hidden) continue;
         if (row.openable && !row.open) {
-          if (opened >= OPEN_ALL_LIMIT) {
+          if (opened >= OPEN_LIMIT) {
             this.#warn?.show(
               this.#header?.key_header ?? this.#box,
-              `Stopped after opening ${OPEN_ALL_LIMIT} rows, open all again for more`,
+              `Stopped after opening ${OPEN_LIMIT} rows, open all again for more`,
             );
             return;
           }
@@ -465,7 +606,7 @@ class Container<
       const col = this.#root.columns.get(key)!;
       //Without a header nothing can resize, so init_width, the start of a resize, does not apply
       const width =
-        col.fixed_width ?? (this.#header ? col.init_width : undefined);
+        col.fixed_width ?? (this.#headless ? undefined : col.init_width);
       if (width) {
         if (width === "min") return "min-content";
         else if (width === "max") return "max-content";
@@ -531,6 +672,346 @@ class Container<
       this.#parent,
     );
     list_rows_apply(this.#root, this.#parent, this.#child_box, rows);
+    this.#search_empty_update();
+  }
+
+  //       _____ ______          _____   _____ _    _
+  //      / ____|  ____|   /\   |  __ \ / ____| |  | |
+  //     | (___ | |__     /  \  | |__) | |    | |__| |
+  //      \___ \|  __|   / /\ \ |  _  /| |    |  __  |
+  //      ____) | |____ / ____ \| | \ \| |____| |  | |
+  //     |_____/|______/_/    \_\_|  \_\\_____|_|  |_|
+
+  /**Shows a new text of the search input and searches for it after the delay, or right away */
+  #search_input(text: string, now: boolean) {
+    this.#search_text = text;
+    if (this.#search_bar) this.#search_bar.value = text;
+    this.#search_later(now);
+  }
+
+  /**Shows new conditions of the filter input and searches for them after the delay, or right away */
+  #filter_input(filter: ListFilter, now: boolean) {
+    this.#search_filter = filter;
+    this.#search_cells_update();
+    this.#search_later(now);
+  }
+
+  /**Searches after the delay, so a burst of changes searches once, or right away */
+  #search_later(now: boolean) {
+    window.clearTimeout(this.#search_timer);
+    this.#search_timer = 0;
+    if (now || this.#search_delay <= 0) this.#search();
+    else
+      this.#search_timer = window.setTimeout(() => {
+        this.#search_timer = 0;
+        this.#search();
+      }, this.#search_delay);
+  }
+
+  /**Searches right away for a change waiting for the delay */
+  #search_now() {
+    if (this.#search_timer) this.#search_later(true);
+  }
+
+  /**Searches the rows for the text and the conditions, the top rows answer and pass the search on to their sub rows */
+  #search() {
+    //Conditions of columns the list does not have are left out, like after an update of the app
+    const filter = list_filter_prune(this.#search_filter, (condition) =>
+      this.#root.columns.has(condition.column as keyof T),
+    );
+    const query = list_search_query(this.#search_text, filter);
+    //The same search again, like after enter, finds the same
+    const done = query ? query.text + "\n" + JSON.stringify(query.filter) : "";
+    if (done === this.#search_done) return;
+    this.#search_done = done;
+    this.#root.search = query;
+    const apply = () => {
+      for (const row of this.#top_rows()) row.search_apply();
+    };
+    this.#search_hold(() =>
+      this.#selection ? this.#selection.batch(apply) : apply(),
+    );
+    this.#search_empty_update();
+  }
+
+  /**Locks the search bar while the search input is a read only state */
+  #search_lock() {
+    if (!this.#search_bar) return;
+    const target = this.input_state(CONTAINER.search);
+    this.#search_bar.read_only = target !== undefined && !target.writable;
+  }
+
+  #show_search_bar(show: boolean) {
+    this.classList.toggle("search-bar", show);
+    if (!show) {
+      this.#search_bar?.remove();
+      this.#search_bar = undefined;
+      return;
+    }
+    if (this.#search_bar) return;
+    const bar = (this.#search_bar = new ListSearchBar());
+    bar.value = this.#search_text;
+    bar.on_input = (text, now) => this.#write_text(text, now);
+    this.insertBefore(bar, this.#box);
+    this.#search_lock();
+  }
+
+  //Like any input the user changes, a writable state is written and the list follows it, without a state the list keeps the value
+  //A state that writes right away gave the value back already, waiting for the delay, now searches without it
+  #write_text(text: string, now: boolean) {
+    const target = this.input_state(CONTAINER.search);
+    if (!target) this.#search_input(text, now);
+    else if (target.writable) {
+      void target.write?.(text);
+      if (now) this.#search_now();
+    }
+  }
+
+  #write_filter(filter: ListFilter, now: boolean) {
+    const target = this.input_state(CONTAINER.filter);
+    if (!target) this.#filter_input(filter, now);
+    else if (target.writable) {
+      void target.write?.(filter);
+      if (now) this.#search_now();
+    }
+  }
+
+  #write_column_search(show: boolean) {
+    const target = this.input_state(CONTAINER.column_search);
+    if (!target) this.#show_column_search(show);
+    else if (target.writable) void target.write?.(show);
+  }
+
+  /**Whether the user can change an input with the state, not for a read only state, undefined for a value the list keeps */
+  #changeable(target: { readonly writable: boolean } | undefined): boolean {
+    return target === undefined || target.writable;
+  }
+
+  /**Lines of the menus of the list to show or hide the column search and to clear the search */
+  #search_lines(): ContextMenuLines {
+    if (!this.#search_menu) return [];
+    const lines: ContextMenuLines = [];
+    const typed = this.#root.columns_visible.some(
+      (key) => this.#root.columns.get(key)!.type !== undefined,
+    );
+    if (this.#changeable(this.input_state(CONTAINER.column_search)))
+      if (this.#column_search)
+        lines.push(
+          ctm.line({
+            text: "Hide column search",
+            //A filter that can not be seen is not left filtering
+            on_click: () => {
+              this.#write_column_search(false);
+              this.#write_filter({ conditions: [] }, true);
+            },
+          }),
+        );
+      else if (typed)
+        lines.push(
+          ctm.line({
+            text: "Search columns",
+            on_click: () => this.#write_column_search(true),
+          }),
+        );
+    if (typed && this.#changeable(this.input_state(CONTAINER.filter)))
+      lines.push(
+        ctm.line({
+          text: "Advanced search…",
+          on_click: () => this.advanced_search(),
+        }),
+      );
+    const text = this.#search_text.trim() !== "";
+    const filtered = this.#search_filter.conditions.length > 0;
+    if (
+      (text && this.#changeable(this.input_state(CONTAINER.search))) ||
+      (filtered && this.#changeable(this.input_state(CONTAINER.filter)))
+    )
+      lines.push(
+        ctm.line({
+          text: "Clear search",
+          on_click: () => {
+            this.#write_text("", true);
+            this.#write_filter({ conditions: [] }, true);
+          },
+        }),
+      );
+    return lines;
+  }
+
+  /**Opens the advanced search, a dialog editing the filter as a tree of groups, the filter changes when it is applied
+   * Does nothing for a read only filter state, conditions of columns without a type or not in the list are shown as they are and kept
+   * @param column starts a new condition of the column*/
+  advanced_search(column?: keyof T) {
+    if (!this.#changeable(this.input_state(CONTAINER.filter))) return;
+    const columns: ListAdvancedColumn[] = this.#root.columns_visible.map(
+      (key) => {
+        const options = this.#root.columns.get(key)!;
+        return {
+          key: String(key),
+          title: options.title,
+          type: options.type,
+          choices: options.choices,
+        };
+      },
+    );
+    if (!columns.some((one) => one.type)) return;
+    list_advanced_search(
+      this,
+      columns,
+      this.#search_filter,
+      column === undefined ? undefined : String(column),
+      (filter) => this.#write_filter(filter, true),
+    );
+  }
+
+  #show_column_search(show: boolean) {
+    if (show === this.#column_search) return;
+    this.#column_search = show;
+    if (this.#headless)
+      if (show) this.#make_header(false);
+      else {
+        this.#header?.remove();
+        this.#header = undefined;
+        this.#header_fields = [];
+        this.#search_cells.clear();
+        return;
+      }
+    this.#search_cells_build();
+  }
+
+  /**Gives every header field a cell of the column search, the key column and columns without a type an empty one, or removes them */
+  #search_cells_build() {
+    this.#search_cells.clear();
+    const show = this.#column_search;
+    this.#header?.classList.toggle("column-search", show);
+    this.#root.columns_visible.forEach((key, i) => {
+      const header = this.#header_fields[i];
+      if (!header) return;
+      if (!show) {
+        header.search_cell = undefined;
+        return;
+      }
+      const column = String(key);
+      const options = this.#root.columns.get(key)!;
+      const cell = list_search_cell(options.type, column, options.choices);
+      cell.on_change = (condition, now) =>
+        this.#write_filter(this.#cell_filter(column, condition), now);
+      if (options.type)
+        cell.on_advanced = (start) =>
+          this.advanced_search(start ? key : undefined);
+      header.search_cell = cell;
+      this.#search_cells.set(column, cell);
+    });
+    const key_header = this.#header?.key_header;
+    if (key_header)
+      key_header.search_cell = show
+        ? list_search_cell(undefined, "")
+        : undefined;
+    this.#search_cells_update();
+  }
+
+  /**The filter with the condition a cell gives its column, in the place of every condition the column had, groups left empty go
+   * A cell means and its condition, so the condition is added to a root of all, and a root of any or none goes into a group under all with it */
+  #cell_filter(
+    column: string,
+    condition: ListCondition | undefined,
+  ): ListFilter {
+    const rest = list_filter_prune(
+      this.#search_filter,
+      (one) => one.column !== column,
+    );
+    if (!condition) return rest;
+    const mode = rest.mode ?? "all";
+    if (mode === "all")
+      return { ...rest, conditions: [...rest.conditions, condition] };
+    if (rest.conditions.length === 0)
+      return { ...rest, mode: "all", conditions: [condition] };
+    return {
+      mode: "all",
+      conditions: [
+        { type: "group", mode, conditions: rest.conditions },
+        condition,
+      ],
+    };
+  }
+
+  /**Shows the conditions of the filter in the cells, locked for a read only filter state
+   * A cell edits the conditions of its column on the root while the root is all, conditions in groups or on a root of any or none are only a summary */
+  #search_cells_update() {
+    const read_only = !this.#changeable(this.input_state(CONTAINER.filter));
+    const filter = this.#search_filter;
+    const all = (filter.mode ?? "all") === "all";
+    const grouped = new Set<string>();
+    const collect = (items: readonly ListFilterItem[], nested: boolean) => {
+      for (const item of items)
+        if (list_is_group(item)) collect(item.conditions, true);
+        else if (nested) grouped.add(item.column);
+    };
+    collect(filter.conditions, false);
+    for (const [column, cell] of this.#search_cells) {
+      const own = filter.conditions.filter(
+        (item): item is ListCondition =>
+          !list_is_group(item) && item.column === column,
+      );
+      cell.show_conditions(
+        own,
+        grouped.has(column) || (!all && own.length > 0),
+      );
+      cell.read_only = read_only;
+    }
+  }
+
+  /**Runs the function with the rows the search opens waiting, the outermost hold opens them after it */
+  #search_hold<F>(func: () => F): F {
+    this.#search_holds++;
+    try {
+      return func();
+    } finally {
+      if (--this.#search_holds === 0) this.#search_open();
+    }
+  }
+
+  #search_queue(row: ListRow<R, T, A, S>) {
+    this.#search_queued.push(row);
+    if (this.#search_holds === 0) this.#search_open();
+  }
+
+  /**Opens the queued rows in order, the sub rows they show queue after them, so the search opens level by level
+   * Stops with a warning after opening OPEN_LIMIT rows, a search that keeps finding something below would otherwise never end */
+  #search_open() {
+    if (this.#search_queued.length === 0) return;
+    this.#search_holds++;
+    let opened = 0;
+    try {
+      for (let i = 0; i < this.#search_queued.length; i++) {
+        if (opened >= OPEN_LIMIT) {
+          this.#warn?.show(
+            this.#search_bar ?? this.#header?.key_header ?? this.#box,
+            `Stopped after opening ${OPEN_LIMIT} rows for the search`,
+          );
+          break;
+        }
+        const row = this.#search_queued[i];
+        if (row.search_open()) opened += row.amount_rows();
+      }
+    } finally {
+      this.#search_queued = [];
+      this.#search_holds--;
+    }
+  }
+
+  /**Shows a line while the search hides every row */
+  #search_empty_update() {
+    const empty =
+      this.#root.search !== undefined &&
+      !this.#top_rows().some((row) => !row.search_hidden);
+    if (!empty) {
+      this.#search_empty?.remove();
+      this.#search_empty = undefined;
+    } else if (!this.#search_empty) {
+      this.#search_empty = new ListSearchEmpty();
+      this.#child_box.after(this.#search_empty);
+    }
   }
 
   /**A fixed value becomes a state of the list the user changes, a state is followed and written when writable */
