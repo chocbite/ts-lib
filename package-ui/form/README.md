@@ -75,28 +75,31 @@ Prompts made with `prompts.form` of `@chocbite/ts-lib-ui/prompts` are a group in
 
 ## Elements
 
-| Factory                       | Value                | Options                                                                           |
-| ----------------------------- | -------------------- | --------------------------------------------------------------------------------- |
-| `form.button`                 | boolean              | `text`, `icon`, `on_click`, `toggle`, `color`, `center`                           |
-| `form.switch`                 | boolean              | `icon`, `on_color`, `off_color`                                                   |
-| `form.lamp`                   | boolean or number    | `colors` (two for a boolean, more for a number), `text`, `icon`, `center`         |
-| `form.number_input`           | number               | `min`, `max`, `step`, `start`, `decimals`, `unit`                                 |
-| `form.stepper`, `form.slider` | number               | as number input, and `live`, `icon_decrease`, `icon_increase`                     |
-| `form.progress`               | number, only shown   | `min`, `max`, `decimals`, `unit`                                                  |
-| `form.text_input`             | string               | `placeholder`, `max_length`, `max_bytes`, `filter`, `live`                        |
-| `form.text_multiline`         | string               | as text input                                                                     |
-| `form.password`               | string               | `filter`, `live`                                                                  |
-| `form.toggle_button`          | one of `selections`  | `selections`                                                                      |
-| `form.dropdown`               | one of `selections`  | `selections`, `default`, `default_icon`                                           |
-| `form.color`                  | hex color string     | `live`, `alpha`                                                                   |
-| `form.date_time`              | Date, string, number | `mode` (at creation, decides the value), `type`, `precision`                      |
-| `form.ip`                     | `IPAddress`          | `type`                                                                            |
-| `form.text`                   | none, a label        | `text`, `size`                                                                    |
-| `form.spacer`                 | none                 | `space`                                                                           |
-| `form.group`                  | object by id         | `elements` and `id` at creation, `column`, `row`, `border`, `embed`, `max_height` |
-| `form.group_collapser`        | none                 | `collapsed`, `opened_text`, `closed_text`                                         |
+| Factory                       | Value                 | Options                                                                           |
+| ----------------------------- | --------------------- | --------------------------------------------------------------------------------- |
+| `form.button`                 | boolean               | `text`, `icon`, `on_click`, `toggle`, `color`, `center`                           |
+| `form.switch`                 | boolean               | `icon`, `on_color`, `off_color`                                                   |
+| `form.lamp`                   | boolean or number     | `colors` (two for a boolean, more for a number), `text`, `icon`, `center`         |
+| `form.number_input`           | number                | `min`, `max`, `step`, `start`, `decimals`, `unit`                                 |
+| `form.stepper`, `form.slider` | number                | as number input, and `live`, `icon_decrease`, `icon_increase`                     |
+| `form.progress`               | number, only shown    | `min`, `max`, `decimals`, `unit`                                                  |
+| `form.text_input`             | string                | `placeholder`, `max_length`, `max_bytes`, `filter`, `live`                        |
+| `form.text_multiline`         | string                | as text input                                                                     |
+| `form.password`               | string                | `filter`, `live`                                                                  |
+| `form.toggle_button`          | one of `selections`   | `selections`                                                                      |
+| `form.dropdown`               | one of `selections`   | `selections`, `default`, `default_icon`                                           |
+| `form.dropdown_multi`         | array of `selections` | `selections`, `default`, `min`, `max`                                             |
+| `form.color`                  | hex color string      | `live`, `alpha`                                                                   |
+| `form.date_time`              | Date, string, number  | `mode` (at creation, decides the value), `type`, `precision`                      |
+| `form.ip`                     | `IPAddress`           | `type`                                                                            |
+| `form.text`                   | none, a label         | `text`, `size`                                                                    |
+| `form.spacer`                 | none                  | `space`                                                                           |
+| `form.group`                  | object by id          | `elements` and `id` at creation, `column`, `row`, `border`, `embed`, `max_height` |
+| `form.group_collapser`        | none                  | `collapsed`, `opened_text`, `closed_text`                                         |
 
 Limits of 0, like `max_length: 0`, mean no limit. Every option of the elements is described on its key, an editor shows it on hover.
+
+The value of `form.dropdown_multi` is the selected ones in the order of the selections, `[]` when nothing is selected, which is a value. Its popup has check boxes and stays open while the user checks and unchecks, each of which writes the whole array, so a state sees every change. Values not in the selections are left out of what the user writes, the value is what the popup shows. `min` and `max` are how many can be selected, a change past them is refused with a warning. The dropdowns share one popup per document. Its `selections`, `min` and `max` are given as options.
 
 ## Look
 
@@ -106,7 +109,7 @@ All of it comes from the theme variables of the `form` group: `form.colors.accen
 
 The color input shows its color on a checkerboard, so a color with alpha shows as one. Its value is a hex color like `#ff8800`. With `alpha` it has an alpha slider beside the swatch and writes colors like `#ff880080`, taking `#rgb`, `#rrggbb`, `#rrggbbaa` and `transparent`. The color picker of the browser has no alpha, it only picks the color and the alpha is kept. The native color input inside has the alpha as `data-alpha`, from 0 to 1, which the color keyboard of `@chocbite/ts-lib-ui/keyboard` shows and changes. Without `alpha` a value with alpha is still shown with it, but a picked color is written without.
 
-An element without a value has the `no-value` attribute, and these elements show it, so it is never taken for a value: text and number inputs a short grey line where the value would be, hidden while typing, the color input a muted rainbow, the switch its knob in the middle on a lighter track, a press turns it on. Dropdowns ask to select something. Other elements have the attribute without a look of their own yet.
+An element without a value has the `no-value` attribute, and these elements show it, so it is never taken for a value: text and number inputs a short grey line where the value would be, hidden while typing, the color input a muted rainbow, the switch its knob in the middle on a lighter track, a press turns it on. Dropdowns ask to select something, the multi dropdown in grey, as nothing selected is a value. Other elements have the attribute without a look of their own yet.
 
 ## Keyboard
 

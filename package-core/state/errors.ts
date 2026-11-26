@@ -27,6 +27,12 @@ export const state_errors = Object.freeze({
   TEXT_TOO_LONG: Symbol("Text too long"),
   /**A value that is not in the list of its enum state*/
   NOT_IN_LIST: Symbol("Value not available"),
+  /**A value given twice to an enum multi state*/
+  DUPLICATE_VALUE: Symbol("Value given twice"),
+  /**More values than the max of an enum multi state*/
+  TOO_MANY_VALUES: Symbol("Too many values"),
+  /**Fewer values than the min of an enum multi state*/
+  TOO_FEW_VALUES: Symbol("Too few values"),
 });
 
 /**The error of a write, check or limit on a state that can not be written. It is a bug, so it has an Error,

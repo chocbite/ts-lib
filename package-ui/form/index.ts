@@ -60,6 +60,12 @@ import {
   type FormDropDownSelection,
 } from "./selectors/drop_down/drop_down";
 import {
+  form_dropdown_multi,
+  FormDropdownMulti,
+  type FormDropDownMultiCreateOptions,
+  type FormDropDownMultiOptions,
+} from "./selectors/drop_down/drop_down_multi";
+import {
   type FormSelectorCreateOptions,
   type FormSelectorOption,
   type FormSelectorOptions,
@@ -148,6 +154,7 @@ export const form = {
 
   //Selectors
   dropdown: form_dropdown,
+  dropdown_multi: form_dropdown_multi,
   toggle_button: form_toggle_button,
 
   //Spacing
@@ -174,6 +181,9 @@ export type {
   FormDropDownCreateOptions,
   FormDropDownOptions,
   FormDropDownSelection,
+  FormDropdownMulti,
+  FormDropDownMultiCreateOptions,
+  FormDropDownMultiOptions,
   FormGroup,
   FormGroupCollapser,
   FormGroupCollapserOptions,

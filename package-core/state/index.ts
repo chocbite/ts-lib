@@ -173,9 +173,14 @@ export {
 } from "./helpers/boolean";
 export {
   STATE_ENUM_HELPER_KEY,
+  STATE_ENUM_MULTI_HELPER_KEY,
+  STATE_ENUM_MULTI_RELATED_KEY,
   STATE_ENUM_RELATED_KEY,
   type StateEnumHelper,
   type StateEnumHelperSync,
+  type StateEnumMultiHelper,
+  type StateEnumMultiHelperSync,
+  type StateEnumMultiRelated,
   type StateEnumRelated,
 } from "./helpers/enum";
 export {

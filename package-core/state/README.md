@@ -281,7 +281,7 @@ function move<T>(from: StateROSWS<T[]>, to: StateROSWS<T[]>, index: number): Sta
 `state.ok_w`, `state.from_w` and `state.err_w` write synchronously, and `state.rosws` and `state.resws` make such states with a helper or setter. What they take is limited to what can be done synchronously:
 
 - the setter gives its result directly instead of a promise, `(value, owner, old) => StateResult<void>`;
-- the helper checks synchronously, the number, string and enum helpers do when every state in their options that they check with is sync, the array and boolean helpers always do;
+- the helper checks synchronously, the number, string, enum and enum multi helpers do when every state in their options that they check with is sync, the array and boolean helpers always do;
 - the write gate is a sync state, `StateRES<boolean>`.
 
 `write`, `check` and `limit` work on them as on any writable state. Their thenables call the function of `then` at once.
@@ -597,6 +597,9 @@ The state system makes these kinds, in `state.errors`:
 | `TOO_MANY_DECIMALS` | Too many decimals    | A number with more than `decimals` decimals.                                                             |
 | `TEXT_TOO_LONG`     | Text too long        | A text longer than `max_length` characters or `max_length_bytes` bytes.                                  |
 | `NOT_IN_LIST`       | Value not available  | An enum value that isn't in the list. While the list itself is an error, a check gives the list's error. |
+| `DUPLICATE_VALUE`   | Value given twice    | An enum multi value with a value in it twice.                                                            |
+| `TOO_MANY_VALUES`   | Too many values      | An enum multi value with more values than `max`.                                                         |
+| `TOO_FEW_VALUES`    | Too few values       | An enum multi value with fewer values than `min`.                                                        |
 
 ```typescript
 const result = await temperature.write(150);
@@ -727,6 +730,30 @@ const color = state.rosw(
 ```
 
 When the list is a sync state, as here, the helper also checks synchronously, see [Sync writes](#sync-writes).
+
+### Enum multi
+
+A state holding several values of an enum list, like the choices of a multi select, takes the list with `state.e.help_multi`, and optionally `min` and `max`, the fewest and most values it can have:
+
+```typescript
+const colors = state.rosw(
+  state.e.help_multi(ok<Color[]>([Color.Red]), {
+    list: state.ok(list),
+    min: state.ok(1),
+    max: state.ok(2),
+  }),
+  true,
+);
+await colors.write([Color.Green, Color.Blue]); // ok
+await colors.write([Color.Red, Color.Red]); // DUPLICATE_VALUE
+await colors.limit([Color.Red, Color.Green, Color.Blue]); // ok([Color.Red, Color.Green])
+```
+
+- **A check** passes when every value is in the list, none is given twice, and the count is within `min` and `max`. The order of the values is free. While the list is an error, a check gives the list's error.
+- **A limit** drops values not in the list or given twice, and keeps the first values up to `max`. It can't add values, so too few stay too few. With nothing to drop it gives the same array.
+- **The related** has `list`, `min` and `max`. `state.e.is_multi_related` tells it apart from the related of a single enum, which `state.e.is_related` is for.
+
+When the list, `min` and `max` are sync states, the helper also checks synchronously.
 
 ### Boolean
 

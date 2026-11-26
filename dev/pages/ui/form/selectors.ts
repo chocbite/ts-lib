@@ -145,6 +145,95 @@ const MIXED: FormSelections<number> = [
     );
 }
 
+//      __  __ _    _ _   _______ _____
+//     |  \/  | |  | | | |__   __|_   _|
+//     | \  / | |  | | |    | |    | |
+//     | |\/| | |  | | |    | |    | |
+//     | |  | | |__| | |____| |   _| |_
+//     |_|  |_|\____/|______|_|  |_____|
+{
+  const sec = section(
+    "Multi dropdown",
+    "Click to open, click, space or enter checks and unchecks an option, the popup stays open until escape, a click outside or the close line. The field lists the checked ones in the order of the options, cut off when they do not fit. Without a value the default text is grey, with nothing checked it is not. It shares the popup with the dropdown, opening one closes the other",
+  );
+  const r = spaced_row(sec);
+  box(r, "3 options", WIDTH).appendChild(
+    form.dropdown_multi({ selections: numbered(3, false), value: [0, 2] }),
+  );
+  box(r, "5 options, icons", WIDTH).appendChild(
+    form.dropdown_multi({ selections: numbered(5, true), value: [1] }),
+  );
+  box(r, "nothing checked, default text", WIDTH).appendChild(
+    form.dropdown_multi({
+      selections: numbered(3, false),
+      value: [],
+      default: "No pumps",
+    }),
+  );
+  box(r, "no value", WIDTH).appendChild(
+    form.dropdown_multi({ selections: numbered(3, false) }),
+  );
+  const l = spaced_row(sec);
+  box(l, "100 options", WIDTH).appendChild(
+    form.dropdown_multi({ selections: numbered(100, false), value: [3, 50] }),
+  );
+  box(l, "min 1, max 2, uncheck the last or check a third", WIDTH).appendChild(
+    form.dropdown_multi({
+      selections: numbered(4, false),
+      value: [0],
+      min: 1,
+      max: 2,
+    }),
+  );
+  const changes = box(l, "change listener", WIDTH);
+  const line = document.createElement("div");
+  line.textContent = "change: -";
+  changes.appendChild(
+    form.dropdown_multi({
+      selections: numbered(4, true),
+      value: [],
+      change: (v) => (line.textContent = "change: [" + v.join(", ") + "]"),
+    }),
+  );
+  changes.appendChild(line);
+  box(l, "dropdown, shares the popup", WIDTH).appendChild(
+    form.dropdown({ selections: numbered(3, false), value: 0 }),
+  );
+  const bound = state.ok_w([1, 2]);
+  const rejecting = state.rosw(ok<number[]>([0]), async (v, s) =>
+    v.includes(2)
+      ? err(demo_error("Rejected", "Option 3 is not allowed"))
+      : (s.set_ok(v), ok(undefined)),
+  );
+  controls(sec, {
+    "Set 1, 4": () => bound.set_ok([0, 3]),
+    "Set nothing": () => bound.set_ok([]),
+  });
+  const s = spaced_row(sec);
+  const sb = box(s, "bound, buttons set it, also while open", WIDTH);
+  sb.appendChild(
+    form.dropdown_multi({ selections: numbered(4, false) }).set({ value: bound }),
+  );
+  readout(sb, "state", bound);
+  const sr = box(s, "rejects option 3", WIDTH);
+  sr.appendChild(
+    form
+      .dropdown_multi({ selections: numbered(4, false) })
+      .set({ value: rejecting }),
+  );
+  readout(sr, "state", rejecting);
+  box(s, "read only state", WIDTH).appendChild(
+    form
+      .dropdown_multi({ selections: numbered(4, false) })
+      .set({ value: bound.read_only }),
+  );
+  const w = spaced_row(sec);
+  for (const width of ["6rem", "12rem", "36rem"])
+    box(w, width + ", long", { width }).appendChild(
+      form.dropdown_multi({ selections: MIXED, value: [0, 1, 2] }),
+    );
+}
+
 //      ____   ____  _    _ _   _ _____
 //     |  _ \ / __ \| |  | | \ | |  __ \
 //     | |_) | |  | | |  | |  \| | |  | |
@@ -257,5 +346,8 @@ const MIXED: FormSelections<number> = [
   );
   box(r, "100 options", WIDTH).appendChild(
     form.dropdown({ selections: numbered(100, false), value: 99 }),
+  );
+  box(r, "multi, 10 options", WIDTH).appendChild(
+    form.dropdown_multi({ selections: numbered(10, true), value: [2, 4] }),
   );
 }

@@ -36,26 +36,29 @@ const SELECTOR_RELATED = {
   list: input_key<StateOrVal<EnumList | null>>(),
 };
 
-/**Options of a selector with value RT*/
-export interface FormSelectorOptions<RT> extends FormValueWriteOptions<RT> {
+/**Options of a selector with selections of RT, and a value V, which is one of them unless the selector picks several*/
+export interface FormSelectorOptions<RT, V = RT> extends FormValueWriteOptions<V> {
   /**Choices of the selector, not given the choices of an enum value state are used, an error shows none*/
   selections?: StateOrVal<FormSelections<RT>>;
 }
 export type FormSelectorCreateOptions<
   RT,
   ID extends string | undefined,
-> = FormSelectorOptions<RT> & FormValueCreateOptions<ID>;
+  V = RT,
+> = FormSelectorOptions<RT, V> & FormValueCreateOptions<ID>;
 
-/**Base for selectors, choosing a value from a list of selections*/
+/**Base for selectors, choosing a value from a list of selections of RT
+ * The value V is one of them, or for a selector picking several, an array of them*/
 export abstract class FormSelectorBase<
   RT,
   ID extends string | undefined = string | undefined,
-> extends FormValueWrite<RT, ID> {
+  V = RT,
+> extends FormValueWrite<V, ID> {
   #selections = new FormSetting<FormSelections<RT>>((selections) =>
     this.apply_selections(selections),
   );
 
-  set(options: FormSelectorOptions<RT>): this {
+  set(options: FormSelectorOptions<RT, V>): this {
     super.set(options);
     this.set_input(SELECTOR.selections, options.selections, (selections) =>
       this.#selections.input(selections.ok ? selections.value : undefined),

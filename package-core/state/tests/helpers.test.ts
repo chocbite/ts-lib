@@ -261,6 +261,18 @@ describe("Helper validation on write", async () => {
     expect(result.ok).toBe(false);
     expect(state_inst.ok()).toBe("a");
   });
+  it("Enum write with a key every object has, like toString, fails", async () => {
+    const state_inst = st.rosw(
+      st.e.help(ok<"a" | "b">("a"), { list: st.ok(list) }),
+      true,
+    );
+    for (const key of ["toString", "constructor", "__proto__"]) {
+      expect(await state_inst.write(key as "a")).toEqual(
+        err_nice(st.errors.NOT_IN_LIST, key + " is not in list"),
+      );
+    }
+    expect(state_inst.ok()).toBe("a");
+  });
   it("Enum write with a value in the list works", async () => {
     const state_inst = st.rosw(
       st.e.help(ok<"a" | "b">("a"), { list: st.ok(list) }),

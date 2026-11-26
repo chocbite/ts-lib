@@ -2,7 +2,8 @@
 
 $padding: 0.2rem;
 
-form-dropdown {
+form-dropdown,
+form-dropdownmulti {
   @include base.base;
   @include base.field;
   min-height: base.$size_height;
@@ -70,145 +71,17 @@ form-dropdown {
   }
 }
 
-form-dropdownbox {
-  position: fixed;
-  display: none;
-  inset: 0;
-  z-index: 99999999;
-  -webkit-user-select: none;
-  user-select: none;
-
-  &.open {
-    display: block;
+form-dropdownmulti {
+  //The names of the selected ones on one line, cut off when they do not fit
+  > div {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
-  > div {
-    border: base.$border;
-    border-radius: base.$size_cornerRadius;
-    background-color: base.$color_background;
-    box-shadow: base.$shadow_popup;
-    outline: none;
-    position: fixed;
-    display: flex;
-    box-sizing: border-box;
-    flex-direction: row;
-    overflow: hidden;
-
-    &:focus-visible {
-      box-shadow: base.$shadow_popup, base.$focus_out;
-    }
-
-    //Scroll
-    > div {
-      box-sizing: border-box;
-      overflow-y: auto;
-      overflow-x: hidden;
-      scrollbar-width: thin;
-      overscroll-behavior: contain;
-      outline: none;
-      position: relative;
-
-      &.scroll {
-        touch-action: auto;
-      }
-
-      > div {
-        width: 100%;
-        display: table;
-        position: relative;
-
-        > div {
-          fill: base.$color_text;
-          color: base.$color_text;
-          display: table-row;
-          outline: none;
-          position: relative;
-
-          &:focus-visible::after {
-            content: "";
-            inset: 0;
-            z-index: 0;
-            position: absolute;
-            box-shadow: base.$focus_in;
-          }
-
-          &:first-child::after {
-            border-radius: base.$size_cornerRadius 0 0 0;
-          }
-          &:last-child::after {
-            border-radius: 0 0 0 base.$size_cornerRadius;
-          }
-
-          @media (pointer: fine) {
-            &:hover::after {
-              content: "";
-              inset: 0;
-              z-index: 0;
-              position: absolute;
-              background-color: base.$color_background_hover;
-            }
-          }
-
-          &.selected {
-            fill: base.$color_accent;
-            color: base.$color_accent;
-            font-weight: 500;
-
-            &::after {
-              content: "";
-              inset: 0;
-              background-color: base.$color_background_hover;
-              position: absolute;
-              z-index: 0;
-            }
-          }
-
-          &:last-child {
-            padding-left: $padding;
-            padding-right: 0.4rem;
-          }
-
-          .touch & {
-            height: base.$size_touchHeight;
-          }
-
-          > div {
-            height: base.$size_height;
-            padding-block: 0.3rem;
-            line-height: calc(base.$font_size + 0.2rem);
-            display: table-cell;
-            box-sizing: border-box;
-            vertical-align: middle;
-            position: relative;
-            z-index: 1;
-
-            .touch & {
-              font-size: base.$touch_font_size;
-              line-height: calc(base.$touch_font_size + 0.2rem);
-            }
-
-            &:first-child {
-              padding-inline: 0.3rem;
-              width: base.$size_height;
-
-              > svg {
-                height: base.$size_height - $padding * 2;
-                display: block;
-                box-sizing: border-box;
-
-                .touch & {
-                  height: base.$size_touchHeight - $padding * 4;
-                }
-              }
-
-              &:empty {
-                padding: 0;
-                padding-left: $padding;
-              }
-            }
-          }
-        }
-      }
-    }
+  //Without a value, nothing selected is a value
+  &[no-value] > div {
+    color: base.$color_text_unselected;
   }
 }
