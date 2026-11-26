@@ -1,25 +1,13 @@
 import { Base, define_element, input_key, type InputOptions } from "#base";
 import depot, { type DepotNode } from "@chocbite/ts-lib/depot";
-import { ok, type ResultNice } from "@chocbite/ts-lib/result";
-import type { State, StateOrVal } from "@chocbite/ts-lib/state";
-import {
-  widget_properties,
-  WIDGETS,
-  type CanvasWidget,
-  type WidgetDefinition,
-} from "./data";
-import {
-  CanvasLink,
-  link_node_state,
-  option_value_state,
-  type OptionState,
-} from "./link";
-import {
-  base_properties,
-  DEFAULT_WIDGET_SIZE,
-  property_value,
-  type WidgetProperty,
-} from "./properties";
+import type { ResultNice } from "@chocbite/ts-lib/result";
+import state, {
+  type State,
+  type StateOrVal,
+  type StateROS,
+} from "@chocbite/ts-lib/state";
+import { WIDGETS, type CanvasWidget, type WidgetDefinition } from "./data";
+import { GEOMETRY_KEYS } from "./geometry";
 import { WidgetBase, type WidgetBaseOptions } from "./widget";
 
 /**Inputs of the error widget*/
@@ -44,39 +32,16 @@ class ErrorWidget extends WidgetBase {
 }
 define_element(ErrorWidget);
 
-/**Internal to canvas, dispatched bubbling when the widget elements of a page change,
- * by a slot making a new element and by a page adding, removing or moving slots*/
-export const WIDGET_ELEMENTS_EVENT = "canvas_widget_elements";
-/**Internal to canvas, dispatched bubbling by a slot when the id of its widget changes, so the page keeps the ids unique*/
-export const WIDGET_ID_EVENT = "canvas_widget_id";
-
 const LOOKUP = Symbol("lookup");
 const DEFINITION = Symbol("definition");
 
-const GEOMETRY = new Set(["x", "y", "width", "height", "rotation"]);
-
-/**The kind of the property of every base property, known before the definition arrives*/
-const base_kinds = () =>
-  new Map<string, WidgetProperty["kind"]>(
-    base_properties(DEFAULT_WIDGET_SIZE).map(([key, property]) => [
-      key,
-      property.kind,
-    ]),
-  );
-
-/**How an option is given to the widget now*/
-interface Resolved {
-  /**The link the option holds, undefined while it holds a value*/
-  link: CanvasLink | undefined;
-  /**The state the widget gets*/
-  state: State<unknown, any, any>;
-}
+const GEOMETRY = new Set<string>(GEOMETRY_KEYS);
 
 /**Holds the element of one widget of a page, internal to canvas
  * It follows the definition of the widget in the depot and makes the element when the definition arrives, or again when it changes,
  * an error is shown in the place of the widget until then
- * It follows every option too, a link is looked up in the depot and the widget is given the linked state, so switching an option
- * between a value and a link, or a linked state being registered, changes only that input of the widget
+ * The element is given the inputs of the widget, see CanvasWidget.input, which follow links, so switching an option
+ * between a value and a link, or a linked state being registered, changes only that input of the element
  * Given another widget, it follows that one instead and makes its element, so a page reuses slots, see PageElement
  * It has display contents, so the widget is placed on the page as if the slot was not there*/
 export class WidgetSlot extends Base {
@@ -88,17 +53,15 @@ export class WidgetSlot extends Base {
   }
 
   #widget!: CanvasWidget;
-  /**Symbols of the option states and links followed for the widget*/
+  /**Symbols of the inputs followed for the widget*/
   #followed: symbol[] = [];
   /**The definition, or why there is none, undefined until looked up*/
   #definition: WidgetDefinition | string | undefined;
   /**The definition the shown element was made from, undefined while an error is shown*/
   #made: WidgetDefinition | undefined;
-  /**The kind of the property of every option, linked values are converted to it,
-   * the base properties every widget has are known before the definition arrives*/
-  #kinds = base_kinds();
-  /**The state the widget gets for every option*/
-  #options = new Map<string, Resolved>();
+  /**The state the element is given for every option, as far as known*/
+  #inputs = new Map<string, State<unknown, any, any>>();
+  #element = state.ok_w<WidgetBase | undefined>(undefined);
 
   constructor(widget: CanvasWidget) {
     super();
@@ -115,6 +78,15 @@ export class WidgetSlot extends Base {
     this.#follow(widget);
   }
 
+  /**The widget element shown now, an error widget when the widget can not be made*/
+  get element(): WidgetBase | undefined {
+    return this.#element.ok();
+  }
+  /**The widget element shown, changes when the slot makes a new one*/
+  get element_state(): StateROS<WidgetBase | undefined> {
+    return this.#element.read_only;
+  }
+
   #follow(widget: CanvasWidget): void {
     for (const symbol of this.#followed) this.detach_state_from_symbol(symbol);
     this.#followed = [];
@@ -123,73 +95,29 @@ export class WidgetSlot extends Base {
     this.#widget = widget;
     this.#definition = undefined;
     this.#made = undefined;
-    this.#kinds = base_kinds();
-    this.#options.clear();
+    this.#inputs.clear();
     //The element of the widget before is not shown with the options of this one
-    this.replaceChildren();
-    for (const [key, option] of Object.entries(
-      widget.options as Record<string, OptionState<unknown> | undefined>,
-    ))
-      if (option) {
-        const value = Symbol(key);
-        const lookup = Symbol(key);
-        this.#followed.push(value, lookup);
-        this.attach_state_to_symbol(value, option, (result) => {
-          if (key === "id")
-            this.dispatchEvent(new Event(WIDGET_ID_EVENT, { bubbles: true }));
-          this.#option(key, option, lookup, result);
-        });
-      }
+    this.#show(undefined);
+    for (const key of widget.input_keys()) {
+      const input = widget.input(key);
+      if (!input) continue;
+      const symbol = Symbol(key);
+      this.#followed.push(symbol);
+      this.attach_state_to_symbol(symbol, input, (given) => {
+        if (given.ok) this.#give(key, given.value);
+      });
+    }
     this.attach_state_to_symbol(LOOKUP, depot.get(widget.widget), (node) =>
       this.#node(node),
     );
   }
 
-  /**The widget element shown now, an error widget when the widget can not be made*/
-  get element(): WidgetBase | undefined {
-    return (this.firstElementChild as WidgetBase | null) ?? undefined;
-  }
-
-  #option(
-    key: string,
-    option: OptionState<unknown>,
-    lookup: symbol,
-    value: ResultNice<unknown>,
-  ): void {
-    const link =
-      value.ok && value.value instanceof CanvasLink ? value.value : undefined;
-    const current = this.#options.get(key);
-    if (current && current.link === link) return;
-    this.detach_state_from_symbol(lookup);
-    if (!link) return this.#give(key, undefined, option_value_state(option));
-    //Until the lookup gives the linked state, the option holds the link, shown as an error
-    this.#give(key, link, option_value_state(option));
-    //Converted by the kind of the property of the option, looked up at every value, as the definition can arrive later
-    const convert = (value: unknown) => {
-      const kind = this.#kinds.get(key);
-      return kind ? property_value(kind, value) : ok(value);
-    };
-    this.attach_state_to_symbol(lookup, depot.get(link.path), (node) =>
-      this.#give(key, link, link_node_state(link, node, convert)),
-    );
-  }
-
-  /**Gives the widget the state of an option*/
-  #give(
-    key: string,
-    link: CanvasLink | undefined,
-    given: State<unknown, any, any>,
-  ): void {
-    this.#options.set(key, { link, state: given });
+  /**Gives the element the state of an option*/
+  #give(key: string, given: State<unknown, any, any>): void {
+    if (this.#inputs.get(key) === given) return;
+    this.#inputs.set(key, given);
     //The error widget only takes the place
     if (this.#made || GEOMETRY.has(key)) this.element?.set({ [key]: given });
-  }
-
-  /**The state of every option, for making the element*/
-  #states(): Record<string, State<unknown, any, any>> {
-    const states: Record<string, State<unknown, any, any>> = {};
-    for (const [key, resolved] of this.#options) states[key] = resolved.state;
-    return states;
   }
 
   #node(node: ResultNice<DepotNode>): void {
@@ -198,11 +126,11 @@ export class WidgetSlot extends Base {
     const entry = node.value;
     if (entry.kind !== "entry" || entry.type !== WIDGETS)
       return this.#set_definition(`"${this.widget.widget}" is not a widget`);
-    this.attach_state_to_symbol(DEFINITION, entry.value, (definition) =>
+    //The entry is in the widgets type, so its content is a widget definition
+    const content = state.as_state(entry.value as StateOrVal<WidgetDefinition>);
+    this.attach_state_to_symbol(DEFINITION, content, (definition) =>
       this.#set_definition(
-        definition.ok
-          ? (definition.value as WidgetDefinition)
-          : definition.error.nice,
+        definition.ok ? definition.value : definition.error.nice,
       ),
     );
   }
@@ -212,9 +140,8 @@ export class WidgetSlot extends Base {
     this.#definition = definition;
     if (typeof definition === "string") {
       this.#made = undefined;
-      const states = this.#states();
       const geometry: Record<string, unknown> = {};
-      for (const key of GEOMETRY) geometry[key] = states[key];
+      for (const key of GEOMETRY) geometry[key] = this.#inputs.get(key);
       return this.#show(
         ErrorWidget.create({
           ...(geometry as WidgetBaseOptions),
@@ -223,14 +150,13 @@ export class WidgetSlot extends Base {
       );
     }
     this.#made = definition;
-    for (const [key, property] of widget_properties(definition))
-      this.#kinds.set(key, property.kind);
-    this.#show(definition.create(this.#states()));
+    this.#show(definition.create(Object.fromEntries(this.#inputs)));
   }
 
-  #show(element: WidgetBase): void {
-    this.replaceChildren(element);
-    this.dispatchEvent(new Event(WIDGET_ELEMENTS_EVENT, { bubbles: true }));
+  #show(element: WidgetBase | undefined): void {
+    if (element) this.replaceChildren(element);
+    else this.replaceChildren();
+    this.#element.set_ok(element);
   }
 }
 define_element(WidgetSlot);

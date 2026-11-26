@@ -115,14 +115,17 @@ export type HelperRelated<HEL extends StateHelper<any, any, any>> = ReturnType<
 
 export const STATE_KEY = Symbol("state");
 
-/**true for types JSON can represent, states holding such types included, false otherwise*/
+/**true for types JSON can represent, states holding such types included, false otherwise
+ * A value giving what is walked instead of itself with STATE_VIEWER_OVERRIDE_KEY is checked by what it gives, like to_json writes it*/
 type StateJsonPart<T> = 0 extends 1 & T
   ? true
   : T extends string | number | boolean | null
     ? true
     : T extends StateBase<infer R, any, any>
       ? StateJsonPart<ResultInferOk<R>>
-      : T extends (...args: any[]) => any
+      : T extends { [STATE_VIEWER_OVERRIDE_KEY](): infer W }
+        ? StateJsonPart<W>
+        : T extends (...args: any[]) => any
         ? false
         : T extends { toJSON(): any }
           ? true

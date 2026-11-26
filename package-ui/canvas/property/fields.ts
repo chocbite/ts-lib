@@ -8,7 +8,7 @@ import {
   type CanvasLink,
   type OptionConvert,
   type OptionState,
-} from "./link";
+} from "../link";
 import { open_link_menu } from "./link_menu";
 import { as_text, property_value, type WidgetProperty } from "./properties";
 import "./fields.scss";

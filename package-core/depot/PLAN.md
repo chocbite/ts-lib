@@ -130,3 +130,58 @@ Types defined in ts-lib-ui are registered by their own module: the widgets type 
 6. depot_ui: state selector, with a dev page.
 
 Each step ends with typecheck, tests and lint passing, and a stop for review.
+
+## Providers
+
+Some resources already live in a structure of their own, like the theme variables, or a tree of objects users create on a server, kept on the client as states. Registering them would store everything twice, and for big or recursive structures it would make a node for every item up front. A provider lets such a structure be mounted in the depot instead.
+
+### Decisions
+
+- The structure implements an interface, `DepotSource`, on its own objects, nothing is copied.
+- `group.provide(id, source)` mounts a source at a path, like `group` and `add`, so the app or module still decides where it goes. It gives the node of the source, removing it unmounts the source.
+- Nodes for provided items are made only for paths that are looked up or listed, and kept per parent for the source object, so the same path gives the same node while the source object lives. The path comes from the walk, so a source object does not know its parent and can be at several paths, like in a recursive structure.
+- Name, description, the children of a group and the content of an entry are each a `StateOrVal`, a constant or a state. Constants cost no state, a state is followed. A source gives states only for what changes, like the name of an object users can rename.
+- Registered nodes get the same: name and description are `StateOrValROS<string>` as given to `group` and `add`, and the content of an entry is the `StateOrVal` given to `add`, no longer always wrapped in a state. Readers pass them to elements, which take `StateOrVal`, or use `state.as_state`.
+- A provided group is read only in the depot, `group`, `add`, `alias` and `provide` on it throw, its source decides its children. Removing a provided node other than the mounted one throws, the source removes it.
+- A lookup through a provided group whose children are a state follows that state, constant children are not followed.
+- A child id that is not a valid depot id is left out, it can not be looked up or listed.
+- Aliases point at registered nodes only for now.
+- Ids from a source should be stable ids, like the id of an object on a server, not its name, so renaming changes the name and not the path, and stored paths keep working.
+
+### Source interface
+
+```ts
+interface DepotSourceBase {
+  readonly name: StateOrValROS<string>;
+  readonly description: StateOrValROS<string>;
+  readonly icon?: DepotIcon;
+}
+interface DepotSourceGroup<T> extends DepotSourceBase {
+  /**The children, a constant list or a state of one for a group that changes*/
+  readonly children: StateOrValROS<readonly DepotSourceChild<T>[]>;
+  /**Optional fast lookup of one child by id, otherwise the children are searched*/
+  child?(id: string): DepotSource<T> | undefined;
+}
+interface DepotSourceEntry<T> extends DepotSourceBase {
+  readonly value: StateOrVal<T>;
+}
+type DepotSource<T> = DepotSourceGroup<T> | DepotSourceEntry<T>;
+type DepotSourceChild<T> = {
+  readonly id: string;
+  readonly source: DepotSource<T>;
+};
+```
+
+### Open for later steps
+
+- The depot_ui selector walks the whole tree to filter and search, which would make every node of a big provided tree, and never ends on a recursive one. It must list only open groups, and search within what is loaded or through the source.
+- Aliases into provided trees.
+
+### Provider steps
+
+1. Core: `DepotSource`, `provide`, `StateOrVal` names, descriptions, children and content, lookups through sources. Readers in ts-lib-ui and the dev page updated. Tests in Node with a test source, also a recursive one.
+2. Theme: `package-ui/theme` registers a theme color type and provides its own variable structure through it.
+3. Theme: custom theme color variables added and removed at runtime.
+4. Canvas: color properties pick a theme color variable, with a None option for no color, there are no plain colors. A color is only a plain value through a linked state.
+
+Each step ends with typecheck, tests and lint passing, and a stop for review.

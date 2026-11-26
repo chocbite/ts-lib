@@ -1,17 +1,21 @@
 import { define_element, input_key, type InputOptions } from "#base";
 import depot from "@chocbite/ts-lib/depot";
-import state, { type StateOrVal, type StateROSW } from "@chocbite/ts-lib/state";
+import state, {
+  type StateOrVal,
+  type StateROS,
+  type StateROSW,
+} from "@chocbite/ts-lib/state";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
-import { canvas, type CanvasPage, type CanvasWidget } from "..";
+import {
+  canvas,
+  type CanvasPageData,
+  type CanvasWidget,
+  type CanvasWidgetData,
+} from "..";
+import { made_one } from "./made";
 import { CanvasLink } from "../link";
 import type { WidgetSlot } from "../slot";
-import {
-  WIDGET_CHANGE,
-  WIDGET_CHANGEABLE,
-  WIDGET_GEOMETRY,
-  WidgetBase,
-  type WidgetBaseOptions,
-} from "../widget";
+import { WidgetBase, type WidgetBaseOptions } from "../widget";
 
 const LINK_WIDGET = {
   text: input_key<StateOrVal<string>>(),
@@ -51,20 +55,27 @@ afterAll(() => {
 
 afterEach(() => {
   document.body.replaceChildren();
-  for (const child of [...states.children.ok()]) child.remove();
+  //A registered group always has a children state
+  const children = states.children as StateROS<readonly { remove(): void }[]>;
+  for (const child of [...children.ok()]) child.remove();
 });
 
 const TEXT = "/states/canvaslinktest/text";
 const X = "/states/canvaslinktest/x";
 
 /**Shows the widget in a viewport and gives its slot*/
-const show = (widget: CanvasWidget) => {
+const show = (widget: CanvasWidgetData) => {
   const viewport = document.body.appendChild(
-    canvas.viewport({ page: { widgets: [widget] } }),
+    canvas.viewport({ page: canvas.page({ widgets: [widget] }) }),
   );
   return viewport.querySelector("canvas-slot") as WidgetSlot;
 };
 const element = (slot: WidgetSlot) => slot.element as LinkWidget;
+/**The value of an option as the widget gets it now, undefined while it has none*/
+const value_of = (widget: CanvasWidget, key: string): unknown => {
+  const value = widget.value(key)!.get!();
+  return value.ok ? value.value : undefined;
+};
 
 describe("Links to depot states", () => {
   it("are typed by the option they are given to", () => {
@@ -96,7 +107,7 @@ describe("Links to depot states", () => {
     const made = element(slot);
     expect(made).toBeInstanceOf(LinkWidget);
     expect(made.textContent).toBe(depot.errors.NOT_REGISTERED.description);
-    expect(made[WIDGET_GEOMETRY].x).toBe(7);
+    expect(made.style.left).toBe("7px");
     const first = states.add("text", "Text", "", state.ok("first"));
     expect(made.textContent).toBe("first");
     first.remove();
@@ -130,16 +141,16 @@ describe("Links to depot states", () => {
     const x = state.ok_w(5);
     states.add("x", "X", "", x);
     states.add("y", "Y", "", state.ok(7));
-    const slot = show(
-      canvas.widget(definition, {
-        x: canvas.link(X),
-        y: canvas.link("/states/canvaslinktest/y"),
-      }),
-    );
-    expect(element(slot)[WIDGET_CHANGEABLE]("x")).toBe(true);
-    expect(element(slot)[WIDGET_CHANGEABLE]("y")).toBe(false);
-    element(slot)[WIDGET_CHANGE]({ x: 40, y: 50 });
+    const slot = show(canvas.widget(definition, {
+      x: canvas.link(X),
+      y: canvas.link("/states/canvaslinktest/y"),
+    }));
+    const widget = slot.widget;
+    expect(widget.value("x")!.writable).toBe(true);
+    expect(widget.value("y")!.writable).toBe(false);
+    void widget.value("x")!.write!(40);
     expect(x.ok()).toBe(40);
+    expect(element(slot).style.left).toBe("40px");
   });
 
   describe("linear transform", () => {
@@ -148,32 +159,31 @@ describe("Links to depot states", () => {
     it("maps the value, and maps a write back", () => {
       const x = state.ok_w(75);
       states.add("x", "X", "", x);
-      const slot = show(
-        canvas.widget(definition, {
-          x: canvas.link(X, { transforms: [linear] }),
-        }),
-      );
-      expect(element(slot)[WIDGET_GEOMETRY].x).toBe(175);
+      const slot = show(canvas.widget(definition, {
+        x: canvas.link(X, { transforms: [linear] }),
+      }));
+      const widget = slot.widget;
+      expect(element(slot).style.left).toBe("175px");
+      expect(value_of(widget, "x")).toBe(175);
       x.set_ok(100);
-      expect(element(slot)[WIDGET_GEOMETRY].x).toBe(200);
-      element(slot)[WIDGET_CHANGE]({ x: 160 });
+      expect(element(slot).style.left).toBe("200px");
+      void widget.value("x")!.write!(160);
       expect(x.ok()).toBe(60);
     });
 
     it("locks when it can not be reversed, or the linked state is read only", () => {
       states.add("x", "X", "", state.ok_w(75));
       states.add("y", "Y", "", state.ok(75));
-      const slot = show(
-        canvas.widget(definition, {
-          x: canvas.link(X, {
-            transforms: [canvas.linear([50, 100], [150, 150])],
-          }),
-          y: canvas.link("/states/canvaslinktest/y", { transforms: [linear] }),
+      const slot = show(canvas.widget(definition, {
+        x: canvas.link(X, {
+          transforms: [canvas.linear([50, 100], [150, 150])],
         }),
-      );
-      expect(element(slot)[WIDGET_GEOMETRY].x).toBe(150);
-      expect(element(slot)[WIDGET_CHANGEABLE]("x")).toBe(false);
-      expect(element(slot)[WIDGET_CHANGEABLE]("y")).toBe(false);
+        y: canvas.link("/states/canvaslinktest/y", { transforms: [linear] }),
+      }));
+      const widget = slot.widget;
+      expect(element(slot).style.left).toBe("150px");
+      expect(widget.value("x")!.writable).toBe(false);
+      expect(widget.value("y")!.writable).toBe(false);
     });
 
     it("faults the option for a value that is not a number", () => {
@@ -190,7 +200,7 @@ describe("Links to depot states", () => {
   describe("saving", () => {
     it("saves a link as a $link object and loads it again", async () => {
       const transforms = [canvas.linear([0, 10], [0, 100])];
-      const page: CanvasPage = {
+      const page: CanvasPageData = {
         widgets: [
           canvas.widget(definition, {
             x: canvas.link(X, { transforms }),
@@ -276,7 +286,9 @@ describe("Links to depot states", () => {
   it("show their path in the properties editor, and follow switching", () => {
     const text = state.ok_w<string | CanvasLink<string>>(canvas.link(TEXT));
     const editor = document.body.appendChild(
-      canvas.properties({ selected: [canvas.widget(definition, { text })] }),
+      canvas.properties({
+        owner: made_one(canvas.widget(definition, { text })),
+      }),
     );
     const field = () =>
       [...editor.querySelectorAll("list-row")]

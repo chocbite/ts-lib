@@ -1,9 +1,4 @@
-import {
-  group_bounds,
-  transform_group,
-  wrap_angle,
-  type GroupRotation,
-} from "./group";
+import { wrap_angle } from "./group";
 import { Base, define_element } from "#base";
 import {
   material_arrow_range_rounded,
@@ -11,21 +6,21 @@ import {
   material_rotate_right_rounded,
 } from "#icons";
 import type { SVGFunc } from "#svg";
+import { CanvasWidget } from "./data";
+import {
+  change_geometry,
+  changeable,
+  geometry_now,
+  geometry_states,
+  type GeometryKey,
+} from "./geometry";
+import { CanvasTransformer } from "./selection";
 import "./shared";
 import "./transformer.scss";
-import {
-  WIDGET_CHANGE,
-  WIDGET_CHANGEABLE,
-  WIDGET_GEOMETRY,
-  WIDGET_TRANSFORM_EVENT,
-  scrolls,
-  type WidgetBase,
-  type WidgetGeometry,
-} from "./widget";
+import { scrolls, type WidgetBase, type WidgetGeometry } from "./widget";
 
 /**Smallest width and height a widget can be resized to */
 const MIN_SIZE = 1;
-const GROUP = Symbol("group");
 
 /**Grid positions and sizes snap to, unless alt is held */
 const SNAP_GRID = 5;
@@ -76,9 +71,8 @@ interface Drag {
 }
 
 /**Dashed outline with handles, attached to widgets to move, resize and rotate them
- * One widget is outlined by its own rotated outline, several by the box around them, see group_bounds,
- * which moves, scales and rotates them together, see transform_group
- * The box of several widgets is turned by their group rotation, which the rotate handle sets, see GroupRotation
+ * One widget is outlined by its own rotated outline, several by the box of their CanvasTransformer,
+ * which moves, scales and rotates them together, its rotation is set by the rotate handle
  * Corner handles resize both axes and side handles one axis, keeping the opposite corner or side in place
  * The handle above the outline rotates around the center
  * The center handle and the outline itself move the widget, the inside of the outline is left to the widgets below
@@ -91,8 +85,8 @@ interface Drag {
  *
  * The transformer is drawn in viewport pixels, so it keeps its size when the page is zoomed
  *
- * Changes go through the widgets, which write them to the states of their inputs,
- * handles of parts any widget has as a read only state are hidden*/
+ * It follows the geometry of the widgets through their states, see CanvasWidget.value, and changes it by writing the states,
+ * handles of parts any widget can not change are hidden*/
 export class Transformer extends Base {
   /**Returns the name used to define the element */
   static element_name() {
@@ -103,20 +97,16 @@ export class Transformer extends Base {
     return "canvas";
   }
 
-  #widgets: WidgetBase[] = [];
-  /**The box while several widgets are dragged, as the drag makes it, the bounds of the widgets otherwise*/
+  /**The widget or widgets the transformer is on*/
+  #selected: CanvasWidget | CanvasTransformer | undefined;
+  /**Symbols of the geometry states followed*/
+  #followed: symbol[] = [];
+  /**True while states are attached or written, the transformer is updated once after*/
+  #quiet = false;
+  /**The element the viewport shows for a widget, for whether it has scrollbars*/
+  readonly #element_of: (widget: CanvasWidget) => WidgetBase | undefined;
+  /**The box while several widgets are dragged, as the drag makes it, the box of the widgets otherwise*/
   #drag_box: WidgetGeometry | undefined;
-  /**The rotation of the box of several widgets, shared with the other viewports and properties editors of the selection*/
-  #group: GroupRotation | undefined;
-
-  /**Sets the rotation of the box of several widgets, the transformer follows it and sets it when the box is turned*/
-  set group(group: GroupRotation | undefined) {
-    if (this.#group === group) return;
-    this.#group = group;
-    if (group)
-      this.attach_state_to_symbol(GROUP, group.rotation, () => this.#update());
-    else this.detach_state_from_symbol(GROUP);
-  }
   /**Maps the level the widgets are on to viewport pixels*/
   #matrix = new DOMMatrix();
   /**The scale of the matrix, which scales evenly*/
@@ -130,8 +120,13 @@ export class Transformer extends Base {
   #actions = new Map<Element, Action>();
   #drag: Drag | undefined;
 
-  constructor() {
+  /**@param element_of the element the viewport shows for a widget*/
+  constructor(
+    element_of: (widget: CanvasWidget) => WidgetBase | undefined = () =>
+      undefined,
+  ) {
     super();
+    this.#element_of = element_of;
     this.hidden = true;
     for (const side of ["top", "right", "bottom", "left"])
       this.#add("side " + side, { type: "move" });
@@ -157,51 +152,68 @@ export class Transformer extends Base {
     this.#stop_drag();
   }
 
-  /**Sets the widgets the transformer is attached to, none hides the transformer */
-  set widgets(widgets: readonly WidgetBase[]) {
-    if (
-      widgets.length === this.#widgets.length &&
-      widgets.every((widget, i) => widget === this.#widgets[i])
-    )
-      return;
+  /**Puts the transformer on a widget, or on several widgets through their CanvasTransformer, nothing hides it*/
+  set selected(selected: CanvasWidget | CanvasTransformer | undefined) {
+    if (selected === this.#selected) return;
     this.#stop_drag();
-    for (const widget of this.#widgets)
-      widget.removeEventListener(
-        WIDGET_TRANSFORM_EVENT,
-        this.#on_widget_transform,
-      );
-    this.#widgets = [...widgets];
-    for (const widget of this.#widgets)
-      widget.addEventListener(
-        WIDGET_TRANSFORM_EVENT,
-        this.#on_widget_transform,
-      );
-    this.#update();
+    for (const symbol of this.#followed) this.detach_state_from_symbol(symbol);
+    this.#followed = [];
+    this.#selected = selected;
+    const states =
+      selected instanceof CanvasTransformer
+        ? selected.states
+        : selected
+          ? geometry_states(selected)
+          : [];
+    this.#quietly(() => {
+      for (const followed of states) {
+        const symbol = Symbol("geometry");
+        this.#followed.push(symbol);
+        this.attach_state_to_symbol(symbol, followed, () => this.#update());
+      }
+    });
   }
-  /**Returns the widgets the transformer is attached to */
-  get widgets(): readonly WidgetBase[] {
-    return this.#widgets;
+  /**The widgets the transformer is on*/
+  get widgets(): readonly CanvasWidget[] {
+    const selected = this.#selected;
+    if (selected instanceof CanvasTransformer) return selected.widgets;
+    return selected ? [selected] : [];
   }
 
-  /**The outline, the geometry of one widget, or the box around several*/
+  /**Runs func without updating for every state it attaches or writes, then updates once*/
+  #quietly(func: () => void) {
+    const was = this.#quiet;
+    this.#quiet = true;
+    try {
+      func();
+    } finally {
+      this.#quiet = was;
+    }
+    this.#update();
+  }
+
+  /**The geometry of every widget, undefined while one of them has none, see geometry_now*/
+  #geometries(): WidgetGeometry[] | undefined {
+    const selected = this.#selected;
+    if (selected instanceof CanvasTransformer) return selected.geometries();
+    const geometry = selected && geometry_now(selected);
+    return geometry && [geometry];
+  }
+
+  /**The outline, the geometry of one widget, or the box of several*/
   #frame(): WidgetGeometry | undefined {
-    const widgets = this.#widgets;
-    if (widgets.length === 0) return undefined;
-    if (widgets.length === 1) return widgets[0][WIDGET_GEOMETRY];
-    return (
-      this.#drag_box ??
-      group_bounds(
-        widgets.map((widget) => widget[WIDGET_GEOMETRY]),
-        this.#group?.rotation.ok() ?? 0,
-      )
-    );
+    const selected = this.#selected;
+    if (selected instanceof CanvasTransformer)
+      return this.#drag_box ?? selected.box();
+    return selected && geometry_now(selected);
   }
 
   /**Whether every widget can change all the parts*/
-  #changeable(...keys: Parameters<WidgetBase[typeof WIDGET_CHANGEABLE]>[0][]) {
-    return this.#widgets.every((widget) =>
-      keys.every((key) => widget[WIDGET_CHANGEABLE](key)),
-    );
+  #changeable(...keys: GeometryKey[]) {
+    const selected = this.#selected;
+    if (selected instanceof CanvasTransformer)
+      return selected.changeable(...keys);
+    return keys.every((key) => selected && changeable(selected, key));
   }
 
   /**Returns whether a handle is being dragged */
@@ -226,6 +238,7 @@ export class Transformer extends Base {
   }
 
   #update() {
+    if (this.#quiet) return;
     const frame = this.#frame();
     this.hidden = !frame;
     if (!frame) return;
@@ -241,23 +254,23 @@ export class Transformer extends Base {
     this.style.width = width * scale + "px";
     this.style.height = height * scale + "px";
     this.style.transform = `rotate(${rotation}deg)`;
-    const changeable = (
-      ...keys: Parameters<WidgetBase[typeof WIDGET_CHANGEABLE]>[0][]
-    ) => this.#changeable(...keys);
-    this.classList.toggle("no-move", !changeable("x", "y"));
+    this.classList.toggle("no-move", !this.#changeable("x", "y"));
     this.classList.toggle(
       "no-resize",
-      !changeable("x", "y", "width", "height"),
+      !this.#changeable("x", "y", "width", "height"),
     );
     //Several widgets turn around the center of the box, which moves them
     this.classList.toggle(
       "no-rotate",
-      this.#widgets.length > 1
-        ? !changeable("x", "y", "rotation")
-        : !changeable("rotation"),
+      this.#selected instanceof CanvasTransformer
+        ? !this.#changeable("x", "y", "rotation")
+        : !this.#changeable("rotation"),
     );
     //The edges of a widget that scrolls let presses through to its scrollbars, the center handle still moves it
-    const single = this.#widgets.length === 1 ? this.#widgets[0] : undefined;
+    const single =
+      this.#selected instanceof CanvasWidget
+        ? this.#element_of(this.#selected)
+        : undefined;
     this.toggleAttribute("scrolls", single !== undefined && scrolls(single));
     //Cursors only exist in 45 degree steps repeating every 180 degrees, the stylesheet picks the cursors from the closest step
     const half_turn = ((rotation % 180) + 180) % 180;
@@ -266,7 +279,8 @@ export class Transformer extends Base {
 
   #start(action: Action, e: PointerEvent) {
     const frame = this.#frame();
-    if (!frame || this.#drag) return;
+    const starts = this.#geometries();
+    if (!frame || !starts || this.#drag) return;
     e.preventDefault();
     e.stopPropagation();
     const { x, y, width, height, rotation } = frame;
@@ -281,7 +295,7 @@ export class Transformer extends Base {
         pressed.x - (x + width / 2),
       ),
       last: undefined,
-      starts: this.#widgets.map((widget) => ({ ...widget[WIDGET_GEOMETRY] })),
+      starts,
       x,
       y,
       width,
@@ -306,10 +320,6 @@ export class Transformer extends Base {
     window.removeEventListener("pointercancel", this.#on_pointer_up);
   }
 
-  #on_widget_transform = () => {
-    this.#update();
-  };
-
   #on_pointer_down = (e: PointerEvent) => {
     const action =
       e.target instanceof Element ? this.#actions.get(e.target) : undefined;
@@ -329,13 +339,17 @@ export class Transformer extends Base {
     if (e.pointerId === this.#drag?.pointer_id) this.#stop_drag();
   };
 
-  /**Changes the frame like the drag, one widget directly, several through their box*/
+  /**Changes the frame like the drag, one widget directly, several through their box, updated once after all are written*/
   #change(drag: Drag, change: Partial<WidgetGeometry>) {
-    const widgets = this.#widgets;
-    if (widgets.length === 1) {
+    this.#quietly(() => this.#write(drag, change));
+  }
+
+  #write(drag: Drag, change: Partial<WidgetGeometry>) {
+    const selected = this.#selected;
+    if (!(selected instanceof CanvasTransformer)) {
       if (change.rotation !== undefined)
         change.rotation = wrap_angle(change.rotation);
-      widgets[0][WIDGET_CHANGE](change);
+      if (selected) change_geometry(selected, change);
       return;
     }
     const from: WidgetGeometry = {
@@ -346,17 +360,9 @@ export class Transformer extends Base {
       rotation: drag.rotation,
     };
     const to = { ...from, ...change };
-    //Set first, the widgets tell the transformer about every change
     this.#drag_box = to;
     //The box keeps the rotation after the drag, the properties editor shows it while turning
-    this.#group?.set(to.rotation);
-    const geometries = transform_group(drag.starts, from, to);
-    widgets.forEach((widget, i) => {
-      const geometry = geometries[i];
-      geometry.rotation = wrap_angle(geometry.rotation);
-      widget[WIDGET_CHANGE](geometry);
-    });
-    this.#update();
+    selected.change(drag.starts, from, to);
   }
 
   /**The point of the level under the pointer, through the matrix of the view*/
@@ -375,7 +381,7 @@ export class Transformer extends Base {
   /**Updates the widgets from the pointer event and the current view */
   #apply_drag(drag: Drag, e: PointerEvent) {
     //A viewport without a size has a scale of 0, which has no page position
-    if (!this.#widgets.length || this.#scale <= 0) return;
+    if (!this.#selected || this.#scale <= 0) return;
     //Pointer movement in units of the level
     const now = this.#to_level(e);
     const delta_x = now.x - drag.page_x;

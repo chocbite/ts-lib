@@ -6,5 +6,10 @@ export type {
   DepotGroup,
   DepotIcon,
   DepotNode,
+  DepotSource,
+  DepotSourceBase,
+  DepotSourceChild,
+  DepotSourceEntry,
+  DepotSourceGroup,
   DepotType,
 } from "./depot";

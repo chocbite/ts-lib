@@ -10,9 +10,9 @@ import type { StateOrVal } from "@chocbite/ts-lib/state";
 import type { CanvasPage, CanvasWidget } from "./data";
 import "./page.scss";
 import "./shared";
-import { fill_ids } from "./ids";
-import { WIDGET_ELEMENTS_EVENT, WIDGET_ID_EVENT, WidgetSlot } from "./slot";
-import { WIDGET_GEOMETRY, type WidgetBase } from "./widget";
+import { geometry_now } from "./geometry";
+import { WidgetSlot } from "./slot";
+import type { WidgetBase } from "./widget";
 
 /**Inputs of the page element, the values of a CanvasPage*/
 const PAGE = {
@@ -23,32 +23,9 @@ const PAGE = {
 };
 type PageElementOptions = BaseOptions & InputOptions<typeof PAGE>;
 
-/**Page elements in the document, to find the page of a widget*/
-const PAGES = new Set<PageElement>();
-
-/**The widgets of a page shown in the document with the widget on it, undefined when no page shows the widget*/
-export function page_widgets_of(
-  widget: CanvasWidget,
-): readonly CanvasWidget[] | undefined {
-  for (const page of PAGES) if (page.slot_of(widget)) return page.widgets;
-  return undefined;
-}
-
-/**The element of a widget on a page shown in the document, undefined when no page shows the widget*/
-export function widget_element_of(
-  widget: CanvasWidget,
-): WidgetBase | undefined {
-  for (const page of PAGES) {
-    const element = page.slot_of(widget)?.element;
-    if (element) return element;
-  }
-  return undefined;
-}
-
 /**Element showing a page in one viewport, internal to canvas, the viewport makes it from the page data
  * Every widget gets a slot, which makes the widget element, the order of the slots is the drawing order
- * It keeps the ids of the widgets unique, giving a widget with an empty or taken id a new one, see fill_ids,
- * every page element showing the page does it, the first one leaves nothing for the others*/
+ * It only shows the page, the page keeps the ids of its widgets unique itself, see CanvasPage*/
 export class PageElement extends Base {
   /**Returns the name used to define the element */
   static element_name() {
@@ -63,38 +40,16 @@ export class PageElement extends Base {
   #height: number = 1080;
 
   #widgets: readonly CanvasWidget[] = [];
-  #fill_queued = false;
 
   constructor() {
     super();
     this.style.width = this.#width + "px";
     this.style.height = this.#height + "px";
-    this.addEventListener(WIDGET_ID_EVENT, () => this.#queue_fill());
-  }
-
-  protected connectedCallback(): void {
-    super.connectedCallback();
-    PAGES.add(this);
-  }
-
-  protected disconnectedCallback(): void {
-    super.disconnectedCallback();
-    PAGES.delete(this);
   }
 
   /**The widgets shown, in drawing order*/
   get widgets(): readonly CanvasWidget[] {
     return this.#widgets;
-  }
-
-  /**Fills the ids once after the changes of this moment, so loading a page with many widgets checks the ids once*/
-  #queue_fill() {
-    if (this.#fill_queued) return;
-    this.#fill_queued = true;
-    queueMicrotask(() => {
-      this.#fill_queued = false;
-      if (this.isConnected) fill_ids(this.#widgets);
-    });
   }
 
   /**Width of the page in page units*/
@@ -148,25 +103,17 @@ export class PageElement extends Base {
       update: (slot, widget) => (slot.widget = widget),
     });
     this.#widgets = widgets;
-    this.#queue_fill();
-    this.dispatchEvent(new Event(WIDGET_ELEMENTS_EVENT, { bubbles: true }));
   }
 
   /**The widgets whose outline covers the point on the page, in front first, invisible ones included
-   * A rotated widget is found by its rotated outline*/
+   * A rotated widget is found by its rotated outline, a widget whose geometry has no value now is not found*/
   widgets_at(x: number, y: number): CanvasWidget[] {
     const found: CanvasWidget[] = [];
-    const slots = this.children as HTMLCollectionOf<WidgetSlot>;
-    for (let i = slots.length - 1; i >= 0; i--) {
-      const element = slots[i].element;
-      if (!element) continue;
-      const {
-        x: left,
-        y: top,
-        width,
-        height,
-        rotation,
-      } = element[WIDGET_GEOMETRY];
+    for (let i = this.#widgets.length - 1; i >= 0; i--) {
+      const widget = this.#widgets[i];
+      const geometry = geometry_now(widget);
+      if (!geometry) continue;
+      const { x: left, y: top, width, height, rotation } = geometry;
       //The point turned back around the center of the widget, into the frame of the widget
       const cx = left + width / 2;
       const cy = top + height / 2;
@@ -176,7 +123,7 @@ export class PageElement extends Base {
       const dx = (x - cx) * cos - (y - cy) * sin;
       const dy = (x - cx) * sin + (y - cy) * cos;
       if (Math.abs(dx) <= width / 2 && Math.abs(dy) <= height / 2)
-        found.push(slots[i].widget);
+        found.push(widget);
     }
     return found;
   }
@@ -196,6 +143,6 @@ export function page_element(page: CanvasPage): PageElement {
     width: page.width,
     height: page.height,
     background: page.background,
-    widgets: page.widgets,
+    widgets: page.children,
   });
 }

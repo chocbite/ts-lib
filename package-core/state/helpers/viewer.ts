@@ -92,7 +92,11 @@ export function viewer(
   return new StateViewer(root, callback);
 }
 
-export const VIEWER = {
+//Typed, so OVERRIDE_KEY keeps its unique symbol type, an object literal would widen it to symbol
+export const VIEWER: {
+  readonly viewer: typeof viewer;
+  readonly OVERRIDE_KEY: typeof STATE_VIEWER_OVERRIDE_KEY;
+} = {
   /**Calls the callback when the root or any state in its value changes, at any depth, see viewer*/
   viewer,
   /**Key for a value to give what the viewer and to_json walk instead of the value itself*/

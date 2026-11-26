@@ -24,6 +24,17 @@ import {
 } from "./tests_shared";
 import { TEST_ERROR } from "./tests_shared";
 
+/**Waits for the subscribers to have been told, checking often, a fixed time is too short on a busy machine*/
+const told = (check: () => void) =>
+  vi.waitFor(check, { timeout: 1000, interval: 1 });
+
+/**A value the test gives when it wants, for a state loading it*/
+function loaded<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => (resolve = r));
+  return { promise, resolve };
+}
+
 describe("Collected states", function () {
   //##################################################################################################################################################
   //      _____   ____   _____
@@ -32,7 +43,7 @@ describe("Collected states", function () {
   //     |  _  /| |  | |\___ \
   //     | | \ \| |__| |____) |
   //     |_|  \_\\____/|_____/
-  describe("ROS", { timeout: 100 }, function () {
+  describe("ROS", function () {
     it("ok", async function () {
       const init = st.c.ros((val) => val[0], st.ok(1));
       expect(init).instanceOf(st.c.class);
@@ -97,7 +108,7 @@ describe("Collected states", function () {
   //     |  _  /|  __|  \___ \
   //     | | \ \| |____ ____) |
   //     |_|  \_\______|_____/
-  describe("RES", { timeout: 100 }, function () {
+  describe("RES", function () {
     it("ok", async function () {
       const init = st.c.res((val) => val[0], st.from(1));
       expect(init).instanceOf(st.c.class);
@@ -163,7 +174,7 @@ describe("Collected states", function () {
   //     |  _  /| |  | |/ /\ \
   //     | | \ \| |__| / ____ \
   //     |_|  \_\\____/_/    \_\
-  describe("ROA", { timeout: 200 }, function () {
+  describe("ROA", function () {
     it("ok", async function () {
       const init = st.c.roa(
         (val) => val[0],
@@ -219,7 +230,7 @@ describe("Collected states", function () {
   //     |  _  /|  __|   / /\ \
   //     | | \ \| |____ / ____ \
   //     |_|  \_\______/_/    \_\
-  describe("REA", { timeout: 200 }, function () {
+  describe("REA", function () {
     it("ok", async function () {
       const init = st.c.rea(
         (val) => val[0],
@@ -284,7 +295,7 @@ describe("Collected states", function () {
   //     |____/ \__,_|\__\___|_| |_|_|_| |_|\__, |
   //                                          __/ |
   //                                         |___/
-  describe("Batching", { timeout: 200 }, function () {
+  describe("Batching", function () {
     it("ROS: transform called once when multiple states set in same event loop cycle", async function () {
       let transform_call_count = 0;
       const stat1 = st.ok(0.25);
@@ -497,8 +508,11 @@ describe("Collected states", function () {
     });
 
     it("ROA: waits for staggered initial states and uses updates received before initialization", async function () {
-      const fast = st.roa(() => sleep(1, ok(1)));
-      const slow = st.roa(() => sleep(30, ok(2)));
+      //Loaded when the test lets them, so the order does not depend on timers
+      const fast_load = loaded<ResultOk<number>>();
+      const slow_load = loaded<ResultOk<number>>();
+      const fast = st.roa(() => fast_load.promise);
+      const slow = st.roa(() => slow_load.promise);
       const state = st.c.roa(
         (values) => ok(values[0].value + values[1].value),
         fast,
@@ -507,19 +521,26 @@ describe("Collected states", function () {
       const updates: ResultOk<number>[] = [];
       const sub = state.sub((value) => updates.push(value), true);
 
-      await sleep(10);
+      fast_load.resolve(ok(1));
+      await sleep(0);
+      //The slow state has not loaded, nothing is told
       expect(updates).toEqual([]);
 
       fast.set_ok(10);
-      await sleep(30);
-
+      slow_load.resolve(ok(2));
+      await told(() => expect(updates).toEqual([ok(12)]));
+      //Told once
+      await sleep(0);
       expect(updates).toEqual([ok(12)]);
       state.unsub(sub);
     });
 
     it("REA: waits for staggered initial states and uses updates received before initialization", async function () {
-      const fast = st.rea(() => sleep(1, ok(1)));
-      const slow = st.rea(() => sleep(30, ok(2)));
+      //Loaded when the test lets them, so the order does not depend on timers
+      const fast_load = loaded<StateResult<number>>();
+      const slow_load = loaded<StateResult<number>>();
+      const fast = st.rea(() => fast_load.promise);
+      const slow = st.rea(() => slow_load.promise);
       const state = st.c.rea(
         (values) => {
           if (values[0].err) return values[0];
@@ -532,18 +553,22 @@ describe("Collected states", function () {
       const updates: StateResult<number>[] = [];
       const sub = state.sub((value) => updates.push(value), true);
 
-      await sleep(10);
+      fast_load.resolve(ok(1));
+      await sleep(0);
+      //The slow state has not loaded, nothing is told
       expect(updates).toEqual([]);
 
       fast.set(ok(10));
-      await sleep(30);
-
+      slow_load.resolve(ok(2));
+      await told(() => expect(updates).toEqual([ok(12)]));
+      //Told once
+      await sleep(0);
       expect(updates).toEqual([ok(12)]);
       state.unsub(sub);
     });
   });
 
-  describe("Edge cases", { timeout: 200 }, function () {
+  describe("Edge cases", function () {
     it("ROS: keeps recomputing after the getter throws once", async function () {
       const source = st.ok_w(1);
       const state = st.c.ros((values) => {
@@ -583,7 +608,6 @@ describe("Collected states", function () {
 
   describe(
     "Changing states and getter while subscribed",
-    { timeout: 200 },
     function () {
       const sum = (values: readonly StateResult<number>[]) => {
         let total = 0;
@@ -598,21 +622,21 @@ describe("Collected states", function () {
         const state = st.c.res<number, StateRES<number>[]>(sum, st.ok(1));
         const updates: StateResult<number>[] = [];
         state.sub((value) => updates.push(value), true);
-        await sleep(5);
+        //The first value is told
+        await told(() => expect(updates).toEqual([ok(1)]));
         state.set_states(st.ok(1), st.ok(5));
-        await sleep(5);
-        expect(updates).toEqual([ok(1), ok(6)]);
+        await told(() => expect(updates).toEqual([ok(1), ok(6)]));
       });
 
       it("REA: set_states tells subscribers the new value", async function () {
         const state = st.c.rea<number, StateRES<number>[]>(sum, st.ok(1));
         const updates: StateResult<number>[] = [];
         state.sub((value) => updates.push(value), true);
-        await sleep(5);
+        //The first value is told
+        await told(() => expect(updates).toEqual([ok(1)]));
         state.set_states(st.ok(1), st.ok(5));
-        await sleep(5);
+        await told(() => expect(updates).toEqual([ok(1), ok(6)]));
         expect(await state.read()).toEqual(ok(6));
-        expect(updates).toEqual([ok(1), ok(6)]);
       });
 
       it("ROA: set_states tells subscribers the new value", async function () {
@@ -626,28 +650,30 @@ describe("Collected states", function () {
         );
         const updates: StateResult<number>[] = [];
         state.sub((value) => updates.push(value), true);
-        await sleep(5);
+        //The first value is told
+        await told(() => expect(updates).toEqual([ok(1)]));
         state.set_states(st.ok(1), st.ok(5));
-        await sleep(5);
+        await told(() => expect(updates).toEqual([ok(1), ok(6)]));
         expect(await state.read()).toEqual(ok(6));
-        expect(updates).toEqual([ok(1), ok(6)]);
       });
 
       it("REA: set_getter tells subscribers the new value", async function () {
         const state = st.c.rea<number, StateRES<number>[]>(sum, st.ok(1));
         const updates: StateResult<number>[] = [];
         state.sub((value) => updates.push(value), true);
-        await sleep(5);
+        //The first value is told
+        await told(() => expect(updates).toEqual([ok(1)]));
         state.set_getter(() => ok(10));
-        await sleep(5);
+        await told(() => expect(updates).toEqual([ok(1), ok(10)]));
         expect(await state.read()).toEqual(ok(10));
-        expect(updates).toEqual([ok(1), ok(10)]);
       });
 
       it("REA: the first subscriber gets the first value once", async function () {
         const state = st.c.rea<number, StateRES<number>[]>(sum, st.ok(1));
         const updates: StateResult<number>[] = [];
         state.sub((value) => updates.push(value), true);
+        await told(() => expect(updates).toEqual([ok(1)]));
+        //And not again
         await sleep(5);
         expect(updates).toEqual([ok(1)]);
       });

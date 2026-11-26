@@ -1,6 +1,6 @@
 import { sleep } from "#common";
 import { err, NiceError, ok, ResultOk } from "#result";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import type {
   StateResult as SR,
   StateREA,
@@ -73,7 +73,7 @@ export type TestStateWrite = () =>
 //      ____) | |__| | |_) |____) | |____| | \ \ _| |_| |_) | |____
 //     |_____/ \____/|____/|_____/ \_____|_|  \_\_____|____/|______|
 /**Tests different cases of subscribing and unsubscribing to a state
- * @param wait Time to wait after subscribing first time for async states
+ * @param wait the longest time the state may take to tell its subscribers, async states take some
  */
 export async function test_state_sub(
   state_maker: TestStateAll,
@@ -81,6 +81,9 @@ export async function test_state_sub(
 ): Promise<void> {
   const made = state_maker();
   const { state, set } = made;
+  //Waits for the subscribers to have been told, until the time the state may take and a margin, timers fire late on a busy machine
+  const told = (check: () => void) =>
+    vi.waitFor(check, { timeout: wait + 1000, interval: 1 });
   const warn_backup = console.error;
   console.error = () => {
     count += 100000000;
@@ -92,8 +95,7 @@ export async function test_state_sub(
   expect(state.in_use()).equal(state);
   expect(state.has(sub1)).equal(state);
   expect(state.amount()).equal(1);
-  await sleep(wait ?? 1);
-  expect(count).equal(1);
+  await told(() => expect(count).equal(1));
   const sub2 = state.sub(() => {
     count += 10;
   });
@@ -102,8 +104,7 @@ export async function test_state_sub(
   expect(state.amount()).equal(2);
   expect(count).equal(1);
   set(ok(8));
-  await sleep(1);
-  expect(count).equal(12);
+  await told(() => expect(count).equal(12));
   const sub3 = state.sub(() => {
     count += 100;
     throw new Error("Gaurded against crash");
@@ -112,16 +113,14 @@ export async function test_state_sub(
   expect(state.has(sub3)).equal(state);
   expect(state.amount()).equal(3);
   set(ok(12));
-  await sleep(1);
-  expect(count).equal(100000123);
+  await told(() => expect(count).equal(100000123));
   state.unsub(sub1);
   state.unsub(sub2);
   expect(state.in_use()).equal(state);
   expect(state.has(sub3)).equal(state);
   expect(state.amount()).equal(1);
   set(ok(13));
-  await sleep(1);
-  expect(count).equal(200000223);
+  await told(() => expect(count).equal(200000223));
   state.unsub(sub3);
   expect(state.in_use()).equal(undefined);
   expect(state.amount()).equal(0);
@@ -132,9 +131,8 @@ export async function test_state_sub(
     });
     set(ok(15));
   });
-  await sleep(1);
   expect(val).toEqual(ok(15));
-  expect(count).equal(200001223);
+  await told(() => expect(count).equal(200001223));
   state.unsub(sub4);
   if (!made.o) {
     const [sub5, val2] = await new Promise<[StateSub<any>, SR<number>]>((a) => {
@@ -144,9 +142,8 @@ export async function test_state_sub(
       });
       made.set(err(err_gen()));
     });
-    await sleep(1);
     expect(val2).toEqual(err(err_gen()));
-    expect(count).equal(200011223);
+    await told(() => expect(count).equal(200011223));
     state.unsub(sub5);
   }
 
@@ -159,6 +156,10 @@ export async function test_state_sub(
 //     |  _  /|  __|   / /\ \ | |  | |
 //     | | \ \| |____ / ____ \| |__| |
 //     |_|  \_\______/_/    \_\_____/
+/**Added to the time a read is waited for, timers fire late on a busy machine, like when all tests run at once
+ * The wait only catches a read that never resolves, so it does not need to be tight*/
+const TIMER_MARGIN = 200;
+
 /**Tests different cases of using read on a state
  * Expects initial value to be number 1
  * @param wait the longest time the state may take to give its value*/
@@ -168,14 +169,14 @@ export async function test_state_read(
 ): Promise<void> {
   it("reading then setting trice", async function () {
     const { state, set } = state_maker();
-    let read = await Promise.race([state.read(), sleep(wait)]);
+    let read = await Promise.race([state.read(), sleep(wait + TIMER_MARGIN)]);
     expect(read).instanceOf(ResultOk);
     expect(read).toEqual(ok(1));
     set(ok(5));
-    read = await Promise.race([state.read(), sleep(wait)]);
+    read = await Promise.race([state.read(), sleep(wait + TIMER_MARGIN)]);
     expect(read).toEqual(ok(5));
     set(ok(9999999999));
-    read = await Promise.race([state.read(), sleep(wait)]);
+    read = await Promise.race([state.read(), sleep(wait + TIMER_MARGIN)]);
     expect(read).toEqual(ok(9999999999));
   });
   it("chaining then on the read", async function () {
@@ -187,7 +188,7 @@ export async function test_state_read(
         return 8;
       })
       .then((val) => val + 4);
-    expect(await Promise.race([chained, sleep(wait)])).equal(12);
+    expect(await Promise.race([chained, sleep(wait + TIMER_MARGIN)])).equal(12);
   });
   it("a sync state calls the function of then at once", async function () {
     const { state, s } = state_maker();

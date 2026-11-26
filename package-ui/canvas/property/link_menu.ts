@@ -9,7 +9,7 @@ import {
   type LinearTransform,
   type LinkTransform,
   type OptionState,
-} from "./link";
+} from "../link";
 import { property_value, type WidgetProperty } from "./properties";
 
 /**How the link menu edits a kind of transform, add one for every kind of transform*/

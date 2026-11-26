@@ -4,11 +4,11 @@ import state, { type StateOrVal, type StateROSW } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   canvas,
-  type CanvasPage,
-  type CanvasWidget,
+  type CanvasPageData,
   type WidgetBaseOptions,
   type WidgetDefinition,
 } from "..";
+import type { CanvasWidgetData } from "../data";
 
 describe("Canvas module", () => {
   afterEach(() => {
@@ -25,7 +25,7 @@ describe("Canvas module", () => {
     const empty = canvas.viewport();
     expect(empty.localName).toBe("canvas-viewport");
     expect(empty.querySelector("canvas-page")).toBeNull();
-    const viewport = canvas.viewport({ page: {}, edit: true });
+    const viewport = canvas.viewport({ page: canvas.page(), edit: true });
     expect(viewport.querySelector("canvas-page")).not.toBeNull();
     expect(viewport.hasAttribute("edit")).toBe(true);
   });
@@ -68,7 +68,7 @@ describe("Canvas module", () => {
         },
         size: { width: 30, height: 40 },
       });
-      const values = (widget: CanvasWidget) =>
+      const values = (widget: CanvasWidgetData) =>
         Object.fromEntries(
           ["x", "y", "width", "height", "rotation", "opacity", "visible"].map(
             (key) => {
@@ -100,7 +100,9 @@ describe("Canvas module", () => {
         widgets: [{ widget: definition.path, options: { x: 5 } }],
       });
       if (!loaded.some) throw new Error("not loaded");
-      const [widget] = (loaded.value.widgets as StateROSW<CanvasWidget[]>).ok();
+      const [widget] = (
+        loaded.value.widgets as StateROSW<CanvasWidgetData[]>
+      ).ok();
       expect(values(widget)).toEqual({ ...defaults, x: 5 });
     } finally {
       group.remove();
@@ -112,23 +114,24 @@ describe("Canvas module", () => {
     const key = "@test/canvas_page/page";
     try {
       const x = state.ok_w(10);
-      const page = state.ok_w<CanvasPage>({
+      const page = state.ok_w<CanvasPageData>({
         width: 800,
-        widgets: state.ok_w<CanvasWidget[]>([
-          {
-            widget: "/widgets/basic/box",
-            options: { x, width: state.ok_w(20) },
-          },
+        widgets: state.ok_w<CanvasWidgetData[]>([
+          { widget: "/widgets/basic/box", options: { x, width: state.ok_w(20) } },
         ]),
       });
       group.register_debounced("page", "Page", "", page, 5);
       x.set_ok(30);
       await new Promise((r) => setTimeout(r, 30));
-      const loaded = group.get("page", {}, canvas.page_from_json).value;
+      const loaded = group.get(
+        "page",
+        canvas.page(),
+        canvas.page_from_json,
+      ).value;
       expect(await (loaded.width as StateROSW<number>).read()).toEqual(
         expect.objectContaining({ value: 800 }),
       );
-      const widgets = (loaded.widgets as StateROSW<CanvasWidget[]>).ok();
+      const widgets = (loaded.widgets as StateROSW<CanvasWidgetData[]>).ok();
       expect(widgets[0].widget).toBe("/widgets/basic/box");
       const loaded_x = widgets[0].options.x as StateROSW<number>;
       expect(loaded_x.ok()).toBe(30);
@@ -139,7 +142,7 @@ describe("Canvas module", () => {
   });
 
   it("loads the id and background of a page, an empty id and white when not saved", () => {
-    const value = (page: CanvasPage, key: "id" | "background") =>
+    const value = (page: CanvasPageData, key: "id" | "background") =>
       (page[key] as StateROSW<string>).ok();
     const saved = canvas.page_from_json({ id: "Main", background: "#123456" });
     if (!saved.some) throw new Error("not loaded");

@@ -35,7 +35,7 @@ export type ListSubRows<R> = () => StateOrVal<R[]>;
 const OPENED = Symbol("opened");
 
 export interface ListRowOptions<R, T extends {}, S extends boolean> {
-  /**Whether the row is open, a plain value is where the row starts when it is not open already
+  /**Whether the row is open, a plain value is where the row starts, later data does not open or close it
    * A writable state is written when the user opens or closes the row, the row opens and closes when the state changes
    * A read only state is only followed, the user can not open or close the row, and it has no opener arrow
    * The row opens to the state whenever it can be opened, an error of the state closes it */
@@ -89,6 +89,8 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   #error?: ListRowsError<A>;
   /**Opens the row once it is openable, for a plain opened true given while it is not openable yet */
   #open_pending = false;
+  /**Whether the row has had valid data, a plain opened only applies to the first */
+  #started = false;
   /**Opened state the row follows, written when the user opens or closes the row */
   #opened?: State<boolean>;
   /**Last value of the opened state, the row opens to it whenever it becomes openable */
@@ -319,7 +321,9 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     //Kept for the same state, a new one is attached after openable, so it opens the row by the openable of the new data
     const new_state = opened_state !== this.#opened;
     if (new_state) this.#opened_detach();
-    const start = !opened_state && !was_open && Boolean(opened);
+    //A plain opened is where the row starts, later data does not open or close it, the row keeps the user's opening and closing
+    const start = !opened_state && !this.#started && Boolean(opened);
+    this.#started = true;
     if (state.is.state(row_options.openable)) {
       //Opening waits for the first value of the state, which is immediate when connected
       this.#open_pending = start;

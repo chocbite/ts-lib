@@ -13,32 +13,42 @@ import state, {
   type StateOrVal,
   type StateROS,
 } from "@chocbite/ts-lib/state";
-import type { CanvasPage, CanvasWidget } from "./data";
-import { GroupRotation } from "./group";
+import {
+  is_group,
+  path_of,
+  type CanvasGroup,
+  type CanvasPage,
+  type CanvasWidget,
+  type CanvasWidgetData,
+  widget_kind,
+} from "./data";
+import {
+  CanvasTransformer,
+  is_page,
+  selected_widgets,
+  selection_of,
+  selection_rotation,
+  type CanvasSelection,
+} from "./selection";
 import { select_widget } from "./select";
 import {
   content_fit,
+  GroupWidget,
   group_key,
   group_lines,
-  path_to,
-  is_group,
 } from "./group_widget";
-import { refuse_taken_ids, widget_id, widget_name } from "./ids";
+import { widget_id } from "./ids";
 import { material_door_open_rounded } from "#icons";
 import { clipboard_events, edit_lines, paste_line } from "./clipboard";
+import { geometry_now, geometry_states } from "./geometry";
+import { option_now, value_now, widgets_now } from "./now";
 import { delete_line, order_lines, remove_widgets } from "./order";
 import { page_element, type PageElement } from "./page";
-import { WIDGET_ELEMENTS_EVENT, WidgetSlot } from "./slot";
+import { WidgetSlot } from "./slot";
 import "./shared";
 import { Transformer } from "./transformer";
 import "./viewport.scss";
-import {
-  WIDGET_GEOMETRY,
-  WIDGET_TRANSFORM_EVENT,
-  WidgetBase,
-  scrolls,
-  type WidgetGeometry,
-} from "./widget";
+import { WidgetBase, scrolls, type WidgetGeometry } from "./widget";
 
 /**Inputs of the viewport*/
 const VIEWPORT = {
@@ -46,12 +56,12 @@ const VIEWPORT = {
   page: input_key<StateOrVal<CanvasPage | undefined>>(),
   /**Enables zooming, panning and changing widgets, leaving it resets the view and clears the selection*/
   edit: input_key<StateOrVal<boolean>>(),
-  /**Selected widgets of the page, the transformer is shown on them in edit mode
+  /**Selected widgets of the page, or the page, the transformer is shown on the widgets in edit mode, selecting the page goes up to it
    * Pressing a widget selects only it, ctrl or shift toggles it, pressing the page clears the selection and dragging on it selects
    * the widgets inside the rectangle: a writable state is written, with array instructions, so viewports, outlines and a properties editor
    * can share the selection, an initial value or no value is kept by the viewport, a read only state can not be changed by the user
    * The viewport only changes the selection when the user presses, never on its own*/
-  selected: input_key<StateOrVal<readonly CanvasWidget[]>>(),
+  selected: input_key<StateOrVal<CanvasSelection>>(),
 };
 export type CanvasViewportOptions = BaseOptions & InputOptions<typeof VIEWPORT>;
 
@@ -69,42 +79,6 @@ const WHEEL_LINE_HEIGHT = 16;
 const WHEEL_SLOW = 0.1;
 /**Pixels a right press can move and still open the menu instead of panning */
 const MENU_SLOP = 4;
-
-/**The value of a state now, undefined while it has none*/
-const widgets_value = (value: StateROS<unknown> | State<unknown>): unknown => {
-  const now = value.rsync ? value.get() : undefined;
-  return now?.ok ? now.value : undefined;
-};
-
-/**The widgets of a page now*/
-const widgets_now = (page: CanvasPage | undefined): readonly CanvasWidget[] => {
-  const widgets = page?.widgets;
-  if (!state.is.state(widgets)) return widgets ?? [];
-  const now = widgets_value(widgets);
-  return Array.isArray(now) ? (now as CanvasWidget[]) : [];
-};
-
-/**The content of a group as a page, its id, content size, background and widgets,
- * the id refuses an id another widget of the level of the group has
- * @param level the widgets of the level of the group now*/
-function group_page(
-  group: CanvasWidget,
-  level: () => readonly CanvasWidget[],
-): CanvasPage {
-  const options = group.options as Record<string, unknown>;
-  const id = options.id as State<unknown, any, any> | undefined;
-  return {
-    id: (id
-      ? refuse_taken_ids(group, id, level)
-      : undefined) as CanvasPage["id"],
-    width: options.content_width as CanvasPage["width"],
-    height: options.content_height as CanvasPage["height"],
-    //Transparent when not given, as the group shows it
-    background: (options.background ??
-      "transparent") as CanvasPage["background"],
-    widgets: options.widgets as CanvasPage["widgets"],
-  };
-}
 
 /**The corners of the outline of a widget, turned around its center*/
 function outline_corners({
@@ -163,14 +137,16 @@ class Viewport extends Base {
 
   #background: HTMLDivElement = this.appendChild(document.createElement("div"));
   #container: HTMLDivElement = this.appendChild(document.createElement("div"));
-  #transformer: Transformer = this.appendChild(new Transformer());
+  #transformer: Transformer = this.appendChild(
+    new Transformer((widget) => this.#page?.slot_of(widget)?.element),
+  );
   #page: PageElement | undefined;
   /**The page data shown*/
   #page_data: CanvasPage | undefined;
   /**The page given, the groups of the edit path are in it*/
   #root: CanvasPage | undefined;
   /**The groups entered, the viewport shows the content of the last, the page itself without any*/
-  #path: CanvasWidget[] = [];
+  #path: CanvasGroup[] = [];
   #path_bar: HTMLDivElement | undefined;
   /**The page element of the page given, behind the level edited while editing inside a group*/
   #root_element: PageElement | undefined;
@@ -196,11 +172,15 @@ class Viewport extends Base {
           );
     return svg;
   })();
-  /**The group elements of the path in the page, the level follows them, the last is hidden while edited*/
+  /**The group elements of the path in the page, as far as they are made, the last is hidden while edited
+   * The level scrolls with the groups of the path that scroll*/
   #chain: WidgetBase[] = [];
+  /**Symbols of the element states of the slots of the groups of the path, the chain is made again when a slot makes a new element*/
+  #chain_followed: symbol[] = [];
   /**Maps the level edited to viewport pixels, the view, and for the content of a group the groups of the path*/
   #level_matrix = new DOMMatrix();
-  /**Symbols of the widgets states of the levels of the path, followed to go up when a group is removed*/
+  /**Symbols of the states of the path followed, the widgets of its levels, to go up when a group is removed,
+   * and how the groups of the path place their content*/
   #path_followed: symbol[] = [];
   #shown = state.ok_w<CanvasPage | undefined>(undefined);
   /**The page the viewport shows now, the page given, or the content of the group it edits inside,
@@ -210,6 +190,9 @@ class Viewport extends Base {
   }
   /**Where a right press started, it opens the menu when released without moving */
   #menu_press: { id: number; x: number; y: number } | undefined;
+  /**The selection as given*/
+  #selection: CanvasSelection;
+  /**The widgets of the selection, everything selecting works on*/
   #selected: readonly CanvasWidget[] = [];
   /**The selection rectangle being dragged, from where it started in client pixels, ctrl or shift adds to the selection*/
   #marquee:
@@ -241,10 +224,6 @@ class Viewport extends Base {
     super();
     this.#background.className = "checkerboard";
     this.#container.className = "container";
-    //The transformer moves to the element the slot of the selected widget shows now
-    this.#container.addEventListener(WIDGET_ELEMENTS_EVENT, () =>
-      this.#attach(),
-    );
     //Ctrl+x, ctrl+c and ctrl+v of the focused viewport in edit mode, with the clipboard of the system
     clipboard_events(
       this,
@@ -282,13 +261,8 @@ class Viewport extends Base {
       this.#set_edit(edit.ok && edit.value);
     });
     this.set_input(VIEWPORT.selected, options.selected, (selected) => {
-      this.#selected = selected.ok ? selected.value : [];
-      //Shared by everything given the same selection state, kept while the same widgets are selected
-      const group = GroupRotation.of(
-        this.input_state(VIEWPORT.selected) ?? this,
-      );
-      group.select(this.#selected);
-      this.#transformer.group = group;
+      this.#selection = selected.ok ? selected.value : undefined;
+      this.#selected = selected_widgets(this.#selection);
       this.#attach();
       this.#follow_selection();
     });
@@ -298,36 +272,19 @@ class Viewport extends Base {
   /**Shows the level of the edit path, the content of the last group entered, or the page itself*/
   #show_level() {
     const group = this.#path[this.#path.length - 1];
-    const parent = this.#level_page(this.#path.length - 1);
     this.#level?.remove();
     this.#level = undefined;
     this.#area_back.remove();
     this.#area_line.remove();
-    for (const element of this.#chain) {
-      element.removeEventListener(WIDGET_TRANSFORM_EVENT, this.#on_chain);
-      element.removeEventListener("scroll", this.#on_chain);
-      element.style.removeProperty("visibility");
-    }
-    this.#chain = [];
     let page: CanvasPage | undefined;
     if (!group) {
       page = this.#root;
       this.#page = this.#root_element;
       this.#container.classList.remove("behind");
     } else {
-      page = group_page(group, () => widgets_now(parent));
+      page = group.content;
       //The page is shown grayed behind, the group edited hidden in it, its content is shown on top where the group shows it
       this.#container.classList.add("behind");
-      this.#chain = this.#chain_elements();
-      //Moved or scrolled, the content edited follows the group
-      for (const element of this.#chain) {
-        element.addEventListener(WIDGET_TRANSFORM_EVENT, this.#on_chain);
-        element.addEventListener("scroll", this.#on_chain);
-      }
-      this.#chain[this.#path.length - 1]?.style.setProperty(
-        "visibility",
-        "hidden",
-      );
       const level = document.createElement("div");
       level.className = "level";
       this.insertBefore(level, this.#transformer);
@@ -337,6 +294,7 @@ class Viewport extends Base {
       this.#level = level;
     }
     this.#page_data = page;
+    this.#follow_chain();
     this.#follow_path();
     if (this.#shown.ok() !== page) this.#shown.set_ok(page);
     this.#render_path();
@@ -344,20 +302,47 @@ class Viewport extends Base {
     this.#update_view();
   }
 
-  /**The group elements of the path in the page element, as far as they are made*/
-  #chain_elements(): WidgetBase[] {
-    const elements: WidgetBase[] = [];
-    let page: PageElement | null | undefined = this.#root_element;
-    for (const group of this.#path) {
-      const element: WidgetBase | undefined = page?.slot_of(group)?.element;
-      if (!element) break;
-      elements.push(element);
-      page = element.querySelector<PageElement>(":scope > canvas-page");
+  /**Finds the group elements of the path in the page element, as far as they are made, hides the last while it is edited,
+   * and follows the slots of the groups, so the chain is found again when a slot makes a new element*/
+  #follow_chain() {
+    for (const symbol of this.#chain_followed)
+      this.detach_state_from_symbol(symbol);
+    this.#chain_followed = [];
+    for (const element of this.#chain) {
+      element.removeEventListener("scroll", this.#on_chain);
+      element.style.removeProperty("visibility");
     }
-    return elements;
+    const chain: WidgetBase[] = [];
+    const slots: WidgetSlot[] = [];
+    let page: PageElement | undefined = this.#root_element;
+    for (const group of this.#path) {
+      const slot = page?.slot_of(group);
+      if (!slot) break;
+      slots.push(slot);
+      const element = slot.element;
+      if (!element) break;
+      chain.push(element);
+      if (!(element instanceof GroupWidget)) break;
+      page = element.content_page;
+    }
+    this.#chain = chain;
+    //Scrolled, the content edited follows the group
+    for (const element of chain)
+      element.addEventListener("scroll", this.#on_chain);
+    if (chain.length === this.#path.length)
+      chain.at(-1)?.style.setProperty("visibility", "hidden");
+    slots.forEach((slot, i) => {
+      const symbol = Symbol("chain");
+      this.#chain_followed.push(symbol);
+      this.attach_state_to_symbol(symbol, slot.element_state, (element) => {
+        if (element.value === chain[i]) return;
+        this.#follow_chain();
+        this.#update_view();
+      });
+    });
   }
 
-  /**A group of the path moved, the level follows it*/
+  /**A group of the path scrolled, the level follows it*/
   #on_chain = () => this.#update_view();
 
   /**Maps the content of the last group of the path to the page, through every group of the path, like the groups show it:
@@ -369,30 +354,25 @@ class Viewport extends Base {
     let matrix = new DOMMatrix();
     this.#path.forEach((group, i) => {
       const element = this.#chain[i];
-      const options = group.options as Record<
-        string,
-        StateROS<unknown> | undefined
-      >;
-      const number = (key: string) => {
-        const value = options[key] ? widgets_value(options[key]) : undefined;
-        return typeof value === "number" ? value : 0;
+      const number = (value: unknown) =>
+        typeof value === "number" ? value : 0;
+      const frame = geometry_now(group) ?? {
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        rotation: 0,
       };
-      const frame = element
-        ? element[WIDGET_GEOMETRY]
-        : {
-            x: number("x"),
-            y: number("y"),
-            width: number("width"),
-            height: number("height"),
-            rotation: number("rotation"),
-          };
-      const display = options.display
-        ? widgets_value(options.display)
+      const display = group.option("display")
+        ? option_now(group, "display")
         : "scale";
       //Stretched content is edited fitted evenly, a stretch would slant turned widgets, which the transformer can not follow
       const fit = content_fit(
         display === "stretch" ? "scale" : display,
-        { width: number("content_width"), height: number("content_height") },
+        {
+          width: number(value_now(group.content.width)),
+          height: number(value_now(group.content.height)),
+        },
         frame,
       );
       matrix = matrix
@@ -430,56 +410,45 @@ class Viewport extends Base {
   /**The page of a level of the path, 0 is the page given, a level n is the content of the group n - 1 of the path*/
   #level_page(depth: number): CanvasPage | undefined {
     if (depth <= 0) return this.#root;
-    const group = this.#path[depth - 1];
-    return group
-      ? {
-          widgets: (group.options as Record<string, unknown>)
-            .widgets as CanvasPage["widgets"],
-        }
-      : undefined;
+    return this.#path[depth - 1]?.content;
   }
 
-  /**Follows the widgets of every level of the path, a group of the path that is no longer on its level cuts the path there*/
+  /**Follows the path: the widgets of the level shown, for the transformer, the widgets of every level of the path,
+   * a group of the path that is no longer on its level cuts the path there, the ids shown in the path bar,
+   * and how the groups of the path place their content, so the content edited is placed again when they change elsewhere*/
   #follow_path() {
     for (const symbol of this.#path_followed)
       this.detach_state_from_symbol(symbol);
     this.#path_followed = [];
-    //The path shows the ids of the page and the groups as they change
-    const ids = [
-      this.#root?.id,
-      ...this.#path.map(
-        (group) => (group.options as Record<string, unknown>).id,
-      ),
-    ];
-    if (this.#path.length)
-      for (const id of ids) {
-        if (!state.is.state(id)) continue;
-        const symbol = Symbol("id");
-        this.#path_followed.push(symbol);
-        this.attach_state_to_symbol(symbol, id, () => this.#render_path());
-      }
-    this.#path.forEach((group, depth) => {
-      //How the group places its content, changed elsewhere the content edited is placed again
-      const options = group.options as Record<string, unknown>;
-      for (const key of ["content_width", "content_height", "display"]) {
-        const option = options[key];
-        if (!state.is.state(option)) continue;
-        const symbol = Symbol(key);
-        this.#path_followed.push(symbol);
-        this.attach_state_to_symbol(symbol, option, () => this.#update_view());
-      }
-      const widgets = this.#level_page(depth)?.widgets;
-      if (!state.is.state(widgets)) return;
-      const symbol = Symbol("level");
+    const follow = (followed: State<unknown, any, any>, func: () => void) => {
+      const symbol = Symbol("path");
       this.#path_followed.push(symbol);
-      this.attach_state_to_symbol(symbol, widgets, () => this.#check_path());
+      this.attach_state_to_symbol(symbol, followed, func);
+    };
+    //Selected widgets removed from the level shown are left out of the transformer
+    if (this.#page_data) follow(this.#page_data.widgets, () => this.#attach());
+    //The path shows the ids of the page and the groups as they change
+    if (this.#path.length && this.#root) {
+      follow(this.#root.id, () => this.#render_path());
+      for (const group of this.#path)
+        follow(group.content.id, () => this.#render_path());
+    }
+    this.#path.forEach((group, depth) => {
+      for (const geometry of geometry_states(group))
+        follow(geometry, () => this.#update_view());
+      follow(group.content.width, () => this.#update_view());
+      follow(group.content.height, () => this.#update_view());
+      const display = group.option("display");
+      if (display) follow(display, () => this.#update_view());
+      const level = this.#level_page(depth);
+      if (level) follow(level.widgets, () => this.#check_path());
     });
   }
 
   /**Cuts the path at the first group that is no longer on its level, the viewport then shows the deepest level left*/
   #check_path() {
     const cut = this.#path.findIndex(
-      (group, depth) => !widgets_now(this.#level_page(depth)).includes(group),
+      (group, depth) => !this.#level_page(depth)?.widgets_now().includes(group),
     );
     if (cut === -1) return;
     this.#path = this.#path.slice(0, cut);
@@ -488,17 +457,24 @@ class Viewport extends Base {
 
   /**Goes to the level of the selected widgets when they are not on the level shown, the outline selects at any level*/
   #follow_selection() {
+    if (!this.#edit) return;
+    //The page selected, its own level is shown
+    if (is_page(this.#selection) && this.#selection === this.#root) {
+      if (!this.#path.length) return;
+      this.#path = [];
+      return this.#show_level();
+    }
     const first = this.#selected[0];
-    if (!this.#edit || !first) return;
+    if (!first) return;
     if (widgets_now(this.#page_data).includes(first)) return;
-    const path = path_to(widgets_now(this.#root), first);
+    const path = this.#root ? path_of(this.#root, first) : undefined;
     if (!path) return;
     this.#path = path;
     this.#show_level();
   }
 
   /**Edits inside the group, the selection is cleared, as it is of the level above*/
-  #enter(group: CanvasWidget) {
+  #enter(group: CanvasGroup) {
     this.#select([]);
     this.#path = [...this.#path, group];
     this.#show_level();
@@ -528,10 +504,7 @@ class Viewport extends Base {
     exit.onclick = () => this.#go_to(this.#path.length - 1);
     //The bar is not part of the page, presses on it select nothing
     bar.addEventListener("pointerdown", (e) => e.stopPropagation());
-    const root_id = this.#root?.id;
-    const root_name = state.is.state(root_id)
-      ? widgets_value(root_id)
-      : root_id;
+    const root_name = value_now(this.#root?.id);
     const names = [
       typeof root_name === "string" && root_name ? root_name : "Page",
       ...this.#path.map((group) => widget_id(group) || "Group"),
@@ -550,48 +523,45 @@ class Viewport extends Base {
     this.#path_bar = bar;
   }
 
-  /**Selects like the user does, a writable state is written, an initial value or no value is kept, a read only state is left
-   * @param next the selection after the change
-   * @param write what is written to a state, an array instruction for a small change, next when undefined*/
-  #select(next: readonly CanvasWidget[], write?: CanvasWidget[]) {
+  /**Selects the widgets like the user does, see selection_of: a writable state is written,
+   * an initial value or no value is kept, a read only state is left*/
+  #select(widgets: readonly CanvasWidget[]) {
+    const next = selection_of(widgets);
     const given = this.input_state(VIEWPORT.selected);
     if (given === undefined) {
-      this.#selected = next;
+      this.#selection = next;
+      this.#selected = selected_widgets(next);
       this.#attach();
-    } else if (given.writable) void given.write?.(write ?? [...next]);
+      return;
+    }
+    if (given.writable) void given.write?.(next);
   }
 
   /**Selects only the widget, none clears the selection*/
   #select_only(widget: CanvasWidget | undefined) {
-    const next = widget ? [widget] : [];
-    if (
-      next.length === this.#selected.length &&
-      next.every((w, i) => w === this.#selected[i])
-    )
-      return;
-    this.#select(next);
+    if (this.#selection === widget) return;
+    this.#select(widget ? [widget] : []);
   }
 
   /**Adds the widget to the selection, or takes it out when it is selected*/
   #toggle(widget: CanvasWidget) {
-    if (this.#selected.includes(widget))
-      this.#select(
-        this.#selected.filter((w) => w !== widget),
-        state.a.write.delete(widget),
-      );
-    else this.#select([...this.#selected, widget], state.a.write.push(widget));
+    this.#select(
+      this.#selected.includes(widget)
+        ? this.#selected.filter((w) => w !== widget)
+        : [...this.#selected, widget],
+    );
   }
 
-  /**Puts the transformer on the elements of the selected widgets on the page, hidden outside edit mode*/
+  /**Puts the transformer on the selected widgets when they are on the level shown, hidden outside edit mode*/
   #attach() {
-    const page = this.#page;
-    const elements: WidgetBase[] = [];
-    if (this.#edit && page)
-      for (const widget of this.#selected) {
-        const element = page.slot_of(widget)?.element;
-        if (element) elements.push(element);
-      }
-    this.#transformer.widgets = elements;
+    const level = widgets_now(this.#page_data);
+    //Widgets are selected as a widget or a CanvasTransformer
+    this.#transformer.selected =
+      this.#edit &&
+      this.#selected.length &&
+      this.#selected.every((widget) => level.includes(widget))
+        ? (this.#selection as CanvasWidget | CanvasTransformer)
+        : undefined;
   }
 
   /**Enables zooming, panning and changing widgets, leaving it resets the view to fit the page */
@@ -795,10 +765,10 @@ class Viewport extends Base {
     const top = Math.min(a.y, b.y);
     const bottom = Math.max(a.y, b.y);
     const inside: CanvasWidget[] = [];
-    for (const slot of page.children as HTMLCollectionOf<WidgetSlot>) {
-      const element = slot.element;
-      if (!element) continue;
-      const corners = outline_corners(element[WIDGET_GEOMETRY]).map((point) =>
+    for (const widget of new Set(page.widgets)) {
+      const geometry = geometry_now(widget);
+      if (!geometry) continue;
+      const corners = outline_corners(geometry).map((point) =>
         this.#level_matrix.transformPoint(point),
       );
       if (
@@ -810,12 +780,11 @@ class Viewport extends Base {
             point.y <= bottom,
         )
       )
-        inside.push(slot.widget);
+        inside.push(widget);
     }
     if (!marquee.add) return this.#select(inside);
     const added = inside.filter((widget) => !this.#selected.includes(widget));
-    if (added.length)
-      this.#select([...this.#selected, ...added], state.a.write.push(...added));
+    if (added.length) this.#select([...this.#selected, ...added]);
   }
 
   /**Returns center and distance of the first two touches */
@@ -964,13 +933,15 @@ class Viewport extends Base {
   /**Adds the widgets picked in the widget selector to the level edited, the first with its top left at the point, and selects them*/
   async #add_at(x: number, y: number) {
     const widgets = this.#page_data?.widgets;
-    if (!state.is.state(widgets) || !widgets.writable) return;
+    if (!widgets?.writable) return;
     const picked = await select_widget({ mode: "multi", at: { x, y } });
     if (!picked.length) return;
     const written = await widgets.write?.(
-      state.a.write.push<CanvasWidget>(...picked),
+      state.a.write.push<CanvasWidgetData>(...picked),
     );
-    if (written?.ok) this.#select(picked);
+    const page = this.#page_data;
+    if (written?.ok && page)
+      this.#select(picked.map((data) => page.widget_of(data)));
   }
 
   /**A double click on a group edits inside it, one where there is no widget of the level edited goes up one level
@@ -997,11 +968,9 @@ class Viewport extends Base {
     this.#update_view();
   }
 
-  /**The rotation of the box of the selection, a group made of it is turned by it*/
+  /**The rotation a group made of the selection is turned by*/
   #group_rotation(): number {
-    return GroupRotation.of(
-      this.input_state(VIEWPORT.selected) ?? this,
-    ).rotation.ok();
+    return selection_rotation(this.#selection);
   }
 
   /**Selects every widget of the page, in drawing order*/
@@ -1062,10 +1031,9 @@ class Viewport extends Base {
           paste_line(data, pasted, { x, y }, shown),
           ctm.line({
             text: "Add widget",
-            access:
-              state.is.state(data.widgets) && data.widgets.writable
-                ? AccessTypes.Write
-                : AccessTypes.Read,
+            access: data.widgets.writable
+              ? AccessTypes.Write
+              : AccessTypes.Read,
             on_click: () => void this.#add_at(x, y),
           }),
           ctm.divider(),
@@ -1082,6 +1050,7 @@ class Viewport extends Base {
         { element: this, x: client_x, y: client_y },
       );
     const targets = this.#selected.includes(widget) ? this.#selected : [widget];
+    const [only] = targets;
     if (targets !== this.#selected) this.#select_only(widget);
     ctm.summon(
       ctm.menu([
@@ -1096,11 +1065,11 @@ class Viewport extends Base {
         delete_line(data, targets, () => this.#deselect(targets)),
         ctm.divider(),
         ...group_lines(data, targets, this.#group_rotation(), pasted),
-        ...(targets.length === 1 && is_group(targets[0])
+        ...(targets.length === 1 && is_group(only)
           ? [
               ctm.line({
                 text: "Edit",
-                on_click: () => this.#enter(targets[0]),
+                on_click: () => this.#enter(only),
               }),
             ]
           : []),
@@ -1114,7 +1083,7 @@ class Viewport extends Base {
             Promise.resolve(
               page.widgets_at(x, y).map((covered) =>
                 ctm.line({
-                  text: widget_id(covered) || widget_name(covered),
+                  text: widget_id(covered) || widget_kind(covered.widget),
                   checked: this.#selected.includes(covered),
                   on_click: () => this.#select_only(covered),
                 }),

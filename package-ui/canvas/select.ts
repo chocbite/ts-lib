@@ -3,7 +3,7 @@ import type { DepotEntry } from "@chocbite/ts-lib/depot";
 import {
   new_widget,
   WIDGETS,
-  type CanvasWidget,
+  type CanvasWidgetData,
   type WidgetDefinition,
 } from "./data";
 
@@ -23,14 +23,14 @@ export interface CanvasSelectWidgetOptions {
  * add them to the widgets of a page to show them*/
 export async function select_widget(
   options: CanvasSelectWidgetOptions = {},
-): Promise<CanvasWidget[]> {
+): Promise<CanvasWidgetData[]> {
   const entries = await depot_ui.select(WIDGETS, {
     mode: options.mode,
     filter: options.filter,
     title: options.title ?? "Add widget",
   });
   const at = options.at ?? { x: 0, y: 0 };
-  const made: CanvasWidget[] = [];
+  const made: CanvasWidgetData[] = [];
   for (const [i, entry] of entries.entries()) {
     //A definition in error has no properties to make the widget from, it is left out
     const widget = await new_widget(entry, {

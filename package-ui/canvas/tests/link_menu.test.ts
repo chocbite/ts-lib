@@ -1,16 +1,16 @@
 import { define_element, input_key, type InputOptions } from "#base";
 import depot from "@chocbite/ts-lib/depot";
-import state, { type StateOrVal, type StateROSW } from "@chocbite/ts-lib/state";
+import state, {
+  type StateOrVal,
+  type StateROS,
+  type StateROSW,
+} from "@chocbite/ts-lib/state";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
-import { canvas, type CanvasWidget } from "..";
+import { canvas, type CanvasWidgetData } from "..";
+import { made, made_one } from "./made";
 import { CanvasLink } from "../link";
 import type { WidgetSlot } from "../slot";
-import {
-  WIDGET_CHANGE,
-  WIDGET_GEOMETRY,
-  WidgetBase,
-  type WidgetBaseOptions,
-} from "../widget";
+import { WidgetBase, type WidgetBaseOptions } from "../widget";
 
 const MENU_WIDGET = {
   text: input_key<StateOrVal<string>>(),
@@ -60,17 +60,21 @@ afterEach(() => {
   for (const panel of document.querySelectorAll("composition-panel"))
     (panel as HTMLElement & { close(): void }).close();
   document.body.replaceChildren();
-  for (const child of [...states.children.ok()]) child.remove();
+  //A registered group always has a children state
+  const children = states.children as StateROS<readonly { remove(): void }[]>;
+  for (const child of [...children.ok()]) child.remove();
 });
 
 const PATH = (id: string) => "/states/linkmenutest/" + id;
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 /**Shows the widget in a viewport and gives its element*/
-const show = (widget: CanvasWidget) =>
+const show = (widget: CanvasWidgetData) =>
   (
     document.body
-      .appendChild(canvas.viewport({ page: { widgets: [widget] } }))
+      .appendChild(
+        canvas.viewport({ page: canvas.page({ widgets: [widget] }) }),
+      )
       .querySelector("canvas-slot") as WidgetSlot
   ).element as MenuWidget;
 
@@ -78,18 +82,17 @@ describe("Linked values are converted to the type of the option", () => {
   it("numbers with Number, so a boolean maps through a linear transform", () => {
     const on = state.ok_w(true);
     states.add("on", "On", "", on);
-    const element = show(
-      canvas.widget(definition, {
-        x: canvas.link(PATH("on"), {
-          transforms: [canvas.linear([0, 1], [10, 50])],
-        }),
+    const widget = canvas.widget(definition, {
+      x: canvas.link(PATH("on"), {
+        transforms: [canvas.linear([0, 1], [10, 50])],
       }),
-    );
-    expect(element[WIDGET_GEOMETRY].x).toBe(50);
+    });
+    const element = show(widget);
+    expect(element.style.left).toBe("50px");
     on.set_ok(false);
-    expect(element[WIDGET_GEOMETRY].x).toBe(10);
+    expect(element.style.left).toBe("10px");
     //Written back as the type of the linked state
-    element[WIDGET_CHANGE]({ x: 50 });
+    void made_one(widget).value("x")!.write!(50);
     expect(on.ok()).toBe(true);
   });
 
@@ -99,7 +102,7 @@ describe("Linked values are converted to the type of the option", () => {
     const element = show(
       canvas.widget(definition, { x: canvas.link(PATH("text")) }),
     );
-    expect(element[WIDGET_GEOMETRY].x).toBe(12);
+    expect(element.style.left).toBe("12px");
     text.set_ok("abc");
     expect(element.faults.map((fault) => fault.nice)).toContain(
       "Value can not be converted",
@@ -124,8 +127,10 @@ const row = (editor: HTMLElement, name: string) =>
     (row) => row.querySelector("list-keyfield")!.textContent === name,
   )!;
 /**Opens the properties editor of the widgets, with the General section open*/
-const editor_of = (...selected: CanvasWidget[]) => {
-  const editor = document.body.appendChild(canvas.properties({ selected }));
+const editor_of = (...selected: CanvasWidgetData[]) => {
+  const editor = document.body.appendChild(
+    canvas.properties({ owner: canvas.selection_of(made(...selected)) }),
+  );
   row(editor, "General")
     .querySelector<HTMLElement>("list-keyfield .opener > div")!
     .click();

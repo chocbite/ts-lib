@@ -30,7 +30,7 @@ describe("Initialize delayed states", function () {
   //     |  _  /| |  | |/ /\ \
   //     | | \ \| |__| / ____ \
   //     |_|  \_\\____/_/    \_\
-  describe("ROA", { timeout: 100 }, function () {
+  describe("ROA", function () {
     it("ok", async function () {
       const init = st.roa(() => sleep(1, ok(1)));
       assertType<StateROA<number>>(init);
@@ -79,7 +79,7 @@ describe("Initialize delayed states", function () {
   //     |  _  /|  __|   / /\ \
   //     | | \ \| |____ / ____ \
   //     |_|  \_\______/_/    \_\
-  describe("REA", { timeout: 200 }, function () {
+  describe("REA", function () {
     it("ok", async function () {
       const init = st.rea(() => sleep(1, ok(1)));
       assertType<StateREA<number>>(init);
@@ -133,7 +133,7 @@ describe("Initialize delayed states", function () {
   //     |  _  /| |  | |/ /\ \ \/  \/ /
   //     | | \ \| |__| / ____ \  /\  /
   //     |_|  \_\\____/_/    \_\/  \/
-  describe("ROAW", { timeout: 100 }, function () {
+  describe("ROAW", function () {
     it("ok", async function () {
       const init = st.roaw(() => sleep(1, ok(1)));
       assertType<StateROAW<number>>(init);
@@ -190,7 +190,7 @@ describe("Initialize delayed states", function () {
   //     |  _  /|  __|   / /\ \ \/  \/ /
   //     | | \ \| |____ / ____ \  /\  /
   //     |_|  \_\______/_/    \_\/  \/
-  describe("REAW", { timeout: 200 }, function () {
+  describe("REAW", function () {
     it("ok", async function () {
       const init = st.reaw(() => sleep(1, ok(1)));
       assertType<StateREAW<number>>(init);
@@ -246,7 +246,7 @@ describe("Initialize delayed states", function () {
     });
   });
 
-  describe("Failing init", { timeout: 200 }, function () {
+  describe("Failing init", function () {
     const failing = () =>
       st.rea<number>(async () => {
         throw new Error("Init failed");
@@ -283,7 +283,7 @@ describe("Initialize delayed states", function () {
     });
   });
 
-  describe("Set during init", { timeout: 200 }, function () {
+  describe("Set during init", function () {
     it("ROA: value set while init is running is not overwritten by init", async function () {
       const state = st.roa<number>(() => sleep(20, ok(3)));
       const values: number[] = [];

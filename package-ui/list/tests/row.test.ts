@@ -405,6 +405,39 @@ describe("ListRow opening", () => {
     expect(row.open).toBe(false);
     expect(row.amount_rows()).toBe(0);
   });
+
+  it("keeps a row the user closed closed when its data gives a plain opened true again", () => {
+    const a = { ...tree("a"), opened: true };
+    const rows = state.ok_w<Item[]>([a]);
+    const { container } = item_list(rows);
+    const row = find(container, "a");
+    expect(row.open).toBe(true);
+    row.open = false;
+    rows.set_ok([a]);
+    expect(row.open).toBe(false);
+    rows.array.change(0, { ...tree("a"), opened: true });
+    expect(row.open).toBe(false);
+  });
+
+  it("does not open a closed row reused for other data with a plain opened true", () => {
+    const rows = state.ok_w<Item[]>([tree("a")]);
+    const { container } = item_list(rows);
+    const row = find(container, "a");
+    rows.set_ok([{ ...tree("b"), opened: true }]);
+    expect(name_of(row)).toBe("b");
+    expect(row.open).toBe(false);
+  });
+
+  it("does not open a row the user closed when its openable state turns true again", () => {
+    const openable = state.ok_w(true);
+    const { container } = item_list([{ ...tree("a"), openable, opened: true }]);
+    const row = find(container, "a");
+    expect(row.open).toBe(true);
+    row.open = false;
+    openable.set_ok(false);
+    openable.set_ok(true);
+    expect(row.open).toBe(false);
+  });
 });
 
 describe("ListRow opened state", () => {

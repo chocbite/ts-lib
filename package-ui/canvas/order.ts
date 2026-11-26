@@ -1,7 +1,8 @@
 import { AccessTypes } from "#base";
 import ctm, { type ContextMenuLine } from "#context_menu";
 import state from "@chocbite/ts-lib/state";
-import type { CanvasPage, CanvasWidget } from "./data";
+import type { CanvasPage, CanvasWidget, CanvasWidgetData } from "./data";
+import { widgets_now } from "./now";
 
 /**Ways to move a widget in the drawing order of its page, the last widget is drawn on top
  * front and back move it to the top or the bottom, forward and backward one step*/
@@ -10,9 +11,9 @@ export type WidgetOrder = "front" | "forward" | "backward" | "back";
 /**The moves, from index to index done one after the other, that order the selected widgets,
  * moved together and kept in their order, none when nothing can move that way or none of them is one of the widgets
  * front and back move them to the top or the bottom, forward and backward one step past the next widget that is not selected*/
-export function order_moves(
-  widgets: readonly CanvasWidget[],
-  selected: readonly CanvasWidget[],
+export function order_moves<T>(
+  widgets: readonly T[],
+  selected: readonly T[],
   order: WidgetOrder,
 ): [number, number][] {
   const chosen = new Set(selected);
@@ -55,14 +56,6 @@ export function order_moves(
   return moves;
 }
 
-/**The widgets of a page now, undefined while they are not there*/
-function widgets_now(page: CanvasPage): readonly CanvasWidget[] | undefined {
-  const widgets = page.widgets;
-  if (!state.is.state(widgets)) return widgets;
-  const value = widgets.rsync ? widgets.get() : undefined;
-  return value?.ok ? value.value : undefined;
-}
-
 /**Moves the selected widgets in the drawing order of the page, see order_moves, by writing move instructions
  * to the widgets state of the page, false when nothing can move that way, or the widgets are not a writable state*/
 export async function reorder_widget(
@@ -71,15 +64,19 @@ export async function reorder_widget(
   order: WidgetOrder,
 ): Promise<boolean> {
   const widgets = page.widgets;
-  if (!state.is.state(widgets) || !widgets.writable) return false;
+  if (!widgets.writable) return false;
   const current = await widgets.read();
   if (!current.ok) return false;
-  const moves = order_moves(current.value, selected, order);
+  const moves = order_moves(
+    current.value,
+    selected.map((widget) => widget.data),
+    order,
+  );
   if (!moves.length) return false;
   //Move instructions, so the state tells its subscribers only these widgets moved
   for (const [from, to] of moves) {
     const written = await widgets.write?.(
-      state.a.write.move<CanvasWidget>(from, to),
+      state.a.write.move<CanvasWidgetData>(from, to),
     );
     if (!written?.ok) return false;
   }
@@ -98,8 +95,8 @@ export function order_lines(
   page: CanvasPage,
   selected: readonly CanvasWidget[],
 ): ContextMenuLine[] {
-  const widgets = widgets_now(page) ?? [];
-  const writable = state.is.state(page.widgets) && page.widgets.writable;
+  const widgets = widgets_now(page);
+  const writable = page.widgets.writable;
   return ORDER_LINES.map(([order, text]) =>
     ctm.line({
       text,
@@ -119,16 +116,18 @@ export async function remove_widgets(
   selected: readonly CanvasWidget[],
 ): Promise<boolean> {
   const widgets = page.widgets;
-  if (!state.is.state(widgets) || !widgets.writable) return false;
+  if (!widgets.writable) return false;
   const current = await widgets.read();
   if (!current.ok) return false;
   const removing = new Set(
-    selected.filter((widget) => current.value.includes(widget)),
+    selected
+      .map((widget) => widget.data)
+      .filter((data) => current.value.includes(data)),
   );
   if (!removing.size) return false;
-  for (const widget of removing) {
+  for (const data of removing) {
     const written = await widgets.write?.(
-      state.a.write.delete<CanvasWidget>(widget),
+      state.a.write.delete<CanvasWidgetData>(data),
     );
     if (!written?.ok) return false;
   }
@@ -142,7 +141,7 @@ export function delete_line(
   selected: readonly CanvasWidget[],
   removed?: () => void,
 ): ContextMenuLine {
-  const writable = state.is.state(page.widgets) && page.widgets.writable;
+  const writable = page.widgets.writable;
   return ctm.line({
     text: "Delete",
     shortcut: "Del",

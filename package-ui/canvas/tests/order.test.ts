@@ -1,20 +1,21 @@
 import state, { type StateROSW } from "@chocbite/ts-lib/state";
 import { describe, expect, it } from "vitest";
-import { canvas, type CanvasPage, type CanvasWidget } from "..";
+import { canvas } from "..";
+import type { CanvasWidgetData } from "../data";
 import { order_moves, type WidgetOrder } from "../order";
 
-//Distinct paths, so toEqual tells the widgets apart
-const widget = (name: string): CanvasWidget => ({
+//The data of widgets, distinct paths, so toEqual tells them apart
+const widget = (name: string): CanvasWidgetData => ({
   widget: "/widgets/" + name,
   options: {},
 });
 const [a, b, c, d, e] = ["a", "b", "c", "d", "e"].map(widget);
-const name = (w: CanvasWidget) => w.widget.split("/").at(-1);
+const name = (w: { widget: string }) => w.widget.split("/").at(-1);
 
 /**The names of the widgets after the moves for the order of the selected ones*/
 const ordered = (
-  widgets: CanvasWidget[],
-  selected: CanvasWidget[],
+  widgets: CanvasWidgetData[],
+  selected: CanvasWidgetData[],
   order: WidgetOrder,
 ) => {
   const result = [...widgets];
@@ -50,26 +51,37 @@ describe("Ordering widgets", () => {
 
   it("removes widgets from the page, and tells when it can not", async () => {
     const widgets = state.ok_w([a, b, c, d]);
-    const page: CanvasPage = { widgets };
-    expect(await canvas.remove(page, [b, d])).toBe(true);
+    const page = canvas.page({ widgets });
+    const made = (data: CanvasWidgetData) => page.widget_of(data);
+    expect(await canvas.remove(page, [made(b), made(d)])).toBe(true);
     expect(widgets.ok().map(name)).toEqual(["a", "c"]);
-    expect(await canvas.remove(page, [e])).toBe(false);
-    expect(await canvas.remove({ widgets: [a, b] }, [a])).toBe(false);
-    expect(await canvas.remove({ widgets: state.ok([a, b]) }, [a])).toBe(false);
+    expect(await canvas.remove(page, [made(e)])).toBe(false);
+    const fixed = canvas.page({ widgets: [a, b] });
+    expect(await canvas.remove(fixed, [fixed.widget_of(a)])).toBe(false);
+    const read_only = canvas.page({ widgets: state.ok([a, b]) });
+    expect(await canvas.remove(read_only, [read_only.widget_of(a)])).toBe(
+      false,
+    );
   });
 
   it("writes the widgets state of the page, and tells when it can not", async () => {
     const widgets = state.ok_w([a, b, c]);
-    const page: CanvasPage = { widgets };
-    expect(await canvas.reorder(page, [a], "front")).toBe(true);
+    const page = canvas.page({ widgets });
+    expect(await canvas.reorder(page, [page.widget_of(a)], "front")).toBe(true);
     expect(widgets.ok().map(name)).toEqual(["b", "c", "a"]);
-    expect(await canvas.reorder(page, [a], "front")).toBe(false);
-    const fixed: CanvasPage = { widgets: [a, b, c] };
-    expect(await canvas.reorder(fixed, [a], "front")).toBe(false);
-    const read_only: CanvasPage = { widgets: state.ok([a, b, c]) };
-    expect(await canvas.reorder(read_only, [a], "front")).toBe(false);
+    expect(await canvas.reorder(page, [page.widget_of(a)], "front")).toBe(
+      false,
+    );
+    const fixed = canvas.page({ widgets: [a, b, c] });
+    expect(await canvas.reorder(fixed, [fixed.widget_of(a)], "front")).toBe(
+      false,
+    );
+    const read_only = canvas.page({ widgets: state.ok([a, b, c]) });
     expect(
-      (read_only.widgets as StateROSW<CanvasWidget[]>).ok().map(name),
+      await canvas.reorder(read_only, [read_only.widget_of(a)], "front"),
+    ).toBe(false);
+    expect(
+      (read_only.widgets as StateROSW<CanvasWidgetData[]>).ok().map(name),
     ).toEqual(["a", "b", "c"]);
   });
 });

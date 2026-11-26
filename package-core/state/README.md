@@ -817,7 +817,19 @@ view.unsub();
 - The callback is not called for the first values, only for changes.
 - When a state changes, its new value is walked again. States still in it keep their subscription, new states are subscribed and states that are gone are unsubscribed, compared by identity.
 - Async states are followed once they have a value.
-- A value can give what is walked instead of itself with `state.v.OVERRIDE_KEY`, like a class instance holding states. `to_json` uses the same key.
+- A value can give what is walked instead of itself with `state.v.OVERRIDE_KEY`, like a class instance holding states. `to_json` uses the same key, and so does the `StateJsonCompatible` type, which checks what the method gives instead of the class, so a class with methods can be stored when it gives JSON values and states:
+
+```typescript
+class Point {
+  readonly x = state.ok_w(0);
+  move(by: number) {
+    this.x.set_ok(this.x.ok() + by);
+  }
+  [state.v.OVERRIDE_KEY]() {
+    return { x: this.x };
+  }
+}
+```
 
 ## Utilities
 

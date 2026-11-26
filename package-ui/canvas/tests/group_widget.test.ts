@@ -1,10 +1,15 @@
 import { define_element } from "#base";
 import state, { type StateROSW } from "@chocbite/ts-lib/state";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
-import { canvas, WidgetBase, type CanvasPage, type CanvasWidget } from "..";
+import {
+  canvas,
+  WidgetBase,
+  type CanvasSelection,
+  type CanvasWidgetData,
+} from "..";
 import { copy_widgets, paste_widgets } from "../clipboard";
+import { CanvasGroup } from "../data";
 import { GROUP } from "../group_widget";
-import { WIDGET_GEOMETRY } from "../widget";
 
 class GroupTestWidget extends WidgetBase {
   static element_name() {
@@ -29,27 +34,53 @@ type StateOkW<T> = ReturnType<typeof state.ok_w<T>>;
 
 const box = (x: number, y: number, width = 10, height = 10, rotation = 0) =>
   canvas.widget(definition, { x, y, width, height, rotation });
-/**An option state of a widget, groups have options other widgets do not*/
-const option = (widget: CanvasWidget, key: string) =>
+/**An option state of a widget or of its data, groups have options other widgets do not*/
+const option = (widget: { options: object }, key: string) =>
   (widget.options as Record<string, unknown>)[key];
-const value = (widget: CanvasWidget, key: string) =>
+const value = (widget: { options: object }, key: string) =>
   (widget.options as Record<string, StateROSW<unknown>>)[key].ok();
-const place = (widget: CanvasWidget) =>
+const place = (widget: { options: object }) =>
   ["x", "y", "width", "height", "rotation"].map(
     (key) => Math.round(value(widget, key) as number) + 0,
   );
-const children = (group: CanvasWidget) =>
-  (value(group, "widgets") as CanvasWidget[]).slice();
+/**The data of the widgets of a group*/
+const children = (group: { options: object }) =>
+  (value(group, "widgets") as CanvasWidgetData[]).slice();
 
 describe("Groups", () => {
+  it("are a CanvasGroup whose content is a page, which makes the widgets in it", async () => {
+    const [a, b, c] = [box(0, 0), box(20, 0), box(40, 0)];
+    const page = canvas.page({ widgets: state.ok_w([a, b, c]) });
+    const [wa, wb, wc] = [a, b, c].map((data) => page.widget_of(data));
+    expect([wa, wb, wc].map((w) => w.page)).toEqual([page, page, page]);
+    //A page gives the same widget for the same data
+    expect(page.widget_of(a)).toBe(wa);
+    const made = (await canvas.group(page, [wb, wc]))!;
+    expect(made).toBeInstanceOf(CanvasGroup);
+    expect(made.page).toBe(page);
+    expect(made.content.group).toBe(made);
+    expect(made.content.widgets).toBe(option(made, "widgets"));
+    //The content makes widgets of its own for the data, on it
+    const inside = made.content.widgets_now();
+    expect(inside.map((w) => w.data)).toEqual([b, c]);
+    expect(inside.map((w) => w.page)).toEqual([made.content, made.content]);
+    const ungrouped = await canvas.ungroup(page, [made]);
+    expect(ungrouped.map((w) => w.data)).toEqual([b, c]);
+    expect(ungrouped.map((w) => w.page)).toEqual([page, page]);
+  });
+
   it("groups widgets into a group in the place of the front one, their positions relative to it", async () => {
     const [a, b, c] = [box(10, 20), box(50, 0), box(30, 40, 20, 10)];
     const widgets = state.ok_w([a, b, c]);
-    const made = await canvas.group({ widgets }, [c, a]);
+    const page = canvas.page({ widgets });
+    const made = await canvas.group(page, [
+      page.widget_of(c),
+      page.widget_of(a),
+    ]);
     expect(made).toBeDefined();
     const g = made!;
     expect(g.widget).toBe(GROUP);
-    expect(widgets.ok()).toEqual([b, g]);
+    expect(widgets.ok()).toEqual([b, g.data]);
     //In drawing order
     expect(children(g)).toEqual([a, c]);
     //The box of a and c, 10,20 to 50,50
@@ -66,14 +97,18 @@ describe("Groups", () => {
   it("ungroups back to where the widgets were, in the place of the group", async () => {
     const [a, b, c] = [box(10, 20), box(50, 0), box(30, 40, 20, 10, 30)];
     const widgets = state.ok_w([a, b, c]);
-    const page: CanvasPage = { widgets };
+    const page = canvas.page({ widgets });
     const before = [a, c].map(place);
-    const g = (await canvas.group(page, [a, c], 15))!;
+    const g = (await canvas.group(
+      page,
+      [page.widget_of(a), page.widget_of(c)],
+      15,
+    ))!;
     expect(value(g, "rotation")).toBe(15);
     //The group moved 5 to the right
     (g.options.x as StateOkW<number>).set_ok((value(g, "x") as number) + 5);
     const ungrouped = await canvas.ungroup(page, [g]);
-    expect(ungrouped).toEqual([a, c]);
+    expect(ungrouped.map((w) => w.data)).toEqual([a, c]);
     expect(widgets.ok()).toEqual([b, a, c]);
     expect([a, c].map(place)).toEqual(
       before.map(([x, y, ...rest]) => [x + 5, y, ...rest]),
@@ -82,9 +117,9 @@ describe("Groups", () => {
 
   it("scales the content to the group, or shows it at its own size, clipped or with scrollbars", async () => {
     const child = box(0, 0, 20, 10);
-    const widgets = state.ok_w<CanvasWidget[]>([child]);
-    const page: CanvasPage = { width: 200, height: 100, widgets };
-    const g = (await canvas.group(page, [child]))!;
+    const widgets = state.ok_w<CanvasWidgetData[]>([child]);
+    const page = canvas.page({ width: 200, height: 100, widgets });
+    const g = (await canvas.group(page, [page.widget_of(child)]))!;
     (g.options.width as StateOkW<number>).set_ok(40);
     (g.options.height as StateOkW<number>).set_ok(20);
     const viewport = document.body.appendChild(canvas.viewport({ page }));
@@ -108,9 +143,9 @@ describe("Groups", () => {
 
   it("scale their content evenly, centered, so it keeps its proportions", async () => {
     const child = box(0, 0, 20, 10);
-    const widgets = state.ok_w<CanvasWidget[]>([child]);
-    const page: CanvasPage = { width: 200, height: 100, widgets };
-    const g = (await canvas.group(page, [child]))!;
+    const widgets = state.ok_w<CanvasWidgetData[]>([child]);
+    const page = canvas.page({ width: 200, height: 100, widgets });
+    const g = (await canvas.group(page, [page.widget_of(child)]))!;
     //Four times as wide, twice as high, the content is scaled twice and centered
     (g.options.width as StateOkW<number>).set_ok(80);
     (g.options.height as StateOkW<number>).set_ok(20);
@@ -136,9 +171,9 @@ describe("Groups", () => {
 
   it("stretch their content to fill them, each axis on its own", async () => {
     const child = box(0, 0, 20, 10);
-    const widgets = state.ok_w<CanvasWidget[]>([child]);
-    const page: CanvasPage = { width: 200, height: 100, widgets };
-    const g = (await canvas.group(page, [child]))!;
+    const widgets = state.ok_w<CanvasWidgetData[]>([child]);
+    const page = canvas.page({ width: 200, height: 100, widgets });
+    const g = (await canvas.group(page, [page.widget_of(child)]))!;
     (option(g, "display") as StateOkW<string>).set_ok("stretch");
     //Four times as wide, twice as high
     (g.options.width as StateOkW<number>).set_ok(80);
@@ -165,9 +200,9 @@ describe("Groups", () => {
 
   it("paint the background of their content, transparent until given one", async () => {
     const child = box(0, 0);
-    const widgets = state.ok_w<CanvasWidget[]>([child]);
-    const page: CanvasPage = { width: 200, height: 100, widgets };
-    const g = (await canvas.group(page, [child]))!;
+    const widgets = state.ok_w<CanvasWidgetData[]>([child]);
+    const page = canvas.page({ width: 200, height: 100, widgets });
+    const g = (await canvas.group(page, [page.widget_of(child)]))!;
     expect(value(g, "background")).toBe("transparent");
     document.body.appendChild(canvas.viewport({ page }));
     await tick();
@@ -182,13 +217,16 @@ describe("Groups", () => {
   it("are saved, loaded and copied with their widgets", async () => {
     const [a, b] = [box(0, 0), box(20, 0)];
     const widgets = state.ok_w([a, b]);
-    const page: CanvasPage = { widgets };
-    const g = (await canvas.group(page, [a, b]))!;
+    const page = canvas.page({ widgets });
+    const g = (await canvas.group(page, [
+      page.widget_of(a),
+      page.widget_of(b),
+    ]))!;
     const json: unknown = JSON.parse(await state.ok(page).to_json());
     const loaded = canvas.page_from_json(json);
     if (!loaded.some) throw new Error("not loaded");
     const [loaded_group] = (
-      loaded.value.widgets as StateROSW<CanvasWidget[]>
+      loaded.value.widgets as StateROSW<CanvasWidgetData[]>
     ).ok();
     const inside = children(loaded_group);
     expect(inside).toHaveLength(2);
@@ -204,29 +242,36 @@ describe("Groups", () => {
   it("keeps ids unique per level", async () => {
     const [a, b, c] = [box(0, 0), box(20, 0), box(40, 0)];
     const widgets = state.ok_w([a, b, c]);
-    const page: CanvasPage = { widgets };
+    const page = canvas.page({ widgets });
     document.body.appendChild(canvas.viewport({ page }));
     await tick();
     expect([a, b, c].map((w) => value(w, "id"))).toEqual([
-      "Box-1",
-      "Box-2",
-      "Box-3",
+      "box-1",
+      "box-2",
+      "box-3",
     ]);
-    const g = (await canvas.group(page, [b, c]))!;
+    const g = (await canvas.group(page, [
+      page.widget_of(b),
+      page.widget_of(c),
+    ]))!;
     await tick();
-    expect(value(g, "id")).toBe("Group-1");
+    expect(value(g, "id")).toBe("group-1");
     //The widgets inside keep their ids, and a new one inside starts again at 1
-    expect([b, c].map((w) => value(w, "id"))).toEqual(["Box-2", "Box-3"]);
-    (option(g, "widgets") as StateOkW<CanvasWidget[]>).array.push(box(0, 0));
+    expect([b, c].map((w) => value(w, "id"))).toEqual(["box-2", "box-3"]);
+    (option(g, "widgets") as StateOkW<CanvasWidgetData[]>).array.push(
+      box(0, 0),
+    );
     await tick();
-    expect(value(children(g)[2], "id")).toBe("Box-1");
+    expect(value(children(g)[2], "id")).toBe("box-1");
   });
 
   it("ctrl+g groups the selected widgets and selects the group, ctrl+shift+g ungroups it", async () => {
     const [a, b] = [box(10, 10), box(40, 10)];
     const widgets = state.ok_w([a, b]);
-    const page: CanvasPage = { width: 200, height: 100, widgets };
-    const selected = state.ok_w<CanvasWidget[]>([a, b]);
+    const page = canvas.page({ width: 200, height: 100, widgets });
+    const selected = state.ok_w<CanvasSelection>(
+      canvas.selection_of([page.widget_of(a), page.widget_of(b)]),
+    );
     const viewport = document.body.appendChild(
       canvas.viewport({ page, edit: true, selected }),
     );
@@ -243,14 +288,16 @@ describe("Groups", () => {
     expect(key()).toBe(false);
     await vi.waitFor(() => expect(widgets.ok()).toHaveLength(1));
     const [g] = widgets.ok();
-    expect(selected.ok()).toEqual([g]);
+    expect(selected.ok()).toBe(page.widget_of(g));
     key(true);
     await vi.waitFor(() => expect(widgets.ok()).toEqual([a, b]));
-    expect(selected.ok()).toEqual([a, b]);
+    expect(canvas.selected_widgets(selected.ok())).toEqual([
+      page.widget_of(a),
+      page.widget_of(b),
+    ]);
     expect(
-      (viewport.querySelectorAll("canvas-grouptestwidget")[1] as WidgetBase)[
-        WIDGET_GEOMETRY
-      ].x,
-    ).toBe(40);
+      (viewport.querySelectorAll("canvas-grouptestwidget")[1] as WidgetBase)
+        .style.left,
+    ).toBe("40px");
   });
 });

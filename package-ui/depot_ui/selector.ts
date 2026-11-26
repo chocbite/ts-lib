@@ -7,8 +7,8 @@ import type {
   DepotEntry,
   DepotGroup,
 } from "@chocbite/ts-lib/depot";
-import { ok } from "@chocbite/ts-lib/result";
-import state from "@chocbite/ts-lib/state";
+import { ok, some } from "@chocbite/ts-lib/result";
+import state, { type StateOrValROS } from "@chocbite/ts-lib/state";
 import "./selector.scss";
 import { DepotTree } from "./tree";
 import { DepotValueField } from "./value";
@@ -34,7 +34,7 @@ interface SelectorConfig {
 }
 
 interface SelectorValues {
-  description: string;
+  description: StateOrValROS<string>;
   value?: DepotChild<unknown>;
 }
 type ListColumnOf<V> = ReturnType<typeof list.column<V, any>>;
@@ -87,7 +87,20 @@ class DepotSelector extends ContentBase {
 
     const columns: {
       [K in keyof SelectorValues]: ListColumnOf<NonNullable<SelectorValues[K]>>;
-    } = { description: list.column_string("Description") };
+    } = {
+      //A description can be a state, like one of a provided node that changes
+      description: list.column({
+        title: "Description",
+        field_gen: () => list.text_field(),
+        field_apply: (field, description: StateOrValROS<string>) => {
+          if (state.is.state(description))
+            field.attach_state_to_prop("text", description, (e) =>
+              some(e.nice),
+            );
+          else field.detach_state_from_prop("text").text = description;
+        },
+      }),
+    };
     if (config.values)
       columns.value = list.column({
         title: "Value",

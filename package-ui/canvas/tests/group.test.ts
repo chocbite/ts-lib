@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import state from "@chocbite/ts-lib/state";
 import type { CanvasWidget } from "../data";
-import { group_bounds, GroupRotation, transform_group } from "../group";
+import { made_one } from "./made";
+import { group_bounds, transform_group } from "../group";
+import { CanvasTransformer } from "../selection";
 import type { WidgetGeometry } from "../widget";
 
 const g = (
@@ -101,36 +103,28 @@ describe("Group of widgets", () => {
   });
 });
 
-const widget = (rotation: number): CanvasWidget => ({
-  widget: "/widgets/none",
-  options: { rotation: state.ok_w(rotation) },
-});
+const widget = (rotation: number): CanvasWidget =>
+  made_one({ widget: "/widgets/none", options: { rotation: state.ok_w(rotation) } });
 
 describe("Rotation of the box of selected widgets", () => {
   it("starts at the rotation the widgets share, 0 when they differ", () => {
-    const rotation = new GroupRotation();
-    rotation.select([widget(30), widget(390)]);
-    expect(rotation.rotation.ok()).toBe(30);
-    rotation.select([widget(30), widget(10)]);
-    expect(rotation.rotation.ok()).toBe(0);
-  });
-
-  it("is kept while the same widgets are selected, and starts again for others", () => {
-    const rotation = new GroupRotation();
-    const [a, b] = [widget(0), widget(0)];
-    rotation.select([a, b]);
-    rotation.set(45);
-    rotation.select([b, a]);
-    expect(rotation.rotation.ok()).toBe(45);
-    rotation.select([a]);
-    expect(rotation.rotation.ok()).toBe(0);
-  });
-
-  it("is shared by everything given the same selection state", () => {
-    const selected = state.ok_w<CanvasWidget[]>([]);
-    expect(GroupRotation.of(selected)).toBe(GroupRotation.of(selected));
-    expect(GroupRotation.of(selected)).not.toBe(
-      GroupRotation.of(state.ok_w<CanvasWidget[]>([])),
+    expect(new CanvasTransformer([widget(30), widget(390)]).rotation.ok()).toBe(
+      30,
     );
+    expect(new CanvasTransformer([widget(30), widget(10)]).rotation.ok()).toBe(
+      0,
+    );
+  });
+
+  it("is kept by the selection, turning the box turns it, a selection of other widgets starts again", () => {
+    const [a, b] = [widget(0), widget(0)];
+    const selection = new CanvasTransformer([a, b]);
+    const starts = selection.geometries()!;
+    const from = selection.box()!;
+    selection.change(starts, from, { ...from, rotation: 405 });
+    expect(selection.rotation.ok()).toBe(45);
+    expect(selection.box()!.rotation).toBe(45);
+    expect(new CanvasTransformer([a]).rotation.ok()).toBe(45);
+    expect(new CanvasTransformer([a, widget(10)]).rotation.ok()).toBe(0);
   });
 });

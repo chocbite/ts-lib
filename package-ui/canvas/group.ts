@@ -1,5 +1,3 @@
-import state, { type State, type StateROS } from "@chocbite/ts-lib/state";
-import type { CanvasWidget } from "./data";
 import type { WidgetGeometry } from "./widget";
 
 /**Turns a point by the angle in degrees, clockwise on the page*/
@@ -107,56 +105,3 @@ export function transform_group(
 /**An angle from 0 up to 360*/
 export const wrap_angle = (degrees: number): number =>
   ((degrees % 360) + 360) % 360;
-
-/**The rotation of the box of several selected widgets, kept while the same widgets are selected,
- * so the box stays turned after the rotate handle turned it, and the properties editor shows and sets it
- * Shared by the viewports and properties editors given the same selection state, see of*/
-export class GroupRotation {
-  static #shared = new WeakMap<object, GroupRotation>();
-  /**The rotation of the selection state, or of the element itself when it was given no state*/
-  static of(key: object): GroupRotation {
-    let rotation = GroupRotation.#shared.get(key);
-    if (!rotation) {
-      rotation = new GroupRotation();
-      GroupRotation.#shared.set(key, rotation);
-    }
-    return rotation;
-  }
-
-  #members: ReadonlySet<CanvasWidget> = new Set();
-  #rotation = state.ok_w(0);
-  /**The rotation now, from 0 up to 360*/
-  get rotation(): StateROS<number> {
-    return this.#rotation;
-  }
-
-  /**Starts again for other selected widgets, at the rotation they all have, 0 when they differ,
-   * the same widgets in any order keep the rotation*/
-  select(widgets: readonly CanvasWidget[]): void {
-    if (
-      widgets.length === this.#members.size &&
-      widgets.every((widget) => this.#members.has(widget))
-    )
-      return;
-    this.#members = new Set(widgets);
-    const rotations = widgets.map((widget) => {
-      const option = (
-        widget.options as Record<string, State<unknown> | undefined>
-      ).rotation;
-      const value = option?.rsync ? option.get() : undefined;
-      return value?.ok && typeof value.value === "number"
-        ? wrap_angle(value.value)
-        : NaN;
-    });
-    const shared = rotations.every((rotation) => rotation === rotations[0])
-      ? rotations[0]
-      : 0;
-    this.set(Number.isNaN(shared) || shared === undefined ? 0 : shared);
-  }
-
-  /**Sets the rotation, wrapped from 0 up to 360*/
-  set(rotation: number): void {
-    const wrapped = wrap_angle(rotation);
-    if (this.#rotation.ok() !== wrapped) this.#rotation.set_ok(wrapped);
-  }
-}

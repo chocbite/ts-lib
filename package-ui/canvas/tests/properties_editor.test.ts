@@ -5,10 +5,11 @@ import {
   canvas,
   WidgetBase,
   type CanvasLink,
-  type CanvasPage,
-  type CanvasWidget,
+  type CanvasSelection,
   type WidgetBaseOptions,
 } from "..";
+import type { CanvasWidgetData } from "../data";
+import { made as on_page, made_one } from "./made";
 
 class EditorWidget extends WidgetBase {
   static element_name() {
@@ -69,15 +70,24 @@ const tick = () => new Promise((resolve) => setTimeout(resolve));
 /**A local writable state, which can be set directly*/
 type StateOkW<T> = ReturnType<typeof state.ok_w<T>>;
 /**The value of an option of a widget*/
-const value_of = (widget: CanvasWidget, key: string) =>
+const value_of = (widget: { options: object }, key: string) =>
   (widget.options as Record<string, StateROSW<unknown>>)[key].ok();
 
 afterEach(() => {
   document.body.replaceChildren();
 });
 
-const editor_with = (selected: StateOrVal<readonly CanvasWidget[]>) =>
-  document.body.appendChild(canvas.properties({ selected }));
+/**An editor of a selection, the data of widgets is put on a page, the widgets it makes selected*/
+const editor_with = (
+  selected: StateOrVal<CanvasSelection> | readonly CanvasWidgetData[],
+) =>
+  document.body.appendChild(
+    canvas.properties({
+      owner: Array.isArray(selected)
+        ? canvas.selection_of(on_page(...(selected as CanvasWidgetData[])))
+        : (selected as StateOrVal<CanvasSelection>),
+    }),
+  );
 const title = (editor: HTMLElement) =>
   editor.querySelector(":scope > .title")!.textContent;
 /**The name in the key field of a row*/
@@ -133,17 +143,15 @@ const type_number = async (
 };
 
 describe("Properties editor", () => {
-  it("shows the properties of the page when nothing is selected", async () => {
-    const page: CanvasPage = {
+  it("shows the properties of a selected page", async () => {
+    const page = canvas.page({
       id: state.ok_w("Main"),
       width: state.ok_w(800),
       height: state.ok_w(600),
       background: state.ok_w("#ffffff"),
-    };
-    const selected = state.ok_w<CanvasWidget[]>([]);
-    const editor = document.body.appendChild(
-      canvas.properties({ selected, page }),
-    );
+    });
+    const selected = state.ok_w<CanvasSelection>(page);
+    const editor = editor_with(selected);
     expect(title(editor)).toBe("Page");
     expect(names(editor)).toEqual(["ID", "Width", "Height", "Background"]);
     expect(text_of(editor, "ID")).toBe("Main");
@@ -159,10 +167,21 @@ describe("Properties editor", () => {
     await type_number(editor, "Width", 1024);
     expect((page.width as StateOkW<number>).ok()).toBe(1024);
     //A selected widget is shown instead
-    selected.set_ok([canvas.widget(definition, {})]);
+    selected.set_ok(made_one(canvas.widget(definition, {})));
     expect(title(editor)).toBe("Editor box");
-    selected.set_ok([]);
+    selected.set_ok(page);
     expect(title(editor)).toBe("Page");
+    selected.set_ok(undefined);
+    expect(title(editor)).toBe("Nothing selected");
+  });
+
+  it("shows a value of a page that is not a state, read only", () => {
+    const page = canvas.page({ id: "Fixed", width: 640 });
+    const editor = editor_with(page);
+    expect(text_of(editor, "ID")).toBe("Fixed");
+    expect(number_of(editor, "Width")).toBe("640");
+    //Not given, its default is shown
+    expect(number_of(editor, "Height")).toBe("1080");
   });
 
   it("shows that nothing is selected", () => {
@@ -242,20 +261,20 @@ describe("Properties editor", () => {
   });
 
   it("follows the selection state, keeping the open sections open", () => {
-    const first = canvas.widget(definition, { x: state.ok_w(1) });
-    const selected = state.ok_w<CanvasWidget[]>([first]);
+    const first = made_one(canvas.widget(definition, { x: state.ok_w(1) }));
+    const selected = state.ok_w<CanvasSelection>(first);
     const editor = editor_with(selected);
     toggle(editor, "General");
     expect(number_of(editor, "X")).toBe("1");
-    selected.set_ok([canvas.widget(definition, { x: state.ok_w(2) })]);
+    selected.set_ok(made_one(canvas.widget(definition, { x: state.ok_w(2) })));
     expect(number_of(editor, "X")).toBe("2");
-    selected.set_ok([]);
+    selected.set_ok(undefined);
     expect(title(editor)).toBe("Nothing selected");
     expect(names(editor)).toEqual([]);
-    selected.set_ok([first]);
+    selected.set_ok(first);
     expect(number_of(editor, "X")).toBe("1");
     toggle(editor, "General");
-    selected.set_ok([canvas.widget(definition, {})]);
+    selected.set_ok(made_one(canvas.widget(definition, {})));
     expect(names(editor)).toEqual(["General", "Text", "Shown"]);
   });
 
@@ -277,6 +296,28 @@ describe("Properties editor", () => {
           ]),
         ),
       ).toBe("2 widgets");
+    });
+
+    it("follows the name the widget is registered with", () => {
+      const name = state.ok_w("Named");
+      const named = group.add(
+        "named",
+        name,
+        "",
+        canvas.definition({
+          create: () => {
+            throw new Error("not made");
+          },
+        }),
+      );
+      const editor = editor_with([
+        canvas.widget(named, {}),
+        canvas.widget(named, {}),
+      ]);
+      expect(title(editor)).toBe("2 × Named");
+      name.set_ok("Renamed");
+      expect(title(editor)).toBe("2 × Renamed");
+      named.remove();
     });
 
     it("shows the properties all of them have, without the ID", () => {
@@ -332,7 +373,7 @@ describe("Properties editor", () => {
         canvas.widget(made, { x: 0, y: 0, width: 10, height: 10 }),
         canvas.widget(made, { x: 30, y: 10, width: 10, height: 10 }),
       ];
-      const page: CanvasPage = { widgets: state.ok_w(widgets) };
+      const page = canvas.page({ widgets: state.ok_w(widgets) });
       document.body.appendChild(canvas.viewport({ page }));
       const editor = editor_with(widgets);
       toggle(editor, "General");
@@ -362,7 +403,7 @@ describe("Properties editor", () => {
         canvas.widget(made, { x: 0, y: 0, width: 10, height: 10 }),
         canvas.widget(made, { x: 30, y: 10, width: 10, height: 10 }),
       ];
-      const page: CanvasPage = { widgets: state.ok_w(widgets) };
+      const page = canvas.page({ widgets: state.ok_w(widgets) });
       document.body.appendChild(canvas.viewport({ page }));
       const editor = editor_with(widgets);
       toggle(editor, "General");
@@ -375,8 +416,9 @@ describe("Properties editor", () => {
       expect(number_of(editor, "Width")).toBe("80");
       await type_number(editor, "Y", 5);
       expect(widgets.map((w) => value_of(w, "y"))).toEqual([5, 15]);
-      //A widget moved elsewhere changes the box
+      //A widget moved elsewhere changes the box, told once after the changes of the moment, like a collected state does
       (widgets[1].options.x as StateOkW<number>).set_ok(100);
+      await tick();
       expect(number_of(editor, "Width")).toBe("120");
     });
 
@@ -404,13 +446,10 @@ describe("Properties editor", () => {
 
   it("tells when the widget is not registered", () => {
     const editor = editor_with([
-      {
-        widget: "/widgets/editortest/none",
-        options: {},
-      },
+      { widget: "/widgets/editortest/none", options: {} },
     ]);
     expect(title(editor)).toBe(
-      '"/widgets/editortest/none" is not a registered widget',
+      "Not a registered widget: /widgets/editortest/none",
     );
     expect(names(editor)).toEqual([]);
   });

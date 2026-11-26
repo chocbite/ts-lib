@@ -8,9 +8,6 @@ import {
 import type { StateOrVal } from "@chocbite/ts-lib/state";
 import "./widget.scss";
 
-/**Event dispatched on a widget when its position, size or rotation changes */
-export const WIDGET_TRANSFORM_EVENT = "widget_transform";
-
 /**Inputs every widget has, its place on the page*/
 const WIDGET = {
   /**ID of the widget, unique on its page, named after the widget when the page gives it, like "Box-1"
@@ -41,36 +38,19 @@ export interface WidgetGeometry {
   height: number;
   rotation: number;
 }
-type GeometryKey = keyof WidgetGeometry;
-const GEOMETRY_KEYS: readonly GeometryKey[] = [
-  "x",
-  "y",
-  "width",
-  "height",
-  "rotation",
-];
-
-/**Internal to canvas, the geometry the widget shows now*/
-export const WIDGET_GEOMETRY = Symbol("widget_geometry");
-/**Internal to canvas, whether a part of the geometry can be changed by the user*/
-export const WIDGET_CHANGEABLE = Symbol("widget_changeable");
-/**Internal to canvas, changes the geometry like the user does, see WidgetBase*/
-export const WIDGET_CHANGE = Symbol("widget_change");
+const GEOMETRY_KEYS = ["x", "y", "width", "height", "rotation"] as const;
 
 /**Shared class for widgets placed at a fixed position on a page
  * Position and size are in page units (px before any viewport scaling)
  * Rotation is in degrees clockwise around the center of the widget
  *
- * Position, size and rotation are inputs the user changes, by moving, resizing and rotating the widget in an editing viewport:
- * a writable state is written, an initial value or no value is kept by the widget, and a read only state locks that part
- * Width and height are 0 until given
+ * Position, size and rotation are inputs, an editing viewport changes them by writing the states of the widget on the page,
+ * the widget only shows them. Width and height are 0 until given
  *
  * Widgets can lay out their content at an original size, which is then scaled to the width and height of the widget,
  * by overriding original_size, without it the content is laid out at the size of the widget
  *
- * Opacity and visible are inputs too, changed in the properties editor
- *
- * WIDGET_TRANSFORM_EVENT is dispatched whenever position, size or rotation changes*/
+ * Opacity and visible are inputs too, changed in the properties editor*/
 export abstract class WidgetBase extends Base {
   /**Returns the name used to define the element, Abstract classes should return @abstract@ */
   static element_name() {
@@ -127,32 +107,13 @@ export abstract class WidgetBase extends Base {
     return this;
   }
 
-  /**The geometry the widget shows now*/
-  get [WIDGET_GEOMETRY](): Readonly<WidgetGeometry> {
+  /**The geometry the widget shows now, for subclasses laying out their content by it, see on_geometry*/
+  protected get geometry(): Readonly<WidgetGeometry> {
     return this.#geometry;
   }
 
-  /**Whether the user can change the part, false only for a read only state*/
-  [WIDGET_CHANGEABLE](key: GeometryKey): boolean {
-    const given = this.input_state(WIDGET[key]);
-    return given === undefined || given.writable;
-  }
-
-  /**Changes the geometry like the user does, a writable state is written, an initial value is kept by the widget,
-   * parts given as read only states are left unchanged*/
-  [WIDGET_CHANGE](change: Partial<WidgetGeometry>): void {
-    let kept = false;
-    for (const key of GEOMETRY_KEYS) {
-      const value = change[key];
-      if (value === undefined || value === this.#geometry[key]) continue;
-      const given = this.input_state(WIDGET[key]);
-      if (given === undefined) {
-        this.#geometry[key] = value;
-        kept = true;
-      } else if (given.writable) void given.write?.(value);
-    }
-    if (kept) this.#update();
-  }
+  /**Called after the widget was laid out for a new position, size or rotation, override it to lay out content by the geometry*/
+  protected on_geometry(): void {}
 
   #update() {
     const { x, y, width, height, rotation } = this.#geometry;
@@ -167,7 +128,7 @@ export abstract class WidgetBase extends Base {
     this.style.height = layout_height + "px";
     //Scale the layout box to the widget size, then rotate around the center of the widget size
     this.style.transform = `translate(${width / 2}px, ${height / 2}px) rotate(${rotation}deg) translate(${-width / 2}px, ${-height / 2}px) scale(${scale_x}, ${scale_y})`;
-    this.dispatchEvent(new Event(WIDGET_TRANSFORM_EVENT));
+    this.on_geometry();
   }
 }
 

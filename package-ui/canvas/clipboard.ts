@@ -1,13 +1,16 @@
 import { AccessTypes } from "#base";
 import ctm, { type ContextMenuLine } from "#context_menu";
-import state, { type State } from "@chocbite/ts-lib/state";
+import state from "@chocbite/ts-lib/state";
 import {
-  page_from_json,
   widget_to_json,
+  widgets_from_json,
   type CanvasPage,
   type CanvasWidget,
+  type CanvasWidgetData,
 } from "./data";
 import { group_bounds } from "./group";
+import type { OptionState } from "./link";
+import { value_now } from "./now";
 import { remove_widgets } from "./order";
 
 /**Distance every paste of copied widgets is placed further down and right, so copies do not hide the widgets they are copies of*/
@@ -26,12 +29,6 @@ export function has_copied(): boolean {
   return copied.length > 0;
 }
 
-/**The value of a state now, undefined when it has none*/
-const value_now = (option: State<unknown> | undefined): unknown => {
-  const value = option?.rsync ? option.get() : undefined;
-  return value?.ok ? value.value : undefined;
-};
-
 /**Copies the widgets, as the JSON a page saves them as, so pasting makes widgets with states of their own,
  * the copy is kept in the app, shared by every page, and given as the text for the clipboard of the system,
  * like {"format":"chocbite-canvas-widgets","widgets":[...]}, so it can be pasted in another browser
@@ -41,7 +38,7 @@ export function copy_widgets(widgets: readonly CanvasWidget[]): string {
   //Groups with their widgets, links as their $link objects, like when a page is saved
   copied_text = JSON.stringify({
     format: FORMAT,
-    widgets: widgets.map(widget_to_json),
+    widgets: widgets.map((widget) => widget_to_json(widget.data)),
   });
   copied = (JSON.parse(copied_text) as { widgets: unknown[] }).widgets;
   pastes = 1;
@@ -80,11 +77,13 @@ function widgets_of_text(text: string): unknown[] | undefined {
   return undefined;
 }
 
+/**The state of an option of the data of a widget*/
+const option_of = (widget: CanvasWidgetData, key: string) =>
+  (widget.options as Record<string, OptionState<unknown> | undefined>)[key];
+
 /**A number value of an option, undefined while it holds none, like a link*/
-const number_of = (widget: CanvasWidget, key: string): number | undefined => {
-  const value = value_now(
-    (widget.options as Record<string, State<unknown> | undefined>)[key],
-  );
+const number_of = (widget: CanvasWidgetData, key: string): number | undefined => {
+  const value = value_now(option_of(widget, key));
   return typeof value === "number" ? value : undefined;
 };
 
@@ -134,14 +133,9 @@ export async function paste_widgets(
     pastes = 0;
   }
   const widgets = page.widgets;
-  if (!copied.length || !state.is.state(widgets) || !widgets.writable)
-    return [];
-  const made = page_from_json({ widgets: copied });
-  if (!made.some) return [];
-  //page_from_json makes the widgets a local state, which has its value at once
-  const copies = (
-    made.value.widgets as State<CanvasWidget[]> & { ok(): CanvasWidget[] }
-  ).ok();
+  if (!copied.length || !widgets.writable) return [];
+  const copies = widgets_from_json(copied);
+  if (!copies) return [];
   const box = group_bounds(
     copies.map((widget) => ({
       x: number_of(widget, "x") ?? 0,
@@ -169,15 +163,14 @@ export async function paste_widgets(
       ["y", dy],
     ] as const) {
       const now = number_of(widget, key);
-      const option = (
-        widget.options as Record<string, State<unknown> | undefined>
-      )[key];
-      if (now !== undefined && by !== 0) void option?.write?.(now + by);
+      if (now !== undefined && by !== 0)
+        void option_of(widget, key)?.write?.(now + by);
     }
   const written = await widgets.write?.(
-    state.a.write.push<CanvasWidget>(...copies),
+    state.a.write.push<CanvasWidgetData>(...copies),
   );
-  return written?.ok ? copies : [];
+  //The widgets the page makes of the copies
+  return written?.ok ? copies.map((copy) => page.widget_of(copy)) : [];
 }
 
 /**Gives the text to the clipboard of the system, where the browser lets it, the copy in the app is kept either way*/
@@ -213,7 +206,7 @@ export function edit_lines(
   at?: { x: number; y: number },
   within?: PageArea,
 ): ContextMenuLine[] {
-  const writable = state.is.state(page.widgets) && page.widgets.writable;
+  const writable = page.widgets.writable;
   const access = (can: boolean) => (can ? AccessTypes.Write : AccessTypes.Read);
   return [
     ctm.line({
@@ -246,7 +239,7 @@ export function paste_line(
   at?: { x: number; y: number },
   within?: PageArea,
 ): ContextMenuLine {
-  const writable = state.is.state(page.widgets) && page.widgets.writable;
+  const writable = page.widgets.writable;
   return ctm.line({
     text: "Paste",
     shortcut: "Ctrl+V",

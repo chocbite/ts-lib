@@ -5,21 +5,24 @@ import {
   type InputOptions,
 } from "#base";
 import ctm, { type ContextMenuLine } from "#context_menu";
-import state, { type State, type StateOrVal } from "@chocbite/ts-lib/state";
+import state, { type StateOrVal } from "@chocbite/ts-lib/state";
 import {
   canvas_widget,
   GROUP,
+  is_group,
   widget_definition,
   WIDGETS,
+  type CanvasGroup,
   type CanvasPage,
   type CanvasWidget,
+  type CanvasWidgetData,
 } from "./data";
+import { GEOMETRY_KEYS, geometry_now } from "./geometry";
 import { group_bounds, transform_group, wrap_angle } from "./group";
 import { CanvasLink } from "./link";
-import { PageElement, widget_element_of } from "./page";
+import { option_now, value_now } from "./now";
+import { PageElement } from "./page";
 import {
-  WIDGET_GEOMETRY,
-  WIDGET_TRANSFORM_EVENT,
   WidgetBase,
   type WidgetBaseOptions,
   type WidgetGeometry,
@@ -36,16 +39,24 @@ const GROUP_WIDGET = {
   /**Scale fits the content to the size of the group, stretch fills it, each axis on its own, clip shows it at its own size from the top left, cut off,
    * scroll at its own size with scrollbars when it is bigger*/
   display: input_key<StateOrVal<GroupDisplay>>(),
-  /**Size of the content, the page of the widgets of the group*/
-  content_width: input_key<StateOrVal<number>>(),
-  content_height: input_key<StateOrVal<number>>(),
-  /**Widgets of the content, the last is drawn on top*/
-  widgets: input_key<StateOrVal<readonly CanvasWidget[]>>(),
-  /**Background of the content, a CSS color like the background of a page, transparent when not given*/
-  background: input_key<StateOrVal<string>>(),
+  /**The content of the group, the page it shows, given by the group, see CanvasGroup*/
+  content: input_key<StateOrVal<CanvasPage>>(),
 };
+
+/**Options of a group that are its data, the content page is made of them, the element is given the content instead*/
+interface GroupData {
+  /**Size of the content*/
+  content_width?: StateOrVal<number>;
+  content_height?: StateOrVal<number>;
+  /**Background of the content, a CSS color like the background of a page, transparent when not given*/
+  background?: StateOrVal<string>;
+  /**The data of the widgets of the content, the last is drawn on top*/
+  widgets?: StateOrVal<readonly CanvasWidgetData[]>;
+}
+
 export type GroupWidgetOptions = WidgetBaseOptions &
-  InputOptions<typeof GROUP_WIDGET>;
+  InputOptions<typeof GROUP_WIDGET> &
+  GroupData;
 
 /**Where the content of a group is shown in it
  * Scaled evenly by the smaller of the two ratios and centered when displayed scaled, so it keeps its proportions,
@@ -79,7 +90,7 @@ export function content_fit(
 }
 
 /**A widget whose content is a page of widgets of its own, made by grouping widgets
- * The page of the content is shown like the page of a viewport, its widgets get slots and ids unique within it*/
+ * It shows its content page like a viewport shows a page, its size, background and widgets from the page*/
 class GroupWidget extends WidgetBase {
   static element_name() {
     return "groupwidget";
@@ -89,15 +100,19 @@ class GroupWidget extends WidgetBase {
   #content = { width: 0, height: 0 };
   #page = this.appendChild(PageElement.create({ background: "transparent" }));
 
-  constructor() {
-    super();
-    this.addEventListener(WIDGET_TRANSFORM_EVENT, () => this.#fit());
+  /**The page element of the content, internal to canvas, a viewport editing inside the group reads its scrolling*/
+  get content_page(): PageElement {
+    return this.#page;
+  }
+
+  protected on_geometry(): void {
+    this.#fit();
   }
 
   /**Places the content, scaled evenly and centered when displayed scaled, see content_fit,
    * the group itself is laid out at its own size, so its content is never stretched*/
   #fit() {
-    const { width, height } = this[WIDGET_GEOMETRY];
+    const { width, height } = this.geometry;
     const fit = content_fit(this.#display, this.#content, { width, height });
     this.#page.style.transform =
       this.#display === "scale" || this.#display === "stretch"
@@ -112,37 +127,39 @@ class GroupWidget extends WidgetBase {
       this.setAttribute("display", this.#display);
       this.#fit();
     });
-    this.set_input(
-      GROUP_WIDGET.content_width,
-      options.content_width,
-      (width) => {
-        if (!width.ok) return;
-        this.#content.width = width.value;
-        this.#fit();
-      },
-    );
-    this.set_input(
-      GROUP_WIDGET.content_height,
-      options.content_height,
-      (height) => {
-        if (!height.ok) return;
-        this.#content.height = height.value;
-        this.#fit();
-      },
-    );
-    //The page follows the states itself, like the page of a viewport
-    this.#page.set({
-      width: options.content_width,
-      height: options.content_height,
-      widgets: options.widgets,
-      ...(options.background !== undefined
-        ? { background: options.background }
-        : {}),
+    this.set_input(GROUP_WIDGET.content, options.content, (content) => {
+      if (content.ok) this.#show(content.value);
     });
     return this;
   }
+
+  /**Shows the content page, its page element follows the states of the page, like the page of a viewport,
+   * the size it is fitted by is followed too*/
+  #show(content: CanvasPage) {
+    this.#page.set({
+      width: content.width,
+      height: content.height,
+      background: content.background ?? "transparent",
+      widgets: content.children,
+    });
+    this.attach_state_to_symbol(CONTENT_WIDTH, content.width, (width) => {
+      if (!width.ok) return;
+      this.#content.width = width.value;
+      this.#fit();
+    });
+    this.attach_state_to_symbol(CONTENT_HEIGHT, content.height, (height) => {
+      if (!height.ok) return;
+      this.#content.height = height.value;
+      this.#fit();
+    });
+  }
 }
 define_element(GroupWidget);
+
+const CONTENT_WIDTH = Symbol("content width");
+const CONTENT_HEIGHT = Symbol("content height");
+
+export { GroupWidget };
 
 /**The definition of groups, registered by canvas*/
 export const GROUP_DEFINITION = WIDGETS.group(
@@ -191,67 +208,15 @@ export const GROUP_DEFINITION = WIDGETS.group(
   }),
 );
 
-/**Whether the widget is a group*/
-export const is_group = (widget: CanvasWidget): boolean =>
-  widget.widget === GROUP;
-
-/**The value of an option now, undefined while it has none*/
-const value_now = (widget: CanvasWidget, key: string): unknown => {
-  const option = (widget.options as Record<string, State<unknown> | undefined>)[
-    key
-  ];
-  const value = option?.rsync ? option.get() : undefined;
-  return value?.ok ? value.value : undefined;
-};
-
-/**The widgets of a group now*/
-export const group_widgets_of = (group: CanvasWidget): CanvasWidget[] => {
-  const widgets = value_now(group, "widgets");
-  return Array.isArray(widgets) ? (widgets as CanvasWidget[]) : [];
-};
-
-/**The groups from the widgets down to the target, empty when it is one of the widgets, undefined when it is not in them
- * Found in the structure as it is now, so it holds after widgets were grouped, ungrouped or pasted*/
-export function path_to(
-  widgets: readonly CanvasWidget[],
-  target: CanvasWidget,
-): CanvasWidget[] | undefined {
-  for (const widget of widgets) {
-    if (widget === target) return [];
-    if (!is_group(widget)) continue;
-    const inside = path_to(group_widgets_of(widget), target);
-    if (inside) return [widget, ...inside];
-  }
-  return undefined;
-}
-
-const GEOMETRY_KEYS = ["x", "y", "width", "height", "rotation"] as const;
-
-/**The geometry of a widget, as its element shows it, from its options where no page shows it*/
-function geometry_of(widget: CanvasWidget): WidgetGeometry {
-  const element = widget_element_of(widget);
-  if (element) return { ...element[WIDGET_GEOMETRY] };
-  const geometry: WidgetGeometry = {
-    x: 0,
-    y: 0,
-    width: 0,
-    height: 0,
-    rotation: 0,
-  };
-  for (const key of GEOMETRY_KEYS) {
-    const value = value_now(widget, key);
-    if (typeof value === "number") geometry[key] = value;
-  }
-  return geometry;
-}
+/**The geometry of a widget as its elements show it, links followed, all 0 while a part has no value*/
+const geometry_of = (widget: CanvasWidget): WidgetGeometry =>
+  geometry_now(widget) ?? { x: 0, y: 0, width: 0, height: 0, rotation: 0 };
 
 /**Writes the geometry to the options of the widget that hold values, linked ones keep their links*/
 function set_geometry(widget: CanvasWidget, geometry: WidgetGeometry): void {
   for (const key of GEOMETRY_KEYS) {
-    const option = (
-      widget.options as Record<string, State<unknown> | undefined>
-    )[key];
-    if (!option?.writable || value_now(widget, key) instanceof CanvasLink)
+    const option = widget.option(key);
+    if (!option?.writable || option_now(widget, key) instanceof CanvasLink)
       continue;
     void option.write?.(
       key === "rotation" ? wrap_angle(geometry.rotation) : geometry[key],
@@ -262,7 +227,7 @@ function set_geometry(widget: CanvasWidget, geometry: WidgetGeometry): void {
 /**The widgets of a page that can be written, undefined when they can not*/
 async function writable_widgets(page: CanvasPage) {
   const widgets = page.widgets;
-  if (!state.is.state(widgets) || !widgets.writable) return undefined;
+  if (!widgets.writable) return undefined;
   const current = await widgets.read();
   return current.ok ? { state: widgets, now: current.value } : undefined;
 }
@@ -275,10 +240,12 @@ export async function group_widgets(
   page: CanvasPage,
   selected: readonly CanvasWidget[],
   rotation = 0,
-): Promise<CanvasWidget | undefined> {
+): Promise<CanvasGroup | undefined> {
   const widgets = await writable_widgets(page);
   if (!widgets) return undefined;
-  const ordered = widgets.now.filter((widget) => selected.includes(widget));
+  const ordered = page
+    .widgets_now()
+    .filter((widget) => selected.includes(widget));
   if (!ordered.length) return undefined;
   const geometries = ordered.map(geometry_of);
   const box = group_bounds(geometries, rotation);
@@ -300,17 +267,22 @@ export async function group_widgets(
     content_width: box.width,
     content_height: box.height,
     background: "transparent",
-    widgets: state.ok_w<readonly CanvasWidget[]>(ordered),
-  }) as unknown as CanvasWidget;
+    widgets: state.ok_w<readonly CanvasWidgetData[]>(
+      ordered.map((widget) => widget.data),
+    ),
+  });
   //In the place of the front one, after the others are taken out
   const index =
-    widgets.now.indexOf(ordered[ordered.length - 1]) - (ordered.length - 1);
+    widgets.now.indexOf(ordered[ordered.length - 1].data) -
+    (ordered.length - 1);
   for (const widget of ordered)
-    await widgets.state.write?.(state.a.write.delete<CanvasWidget>(widget));
+    await widgets.state.write?.(
+      state.a.write.delete<CanvasWidgetData>(widget.data),
+    );
   await widgets.state.write?.(
-    state.a.write.splice<CanvasWidget>(index, 0, group),
+    state.a.write.splice<CanvasWidgetData>(index, 0, group),
   );
-  return group;
+  return page.widget_of(group) as CanvasGroup;
 }
 
 /**Puts the widgets of the groups back on the page in the place of each group, where the group shows them,
@@ -323,16 +295,19 @@ export async function ungroup_widgets(
   const widgets = await writable_widgets(page);
   if (!widgets) return [];
   const ungrouped: CanvasWidget[] = [];
-  for (const group of widgets.now.filter(
-    (widget) => is_group(widget) && groups.includes(widget),
-  )) {
-    const inside = group_widgets_of(group);
+  for (const group of page
+    .widgets_now()
+    .filter(
+      (widget): widget is CanvasGroup =>
+        is_group(widget) && groups.includes(widget),
+    )) {
+    const inside = group.content.widgets_now();
     const frame = geometry_of(group);
     const content = {
-      width: Number(value_now(group, "content_width")) || frame.width,
-      height: Number(value_now(group, "content_height")) || frame.height,
+      width: Number(value_now(group.content.width)) || frame.width,
+      height: Number(value_now(group.content.height)) || frame.height,
     };
-    const fit = content_fit(value_now(group, "display"), content, frame);
+    const fit = content_fit(option_now(group, "display"), content, frame);
     //Where the group shows the content, turned around the center of the group
     const shown_at = (x: number, y: number) => {
       const radians = (frame.rotation * Math.PI) / 180;
@@ -372,15 +347,17 @@ export async function ungroup_widgets(
     transform_group(inside.map(geometry_of), from, to).forEach((geometry, i) =>
       set_geometry(inside[i], geometry),
     );
-    const now = (await widgets.state.read()).ok
-      ? ((await widgets.state.read()) as { value: readonly CanvasWidget[] }).value
-      : [];
-    const index = now.indexOf(group);
-    await widgets.state.write?.(state.a.write.delete<CanvasWidget>(group));
+    const now = await widgets.state.read();
+    const index = now.ok ? now.value.indexOf(group.data) : -1;
+    const data = inside.map((widget) => widget.data);
     await widgets.state.write?.(
-      state.a.write.splice<CanvasWidget>(index, 0, ...inside),
+      state.a.write.delete<CanvasWidgetData>(group.data),
     );
-    ungrouped.push(...inside);
+    await widgets.state.write?.(
+      state.a.write.splice<CanvasWidgetData>(index, 0, ...data),
+    );
+    //The widgets the page makes of them
+    ungrouped.push(...data.map((entry) => page.widget_of(entry)));
   }
   return ungrouped;
 }
@@ -394,7 +371,7 @@ export function group_lines(
   rotation: number,
   done: (widgets: CanvasWidget[]) => void,
 ): ContextMenuLine[] {
-  const writable = state.is.state(page.widgets) && page.widgets.writable;
+  const writable = page.widgets.writable;
   const access = (can: boolean) => (can ? AccessTypes.Write : AccessTypes.Read);
   return [
     ctm.line({

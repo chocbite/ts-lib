@@ -1,8 +1,13 @@
 import depot, { type DepotGroup, type DepotType } from "@chocbite/ts-lib/depot";
 import { ok, NiceError } from "@chocbite/ts-lib/result";
-import state, { type StateROSW } from "@chocbite/ts-lib/state";
+import state, { type StateROS, type StateROSW } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it } from "vitest";
 import depot_ui, { DepotTree } from "..";
+
+/**The children state of a registered group, which always has one*/
+const children_of = <T>(group: {
+  children: readonly T[] | StateROS<readonly T[]>;
+}): StateROS<readonly T[]> => group.children as StateROS<readonly T[]>;
 
 /**Closes the panels of open selectors*/
 const close_panels = () => {
@@ -88,7 +93,7 @@ describe("tree", () => {
     expect(tree.rows().ok()).toEqual([
       shapes,
       other,
-      type.children.ok().at(-1),
+      children_of(type).ok().at(-1),
     ]);
     expect(calls).toBe(0);
   });
@@ -96,11 +101,11 @@ describe("tree", () => {
   it("drops its subscriptions when disposed", async () => {
     const { type, shapes } = setup();
     const tree = new DepotTree(type);
-    expect(type.children.amount()).toBe(1);
-    expect(shapes.children.amount()).toBe(1);
+    expect(children_of(type).amount()).toBe(1);
+    expect(children_of(shapes).amount()).toBe(1);
     tree.dispose();
-    expect(type.children.amount()).toBe(0);
-    expect(shapes.children.amount()).toBe(0);
+    expect(children_of(type).amount()).toBe(0);
+    expect(children_of(shapes).amount()).toBe(0);
     type.add("more", "", "", 1);
     await tick();
     expect(tree.rows().ok().length).toBe(2);
@@ -200,7 +205,7 @@ describe("select", () => {
     try {
       const result = depot_ui.select(depot.states, {
         mode: "multi",
-        filter: (e) => e.value.writable,
+        filter: (e) => state.is.state(e.value) && e.value.writable,
         selected: [speed],
       });
       expect(rows()).toEqual(["Machine"]);
@@ -332,8 +337,8 @@ describe("select_state", () => {
     const { temp } = setup();
     void depot_ui.select_state();
     input("machine");
-    expect(temp.value.amount()).toBe(1);
+    expect((temp.value as StateROS<number>).amount()).toBe(1);
     button("Cancel").click();
-    expect(temp.value.amount()).toBe(0);
+    expect((temp.value as StateROS<number>).amount()).toBe(0);
   });
 });

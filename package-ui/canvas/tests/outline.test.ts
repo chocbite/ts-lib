@@ -1,7 +1,7 @@
 import { define_element } from "#base";
 import state, { type StateROSW } from "@chocbite/ts-lib/state";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
-import { canvas, type CanvasPage, type CanvasWidget } from "..";
+import { canvas, type CanvasSelection, type CanvasWidgetData } from "..";
 import { WidgetBase } from "../widget";
 
 class OutlineWidget extends WidgetBase {
@@ -35,10 +35,13 @@ const make = (ids: string[]) => {
   const widgets = state.ok_w(
     ids.map((id) => canvas.widget(definition, { id })),
   );
-  const page: CanvasPage = { widgets };
-  const selected = state.ok_w<CanvasWidget[]>([]);
+  const page = canvas.page({ widgets });
+  const selected = state.ok_w<CanvasSelection>(undefined);
   const outline = document.body.appendChild(canvas.outline({ page, selected }));
-  const rows = () => [...outline.querySelectorAll("list-row")];
+  /**The row of the page, the root*/
+  const page_row = () => outline.querySelector<HTMLElement>("list-row")!;
+  /**The rows of the widgets, below the row of the page*/
+  const rows = () => [...outline.querySelectorAll("list-row")].slice(1);
   const texts = () =>
     rows().map((row) =>
       [...row.querySelectorAll("list-keyfield, list-textfield")].map(
@@ -49,7 +52,9 @@ const make = (ids: string[]) => {
     rows().find(
       (row) => row.querySelector("list-keyfield")!.textContent === id,
     )! as HTMLElement;
-  return { widgets, page, selected, outline, rows, texts, row_of };
+  /**The widget the page makes of the data of a widget*/
+  const w = (data: CanvasWidgetData) => page.widget_of(data);
+  return { widgets, page, selected, outline, page_row, rows, texts, row_of, w };
 };
 
 describe("Outline", () => {
@@ -60,6 +65,25 @@ describe("Outline", () => {
       ["Middle", "Box"],
       ["Back", "Box"],
     ]);
+  });
+
+  it("follows the name the widget is registered with", () => {
+    const name = state.ok_w("Named");
+    const named = group.add("named", name, "", {
+      create: (options) => OutlineWidget.create(options),
+    });
+    const widgets = state.ok_w([canvas.widget(named, { id: "a" })]);
+    const outline = document.body.appendChild(
+      canvas.outline({ page: canvas.page({ widgets }) }),
+    );
+    //The first text field is the name of the page row
+    const shown = () =>
+      outline.querySelectorAll("list-textfield")[1].textContent;
+    expect(shown()).toBe("Named");
+    name.set_ok("Renamed");
+    expect(shown()).toBe("Renamed");
+    named.remove();
+    expect(shown()).toBe("named");
   });
 
   it("follows the widgets and their ids", () => {
@@ -86,8 +110,61 @@ describe("Outline", () => {
     expect(rows()[1]).toBe(ra);
   });
 
+  it("shows the page as the root row, opened to its widgets, with its id", () => {
+    const widgets = state.ok_w([canvas.widget(definition, { id: "A" })]);
+    const id = state.ok_w("Main");
+    const outline = document.body.appendChild(
+      canvas.outline({ page: canvas.page({ id, widgets }) }),
+    );
+    const row = outline.querySelector("list-row")!;
+    const own = (selector: string) =>
+      row.querySelector(`:scope > div > ${selector}`)!.textContent;
+    expect(own("list-keyfield")).toBe("Main");
+    expect(own("list-textfield")).toBe("Page");
+    expect(row.querySelectorAll("list-row")).toHaveLength(1);
+    id.set_ok("Other");
+    expect(own("list-keyfield")).toBe("Other");
+  });
+
+  it("selects the page with a click on its row, a ctrl click on a widget then selects only the widget", async () => {
+    const { widgets, page, selected, page_row, row_of, w } = make(["A", "B"]);
+    const [a] = widgets.ok();
+    const click = (row: HTMLElement, ctrlKey = false) =>
+      row
+        .querySelector(":scope > div > list-keyfield")!
+        .dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey }),
+        );
+    click(page_row());
+    await tick();
+    expect(selected.ok()).toBe(page);
+    expect(page_row().classList).toContain("selected");
+    //The page is the level above its widgets, the selection is of one level
+    click(row_of("A"), true);
+    await tick();
+    expect(selected.ok()).toBe(w(a));
+    click(page_row(), true);
+    await tick();
+    expect(selected.ok()).toBe(page);
+  });
+
+  it("leaves a selected page with the delete key", async () => {
+    const { widgets, page, selected, outline } = make(["A"]);
+    selected.set_ok(page);
+    outline.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Delete",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await tick();
+    expect(widgets.ok()).toHaveLength(1);
+    expect(selected.ok()).toBe(page);
+  });
+
   it("shares the selection, a click on a row selects its widget", async () => {
-    const { widgets, selected, row_of } = make(["A", "B"]);
+    const { widgets, selected, row_of, w } = make(["A", "B"]);
     const [a, b] = widgets.ok();
     row_of("B")
       .querySelector("list-keyfield")!
@@ -95,18 +172,18 @@ describe("Outline", () => {
         new MouseEvent("click", { bubbles: true, cancelable: true }),
       );
     await tick();
-    expect(selected.ok()).toEqual([b]);
-    selected.set_ok([a]);
+    expect(selected.ok()).toBe(w(b));
+    selected.set_ok(w(a));
     expect(row_of("A").classList).toContain("selected");
     expect(row_of("B").classList).not.toContain("selected");
-    selected.set_ok([]);
+    selected.set_ok(undefined);
     expect(row_of("A").classList).not.toContain("selected");
   });
 
   it("deletes the selected widgets with the menu of a row or the delete key", async () => {
-    const { widgets, selected, outline, row_of } = make(["A", "B", "C"]);
+    const { widgets, selected, outline, row_of, w } = make(["A", "B", "C"]);
     const [a, b, c] = widgets.ok();
-    selected.set_ok([a, c]);
+    selected.set_ok(canvas.selection_of([w(a), w(c)]));
     row_of("A").dispatchEvent(
       new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
     );
@@ -119,8 +196,8 @@ describe("Outline", () => {
       .click();
     await tick();
     expect(widgets.ok()).toEqual([b]);
-    expect(selected.ok()).toEqual([]);
-    selected.set_ok([b]);
+    expect(selected.ok()).toBeUndefined();
+    selected.set_ok(w(b));
     outline.dispatchEvent(
       new KeyboardEvent("keydown", {
         key: "Delete",
@@ -133,7 +210,7 @@ describe("Outline", () => {
   });
 
   it("adds widgets picked in the widget selector, at the center of the page, and selects them", async () => {
-    const { widgets, selected, outline } = make(["A"]);
+    const { widgets, selected, outline, w } = make(["A"]);
     const add = outline.querySelector<HTMLElement>("list-addrow .add")!;
     expect(add.textContent).toBe("Add widget");
     add.click();
@@ -153,7 +230,7 @@ describe("Outline", () => {
     await tick();
     expect(widgets.ok()).toHaveLength(2);
     const added = widgets.ok()[1];
-    expect(selected.ok()).toEqual([added]);
+    expect(selected.ok()).toBe(w(added));
     //A 100 by 100 widget centered on a 1920 by 1080 page
     const value = (key: string) =>
       (added.options as Record<string, StateROSW<unknown>>)[key].ok();
@@ -161,8 +238,8 @@ describe("Outline", () => {
   });
 
   it("copy and paste of the system paste copies of the selected widgets and select them", async () => {
-    const { widgets, selected, outline } = make(["A", "B"]);
-    selected.set_ok([widgets.ok()[0]]);
+    const { widgets, selected, outline, w } = make(["A", "B"]);
+    selected.set_ok(w(widgets.ok()[0]));
     const clipboard = new DataTransfer();
     const event = (type: "copy" | "paste") =>
       outline.dispatchEvent(
@@ -176,7 +253,7 @@ describe("Outline", () => {
     event("paste");
     await tick();
     expect(widgets.ok()).toHaveLength(3);
-    expect(selected.ok()).toEqual([widgets.ok()[2]]);
+    expect(selected.ok()).toBe(w(widgets.ok()[2]));
   });
 
   it("orders the widget of a row with its menu", async () => {
@@ -223,8 +300,8 @@ describe("Outline of groups", () => {
   const nested = async () => {
     const made = make(["A", "B", "C"]);
     const [a, b, c] = made.widgets.ok();
-    const g = (await canvas.group(made.page, [b, c]))!;
-    (g.options.id as StateOkW<string>).set_ok("G");
+    const g = (await canvas.group(made.page, [made.w(b), made.w(c)]))!;
+    (g.data.options.id as StateOkW<string>).set_ok("G");
     const ids = () => made.rows().map(own);
     const open = (id: string) =>
       made
@@ -247,15 +324,17 @@ describe("Outline of groups", () => {
     const { ids, open, g } = await nested();
     open("G");
     (
-      (g.options as Record<string, unknown>).widgets as StateOkW<CanvasWidget[]>
+      (g.options as Record<string, unknown>).widgets as StateOkW<
+        CanvasWidgetData[]
+      >
     ).array.push(canvas.widget(definition, { id: "D" }));
     expect(ids()).toEqual(["G", "D", "C", "B", "A"]);
   });
 
   it("keeps the selection to one level, a widget of another level replaces it", async () => {
-    const { open, selected, row_of, a, c } = await nested();
+    const { open, selected, row_of, a, c, g, w } = await nested();
     open("G");
-    selected.set_ok([a]);
+    selected.set_ok(w(a));
     row_of("C")
       .querySelector(":scope > div > list-keyfield")!
       .dispatchEvent(
@@ -266,7 +345,8 @@ describe("Outline of groups", () => {
         }),
       );
     await tick();
-    expect(selected.ok()).toEqual([c]);
+    //The widget the content of the group makes
+    expect(selected.ok()).toBe(g.content.widget_of(c));
   });
 
   it("keeps a selection of one level when widgets were grouped while their group is closed", async () => {
@@ -275,13 +355,16 @@ describe("Outline of groups", () => {
     //A widget pasted into the group, never listed
     const pasted = canvas.widget(definition, { id: "P" });
     (
-      (g.options as Record<string, unknown>).widgets as StateOkW<CanvasWidget[]>
+      (g.options as Record<string, unknown>).widgets as StateOkW<
+        CanvasWidgetData[]
+      >
     ).array.push(pasted);
-    selected.set_ok([b]);
+    const inside = [b, pasted].map((data) => g.content.widget_of(data));
+    selected.set_ok(inside[0]);
     //Added like a ctrl click in a viewport does
-    await selected.write(state.a.write.push(pasted));
+    await selected.write(canvas.selection_of(inside));
     await tick();
-    expect(selected.ok()).toEqual([b, pasted]);
+    expect(canvas.selected_widgets(selected.ok())).toEqual(inside);
   });
 
   it("acts in the group of a row with its menu", async () => {
@@ -301,11 +384,11 @@ describe("Outline of groups", () => {
     expect(
       (
         (g.options as Record<string, unknown>).widgets as StateROSW<
-          CanvasWidget[]
+          CanvasWidgetData[]
         >
       ).ok(),
     ).toEqual([c]);
-    expect(widgets.ok()).toEqual([a, g]);
+    expect(widgets.ok()).toEqual([a, g.data]);
     void b;
   });
 });

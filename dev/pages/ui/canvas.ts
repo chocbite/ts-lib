@@ -4,10 +4,11 @@ import {
   type InputOptions,
 } from "@chocbite/ts-lib-ui/base";
 import canvas, {
+  type CanvasWidgetData,
   WidgetBase,
   type CanvasPage,
   type CanvasLink,
-  type CanvasWidget,
+  type CanvasSelection,
   type WidgetBaseOptions,
   type WidgetOptionsInput,
 } from "@chocbite/ts-lib-ui/canvas";
@@ -272,7 +273,7 @@ const graphic_widget = (options: WidgetOptionsInput<DevGraphicOptions>) =>
   canvas.widget(GRAPHIC, options);
 
 /**The widgets of the old trial, for an 800 x 600 page, with writable states*/
-const trial_widgets = (): CanvasWidget[] => [
+const trial_widgets = (): CanvasWidgetData[] => [
   box_widget({
     color: "#2980b9",
     text: "Small box",
@@ -312,7 +313,7 @@ const viewport_in = (
   size: { width: string; height: string },
   page: StateOrVal<CanvasPage | undefined>,
   edit = false,
-  selected?: StateROSW<CanvasWidget[]>,
+  selected?: StateROSW<CanvasSelection>,
 ) => {
   const vp = canvas.viewport({ page, edit, selected });
   vp.style.width = "100%";
@@ -330,30 +331,32 @@ const viewport_in = (
 {
   const sec = section(
     "One page, two viewports",
-    "Two editors on one page, each with a selection, outline and properties editor of its own, so a change in one can be watched in the other. Click, ctrl or shift click, or drag a rectangle on the page to select. Drag the box to move, resize and rotate. Right click for menus. In a focused editor or outline: Ctrl+A, Ctrl+X, Ctrl+C, Ctrl+V, Delete, and Ctrl+G and Ctrl+Shift+G to group and ungroup. Edit in the menu of a group, or a double click on it, edits inside it, a double click beside the widgets of the group goes up again, Add widget in the menu of an empty spot adds widgets there, the bar at the top goes back up, selecting in the outline jumps the editors to the level. With nothing selected a properties editor shows the level of its editor. The buttons change the widgets and page size, see the canvas README for the details",
+    "Two editors on one page, each with a selection, outline and properties editor of its own, so a change in one can be watched in the other. Click, ctrl or shift click, or drag a rectangle on the page to select. Drag the box to move, resize and rotate. Right click for menus. In a focused editor or outline: Ctrl+A, Ctrl+X, Ctrl+C, Ctrl+V, Delete, and Ctrl+G and Ctrl+Shift+G to group and ungroup. Edit in the menu of a group, or a double click on it, edits inside it, a double click beside the widgets of the group goes up again, Add widget in the menu of an empty spot adds widgets there, the bar at the top goes back up, selecting in the outline jumps the editors to the level. The page is the root row of the outline, clicking it selects the page and goes up to it, its properties editor shows it, a ctrl click on a widget then selects only the widget. The buttons change the widgets and page size, see the canvas README for the details",
   );
   const width = state.ok_w(800);
   const height = state.ok_w(600);
-  const widgets = state.ok_w<CanvasWidget[]>(trial_widgets());
-  const page: CanvasPage = {
+  const widgets = state.ok_w<CanvasWidgetData[]>(trial_widgets());
+  const page = canvas.page({
     id: state.ok_w("Main"),
     width,
     height,
     background: state.ok_w("#ffffff"),
     widgets,
-  };
-  const selected = state.ok_w<CanvasWidget[]>([]);
+  });
+  const selected = state.ok_w<CanvasSelection>(undefined);
   const shown = sec.appendChild(document.createElement("div"));
   shown.style.fontFamily = "monospace";
   selected.sub((s) => {
-    shown.textContent =
-      s.ok && s.value.length
-        ? "selected " + s.value.map((w) => w.widget).join(", ")
+    const selection = s.ok ? s.value : undefined;
+    const widgets = canvas.selected_widgets(selection);
+    shown.textContent = canvas.is_page(selection)
+      ? "selected the page"
+      : widgets.length
+        ? "selected " + widgets.map((widget) => widget.widget).join(", ")
         : "nothing selected";
   }, true);
   const boxes = row(sec);
-  //The properties editor shows the level this editor shows while nothing is selected
-  const editor = viewport_in(
+  viewport_in(
     boxes,
     "Editor",
     { width: "36rem", height: "27rem" },
@@ -370,14 +373,12 @@ const viewport_in = (
     width: "22rem",
     height: "27rem",
     display: "flex",
-  }).appendChild(
-    canvas.properties({ selected, page: editor.shown_page }),
-  ).style.flexGrow = "1";
+  }).appendChild(canvas.properties({ owner: selected })).style.flexGrow = "1";
   //The second editor has a selection, outline and properties editor of its own, so a change in one editor can be watched in the other,
   //like changing the content size of a group the other edits inside
-  const selected_second = state.ok_w<CanvasWidget[]>([]);
+  const selected_second = state.ok_w<CanvasSelection>(undefined);
   const second_boxes = row(sec);
-  const second = viewport_in(
+  viewport_in(
     second_boxes,
     "Second editor, its own selection",
     { width: "36rem", height: "27rem" },
@@ -397,7 +398,9 @@ const viewport_in = (
     height: "27rem",
     display: "flex",
   }).appendChild(
-    canvas.properties({ selected: selected_second, page: second.shown_page }),
+    canvas.properties({
+      owner: selected_second,
+    }),
   ).style.flexGrow = "1";
   let added = 0;
   controls(sec, {
@@ -439,10 +442,10 @@ const viewport_in = (
     "Property sections, opacity and visible",
     "Select the label: its text is at the root, the rest is in the Font and Frame sections, open them with the arrow. Link an option in an open section, the section stays open. Position, size, rotation, opacity (0 to 1) and visible are the base properties of every widget, in the General section, select another widget and the open sections stay open. Every widget has a state for them, so they can be linked too. The half transparent box has opacity 0.5. The hidden box is not visible: the view shows nothing, the editor shows it faintly so it can still be selected, turn visible on in the editor and it shows in both",
   );
-  const page: CanvasPage = {
+  const page = canvas.page({
     width: state.ok_w(600),
     height: state.ok_w(300),
-    widgets: state.ok_w<CanvasWidget[]>([
+    widgets: state.ok_w<CanvasWidgetData[]>([
       canvas.widget(LABEL, {
         ...place(20, 20, 240, 70),
         text: "Sectioned label",
@@ -467,8 +470,8 @@ const viewport_in = (
         ...place(300, 150, 160, 80),
       }),
     ]),
-  };
-  const selected = state.ok_w<CanvasWidget[]>([]);
+  });
+  const selected = state.ok_w<CanvasSelection>(undefined);
   const boxes = row(sec);
   viewport_in(
     boxes,
@@ -483,7 +486,7 @@ const viewport_in = (
     width: "22rem",
     height: "27rem",
     display: "flex",
-  }).appendChild(canvas.properties({ selected, page })).style.flexGrow = "1";
+  }).appendChild(canvas.properties({ owner: selected })).style.flexGrow = "1";
 }
 
 //Kept across reloads
@@ -498,11 +501,12 @@ const viewport_in = (
     "Dev canvas page",
     "Pages stored by the canvas dev page",
   );
-  const default_page = (): CanvasPage => ({
-    width: state.ok_w(800),
-    height: state.ok_w(600),
-    widgets: state.ok_w<CanvasWidget[]>(trial_widgets()),
-  });
+  const default_page = (): CanvasPage =>
+    canvas.page({
+      width: state.ok_w(800),
+      height: state.ok_w(600),
+      widgets: state.ok_w<CanvasWidgetData[]>(trial_widgets()),
+    });
   const page = state.ok_w<CanvasPage>(
     SETTINGS.get("page", default_page(), canvas.page_from_json).value,
   );
@@ -524,7 +528,7 @@ const viewport_in = (
   setInterval(show_stored, 500);
   /**The widgets state of the page shown now*/
   const widgets = () =>
-    page.ok().widgets as ReturnType<typeof state.ok_w<CanvasWidget[]>>;
+    page.ok().widgets as ReturnType<typeof state.ok_w<CanvasWidgetData[]>>;
   let added = 0;
   controls(sec, {
     "Add box": () => {
@@ -545,10 +549,10 @@ const viewport_in = (
     "Remove last": () => widgets().set_ok(widgets().ok().slice(0, -1)),
     Reset: () => {
       page.set_ok(default_page());
-      selected.set_ok([]);
+      selected.set_ok(undefined);
     },
   });
-  const selected = state.ok_w<CanvasWidget[]>([]);
+  const selected = state.ok_w<CanvasSelection>(undefined);
   const boxes = row(sec);
   viewport_in(
     boxes,
@@ -562,7 +566,7 @@ const viewport_in = (
     width: "22rem",
     height: "27rem",
     display: "flex",
-  }).appendChild(canvas.properties({ selected, page })).style.flexGrow = "1";
+  }).appendChild(canvas.properties({ owner: selected })).style.flexGrow = "1";
 }
 
 //      _____ _______    _______ ______  _____
@@ -578,7 +582,7 @@ const viewport_in = (
   );
   const shared = place(40, 40, 160, 80);
   const locked = place(300, 40, 160, 80);
-  const page: CanvasPage = {
+  const page = canvas.page({
     width: 800,
     height: 400,
     widgets: [
@@ -600,7 +604,7 @@ const viewport_in = (
         height: 80,
       }),
     ],
-  };
+  });
   place_inputs(sec, "Shared", shared);
   place_inputs(sec, "Locked", locked);
   const boxes = row(sec);
@@ -619,11 +623,11 @@ const viewport_in = (
     "Fit",
     "One 800 x 600 page in three viewports of different shapes outside edit mode, it should scale to fit and center with the viewport background around it",
   );
-  const page: CanvasPage = {
+  const page = canvas.page({
     width: 800,
     height: 600,
     widgets: trial_widgets(),
-  };
+  });
   const boxes = row(sec);
   for (const [width, height] of [
     ["16rem", "12rem"],
@@ -644,8 +648,8 @@ const viewport_in = (
     "Definitions registered late",
     "The page refers to /widgets/dev/late, which is not registered yet, so an error is shown in its place. Register makes the widget appear, unregister shows the error again. Pages refer to widgets by path, so a page can be loaded before the widgets it uses",
   );
-  //Written as data, canvas.widget needs the registered entry
-  const late_widget: CanvasWidget<DevBoxOptions> = {
+  //The data of a widget from its path, canvas.widget needs the registered entry
+  const late_widget: CanvasWidgetData<DevBoxOptions> = {
     widget: "/widgets/dev/late",
     options: {
       color: state.ok_w("#16a085"),
@@ -653,7 +657,7 @@ const viewport_in = (
       ...place(100, 60, 200, 80),
     },
   };
-  const page: CanvasPage = { width: 400, height: 200, widgets: [late_widget] };
+  const page = canvas.page({ width: 400, height: 200, widgets: [late_widget] });
   let late: ReturnType<typeof dev.add> | undefined;
   controls(sec, {
     Register: () => {
@@ -700,7 +704,7 @@ const viewport_in = (
   states.add("on", "On", "A switch, to link options to", on);
   const count_link = canvas.link<string>("/states/dev-canvas/count");
   const blue_text = state.ok_w<string | CanvasLink<string>>(count_link);
-  const widgets: CanvasWidget[] = [
+  const widgets: CanvasWidgetData[] = [
     box_widget({
       color: "#2980b9",
       text: blue_text,
@@ -721,8 +725,8 @@ const viewport_in = (
       ...place(280, 20, 160, 70),
     }),
   ];
-  const page: CanvasPage = { width: 480, height: 200, widgets };
-  const selected = state.ok_w<CanvasWidget[]>([widgets[0]]);
+  const page = canvas.page({ width: 480, height: 200, widgets });
+  const selected = state.ok_w<CanvasSelection>(page.widget_of(widgets[0]));
   const line = row(sec);
   line.append("x state:");
   line.append(form.number_input({ value: x }));
@@ -768,7 +772,7 @@ const viewport_in = (
     width: "22rem",
     height: "20rem",
     display: "flex",
-  }).appendChild(canvas.properties({ selected, page })).style.flexGrow = "1";
+  }).appendChild(canvas.properties({ owner: selected })).style.flexGrow = "1";
 }
 
 //     __  __          _   ___     __
@@ -782,8 +786,8 @@ const viewport_in = (
     "Many widgets",
     "Fills a 1920 x 1080 page with widgets, each with five writable states, shown in an editor and a preview. Look at how long filling takes, and how panning, zooming and dragging feel",
   );
-  const widgets = state.ok_w<CanvasWidget[]>([]);
-  const page: CanvasPage = { width: 1920, height: 1080, widgets };
+  const widgets = state.ok_w<CanvasWidgetData[]>([]);
+  const page = canvas.page({ width: 1920, height: 1080, widgets });
   const colors = ["#2980b9", "#27ae60", "#8e44ad", "#c0392b", "#d35400"];
   const status = sec.appendChild(document.createElement("div"));
   status.style.fontFamily = "monospace";
@@ -792,7 +796,7 @@ const viewport_in = (
     const start = performance.now();
     const columns = Math.ceil(Math.sqrt(amount * (1920 / 1080)));
     const size = 1920 / columns;
-    const list: CanvasWidget[] = [];
+    const list: CanvasWidgetData[] = [];
     for (let i = 0; i < amount; i++)
       list.push(
         box_widget({

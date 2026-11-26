@@ -22,7 +22,7 @@ import {
 import { TEST_ERROR } from "./tests_shared";
 
 describe("Sync states", function () {
-  describe("ROS", { timeout: 100 }, function () {
+  describe("ROS", function () {
     it("ok", async function () {
       const init = st.ros(ok(1));
       assertType<StateROS<number>>(init);
@@ -71,7 +71,7 @@ describe("Sync states", function () {
     });
   });
   //##################################################################################################################################################
-  describe("RES", { timeout: 100 }, function () {
+  describe("RES", function () {
     it("ok", async function () {
       st.res(ok(1));
     });
@@ -104,7 +104,7 @@ describe("Sync states", function () {
     });
   });
   //##################################################################################################################################################
-  describe("ROSWS", { timeout: 100 }, function () {
+  describe("ROSWS", function () {
     it("ok", async function () {
       st.rosw(ok(1), true);
     });
@@ -145,7 +145,7 @@ describe("Sync states", function () {
     });
   });
   //##################################################################################################################################################
-  describe("RESWS", { timeout: 100 }, function () {
+  describe("RESWS", function () {
     it("ok", async function () {
       st.resw(ok(1), true);
     });
@@ -244,6 +244,29 @@ describe("to_json", function () {
     expectTypeOf<StateJsonCompatible<Map<string, number>>>().toEqualTypeOf<false>();
     expectTypeOf<StateJsonCompatible<{ f: () => void }>>().toEqualTypeOf<false>();
     expectTypeOf<StateJsonCompatible<bigint>>().toEqualTypeOf<false>();
+  });
+
+  it("StateJsonCompatible checks what a value gives with OVERRIDE_KEY instead of the value", function () {
+    //Methods and a reference back to itself, like a class instance holding states
+    class Saved {
+      readonly size = st.ok_w(1);
+      get self(): Saved {
+        return this;
+      }
+      grow(): void {}
+      [st.v.OVERRIDE_KEY]() {
+        return { size: this.size };
+      }
+    }
+    expectTypeOf<StateJsonCompatible<StateROS<Saved>>>().toEqualTypeOf<true>();
+    class Unsaveable {
+      [st.v.OVERRIDE_KEY]() {
+        return { f: () => {} };
+      }
+    }
+    expectTypeOf<StateJsonCompatible<Unsaveable>>().toEqualTypeOf<false>();
+    //Without the key a class with methods is not JSON
+    expectTypeOf<StateJsonCompatible<{ grow(): void }>>().toEqualTypeOf<false>();
   });
 });
 

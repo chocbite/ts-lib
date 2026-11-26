@@ -11,6 +11,8 @@ import { ok } from "@chocbite/ts-lib/result";
 
 The list follows the element pattern, see [PATTERN.md](../PATTERN.md). The configuration is fixed for the life of the list, as the header, the lead columns and the rows are built from it. The options are its inputs, `container.set(options)` changes them later, options left out stay as they are.
 
+The row elements are internal. The list is used through its data, its transform, its options and states, never by reading or changing its row elements.
+
 Configuration:
 
 - `transform(data, row, rows)`: turns the data of a row into row options. It returns `ok({ values, ... })`, where `values` has a value per column key. Returning `err(text)` makes the row invalid: the text replaces its fields, and it gets no sub rows, add row, context menu or selection.
@@ -58,7 +60,7 @@ With sub rows, add rows and error texts sit in the key field after the tree line
 
 `opened` is whether a row is open, an input the user changes, like the selected keys:
 
-- **A plain value** is where the row starts, applied when the row is not open already. The row keeps the user's opening and closing itself.
+- **A plain value** is where the row starts, applied when the row is made. Later data does not open or close it, so a row the user closed stays closed when the rows are set again. The row keeps the user's opening and closing itself, also when it is reused for other data, so give a state when whether an entry is open has to follow the entry.
 - **A writable state** is written when the user opens or closes the row: with the opener, the keys of the key field, a click on a row that can only be opened, the "Open" and "Close" lines of the row menu, open all, close all and a drag that opens a row. The row opens and closes when the state gives the value back, so a state that rejects a write leaves the row as it is.
 - **A read only state** is only followed. The user can not open or close the row: it has no opener arrow, the tree lines show in its place and an open row keeps its line down to the sub rows, its row menu has no "Open" or "Close" line, and open all and close all leave it as it is.
 

@@ -274,8 +274,14 @@ export function linked_state(
       );
     steps.push([kind, transform]);
   }
-  /**The latest value of the linked state, to give a value written back its type*/
+  /**The latest value read of the linked state, for an async state, which can not be read at once*/
   let raw: unknown;
+  /**The value of the linked state now, to give a value written back its type*/
+  const linked_now = (): unknown => {
+    if (!linked.rsync) return raw;
+    const now = linked.get();
+    return now.ok ? now.value : raw;
+  };
   const read = (result: ResultNice<unknown>): ResultNice<unknown> => {
     if (result.ok) raw = result.value;
     for (const [kind, transform] of steps) {
@@ -290,7 +296,7 @@ export function linked_state(
     return linked.proxy(read);
   const to_linked = (value: unknown) =>
     like(
-      raw,
+      linked_now(),
       reverses.reduceRight<unknown>((v, reverse) => reverse!(v), value),
     );
   const from_linked = (value: unknown) => {
@@ -322,7 +328,7 @@ export function link_node_state(
     return state.err(
       err_nice(link_errors.NOT_A_STATE, `"${link.path}" is not a state`).error,
     );
-  return linked_state(link, node.value.value, convert);
+  return linked_state(link, state.as_state(node.value.value), convert);
 }
 
 /**The value a link gives now, through its transforms and converted, an error when the state is not registered*/
@@ -332,4 +338,37 @@ export async function link_value(
 ): Promise<ResultNice<unknown>> {
   const node = await depot.get(link.path).read();
   return await link_node_state(link, node, convert).read();
+}
+
+/**The state a widget element is given for an option, as the value of a state, so it follows the option:
+ * the option itself while it holds a value, the linked state through the transforms of the link while it holds a link,
+ * looked up in the depot, following the state being registered, removed and registered again
+ * The state given only changes when the option switches between a value and a link, or the linked state is registered again,
+ * so a widget given it is not given a new state for every value*/
+export function option_input(
+  option: OptionState<unknown>,
+  convert: OptionConvert,
+): State<State<unknown, any, any>, any, any> {
+  const value = state.ok(option_value_state(option));
+  //The input of the last link, a link written again as the same object keeps its input
+  let last: { link: CanvasLink; input: State<unknown, any, any> } | undefined;
+  return (option as State<unknown>)
+    .proxy((result) =>
+      ok(
+        result.ok && result.value instanceof CanvasLink
+          ? result.value
+          : undefined,
+      ),
+    )
+    .nested((link): State<unknown, any, any> => {
+      if (!link) return value;
+      if (last?.link !== link)
+        last = {
+          link,
+          input: depot
+            .get(link.path)
+            .proxy((node) => ok(link_node_state(link, node, convert))),
+        };
+      return last.input;
+    }) as State<State<unknown, any, any>, any, any>;
 }

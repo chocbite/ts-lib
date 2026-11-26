@@ -1,7 +1,7 @@
 import { err_nice, ok, type ResultNice } from "@chocbite/ts-lib/result";
 import type { State } from "@chocbite/ts-lib/state";
-import { link_errors } from "./link";
-import type { WidgetBaseOptions } from "./widget";
+import { link_errors } from "../link";
+import type { WidgetBaseOptions } from "../widget";
 
 interface PropertyBase<T> {
   /**Name shown to the user*/
@@ -13,6 +13,8 @@ interface PropertyBase<T> {
   section?: string;
   /**False leaves the option without a link column chain in the properties editor, so it can not be linked, true when undefined*/
   linkable?: boolean;
+  /**True when every owner has a value of its own, like an id, the property is then left out when several owners are shown together*/
+  unique?: boolean;
   /**Value of a new widget*/
   default: T;
 }
@@ -97,7 +99,10 @@ export function base_properties(size: {
 }): [string, WidgetProperty][] {
   const properties: [string, WidgetProperty][] = [
     //Unique on the page, given by the page when empty or taken, see ids.ts
-    ["id", { kind: "text", name: "ID", default: "", linkable: false }],
+    [
+      "id",
+      { kind: "text", name: "ID", default: "", linkable: false, unique: true },
+    ],
     ["x", { kind: "number", name: "X", default: 0, unit: "px" }],
     ["y", { kind: "number", name: "Y", default: 0, unit: "px" }],
     [

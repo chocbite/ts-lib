@@ -13,7 +13,7 @@ import state, {
   type StateLocalRES,
   type StateLocalROS,
   type StateOrVal,
-  type StateREA,
+  type StateOrValROS,
   type StateRES,
   type StateResult,
   type StateROS,
@@ -65,6 +65,48 @@ type ContentOf<T, C> = [T] extends [object] ? C : T;
 export type DepotNode<T = unknown> = DepotType<T> | DepotChild<T>;
 
 //##################################################################################################################################################
+//       _____  ____  _    _ _____   _____ ______
+//      / ____|/ __ \| |  | |  __ \ / ____|  ____|
+//     | (___ | |  | | |  | | |__) | |    | |__
+//      \___ \| |  | | |  | |  _  /| |    |  __|
+//      ____) | |__| | |__| | | \ \| |____| |____
+//     |_____/ \____/ \____/|_|  \_\\_____|______|
+
+/**Name, description and icon of a source, a constant costs no state, a state is followed*/
+export interface DepotSourceBase {
+  readonly name: StateOrValROS<string>;
+  readonly description: StateOrValROS<string>;
+  readonly icon?: DepotIcon;
+}
+
+/**A group of a source, implemented by the structure itself, its children are listed and looked up through it*/
+export interface DepotSourceGroup<T> extends DepotSourceBase {
+  /**The children, a constant list, or a state of one for a group that changes*/
+  readonly children: StateOrValROS<readonly DepotSourceChild<T>[]>;
+  /**Optional fast lookup of one child by id, for big groups, otherwise the children are searched*/
+  child?(id: string): DepotSource<T> | undefined;
+}
+
+/**An entry of a source, its content a constant or a state*/
+export interface DepotSourceEntry<T> extends DepotSourceBase {
+  readonly value: StateOrVal<T>;
+}
+
+/**Something mounted in the depot with provide, a group or an entry, implemented by a structure on its own objects so nothing is stored twice*/
+export type DepotSource<T> = DepotSourceGroup<T> | DepotSourceEntry<T>;
+
+/**A child of a source group, the id is its path segment, use stable ids, not names, so a rename keeps the path*/
+export interface DepotSourceChild<T> {
+  readonly id: string;
+  readonly source: DepotSource<T>;
+}
+
+/**True for a source group*/
+const is_source_group = <T>(
+  source: DepotSource<T>,
+): source is DepotSourceGroup<T> => "children" in source;
+
+//##################################################################################################################################################
 //      _   _  ____  _____  ______
 //     | \ | |/ __ \|  __ \|  ____|
 //     |  \| | |  | | |  | | |__
@@ -75,10 +117,10 @@ export type DepotNode<T = unknown> = DepotType<T> | DepotChild<T>;
 abstract class Node {
   /**Id of the node, unique in its group, the last segment of its path*/
   readonly id: string;
-  /**Name for showing to users*/
-  readonly name: string;
-  /**Description for showing to users*/
-  readonly description: string;
+  /**Name for showing to users, a constant or a state, elements take either*/
+  readonly name: StateOrValROS<string>;
+  /**Description for showing to users, a constant or a state, elements take either*/
+  readonly description: StateOrValROS<string>;
   /**Icon for showing to users*/
   readonly icon?: DepotIcon;
   #parent: Group<any> | undefined;
@@ -87,8 +129,8 @@ abstract class Node {
   constructor(
     parent: Group<any> | undefined,
     id: string,
-    name: string,
-    description: string,
+    name: StateOrValROS<string>,
+    description: StateOrValROS<string>,
     icon?: DepotIcon,
   ) {
     check_id(id);
@@ -130,6 +172,10 @@ abstract class Node {
       throw new Error(
         "The states type is part of the depot and can not be removed",
       );
+    if (this.#parent instanceof Provided)
+      throw new Error(
+        `Depot path "${this.path}" is provided by a source, the source removes it`,
+      );
     if (this.#removed) return;
     //Marked first, so lookups made when the parent tells of the change see everything below as removed
     this[MARK_REMOVED]();
@@ -152,10 +198,15 @@ abstract class Node {
 //      \_____|_|  \_\\____/ \____/|_|
 
 class Group<T> extends Node {
-  #ids = new Map<string, Child<T> | Alias<T>>();
+  /**Made on the first child, so groups without registered children, like provided ones, cost nothing*/
+  #ids: Map<string, Child<T> | Alias<T>> | undefined;
   /**Lookups that looked up an id in this group*/
   readonly [SLOTS] = new Slots();
-  #children: StateLocalROS<Child<T>[]> = state.ros(ok<Child<T>[]>([]));
+  #children: StateLocalROS<Child<T>[]> | undefined;
+
+  #children_state(): StateLocalROS<Child<T>[]> {
+    return (this.#children ??= state.ros(ok<Child<T>[]>([])));
+  }
 
   get kind(): "type" | "group" {
     return "group";
@@ -163,15 +214,15 @@ class Group<T> extends Node {
 
   /**Children of the group in registration order, array metadata tells what was added or removed.
    * Aliases are not listed*/
-  get children(): StateROS<readonly DepotChild<T>[]> {
-    return this.#children.read_only;
+  get children(): StateOrValROS<readonly DepotChild<T>[]> {
+    return this.#children_state().read_only;
   }
 
   /**Adds a group below this one, throws if the id exists in this group*/
   group(
     id: string,
-    name: string,
-    description: string,
+    name: StateOrValROS<string>,
+    description: StateOrValROS<string>,
     icon?: DepotIcon,
   ): DepotGroup<T> {
     return this.#attach(new Group<T>(this, id, name, description, icon));
@@ -181,8 +232,8 @@ class Group<T> extends Node {
    * @param content the content, a value that is not a state is wrapped in one and never changes, use a state for content that changes*/
   add<C extends T>(
     id: string,
-    name: string,
-    description: string,
+    name: StateOrValROS<string>,
+    description: StateOrValROS<string>,
     content: StateOrVal<C>,
     icon?: DepotIcon,
   ): DepotEntry<ContentOf<T, C>> {
@@ -196,6 +247,10 @@ class Group<T> extends Node {
    * A lookup of the alias path gives the target, and an error once the target is removed.
    * Throws if the id exists in this group, or the target is removed or in another type*/
   alias(id: string, target: DepotChild<T>): DepotAlias<T> {
+    if (target.parent instanceof Provided)
+      throw new Error(
+        `Depot alias target "${target.path}" is provided by a source, aliases point at registered nodes`,
+      );
     if (target.removed)
       throw new Error(`Depot alias target "${target.path}" is removed`);
     if (target.type !== this.type)
@@ -205,35 +260,175 @@ class Group<T> extends Node {
     return this.#attach(new Alias<T>(this, id, target));
   }
 
+  /**Mounts a source at the id, a group or an entry, its items get nodes only when looked up or listed.
+   * Gives the node of the source, removing it unmounts the source. Throws if the id exists in this group
+   * @param source implemented by the structure itself, so nothing is stored twice*/
+  provide(id: string, source: DepotSource<T>): DepotChild<T> {
+    if (this.removed) throw new Error(`Depot group "${this.path}" is removed`);
+    return this.#attach(make_provided(this, id, source));
+  }
+
   /**Child or alias with the id, aliases are not resolved*/
   [LOOKUP](id: string): Child<T> | Alias<T> | undefined {
-    return this.#ids.get(id);
+    return this.#ids?.get(id);
   }
 
   #attach<C extends Child<T> | Alias<T>>(child: C): C {
+    if (this instanceof Provided)
+      throw new Error(
+        `Depot group "${this.path}" is provided by a source, the source decides its children`,
+      );
     if (this.removed) throw new Error(`Depot group "${this.path}" is removed`);
-    if (this.#ids.has(child.id))
+    const ids = (this.#ids ??= new Map());
+    if (ids.has(child.id))
       throw new Error(`Depot path "${child.path}" is already registered`);
-    this.#ids.set(child.id, child);
-    if (!(child instanceof Alias)) this.#children.array.push(child);
+    ids.set(child.id, child);
+    if (!(child instanceof Alias)) this.#children_state().array.push(child);
     this[SLOTS].changed(child.id);
     return child;
   }
 
   /**Removes a child from the group, called by the child*/
   [DETACH](child: Node): void {
-    this.#ids.delete(child.id);
+    this.#ids?.delete(child.id);
     if (!(child instanceof Alias))
-      this.#children.array.delete(child as Child<T>);
+      this.#children?.array.delete(child as Child<T>);
     this[SLOTS].changed(child.id);
   }
 
   [MARK_REMOVED](): void {
     super[MARK_REMOVED]();
-    const children = [...this.#ids.values()];
-    this.#ids.clear();
-    if (this.#children.ok().length) this.#children.set_ok([]);
+    const children = [...(this.#ids?.values() ?? [])];
+    this.#ids?.clear();
+    if (this.#children?.ok().length) this.#children.set_ok([]);
     for (const child of children) child[MARK_REMOVED]();
+  }
+}
+
+//##################################################################################################################################################
+//      _____  _____   ______      _______ _____  ______ _____
+//     |  __ \|  __ \ / __ \ \    / /_   _|  __ \|  ____|  __ \
+//     | |__) | |__) | |  | \ \  / /  | | | |  | | |__  | |  | |
+//     |  ___/|  _  /| |  | |\ \/ /   | | | |  | |  __| | |  | |
+//     | |    | | \ \| |__| | \  /   _| |_| |__| | |____| |__| |
+//     |_|    |_|  \_\\____/   \/   |_____|_____/|______|_____/
+
+/**Node of a source item, made for its parent and id, the source given to provide or a child of a provided group*/
+function make_provided<T>(
+  parent: Group<T>,
+  id: string,
+  source: DepotSource<T>,
+): Child<T> {
+  return is_source_group(source)
+    ? new Provided<T>(parent, id, source)
+    : new Entry<T>(
+        parent,
+        id,
+        source.name,
+        source.description,
+        source.value,
+        source.icon,
+      );
+}
+
+/**The children of a source group now*/
+function source_children<T>(
+  source: DepotSourceGroup<T>,
+): readonly DepotSourceChild<T>[] {
+  return state.is.state(source.children)
+    ? source.children.ok()
+    : source.children;
+}
+
+/**The source child with the id now, undefined when there is none*/
+function source_child<T>(
+  source: DepotSourceGroup<T>,
+  id: string,
+): DepotSource<T> | undefined {
+  if (source.child) return source.child(id);
+  return source_children(source).find((child) => child.id === id)?.source;
+}
+
+/**A group of a source, its children come from the source, nodes for them are made when looked up or listed
+ * and kept while their source object is the child of the id, a source whose children are a state is followed*/
+class Provided<T> extends Group<T> {
+  readonly source: DepotSourceGroup<T>;
+  /**Nodes made so far by id*/
+  #nodes = new Map<string, Child<T>>();
+  /**The source object each node was made for*/
+  #sources = new WeakMap<Child<T>, DepotSource<T>>();
+  /**The children as nodes, made when first asked for, for a source whose children are a state*/
+  #listed: StateLocalROS<Child<T>[]> | undefined;
+  #following = false;
+
+  constructor(parent: Group<T>, id: string, source: DepotSourceGroup<T>) {
+    super(parent, id, source.name, source.description, source.icon);
+    this.source = source;
+  }
+
+  /**The node of a source child, the one made before while the child is the same source object*/
+  #node(id: string, source: DepotSource<T>): Child<T> {
+    const made = this.#nodes.get(id);
+    if (made && this.#sources.get(made) === source) return made;
+    if (made) made[MARK_REMOVED]();
+    const node = make_provided(this, id, source);
+    this.#nodes.set(id, node);
+    this.#sources.set(node, source);
+    return node;
+  }
+
+  /**The children of the source now as nodes, ids that are not valid depot ids are left out*/
+  #now(): Child<T>[] {
+    if (this.removed) return [];
+    const nodes: Child<T>[] = [];
+    for (const child of source_children(this.source))
+      if (ID_PATTERN.test(child.id))
+        nodes.push(this.#node(child.id, child.source));
+    return nodes;
+  }
+
+  get children(): StateOrValROS<readonly DepotChild<T>[]> {
+    if (!state.is.state(this.source.children)) return this.#now();
+    this.#follow();
+    return (this.#listed ??= state.ros(ok(this.#now()))).read_only;
+  }
+
+  [LOOKUP](id: string): Child<T> | undefined {
+    if (this.removed || !ID_PATTERN.test(id)) return undefined;
+    this.#follow();
+    const source = source_child(this.source, id);
+    if (!source) return undefined;
+    return this.#node(id, source);
+  }
+
+  /**Follows a source whose children are a state, from the first lookup or listing until removed*/
+  #follow(): void {
+    if (this.#following || !state.is.state(this.source.children)) return;
+    this.#following = true;
+    this.source.children.sub(this.#changed);
+  }
+
+  /**The children of the source changed, nodes of children that are gone are removed and lookups resolve again*/
+  #changed = () => {
+    if (this.removed) return;
+    for (const [id, node] of [...this.#nodes]) {
+      if (source_child(this.source, id) === this.#sources.get(node)) continue;
+      this.#nodes.delete(id);
+      node[MARK_REMOVED]();
+    }
+    if (this.#listed) this.#listed.set_ok(this.#now());
+    this[SLOTS].changed_all();
+  };
+
+  [MARK_REMOVED](): void {
+    super[MARK_REMOVED]();
+    if (this.#following && state.is.state(this.source.children))
+      this.source.children.unsub(this.#changed);
+    this.#following = false;
+    const nodes = [...this.#nodes.values()];
+    this.#nodes.clear();
+    this.#listed?.set_ok([]);
+    for (const node of nodes) node[MARK_REMOVED]();
   }
 }
 
@@ -278,19 +473,19 @@ class Type<T> extends Group<T> {
 //     |______|_| \_|  |_|  |_|  \_\ |_|
 
 class Entry<T> extends Node {
-  /**State of the content, the state given to add, or a state of the value given*/
-  readonly value: StateREA<T>;
+  /**The content as given, a constant or a state, use state.as_state where a state is needed*/
+  readonly value: StateOrVal<T>;
 
   constructor(
     parent: Group<T>,
     id: string,
-    name: string,
-    description: string,
+    name: StateOrValROS<string>,
+    description: StateOrValROS<string>,
     content: StateOrVal<T>,
     icon?: DepotIcon,
   ) {
     super(parent, id, name, description, icon);
-    this.value = state.as_state(content);
+    this.value = content;
   }
 
   get kind(): "entry" {
@@ -385,6 +580,12 @@ class Slots {
     const set = this.#map.get(id);
     if (set) for (const lookup of [...set]) lookup.update();
   }
+
+  /**Resolves the lookups of every id again*/
+  changed_all(): void {
+    for (const set of [...this.#map.values()])
+      for (const lookup of [...set]) lookup.update();
+  }
 }
 
 /**The state of one path*/
@@ -472,8 +673,8 @@ class Types {
 
   add<T>(
     id: string,
-    name: string,
-    description: string,
+    name: StateOrValROS<string>,
+    description: StateOrValROS<string>,
     icon?: DepotIcon,
   ): DepotType<T> {
     const type = new Type<T>(undefined, id, name, description, icon);
@@ -523,8 +724,8 @@ export const depot = {
    * @template T the content type of every entry below the type*/
   type<T>(
     id: string,
-    name: string,
-    description: string,
+    name: StateOrValROS<string>,
+    description: StateOrValROS<string>,
     icon?: DepotIcon,
   ): DepotType<T> {
     return TYPES.add<T>(id, name, description, icon);
