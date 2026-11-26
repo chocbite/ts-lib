@@ -1,6 +1,7 @@
 import { ok } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { form_number_input } from "../number/number_input/number_input";
 import { form_progress } from "../number/progress/progress";
 import { form_slider } from "../number/slider/slider";
@@ -247,7 +248,9 @@ describe("Number input", () => {
     await wait();
     expect(element.buffer).toBe(5);
     expect(change).not.toHaveBeenCalled();
-    expect(warn_input.validationMessage).toBe("Value too high: Maximum value 5");
+    expect(warn_input.validationMessage).toBe(
+      "Value too high: Maximum value 5",
+    );
   });
 
   it("rejects stepping below min with a warning", async () => {
@@ -309,7 +312,9 @@ describe("Number input", () => {
     expect(element.buffer).toBe(3);
     expect(value_box.textContent).toBe("3");
     expect(change).not.toHaveBeenCalled();
-    expect(warn_input.validationMessage).toBe("Value too high: Maximum value 10");
+    expect(warn_input.validationMessage).toBe(
+      "Value too high: Maximum value 10",
+    );
   });
 
   it("Escape restores the shown value", async () => {
@@ -562,7 +567,9 @@ describe("Stepper", () => {
     await wait();
     expect(element.buffer).toBe(3);
     expect(change).not.toHaveBeenCalled();
-    expect(warn_input.validationMessage).toBe("Value too high: Maximum value 3V");
+    expect(warn_input.validationMessage).toBe(
+      "Value too high: Maximum value 3V",
+    );
   });
 
   it("steps once when an icon is clicked", async () => {
@@ -853,7 +860,9 @@ describe("Progress", () => {
 
   it("a limit given as input wins over the related limit of the value state, the others still apply", () => {
     const value = number_state(25, { max: 100, unit: "%" });
-    const element = document.body.appendChild(form_progress({ value, max: 50 }));
+    const element = document.body.appendChild(
+      form_progress({ value, max: 50 }),
+    );
     expect(parts(element).bar.style.width).toBe("50%");
     expect(element.children[2].textContent).toBe("%");
   });
@@ -884,4 +893,45 @@ describe("Progress", () => {
     expect(text.textContent).toBe("25.0");
     expect(bar.style.width).toBe("50%");
   });
+});
+
+//Real input through the browser, a warning shown while the focus is still moving is hidden again by the move
+describe("Number warning when leaving the field", () => {
+  afterEach(() => document.body.replaceChildren());
+
+  const elements = [
+    ["number input", () => form_number_input({ value: 5, max: 10 })],
+    ["stepper", () => form_stepper({ value: 5, max: 10 })],
+  ] as const;
+
+  for (const [name, make] of elements)
+    for (const leave of ["Tab", "a click on the next field"] as const)
+      it(`shows the warning of a ${name} over its max after the focus moved, left by ${leave}`, async () => {
+        const element = document.body.appendChild(make());
+        const next = document.body.appendChild(
+          document.createElement("button"),
+        );
+        next.textContent = "Next";
+        const warn_input = element.querySelector("input")!;
+        //The order of focus changes and warnings shown, the last one is what the user sees
+        const events: string[] = [];
+        const report = warn_input.reportValidity.bind(warn_input);
+        warn_input.reportValidity = () => {
+          if (warn_input.validationMessage) events.push("warning");
+          return report();
+        };
+        const listening = new AbortController();
+        document.addEventListener("focusin", () => events.push("focus"), {
+          signal: listening.signal,
+        });
+        await userEvent.click(element.querySelector("span[contenteditable]")!);
+        await userEvent.keyboard("{Control>}a{/Control}50");
+        events.length = 0;
+        if (leave === "Tab") await userEvent.keyboard("{Tab}");
+        else await userEvent.click(next);
+        await wait(50);
+        listening.abort();
+        expect(events).toContain("warning");
+        expect(events.at(-1)).toBe("warning");
+      });
 });

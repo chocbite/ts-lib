@@ -291,7 +291,9 @@ export abstract class FormValueWrite<
   /**Shows a warning for a moment, a NiceError as its nice text and its message, there is room for both*/
   warn(message: string | NiceError): void {
     this.warn_input.setCustomValidity(typeof message === "string" ? message : message.toString());
-    this.warn_input.reportValidity();
+    //Shown once a focus change in progress is done, like leaving a field with a wrong value,
+    //the browser hides the bubble when the focus moves after it is shown
+    setTimeout(() => this.warn_input.reportValidity(), 0);
     if (this.#warn_timeout) clearTimeout(this.#warn_timeout);
     this.#warn_timeout = setTimeout(() => {
       this.warn_input.setCustomValidity("");
@@ -313,20 +315,29 @@ export abstract class FormValueWrite<
     return sync_resolve(ok(val));
   }
 
-  /**Function to update value*/
+  /**Shows the value the element has again, or that it has none, over whatever the user entered,
+   * like after a change was rejected*/
+  protected revert_value(): void {
+    if (this._buffer !== undefined) this.new_value(this._buffer);
+    else this.clear_value();
+  }
+
+  /**Limits the value and sets it, a rejected value is reverted and warned about*/
   protected async set_value_limit(val: RT): Promise<ResultNice<RT>> {
     const limited = await this.limit_value(val);
     if (limited.err) {
+      this.revert_value();
       this.warn(limited.error);
       return limited;
     }
     return this.#set_value(limited.value);
   }
 
-  /**Function to update value*/
+  /**Checks the value and sets it, a rejected value is reverted and warned about*/
   protected async set_value_check(val: RT): Promise<ResultNice<RT>> {
     const checked = await this.check_value(val);
     if (checked.err) {
+      this.revert_value();
       this.warn(checked.error);
       return checked;
     }
@@ -340,10 +351,10 @@ export abstract class FormValueWrite<
     this.new_value(val);
     if (this._buffer === val) return ok(val);
     if (this._state) {
-      const buff = this._buffer;
       const written = await this._state.write!(val);
       if (written.err) {
-        if (buff !== undefined) this.new_value(buff);
+        //The value now, the state can have changed while writing
+        this.revert_value();
         this.warn(written.error);
         return err(written.error);
       }

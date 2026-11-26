@@ -27,6 +27,10 @@ const WIDTH = { width: "16rem" };
 const LONG =
   "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua";
 const SAMPLES = ["", "Short", "Æble på dansk, ½ € and 漢字", LONG];
+const DEVICES = Array.from(
+  { length: 12 },
+  (_, i) => ["Pump", "Valve", "Tank", "Fan"][i % 4] + " " + (Math.floor(i / 4) + 1),
+);
 
 //      _______ ________   _________
 //     |__   __|  ____\ \ / /__   __|
@@ -230,4 +234,57 @@ const SAMPLES = ["", "Short", "Æble på dansk, ½ € and 漢字", LONG];
   box(s, "multi line, read access", WIDTH).appendChild(
     form.text_multiline().set({ access: "r" }).set({ value: shared }),
   );
+}
+
+//      _      _______      ________
+//     | |    |_   _\ \    / /  ____|
+//     | |      | |  \ \  / /| |__
+//     | |      | |   \ \/ / |  __|
+//     | |____ _| |_   \  /  | |____
+//     |______|_____|   \/   |______|
+{
+  const sec = section(
+    "Live typing",
+    "With live every change typed is written, without leaving the field. The live search filters the list with every letter, the other one only on enter or leaving. The third has live from a state, the buttons turn it on and off. The multi line one writes every line as it is typed. Escape is left to parents, what was typed is already written",
+  );
+  const live = state.ok_w(true);
+  controls(sec, {
+    "Live on": () => live.set_ok(true),
+    "Live off": () => live.set_ok(false),
+  });
+  const r = spaced_row(sec);
+  for (const [label, is_live] of [
+    ["search, live", true],
+    ["search, not live", false],
+  ] as const) {
+    const search = state.ok_w("");
+    const b = box(r, label, WIDTH);
+    b.appendChild(
+      form.text_input({ value: search, live: is_live, placeholder: "Search..." }),
+    );
+    const list = b.appendChild(document.createElement("div"));
+    search.sub((typed) => {
+      const text = typed.ok ? typed.value.toLowerCase() : "";
+      list.replaceChildren(
+        ...DEVICES.filter((name) => name.toLowerCase().includes(text)).map(
+          (name) => {
+            const line = document.createElement("div");
+            line.textContent = name;
+            return line;
+          },
+        ),
+      );
+    }, true);
+  }
+  const t = box(r, "live from the buttons", WIDTH);
+  const toggled = state.ok_w("");
+  t.appendChild(form.text_input({ value: toggled, live, placeholder: "Type..." }));
+  readout(t, "state", toggled);
+  readout(t, "live", live);
+  const m = box(r, "multi line, live", WIDTH);
+  const note = state.ok_w("");
+  m.appendChild(
+    form.text_multiline({ value: note, live: true, placeholder: "Write a note..." }),
+  );
+  readout(m, "state", note);
 }

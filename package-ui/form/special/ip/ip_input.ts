@@ -208,11 +208,14 @@ class FormIp<
     }
   }
 
-  /**Commits the typed address, or warns why it is not an address*/
+  /**Commits the typed address, or warns why it is not an address and shows the address again*/
   #commit_typed() {
     const typed = this.#typed();
     if (typed.ok) this.#commit(typed.value);
-    else this.warn(typed.error);
+    else {
+      this.revert_value();
+      this.warn(typed.error);
+    }
   }
 
   /**Commits an address, unless it is the current address, a new IPAddress object is never the same object as the current one*/

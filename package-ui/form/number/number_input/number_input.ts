@@ -63,16 +63,19 @@ class FormNumberInput<
       set_selection_all(this.#value_box);
       this.selected = true;
     });
+    //Set at once, a click that moved the focus away, like on the submit button of a prompt, comes right after
     this.#value_box.onblur = () => {
       this.selected = false;
-      setTimeout(() => {
-        this.#set(false);
-      }, 0);
+      void this.#set(false);
     };
     this.#value_box.oninput = () => (this.#edited = true);
     this.onkeydown = (e) => {
-      if (e.key === "Enter") this.#set(true);
-      else if (e.key === "Escape") {
+      if (e.key === "Enter") {
+        //Set and left to the parents, like a prompt submitting, without typing a new line
+        e.preventDefault();
+        void this.#set(true);
+        return;
+      } else if (e.key === "Escape") {
         //With nothing typed to revert, escape is left to parents, like a prompt closing
         if ((this.#value_box.textContent || "") === this.#shown) return;
         if (this.buffer !== undefined) this.new_value(this.buffer);
@@ -103,12 +106,8 @@ class FormNumberInput<
       return;
     }
     const sel = get_cursor_position(this.#value_box);
-    const buff = this.buffer;
     (await this.set_value_check(parseFloat(text.replace(",", ".")) || 0))
-      .map_err(() => {
-        this.new_value(buff || Math.max(Math.min(0, this.#max), this.#min));
-        set_cursor_end(this.#value_box);
-      })
+      .map_err(() => set_cursor_end(this.#value_box))
       .map(() => {
         //-1 when the caret was not in the value, there is none to restore
         if (!cur || sel < 0) return;

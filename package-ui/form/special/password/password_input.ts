@@ -1,5 +1,6 @@
 import { define_element, input_key, type InputOptions } from "#base";
 import type { Option } from "@chocbite/ts-lib/result";
+import type { StateOrVal } from "@chocbite/ts-lib/state";
 import {
   FormValueWrite,
   type FormValueCreateOptions,
@@ -11,6 +12,10 @@ import "./password_input.scss";
 const PASSWORD = {
   /**Characters the user can type, others are refused with a warning*/
   filter: input_key<RegExp>(),
+  /**True writes the value with every change the user types, like for checking it while typing,
+   * false only when the user leaves the field or presses Enter
+   * Every text on the way is written, focusing empties the field without writing*/
+  live: input_key<StateOrVal<boolean>>(),
 };
 export type FormPasswordOptions = FormValueWriteOptions<string> &
   InputOptions<typeof PASSWORD>;
@@ -29,6 +34,7 @@ class FormPassword<
   }
 
   #filter?: RegExp;
+  #live: boolean = false;
 
   constructor() {
     super();
@@ -47,6 +53,9 @@ class FormPassword<
     this.warn_input.onchange = () => {
       this.set_value_check(this.warn_input.value);
     };
+    this.warn_input.oninput = () => {
+      if (this.#live) void this.set_value_check(this.warn_input.value);
+    };
     this.warn_input.onbeforeinput = (ev) => {
       if (ev.data && this.#filter) {
         this.#filter.lastIndex = 0;
@@ -62,6 +71,9 @@ class FormPassword<
     super.set(options);
     this.set_input(PASSWORD.filter, options.filter, (filter) => {
       this.#filter = filter.value;
+    });
+    this.set_input(PASSWORD.live, options.live, (live) => {
+      this.#live = live.ok && live.value;
     });
     return this;
   }

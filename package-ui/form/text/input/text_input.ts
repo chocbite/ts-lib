@@ -26,6 +26,9 @@ const TEXT_INPUT = {
   max_bytes: input_key<StateOrVal<number>>(),
   /**Characters the user can type, others are refused with a warning*/
   filter: input_key<RegExp>(),
+  /**True writes the value with every change the user types, like for a search, false only when the user leaves the field or presses Enter
+   * Every text on the way is written, so it fits where any text can be written*/
+  live: input_key<StateOrVal<boolean>>(),
 };
 /**Related limits of the value state, followed while the inputs are not given*/
 const TEXT_INPUT_RELATED = {
@@ -48,6 +51,7 @@ class FormTextInput<
   }
 
   #filter?: RegExp;
+  #live: boolean = false;
   #max_length?: number;
   #max_bytes?: number;
   #length = new FormSetting<number>((max) => {
@@ -73,6 +77,9 @@ class FormTextInput<
     this.warn_input.type = "text";
     this.appendChild(this.warn_input);
     this.warn_input.onchange = () => this.#set();
+    this.warn_input.oninput = () => {
+      if (this.#live) void this.#set();
+    };
     this.onbeforeinput = (e) => {
       this.warn("");
       const data = e.data || e.dataTransfer?.getData("text/plain");
@@ -120,11 +127,9 @@ class FormTextInput<
   }
 
   async #set() {
-    const buff = this.buffer;
-    (await this.set_value_check(this.warn_input.value || "")).map_err(() => {
-      this.new_value(buff || "");
-      set_cursor_end(this.warn_input);
-    });
+    (await this.set_value_check(this.warn_input.value || "")).map_err(() =>
+      set_cursor_end(this.warn_input),
+    );
   }
 
   set(options: FormTextInputOptions): this {
@@ -140,6 +145,9 @@ class FormTextInput<
     );
     this.set_input(TEXT_INPUT.filter, options.filter, (filter) => {
       this.#filter = filter.value;
+    });
+    this.set_input(TEXT_INPUT.live, options.live, (live) => {
+      this.#live = live.ok && live.value;
     });
     return this;
   }

@@ -2,6 +2,7 @@ import { DOCUMENT_HANDLER } from "#document";
 import { material_close_rounded, material_home_rounded } from "#icons";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { form_dropdown } from "../selectors/drop_down/drop_down";
 
 const wait = (ms: number = 10) =>
@@ -329,5 +330,29 @@ describe("Dropdown state", () => {
     state.set_ok(2);
     await wait();
     expect(text()).toBe("Two");
+  });
+
+  it("shows the warning of a refused option after the popup closed and focused the dropdown", async () => {
+    const { element, text } = make({ value: st.ok_w(1).read_only });
+    const warn_input = element.querySelector("input")!;
+    //The order of focus changes and warnings shown, the last one is what the user sees
+    const events: string[] = [];
+    const report = warn_input.reportValidity.bind(warn_input);
+    warn_input.reportValidity = () => {
+      if (warn_input.validationMessage) events.push("warning");
+      return report();
+    };
+    const listening = new AbortController();
+    document.addEventListener("focusin", () => events.push("focus"), {
+      signal: listening.signal,
+    });
+    element.open = true;
+    await userEvent.click(lines()[2]);
+    await wait(50);
+    listening.abort();
+    expect(text()).toBe("One");
+    expect(document.activeElement).toBe(element);
+    expect(events).toContain("warning");
+    expect(events.at(-1)).toBe("warning");
   });
 });

@@ -53,7 +53,7 @@ const VARIANTS = [
 {
   const sec = section(
     "Number input",
-    "Type a value and press enter or leave, arrow up / down steps, escape reverts. Letters are blocked, a dot is blocked without decimals and minus is blocked with min >= 0. Check the min / max legend and unit placement",
+    "Type a value and press enter or leave, arrow up / down steps, escape reverts. Letters are blocked, a dot is blocked without decimals and minus is blocked with min >= 0. Check the min / max legend and unit placement. Type 500 in the one with min 0, max 100 and leave it by Tab or by clicking another field: it goes back to its value and the warning bubble stays under it",
   );
   const r = spaced_row(sec);
   for (const [label, opts] of VARIANTS)
@@ -85,7 +85,7 @@ const VARIANTS = [
 {
   const sec = section(
     "Stepper",
-    "Click or hold the + and - icons (holding speeds up), drag the value sideways, click the value to type. Arrow left / right with focus. Live writes while dragging, the others only when released",
+    "Click or hold the + and - icons (holding speeds up), drag the value sideways, click the value to type. Arrow left / right with focus. Live writes while dragging, the others only when released. Type 500 in the one with min 0, max 100 and leave it by Tab or by clicking another field: it goes back to its value and the warning bubble stays under it",
   );
   const r = spaced_row(sec);
   for (const [label, opts] of VARIANTS)

@@ -29,6 +29,8 @@ form.lamp({
 
 An error of the state shows as the fault icon on the element, a click on it explains the error.
 
+A change that is refused, by a read only state, a setting like `max`, or the state rejecting the write, is warned about, and the element shows its value again at once, or that it has none, so what the user entered is never left looking like the value.
+
 - **`change`** is called with every value the user changes the element to, after it is accepted. `set({ change })` replaces it.
 - **`description`** is shown as a tooltip.
 - **`element.get_value`** gives the value, wherever it comes from, as a `ResultNice`. While its state is in error it is that error, with all its details, and without a value yet it is a `form.errors.NO_VALUE` error. **`element.changed`** is true once the user changed it.
@@ -81,9 +83,9 @@ Prompts made with `prompts.form` of `@chocbite/ts-lib-ui/prompts` are a group in
 | `form.number_input`           | number               | `min`, `max`, `step`, `start`, `decimals`, `unit`                                 |
 | `form.stepper`, `form.slider` | number               | as number input, and `live`, `icon_decrease`, `icon_increase`                     |
 | `form.progress`               | number, only shown   | `min`, `max`, `decimals`, `unit`                                                  |
-| `form.text_input`             | string               | `placeholder`, `max_length`, `max_bytes`, `filter`                                |
+| `form.text_input`             | string               | `placeholder`, `max_length`, `max_bytes`, `filter`, `live`                        |
 | `form.text_multiline`         | string               | as text input                                                                     |
-| `form.password`               | string               | `filter`                                                                          |
+| `form.password`               | string               | `filter`, `live`                                                                  |
 | `form.toggle_button`          | one of `selections`  | `selections`                                                                      |
 | `form.dropdown`               | one of `selections`  | `selections`, `default`, `default_icon`                                           |
 | `form.color`                  | hex color string     | `live`, `alpha`                                                                   |
@@ -108,4 +110,4 @@ An element without a value has the `no-value` attribute, and these elements show
 
 ## Keyboard
 
-Text and number inputs revert typed text on Escape, with nothing to revert Escape is left to parents, like a prompt closing. A switch toggles on Space, Enter is left to parents, like a form submitting. Buttons press on Enter and Space.
+Text and number inputs revert typed text on Escape, with nothing to revert Escape is left to parents, like a prompt closing. Typed text is set as the value as soon as the field loses the focus, so a click on a button reads the new value, and on Enter, which is then left to parents, like a prompt submitting. With `live` the text inputs and the password write every change as it is typed, like for a search, so Escape has nothing to revert and is left to parents. Every text on the way is written, so it fits where any text can be written, numbers have no live typing for that reason. A switch toggles on Space, Enter is left to parents, like a form submitting. Buttons press on Enter and Space.

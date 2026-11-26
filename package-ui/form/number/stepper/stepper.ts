@@ -1,6 +1,6 @@
 import { state } from "@chocbite/ts-lib/state";
 import { define_element } from "#base";
-import { sleep, sync_resolve } from "@chocbite/ts-lib/common";
+import { sync_resolve } from "@chocbite/ts-lib/common";
 import { material_add_rounded, material_remove_rounded } from "#icons";
 import { number_step_start_decimal } from "@chocbite/ts-lib/math";
 import {
@@ -64,9 +64,9 @@ class FormStepper<
     this.#value_box.onfocus = async () => {
       this.selected = true;
     };
-    this.#value_box.onblur = async () => {
+    //Set at once, a click that moved the focus away, like on the submit button of a prompt, comes right after
+    this.#value_box.onblur = () => {
       this.selected = false;
-      await sleep(0);
       const text = this.#value_box.textContent || "";
       //Not edited, a value that arrived while focused is shown instead of writing the old text back
       if (!this.#edited && text === this.#shown) {

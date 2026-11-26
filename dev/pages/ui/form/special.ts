@@ -119,7 +119,7 @@ const WIDTH = { width: "18rem" };
 {
   const sec = section(
     "Password",
-    "Focusing empties the input so a new password can be typed, leaving writes it. The digits only one warns on other characters. The bound value is written into the input, so the dots show its real length",
+    "Focusing empties the input so a new password can be typed, leaving writes it. The digits only one warns on other characters. The bound value is written into the input, so the dots show its real length. The read only one refuses a new password with Enter or leaving, warns and shows the old dots again. The live one writes every character typed, see its readout, focusing it empties it without writing",
   );
   const value = state.ok_w("secret");
   const access = state.ok_w<AccessTypes>("w");
@@ -135,6 +135,13 @@ const WIDTH = { width: "18rem" };
   const b = box(r, "bound, access from state", WIDTH);
   b.appendChild(form.password().set({ access }).set({ value }));
   readout(b, "state", value);
+  box(r, "read only state", WIDTH).appendChild(
+    form.password({ value: value.read_only }),
+  );
+  const typed = state.ok_w("secret");
+  const l = box(r, "live", WIDTH);
+  l.appendChild(form.password({ value: typed, live: true }));
+  readout(l, "state", typed);
   for (const width of ["5rem", "32rem"])
     box(r, width, { width }).appendChild(
       form.password({ value: "a long password that keeps going" }),
@@ -150,7 +157,7 @@ const WIDTH = { width: "18rem" };
 {
   const sec = section(
     "Color",
-    "The browser color picker. Live writes while picking, the other only when the picker closes. Both share a state, the buttons set it from outside",
+    "The browser color picker. Live writes while picking, the other only when the picker closes. Both share a state, the buttons set it from outside. The read only one warns when a color is picked and goes back to the color of the state",
   );
   const value = state.ok_w("#3366cc");
   controls(sec, {
@@ -164,6 +171,9 @@ const WIDTH = { width: "18rem" };
   a.appendChild(form.color().set({ value }));
   readout(a, "state", value);
   box(r, "live", WIDTH).appendChild(form.color({ live: true }).set({ value }));
+  box(r, "read only state", WIDTH).appendChild(
+    form.color({ value: value.read_only }),
+  );
   box(r, "no value", WIDTH).appendChild(form.color());
   box(r, "read access", WIDTH).appendChild(
     form.color({ value: "#ff8800" }).set({ access: "r" }),
@@ -241,7 +251,7 @@ const WIDTH = { width: "18rem" };
 {
   const sec = section(
     "Date and time bound to states",
-    "A date, a string and a number state. Pick a new value in one and see what each state holds. The buttons set them from outside",
+    "A date, a string and a number state. Pick a new value in one and see what each state holds. The buttons set them from outside. The read only one shows the number state, a picked or typed date is refused with a warning and the date of the state shows again at once, also while it has the focus",
   );
   const date = state.ok_w(new Date(2026, 5, 1, 8, 0, 0));
   const text = state.ok_w("2026-06-01T08:00:00");
@@ -287,4 +297,7 @@ const WIDTH = { width: "18rem" };
       .set({ value: number }),
   );
   readout(n, "state", number, (v) => v + " = " + new Date(v).toISOString());
+  box(r, "read only state", WIDTH).appendChild(
+    form.date_time({ mode: FormDateTimeMode.NUMBER, value: number.read_only }),
+  );
 }

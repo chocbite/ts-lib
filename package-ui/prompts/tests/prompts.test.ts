@@ -2,6 +2,7 @@ import form from "#form";
 import { none, ok, some, type Option } from "@chocbite/ts-lib/result";
 import state from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { prompts, type PromptFormValues } from "..";
 
 /**The prompt open now*/
@@ -206,6 +207,56 @@ describe("Prompt form", () => {
     });
     expect(input.contains(document.activeElement)).toBe(true);
   });
+});
+
+/**The answer of the prompt, or "open" when it is still open a while later*/
+const answer_or_open = <T>(result: Promise<T>) =>
+  Promise.race([
+    result,
+    new Promise<"open">((r) => setTimeout(() => r("open"), 500)),
+  ]);
+
+//Real input through the browser, a click moves the focus out of the field before it clicks,
+//as a user does, and comes right after the press, before a timer of the page can run
+describe("Prompt form, typed numbers", () => {
+  const typed = [
+    ["number input", () => form.number_input({ id: "count", value: 3 })],
+    ["stepper", () => form.stepper({ id: "count", value: 3 })],
+  ] as const;
+
+  /**Opens a prompt with the element and types 7 over its value,
+   * the answer of the prompt is in an object, returning the promise itself would wait for the answer*/
+  const type_seven = async (element: (typeof typed)[number][1]) => {
+    const result = prompts.form("Count", [element()], { text: "OK" });
+    await userEvent.click(
+      current().querySelector<HTMLElement>("span[contenteditable]")!,
+    );
+    await userEvent.keyboard("{Control>}a{/Control}7");
+    return { result };
+  };
+
+  for (const [name, element] of typed) {
+    it(`submits the number typed in a ${name} when the button is clicked`, async () => {
+      const { result } = await type_seven(element);
+      //No timer runs before the click, like a tap, which clicks right after the field loses the focus,
+      //and a mouse click on slow hardware
+      vi.useFakeTimers({ toFake: ["setTimeout"] });
+      try {
+        await userEvent.click(button("OK"));
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(await answer_or_open(result)).not.toBe("open");
+      expect((await submitted(result)).value_changed).toEqual(ok({ count: 7 }));
+    });
+
+    it(`submits the number typed in a ${name} with Enter`, async () => {
+      const { result } = await type_seven(element);
+      await userEvent.keyboard("{Enter}");
+      expect(await answer_or_open(result)).not.toBe("open");
+      expect((await submitted(result)).value_changed).toEqual(ok({ count: 7 }));
+    });
+  }
 });
 
 describe("Prompt focus", () => {
