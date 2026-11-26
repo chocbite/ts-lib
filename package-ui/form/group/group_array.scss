@@ -1,0 +1,150 @@
+@use "../base";
+@use "../number/number_base";
+
+//The bar of a foldable array group, a pager like a stepper and a button that folds or unfolds
+form-grouparray > .fold-bar {
+  @include base.base;
+  display: flex;
+  align-items: center;
+  gap: base.$element_spacing;
+  min-height: base.$size_height;
+  -webkit-user-select: none;
+  user-select: none;
+
+  .touch & {
+    min-height: base.$size_touchHeight;
+  }
+
+  //One field with the arrows at its ends, like a stepper, and the place of the shown item between them
+  > .fold-pager {
+    @include base.field;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: base.$size_height;
+    display: flex;
+    align-items: center;
+    outline: none;
+
+    .touch & {
+      height: base.$size_touchHeight;
+    }
+
+    //A click on an arrow focuses the pager, it takes no typing, so the ring is only for keyboard focus
+    &:focus-within {
+      border-color: base.$color_border;
+      box-shadow: none;
+    }
+    @media (pointer: fine) {
+      &:hover {
+        border-color: base.$color_border_hover;
+      }
+    }
+    &:focus-visible {
+      border-color: base.$color_focus;
+      box-shadow: base.$focus_out;
+    }
+
+    > svg {
+      @include number_base.svg-stepper-button;
+
+      &.disabled {
+        opacity: 0.5;
+        pointer-events: none;
+      }
+    }
+
+    > .fold-count {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      text-align: center;
+
+      > span:first-child {
+        @include base.value-font;
+      }
+      > span:last-child {
+        @include base.unit-font;
+      }
+    }
+
+    &[hidden] {
+      display: none;
+    }
+  }
+
+  //How many items there are, while unfolded, lined up with the text of the fields
+  > .fold-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-left: base.$field_padding;
+    color: base.$color_text_unselected;
+    font-size: base.$font_size;
+    line-height: calc(base.$font_size + 0.2rem);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    .touch & {
+      font-size: base.$touch_font_size;
+      line-height: calc(base.$touch_font_size + 0.2rem);
+    }
+
+    &[hidden] {
+      display: none;
+    }
+  }
+
+  //Stays at the same place folded and unfolded, so it can be pressed again without moving
+  > .fold-toggle {
+    @include base.pressable;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: base.$size_height;
+    height: base.$size_height;
+    outline: none;
+    fill: base.$color_text;
+
+    .touch & {
+      width: base.$size_touchHeight;
+      height: base.$size_touchHeight;
+    }
+
+    > svg {
+      width: 1.1rem;
+      height: 1.1rem;
+
+      .touch & {
+        width: 1.4rem;
+        height: 1.4rem;
+      }
+    }
+
+    &:focus-visible {
+      box-shadow: base.$focus_out;
+    }
+
+    &.disabled {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    &[hidden] {
+      display: none;
+    }
+  }
+}
+
+//The bar spans the whole group, also in columns or wrapping rows
+form-grouparray.grid-col > .fold-bar {
+  grid-column: 1 / -1;
+}
+form-grouparray.grid-row > .fold-bar {
+  grid-row: 1 / -1;
+}
+form-grouparray.flex-row > .fold-bar {
+  flex-basis: 100%;
+}

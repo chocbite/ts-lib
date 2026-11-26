@@ -442,3 +442,59 @@ const content = (name: string) => [
   });
   p.appendChild(pumps);
 }
+
+//Foldable array group
+{
+  const sec = section(
+    "Foldable array group",
+    "The bar pages one item at a time, with its arrows or arrow left / right on it, and its right button shows all items or folds again. Unfold, click into a pump and fold, it should fold to that pump. Add first puts a pump in front, the bar should stay on the same pump with its number one higher. Remove shown takes out the shown pump, the one now at its place is shown. The right group starts unfolded, with initial values, and narrow, check the bar on touch",
+  );
+  let count = 0;
+  const pump = () => {
+    count++;
+    return form.group({
+      border: "line",
+      elements: [
+        form.text({ text: "Pump " + count }),
+        form.stepper({ id: "speed", min: 0, max: 100, unit: "%", value: count * 10 }),
+        form.switch({ id: "on", value: count % 2 === 0 }),
+      ],
+    });
+  };
+  const items = state.ok_w(array_from_length(6, () => pump()));
+  const folded = state.ok_w(true);
+  const index = state.ok_w(0);
+  const pumps = form.group_array({
+    elements: items,
+    foldable: true,
+    folded,
+    index,
+    border: "inset",
+  });
+  const r = spaced_row(sec);
+  const b = box(r, "folded and index as states", { width: "24rem" });
+  controls(b, {
+    "Go to 4": () => index.set_ok(3),
+    "Add first": () => items.set_ok([pump(), ...items.ok()]),
+    "Remove shown": () =>
+      items.set_ok(items.ok().filter((_item, i) => i !== index.ok())),
+    "Fold from outside": () => folded.set_ok(!folded.ok()),
+  });
+  b.appendChild(pumps);
+  const states = b.appendChild(document.createElement("div"));
+  const show_states = () =>
+    (states.textContent =
+      "folded: " + folded.ok() + ", index: " + index.ok());
+  folded.sub(show_states, true);
+  index.sub(show_states);
+
+  box(r, "starts unfolded, narrow", { width: "12rem" }).appendChild(
+    form.group_array({
+      elements: [1, 2, 3].map((value) =>
+        form.stepper({ value, min: 0, max: 10 }),
+      ),
+      foldable: true,
+      folded: false,
+    }),
+  );
+}

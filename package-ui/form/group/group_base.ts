@@ -105,13 +105,17 @@ export abstract class FormGroupBase<
   }
 
   /**Shows the elements in order, elements the group has already are not moved unless their order changed,
-   * as moving an element takes it out of the document and back, losing the focus of a field the user is typing in*/
-  protected place_elements(elements: readonly FormElement[]): void {
+   * as moving an element takes it out of the document and back, losing the focus of a field the user is typing in
+   * @param after a child of the group the elements come after, like a bar in front of them, undefined for none*/
+  protected place_elements(
+    elements: readonly FormElement[],
+    after?: ChildNode,
+  ): void {
     const keep = new Set(elements);
     for (const element of this.#elements)
       if (!keep.has(element) && element.parentNode === this) element.remove();
     //The fault icon of the group stays after the elements
-    let next: ChildNode | null = this.firstChild;
+    let next: ChildNode | null = after ? after.nextSibling : this.firstChild;
     for (const element of elements)
       if (element === next) next = next.nextSibling;
       else this.insertBefore(element, next);

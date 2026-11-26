@@ -85,34 +85,41 @@ items.set_ok([...items.ok(), form.ip()]); //Another address
 
 It lays out like a group, with the same `column`, `row`, `border`, `embed` and `max_height`.
 
+With `foldable` it has a bar over the items. Folded it shows one item at a time, with a pager like a stepper, `‹ 3 / 12 ›`, paged by its arrows, the arrow keys, Home and End, and a button beside it shows all items, `12 entries`, and folds again. Meant for arrays of tens of items, as every item is still built.
+
+- **`folded`**, true by default, and **`index`**, 0 by default, are changed by the user with the bar and work like a value: an initial value is where it starts, a writable state is written, a read only state locks the bar.
+- **Folding shows the item the focus was last in** while unfolded, so the user stays where they were.
+- **The index follows the shown item** when items are put in or taken out before it, a writable index state is written. When the shown item is taken out, the one now at its place is shown, or the last.
+- **Hidden items are out of the document**, so they cost nothing while not shown, their values are still in the value of the group.
+
 `form.group_collapser(group, { collapsed })` holds a group or an array group the user collapses and opens with a button, `collapsed` works like a value.
 
 Prompts made with `prompts.form` of `@chocbite/ts-lib-ui/prompts` are a group in a modal panel.
 
 ## Elements
 
-| Factory                       | Value                 | Options                                                                        |
-| ----------------------------- | --------------------- | ------------------------------------------------------------------------------ |
-| `form.button`                 | boolean               | `text`, `icon`, `on_click`, `toggle`, `color`, `center`                        |
-| `form.switch`                 | boolean               | `icon`, `on_color`, `off_color`                                                |
-| `form.lamp`                   | boolean or number     | `colors` (two for a boolean, more for a number), `text`, `icon`, `center`      |
-| `form.number_input`           | number                | `min`, `max`, `step`, `start`, `decimals`, `unit`                              |
-| `form.stepper`, `form.slider` | number                | as number input, and `live`, `icon_decrease`, `icon_increase`                  |
-| `form.progress`               | number, only shown    | `min`, `max`, `decimals`, `unit`                                               |
-| `form.text_input`             | string                | `placeholder`, `max_length`, `max_bytes`, `filter`, `live`                     |
-| `form.text_multiline`         | string                | as text input                                                                  |
-| `form.password`               | string                | `filter`, `live`                                                               |
-| `form.toggle_button`          | one of `selections`   | `selections`                                                                   |
-| `form.dropdown`               | one of `selections`   | `selections`, `default`, `default_icon`                                        |
-| `form.dropdown_multi`         | array of `selections` | `selections`, `default`, `min`, `max`                                          |
-| `form.color`                  | hex color string      | `live`, `alpha`                                                                |
-| `form.date_time`              | Date, string, number  | `mode` (at creation, decides the value), `type`, `precision`                   |
-| `form.ip`                     | `IPAddress`           | `type`                                                                         |
-| `form.text`                   | none, a label         | `text`, `size`                                                                 |
-| `form.spacer`                 | none                  | `space`                                                                        |
-| `form.group`                  | object by id          | `id` at creation, `elements`, `column`, `row`, `border`, `embed`, `max_height` |
-| `form.group_array`            | array of item values  | `elements`, value elements of one type, and the layout of a group              |
-| `form.group_collapser`        | none                  | `collapsed`, `opened_text`, `closed_text`                                      |
+| Factory                       | Value                 | Options                                                                                          |
+| ----------------------------- | --------------------- | ------------------------------------------------------------------------------------------------ |
+| `form.button`                 | boolean               | `text`, `icon`, `on_click`, `toggle`, `color`, `center`                                          |
+| `form.switch`                 | boolean               | `icon`, `on_color`, `off_color`                                                                  |
+| `form.lamp`                   | boolean or number     | `colors` (two for a boolean, more for a number), `text`, `icon`, `center`                        |
+| `form.number_input`           | number                | `min`, `max`, `step`, `start`, `decimals`, `unit`                                                |
+| `form.stepper`, `form.slider` | number                | as number input, and `live`, `icon_decrease`, `icon_increase`                                    |
+| `form.progress`               | number, only shown    | `min`, `max`, `decimals`, `unit`                                                                 |
+| `form.text_input`             | string                | `placeholder`, `max_length`, `max_bytes`, `filter`, `live`                                       |
+| `form.text_multiline`         | string                | as text input                                                                                    |
+| `form.password`               | string                | `filter`, `live`                                                                                 |
+| `form.toggle_button`          | one of `selections`   | `selections`                                                                                     |
+| `form.dropdown`               | one of `selections`   | `selections`, `default`, `default_icon`                                                          |
+| `form.dropdown_multi`         | array of `selections` | `selections`, `default`, `min`, `max`                                                            |
+| `form.color`                  | hex color string      | `live`, `alpha`                                                                                  |
+| `form.date_time`              | Date, string, number  | `mode` (at creation, decides the value), `type`, `precision`                                     |
+| `form.ip`                     | `IPAddress`           | `type`                                                                                           |
+| `form.text`                   | none, a label         | `text`, `size`                                                                                   |
+| `form.spacer`                 | none                  | `space`                                                                                          |
+| `form.group`                  | object by id          | `id` at creation, `elements`, `column`, `row`, `border`, `embed`, `max_height`                   |
+| `form.group_array`            | array of item values  | `elements`, value elements of one type, `foldable`, `folded`, `index`, and the layout of a group |
+| `form.group_collapser`        | none                  | `collapsed`, `opened_text`, `closed_text`                                                        |
 
 Limits of 0, like `max_length: 0`, mean no limit. Every option of the elements is described on its key, an editor shows it on hover.
 

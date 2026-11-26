@@ -366,21 +366,44 @@ describe("Number input", () => {
     expect(value_box.textContent).toBe("1.0");
   });
 
-  it("blocks letters, and decimal separators without decimals", () => {
+  it("blocks letters, but not decimal separators without decimals, the value is rounded to its decimals", () => {
     const { element } = make_input();
     expect(before_input(element, "a")).toBe(true);
     expect(before_input(element, "5")).toBe(false);
-    expect(before_input(element, ".")).toBe(true);
-    expect(before_input(element, ",")).toBe(true);
+    expect(before_input(element, ".")).toBe(false);
+    expect(before_input(element, ",")).toBe(false);
     element.set({ decimals: 1 });
     expect(before_input(element, ".")).toBe(false);
   });
 
-  it("blocks a minus only when min is not negative", () => {
+  it("rounds a typed decimal value without decimals, instead of blocking the dot", async () => {
+    const { element, value_box } = make_input({ value: 3, decimals: 0 });
+    await userEvent.click(value_box);
+    await userEvent.keyboard("{Control>}a{/Control}1.6");
+    expect(value_box.textContent).toBe("1.6");
+    await userEvent.keyboard("{Enter}");
+    await wait();
+    expect(element.buffer).toBe(2);
+    expect(value_box.textContent).toBe("2");
+  });
+
+  it("allows a minus also when min is not negative, the check refuses a value below min", () => {
     const { element } = make_input();
     expect(before_input(element, "-")).toBe(false);
     element.set({ min: 0 });
-    expect(before_input(element, "-")).toBe(true);
+    expect(before_input(element, "-")).toBe(false);
+  });
+
+  it("warns that a typed negative value is below min, instead of blocking the minus", async () => {
+    const { element, value_box, warn_input } = make_input({ value: 3, min: 0 });
+    await userEvent.click(value_box);
+    await userEvent.keyboard("{Control>}a{/Control}-5");
+    expect(value_box.textContent).toBe("-5");
+    await userEvent.keyboard("{Enter}");
+    await wait();
+    expect(element.buffer).toBe(3);
+    expect(value_box.textContent).toBe("3");
+    expect(warn_input.validationMessage).toContain("Minimum value 0");
   });
 
   it("blocks new lines", () => {
@@ -805,11 +828,35 @@ describe("Stepper", () => {
     expect(before_input(value_box, "3")).toBe(false);
   });
 
-  it("blocks a second minus sign and a minus with a positive min", () => {
+  it("rounds a typed decimal value without decimals, instead of blocking the dot", async () => {
+    const { element, value_box } = make_stepper({ value: 3, decimals: 0 });
+    expect(before_input(value_box, ",")).toBe(false);
+    await userEvent.click(value_box);
+    await userEvent.keyboard("{Control>}a{/Control}1.6");
+    expect(value_box.textContent).toBe("1.6");
+    await userEvent.keyboard("{Enter}");
+    await wait();
+    expect(element.buffer).toBe(2);
+    expect(value_box.textContent).toBe("2");
+  });
+
+  it("blocks a second minus sign, but not a minus when min is not negative", () => {
     const { element, value_box } = make_stepper({ value: -5 });
     expect(before_input(value_box, "-")).toBe(true);
     element.set({ value: 5, min: 0 });
-    expect(before_input(value_box, "-")).toBe(true);
+    expect(before_input(value_box, "-")).toBe(false);
+  });
+
+  it("warns that a typed negative value is below min, instead of blocking the minus", async () => {
+    const { element, value_box, warn_input } = make_stepper({ value: 3, min: 0 });
+    await userEvent.click(value_box);
+    await userEvent.keyboard("{Control>}a{/Control}-5");
+    expect(value_box.textContent).toBe("-5");
+    await userEvent.keyboard("{Enter}");
+    await wait();
+    expect(element.buffer).toBe(3);
+    expect(value_box.textContent).toBe("3");
+    expect(warn_input.validationMessage).toContain("Minimum value 0");
   });
 
   it("writes to the bound state and takes its limits", async () => {

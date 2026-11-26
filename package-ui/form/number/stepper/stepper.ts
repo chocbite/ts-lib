@@ -169,12 +169,12 @@ class FormStepper<
     this.#value_box.onbeforeinput = (e) => {
       if (e.inputType === "insertParagraph") e.preventDefault();
       if (e.data) {
+        //A minus with a min of 0 or more is allowed, the check tells the user why such a value is refused,
+        //and a decimal separator without decimals, the value is rounded to its decimals
         if (!/[\d,.-]/g.test(e.data)) e.preventDefault();
-        else if (/[,.]/g.test(e.data) && this.#decimals === 0)
-          e.preventDefault();
         else if (
           /-/g.test(e.data) &&
-          (this.#min >= 0 || this.#value_box.textContent?.includes("-"))
+          this.#value_box.textContent?.includes("-")
         )
           e.preventDefault();
       }

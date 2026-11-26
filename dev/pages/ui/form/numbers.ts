@@ -53,7 +53,7 @@ const VARIANTS = [
 {
   const sec = section(
     "Number input",
-    "Type a value and press enter or leave, arrow up / down steps, escape reverts. Letters are blocked, a dot is blocked without decimals and minus is blocked with min >= 0. Check the min / max legend and unit placement. Type 500 in the one with min 0, max 100 and leave it by Tab or by clicking another field: it goes back to its value and the warning bubble stays under it",
+    "Type a value and press enter or leave, arrow up / down steps, escape reverts. Letters are blocked, a typed value is rounded to the decimals, like 1.6 to 2 without decimals. Check the min / max legend and unit placement. Type 500 or -5 in the one with min 0, max 100 and leave it by Tab or by clicking another field: it goes back to its value and the warning bubble stays under it, telling the limit",
   );
   const r = spaced_row(sec);
   for (const [label, opts] of VARIANTS)
