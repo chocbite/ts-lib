@@ -27,11 +27,33 @@ names.sub((names) => {
 
 Handlers, typed as `StateUIArrayApplyHandlers`:
 
-- `create` gives the node for a value.
+- `create` gives the node for a value. Its second argument gives the index of the node as a state, see below.
 - `update` is optional. When given, nodes are reused: changed values update their node, and a whole new array updates the existing nodes before adding or removing the difference. Without it, nodes of changed values are replaced.
 - `destroy` is optional, called for every node that is removed or replaced.
 
 The parent must contain nothing but the nodes made for the array.
+
+### The index of a node
+
+The second argument of `create`, typed as `StateUIArrayIndex`, gives the index of the node in the array as a read only `StateROS<number>`, for nodes placed by their index, like in a fixed position layout.
+
+```ts
+state_ui.a.apply(board, cards, {
+  create: (card, index) => {
+    const element = document.createElement("div");
+    element.textContent = card.name;
+    index().sub((i) => (element.style.top = i.value * 3 + "rem"), true);
+    return element;
+  },
+});
+```
+
+- **Only nodes that call it are followed.** The state is made by the first call, later calls give the same state. Nodes that never call it cost nothing, and while no node of the parent has asked, `apply` does nothing extra.
+- **It follows every change.** After the changes of an array are applied, the nodes in the positions that shifted get their new index: from an insert or removal to the end, and between the two ends of a move. A changed value or a whole new array keeps the index of every node it keeps. An index that stays the same tells no one, so only the subscribers of nodes that moved are told.
+- **Asked later,** for example when the element is placed, it gives the current index of the node.
+- **A removed or replaced node** is no longer followed, its state keeps its last index.
+
+An insert at the start moves every node after it, so with thousands of nodes placed by index, add at the end where it can be done.
 
 ## `state_ui.size(element)`
 

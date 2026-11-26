@@ -103,6 +103,70 @@ function applied_list(
   applied_list(lists, "Without update", values, false);
 }
 
+//     _____ _   _ _____  ________   __
+//    |_   _| \ | |  __ \|  ____\ \ / /
+//      | | |  \| | |  | | |__   \ V /
+//      | | | . ` | |  | |  __|   > <
+//     _| |_| |\  | |__| | |____ / . \
+//    |_____|_| \_|_____/|______/_/ \_\
+{
+  const sec = section(
+    "Index states",
+    "create asks for the index of its node as a state, and every node is placed at its index with absolute positioning, so the nodes slide to their new place. " +
+      "The number in front is the index state. Only nodes whose index changed move, an insert moves the nodes after it, a move only the nodes between its ends. " +
+      "The right list shows the same array without asking for indexes, so nothing is followed for it",
+  );
+  const ROW_REM = 1.6;
+  let next = 5;
+  const values = state.ok_w(array_from_length(5, (i) => word(i) + " " + i));
+  const label = () => {
+    const i = next++;
+    return word(i) + " " + i;
+  };
+  controls(sec, {
+    Push: () => values.array.push(label()),
+    Unshift: () => values.array.unshift(label()),
+    "Insert at 2": () => values.array.splice(2, 0, label()),
+    "Remove at 1": () => values.array.splice(1, 1),
+    "Change at 0": () => values.array.change(0, label()),
+    "Move first to end": () => values.array.move(0, values.array.get.length - 1),
+    "Move last 2 to start": () =>
+      values.array.move(Math.max(values.array.get.length - 2, 0), 0, 2),
+    Sort: () => values.array.sort((a, b) => a.localeCompare(b)),
+    "Fresh, 4 values": () => values.set_ok(array_from_length(4, () => label())),
+  });
+  const lists = row(sec);
+  const positioned = box(lists, "Positioned by index", {
+    width: "26rem",
+    position: "relative",
+    border: "1px solid gray",
+  });
+  values.sub((v) => {
+    const array = v.ok ? v.value : [];
+    state_ui.a.apply(positioned, array, {
+      create: (value, index) => {
+        const node = value_node(value);
+        Object.assign(node.style, {
+          position: "absolute",
+          left: "0",
+          right: "0",
+          height: ROW_REM + "rem",
+          boxSizing: "border-box",
+          transition: "top 300ms ease",
+        });
+        const text = node.textContent;
+        index().sub((i) => {
+          node.style.top = i.value * ROW_REM + "rem";
+          node.textContent = `${i.value}: ${text}`;
+        }, true);
+        return node;
+      },
+    });
+    positioned.style.height = Math.max(array.length, 1) * ROW_REM + "rem";
+  }, true);
+  applied_list(lists, "Not asking for indexes", values, false);
+}
+
 //     _____  _              _____ _   _
 //    |  __ \| |        /\  |_   _| \ | |
 //    | |__) | |       /  \   | | |  \| |
@@ -157,7 +221,8 @@ function applied_list(
 {
   const sec = section(
     "Many values",
-    "5000 values in a scrolling box, the buttons should feel instant since only changed nodes are touched",
+    "5000 values in a scrolling box, the buttons should feel instant since only changed nodes are touched. " +
+      "The second box places every node by its index state: push and remove near the end move few nodes, unshift moves all 5000, compare the times",
   );
   const values = state.ok_w(array_from_length(5000, (i) => i));
   const list = box(sec, "5000 values", {
@@ -179,6 +244,34 @@ function applied_list(
       update: (node, value) => (node.textContent = String(value)),
     });
     timing.textContent = `apply took ${(performance.now() - start).toFixed(1)} ms for ${v.ok ? v.value.length : 0} values`;
+  }, true);
+  //The same values with every node asking for its index, unshift moves all of them, push none
+  const indexed = box(sec, "5000 values, each placed by its index state", {
+    height: "12rem",
+    width: "26rem",
+    overflow: "auto",
+    border: "1px solid gray",
+    fontFamily: "monospace",
+  });
+  const inner = indexed.appendChild(document.createElement("div"));
+  inner.style.position = "relative";
+  const indexed_timing = sec.appendChild(document.createElement("code"));
+  indexed_timing.style.display = "block";
+  values.sub((v) => {
+    const start = performance.now();
+    const array = v.ok ? v.value : [];
+    state_ui.a.apply(inner, array, {
+      create: (value, index) => {
+        const node = document.createElement("div");
+        node.textContent = String(value);
+        node.style.position = "absolute";
+        index().sub((i) => (node.style.top = i.value * 1.2 + "rem"), true);
+        return node;
+      },
+      update: (node, value) => (node.textContent = String(value)),
+    });
+    inner.style.height = array.length * 1.2 + "rem";
+    indexed_timing.textContent = `with index states apply took ${(performance.now() - start).toFixed(1)} ms`;
   }, true);
   let next = 5000;
   controls(sec, {

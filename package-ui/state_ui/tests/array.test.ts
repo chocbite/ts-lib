@@ -2,9 +2,10 @@ import st, {
   STATE_ARRAY_READ_KEY,
   type StateArrayRead,
   type StateArrayReadTypes,
+  type StateROS,
 } from "@chocbite/ts-lib/state";
-import { describe, expect, it, vi } from "vitest";
-import state_ui, { state_ui as named } from "..";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import state_ui, { state_ui as named, type StateUIArrayApplyHandlers } from "..";
 
 const apply_array = state_ui.a.apply;
 
@@ -161,5 +162,174 @@ describe("state_ui.a.apply", () => {
     numbers.array.pop();
     numbers.array.shift();
     expect(texts()).toEqual(numbers.ok().map(String));
+  });
+});
+
+describe("state_ui.a.apply index states", () => {
+  /**Parent whose nodes ask for their index state at creation, with the states by node*/
+  const tracked = (values: number[], with_update: boolean) => {
+    const parent = document.createElement("div");
+    const indexes = new Map<ChildNode, StateROS<number>>();
+    const handlers: StateUIArrayApplyHandlers<number, HTMLSpanElement> = {
+      create: (value, index) => {
+        const node = span(value);
+        indexes.set(node, index());
+        return node;
+      },
+      update: with_update
+        ? (node, value) => {
+            node.textContent = String(value);
+          }
+        : undefined,
+    };
+    const apply = (array: readonly number[]) => apply_array(parent, array, handlers);
+    apply(values);
+    /**The index state of every node in the parent*/
+    const read = () => [...parent.childNodes].map((node) => indexes.get(node)!.ok());
+    return { parent, indexes, apply, read };
+  };
+  const positions = (parent: Node) => [...parent.childNodes].map((_node, index) => index);
+
+  it("gives create the index of its node as a state, the same state every call", () => {
+    const parent = document.createElement("div");
+    const states: StateROS<number>[] = [];
+    apply_array(parent, [5, 6, 7], {
+      create: (value, index) => {
+        states.push(index());
+        expect(index()).toBe(states.at(-1));
+        return span(value);
+      },
+    });
+
+    expect(states.map((state) => state.ok())).toEqual([0, 1, 2]);
+    expectTypeOf<Parameters<StateUIArrayApplyHandlers<number, Text>["create"]>[1]>().toEqualTypeOf<
+      () => StateROS<number>
+    >();
+  });
+
+  it("gives a read only state", () => {
+    const parent = document.createElement("div");
+    let state: StateROS<number> | undefined;
+    apply_array(parent, [1], { create: (value, index) => ((state = index()), span(value)) });
+
+    expect(state!.writable).toBe(false);
+  });
+
+  for (const with_update of [false, true])
+    describe(with_update ? "with update" : "without update", () => {
+      it("follows adds, removes and moves", () => {
+        const { parent, apply, read } = tracked([1, 2, 3], with_update);
+
+        apply(changes([0, 1, 2, 3], [{ type: "added", index: 0, items: [0] }]));
+        expect(read()).toEqual(positions(parent));
+        apply(changes([0, 1, 9, 9, 2, 3], [{ type: "added", index: 2, items: [9, 9] }]));
+        expect(read()).toEqual(positions(parent));
+        apply(changes([0, 9, 2, 3], [{ type: "removed", index: 1, items: [1, 9] }]));
+        expect(read()).toEqual(positions(parent));
+        apply(changes([2, 3, 0, 9], [{ type: "moved", from_index: 2, to_index: 0, items: [2, 3] }]));
+        expect(read()).toEqual(positions(parent));
+        apply(changes([0, 9, 2, 3], [{ type: "moved", from_index: 0, to_index: 2, items: [2, 3] }]));
+        expect(read()).toEqual(positions(parent));
+      });
+
+      it("follows several changes applied at once", () => {
+        const { parent, apply, read } = tracked([1, 2, 3, 4], with_update);
+
+        apply(
+          changes([0, 1, 3, 4, 7], [
+            { type: "added", index: 0, items: [0] },
+            { type: "removed", index: 2, items: [2] },
+            { type: "added", index: 4, items: [7] },
+          ]),
+        );
+
+        expect(read()).toEqual(positions(parent));
+      });
+
+      it("gives the nodes of a plain array their positions", () => {
+        const { parent, apply, read } = tracked([1, 2, 3], with_update);
+
+        apply([4, 5, 6, 7]);
+        expect(read()).toEqual(positions(parent));
+        apply([8]);
+        expect(read()).toEqual(positions(parent));
+      });
+    });
+
+  it("gives a node replaced by a changed value a state with its index", () => {
+    const { parent, apply, read } = tracked([1, 2, 3], false);
+
+    apply(changes([1, 8, 3], [{ type: "changed", index: 1, items: [8] }]));
+
+    expect(read()).toEqual(positions(parent));
+  });
+
+  it("tells a subscriber only when the index of its node changes", () => {
+    const { parent, indexes, apply } = tracked([1, 2, 3], true);
+    const first = vi.fn();
+    indexes.get(parent.childNodes[0])!.sub(first);
+
+    apply(changes([1, 2, 3, 4], [{ type: "added", index: 3, items: [4] }]));
+    apply(changes([1, 2, 5, 3, 4], [{ type: "added", index: 2, items: [5] }]));
+    expect(first).not.toHaveBeenCalled();
+    apply(changes([0, 1, 2, 5, 3, 4], [{ type: "added", index: 0, items: [0] }]));
+
+    expect(first.mock.calls.map(([result]) => (result as { value: number }).value)).toEqual([1]);
+  });
+
+  it("gives the current index when asked after the node was placed and moved", () => {
+    const parent = document.createElement("div");
+    const getters = new Map<number, () => StateROS<number>>();
+    const handlers: StateUIArrayApplyHandlers<number, HTMLSpanElement> = {
+      create: (value, index) => {
+        getters.set(value, index);
+        return span(value);
+      },
+    };
+    apply_array(parent, [1, 2, 3], handlers);
+    apply_array(parent, changes([0, 1, 2, 3], [{ type: "added", index: 0, items: [0] }]), handlers);
+
+    const state = getters.get(2)!();
+    expect(state.ok()).toBe(2);
+    apply_array(parent, changes([2, 0, 1, 3], [{ type: "moved", from_index: 2, to_index: 0, items: [2] }]), handlers);
+    expect(state.ok()).toBe(0);
+  });
+
+  it("stops following a removed node, its state keeps the last index", () => {
+    const { parent, indexes, apply } = tracked([1, 2, 3], true);
+    const second = indexes.get(parent.childNodes[1])!;
+
+    apply(changes([1, 3], [{ type: "removed", index: 1, items: [2] }]));
+    apply(changes([0, 1, 3], [{ type: "added", index: 0, items: [0] }]));
+
+    expect(second.ok()).toBe(1);
+  });
+
+  it("follows every change of an array state", () => {
+    const parent = document.createElement("div");
+    const numbers = st.ok_w([1, 2, 3]);
+    const indexes = new Map<ChildNode, StateROS<number>>();
+    numbers.sub((value) => {
+      apply_array(parent, value.value, {
+        create: (number, index) => {
+          const node = span(number);
+          indexes.set(node, index());
+          return node;
+        },
+      });
+    }, true);
+    const read = () => [...parent.childNodes].map((node) => indexes.get(node)!.ok());
+
+    numbers.array.push(4);
+    numbers.array.unshift(0);
+    numbers.array.splice(2, 1);
+    numbers.array.move(0, 3);
+    expect(parent.childNodes.length).toBe(4);
+    expect(read()).toEqual(positions(parent));
+    numbers.array.pop();
+    numbers.array.shift();
+    numbers.array.move(1, 0);
+    expect(parent.childNodes.length).toBe(2);
+    expect(read()).toEqual(positions(parent));
   });
 });

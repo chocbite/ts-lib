@@ -2,6 +2,7 @@ import st, {
   STATE_ARRAY_READ_KEY,
   type StateArrayRead,
   type StateArrayReadTypes,
+  type StateROS,
 } from "@chocbite/ts-lib/state";
 import { NiceError } from "@chocbite/ts-lib/result";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -33,6 +34,24 @@ describe("Base loop", () => {
       }),
     });
     expect(texts(loop)).toEqual(["1", "2", "3"]);
+  });
+
+  it("gives the generator the index of the node as a state, following the changes", () => {
+    const indexes = new Map<ChildNode, StateROS<number>>();
+    const loop = base_loop((value: number, index) => {
+      const element = document.createElement("span");
+      element.textContent = String(value);
+      indexes.set(element, index());
+      return element;
+    });
+    loop.set({ array: [1, 2] });
+    loop.set({
+      array: Object.assign([0, 1, 2], {
+        [STATE_ARRAY_READ_KEY]: [{ type: "added", index: 0, items: [0] }],
+      }),
+    });
+
+    expect([...loop.childNodes].map((node) => indexes.get(node)!.ok())).toEqual([0, 1, 2]);
   });
 
   it("calls the destructor for the children a fresh array replaces", () => {

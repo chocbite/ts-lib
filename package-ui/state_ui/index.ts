@@ -16,5 +16,5 @@ export const state_ui = {
 };
 export default state_ui;
 
-export type { StateUIArrayApplyHandlers } from "./array";
+export type { StateUIArrayApplyHandlers, StateUIArrayIndex } from "./array";
 export type { StateUISize } from "./size";

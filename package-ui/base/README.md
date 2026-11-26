@@ -106,7 +106,7 @@ const list = base_loop((name: string) => document.createTextNode(name), {
 });
 ```
 
-`change` updates a node to a new value so it can be reused, `destructor` is called for every node that is removed.
+`change` updates a node to a new value so it can be reused, `destructor` is called for every node that is removed. The generator gets the index of the node as a state as its second argument, `(name, index) => …`, see the index of a node in [state_ui](../state_ui/README.md#the-index-of-a-node).
 
 ## SVG elements
 

@@ -1,4 +1,4 @@
-import state_ui from "#state_ui";
+import state_ui, { type StateUIArrayIndex } from "#state_ui";
 import type { Option, ResultNice } from "@chocbite/ts-lib/result";
 import type { StateOrValREA } from "@chocbite/ts-lib/state";
 import { Base, type BaseOptions } from "./base";
@@ -37,14 +37,16 @@ class Loop<T = unknown, N extends ChildNode = ChildNode> extends Base {
     return "base";
   }
 
-  #generator: (val: T) => N = () => {
+  #generator: (val: T, index: StateUIArrayIndex) => N = () => {
     throw new Error("Loop created without a generator, use base_loop");
   };
   #destructor?: (element: N) => void;
   #change?: (element: N, new_value: T) => void;
 
   [CREATE](
-    options: LoopCreateOptions<T, N> & { generator?: (val: T) => N },
+    options: LoopCreateOptions<T, N> & {
+      generator?: (val: T, index: StateUIArrayIndex) => N;
+    },
   ): void {
     super[CREATE](options);
     if (options.generator) this.#generator = options.generator;
@@ -72,9 +74,11 @@ define_element(Loop);
 export type { Loop };
 
 /**Creates an element with one child node per value, made by the generator
- * Give the values as array, an array state reuses the nodes of the values its changes keep*/
+ * Give the values as array, an array state reuses the nodes of the values its changes keep
+ * @param generator makes the node for a value, index gives the index of the node as a state that follows the changes,
+ * only nodes that call it are followed, see state_ui.a.apply*/
 export function base_loop<T, N extends ChildNode>(
-  generator: (val: T) => N,
+  generator: (val: T, index: StateUIArrayIndex) => N,
   options: LoopCreateOptions<T, N> = {},
 ): Loop<T, N> {
   //create can not carry the value type of a generic class, the options are checked by this function
