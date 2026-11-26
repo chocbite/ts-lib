@@ -153,9 +153,15 @@ export abstract class FormValue<
   }
 
 
+  /**True when what is shown may not be the value the element has, so show_value shows the value even when it is unchanged
+   * Like after the user changed the element, and a write to its state took it out of the document before the state told it the value*/
+  protected _stale: boolean = false;
+
   /**Shows the value and keeps it, without writing it anywhere, the value input uses it*/
   protected show_value(val: RT): void {
-    if (typeof this._buffer !== "undefined" && this._buffer === val) return;
+    if (!this._stale && this._buffer !== undefined && this._buffer === val)
+      return;
+    this._stale = false;
     this._buffer = val;
     this.new_value(val);
   }
@@ -358,6 +364,9 @@ export abstract class FormValueWrite<
         this.warn(written.error);
         return err(written.error);
       }
+      //The state tells the element its value, unless the element was unsubscribed before it was told,
+      //like when the write took it out of the document, it then shows val, which may not be the value
+      if (this._buffer !== val) this._stale = true;
       this.#changed = true;
     } else {
       this._buffer = val;
