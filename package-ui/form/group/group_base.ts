@@ -1,21 +1,12 @@
 import { AccessTypes, input_key, type InputOptions } from "#base";
-import {
-  err_nice,
-  ok,
-  type NiceError,
-  type Option,
-  type ResultNice,
-  type ResultOk,
-} from "@chocbite/ts-lib/result";
-import { form_errors } from "../errors";
 import type { StateOrVal } from "@chocbite/ts-lib/state";
 import {
   FormElement,
-  FormValue,
   FormValueWrite,
   type FormValueWriteOptions,
 } from "../base";
 import "./group_base.scss";
+import "./group.scss";
 
 /**Different border styles for the component group*/
 export const FormGroupBorderStyle = {
@@ -27,32 +18,6 @@ export const FormGroupBorderStyle = {
 export type FormGroupBorderStyle =
   (typeof FormGroupBorderStyle)[keyof typeof FormGroupBorderStyle];
 
-export type GroupExtractVals<Arr extends any[]> = Arr extends [
-  infer Head,
-  ...infer Tail,
-]
-  ? //Only elements the user changes are collected by the group, like at runtime
-    Head extends FormValueWrite<infer T, infer ID>
-    ? [FormValue<T, ID>, ...GroupExtractVals<Tail>]
-    : [...GroupExtractVals<Tail>]
-  : [];
-
-export type GroupToKeyVal<Arr extends FormValue<any, any>[]> = {
-  [K in Arr[number] as K extends FormValue<any, infer ID>
-    ? [ID] extends [string]
-      ? ID
-      : never
-    : never]: K extends FormValue<infer T, any> ? T : never;
-};
-
-export type GroupValueElements<Elements extends FormElement[]> = {
-  [Element in Elements[number] as Element extends FormValueWrite<any, infer ID>
-    ? [ID] extends [string]
-      ? ID
-      : never
-    : never]: Element;
-};
-
 /**Inputs of groups*/
 const GROUP_BASE = {
   /**Border around the group, none by default*/
@@ -61,19 +26,20 @@ const GROUP_BASE = {
   embed: input_key<StateOrVal<boolean>>(),
   /**Highest height in rem, it scrolls beyond, 0 for no limit*/
   max_height: input_key<StateOrVal<number>>(),
+  /**Columns, true is one column, a width like "10rem" repeats columns at least that wide, an array gives exactly those columns*/
+  column: input_key<StateOrVal<true | string | string[]>>(),
+  /**Rows, works like column, a group has either columns or rows*/
+  row: input_key<StateOrVal<true | string | string[]>>(),
 };
-/**Options of a group with values RT
- * The value of a group is the values of its elements by id, a value given to the group is given to each element as its own*/
-export type FormGroupBaseOptions<RT extends object> = FormValueWriteOptions<
-  Partial<RT>
-> &
+/**Options of a group with the value V, the look and layout every group has*/
+export type FormGroupBaseOptions<V> = FormValueWriteOptions<V> &
   InputOptions<typeof GROUP_BASE>;
 
+/**Base of the groups, laying out elements in columns or rows, its value is made from the values of its elements*/
 export abstract class FormGroupBase<
-  RT extends object,
+  V,
   ID extends string | undefined,
-  Elements extends FormElement[] = FormElement[],
-> extends FormValueWrite<Partial<RT>, ID> {
+> extends FormValueWrite<V, ID> {
   static element_name() {
     return "@abstract@";
   }
@@ -81,16 +47,14 @@ export abstract class FormGroupBase<
     return "form";
   }
 
-  protected _value_elements: Map<string, FormValueWrite<any, any>> = new Map();
+  #elements: FormElement[] = [];
 
-  /**Returns form elements indexed by their form IDs*/
-  get value_elements(): GroupValueElements<Elements> {
-    return Object.fromEntries(
-      this._value_elements,
-    ) as unknown as GroupValueElements<Elements>;
+  constructor() {
+    super();
+    this.classList.add("flex-col");
   }
 
-  set(options: FormGroupBaseOptions<RT>): this {
+  set(options: FormGroupBaseOptions<V>): this {
     super.set(options);
     this.set_input(GROUP_BASE.border, options.border, (border) => {
       this.classList.remove(
@@ -109,70 +73,52 @@ export abstract class FormGroupBase<
     this.set_input(GROUP_BASE.embed, options.embed, (embed) => {
       this.classList.toggle("embed", embed.ok && embed.value);
     });
+    this.set_input(GROUP_BASE.column, options.column, (column) => {
+      if (column.ok) this.#layout("col", column.value);
+    });
+    this.set_input(GROUP_BASE.row, options.row, (row) => {
+      if (row.ok) this.#layout("row", row.value);
+    });
     return this;
   }
 
-  /**Returns value of the group, returning err if any component has no value*/
-  get get_value(): ResultNice<RT> {
-    const result: RT = {} as RT;
-    const failed: string[] = [];
-    const errors: NiceError[] = [];
-    for (const [key, comp] of this._value_elements) {
-      const val = comp.get_value;
-      if (val.err) {
-        failed.push(key);
-        errors.push(val.error);
-      } else result[key as keyof RT] = val.value as RT[keyof RT];
+  #layout(direction: "col" | "row", layout: true | string | string[]) {
+    this.classList.remove("grid-row", "grid-col", "flex-row", "flex-col");
+    this.style.gridTemplateColumns = "";
+    this.style.gridTemplateRows = "";
+    if (layout === true) {
+      this.classList.add("flex-" + direction);
+      return;
     }
-    //One error naming every element without a value, with the error of each inside
-    if (failed.length)
-      return err_nice(form_errors.INVALID, "Elements without a valid value: " + failed.join(", "), errors);
-    return ok(result);
+    this.classList.add("grid-" + direction);
+    const template =
+      typeof layout === "string"
+        ? "repeat(auto-fit, minmax(" + layout + ", 1fr))"
+        : layout.map((size) => "minmax(" + size + ", 1fr)").join(" ");
+    if (direction === "col") this.style.gridTemplateColumns = template;
+    else this.style.gridTemplateRows = template;
   }
 
-  /**Returns partial value of the group, containing all values of components that have values*/
-  get value_partial(): ResultOk<Partial<RT>> {
-    return ok(this.#partial());
+  /**All elements of the group, also those that are not part of its value*/
+  get elements(): FormElement[] {
+    return [...this.#elements];
   }
 
-  #partial(): Partial<RT> {
-    const result: Partial<RT> = {};
-    for (const [key, comp] of this._value_elements) {
-      const val = comp.get_value;
-      if (val.err) continue;
-      result[key as keyof RT] = val.value as RT[keyof RT];
-    }
-    return result;
+  /**Shows the elements in order, elements the group has already are not moved unless their order changed,
+   * as moving an element takes it out of the document and back, losing the focus of a field the user is typing in*/
+  protected place_elements(elements: readonly FormElement[]): void {
+    const keep = new Set(elements);
+    for (const element of this.#elements)
+      if (!keep.has(element) && element.parentNode === this) element.remove();
+    //The fault icon of the group stays after the elements
+    let next: ChildNode | null = this.firstChild;
+    for (const element of elements)
+      if (element === next) next = next.nextSibling;
+      else this.insertBefore(element, next);
+    this.#elements = [...elements];
   }
 
-  /**The change listener of the group gets the values of all components that have values*/
-  protected child_changed(child: FormValueWrite<any, any>): void {
-    if (this._value_elements.get(child.form_id as string) === child)
-      this.call_change(this.#partial());
-  }
-
-  /**Returns partial value of the group, only containing values of components where value has changed*/
-  get value_changed(): ResultOk<Partial<RT>> {
-    const result: Partial<RT> = {};
-    for (const [key, comp] of this._value_elements) {
-      const val = comp.get_value;
-      if (val.err) continue;
-      if (comp.changed) result[key as keyof RT] = val.value as RT[keyof RT];
-    }
-    return ok(result);
-  }
-
-  /**Gives each element its value from the value of the group, as an initial value*/
-  protected new_value(val: RT): void {
-    for (const key in val)
-      this._value_elements.get(key)?.set({ value: val[key as keyof RT] });
-  }
-
-  protected clear_value(): void {
-    for (const comp of this._value_elements.values()) comp.clear();
-  }
-
-  protected state_related(_related: Option<{}>): void {}
+  protected state_related(_related: {}): void {}
 
   protected on_access(access: AccessTypes): void {
     switch (access) {

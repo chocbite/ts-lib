@@ -384,9 +384,9 @@ export abstract class FormValueWrite<
       } catch (e) {
         console.error("Failed while updating change listener", e);
       }
+    //Also without an id, like the items of an array group, the parent decides if the child is one of its values
     const parent = this.parentElement;
-    if (this.form_id !== undefined && parent instanceof FormValueWrite)
-      parent.child_changed(this);
+    if (parent instanceof FormValueWrite) parent.child_changed(this);
   }
 
   /**Called when a child value element with a form id was changed by the user*/

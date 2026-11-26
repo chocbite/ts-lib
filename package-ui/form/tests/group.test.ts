@@ -2,11 +2,14 @@ import { AccessTypes } from "#base";
 import { NiceError, ok, type ResultNice } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
-import { FormColors } from "../base";
 import { form_errors } from "../errors";
 import { form_switch } from "../boolean/switch/switch";
 import { form_lamp } from "../boolean/lamp/lamp";
-import { form_stepper } from "../number/stepper/stepper";
+import { form_stepper, type FormStepper } from "../number/stepper/stepper";
+import { form_number_input } from "../number/number_input/number_input";
+import { form_text } from "../text/text/text";
+import type { FormSwitch } from "../boolean/switch/switch";
+import { FormColors, FormElement, FormValueWrite } from "../base";
 import { form_group } from "../group/group";
 import { FormGroupBorderStyle } from "../group/group_base";
 
@@ -188,11 +191,93 @@ describe("Group elements", () => {
     expect(Object.keys(group.value_elements)).toEqual(["a"]);
   });
 
-  it("gets its elements at creation, as they decide its value", () => {
-    const group = form_group({ elements: [form_stepper({ id: "a" })] });
-    // @ts-expect-error the elements are given at creation
-    group.set({ elements: [form_switch({ id: "b" })] });
-    expect(Object.keys(group.value_elements)).toEqual(["a"]);
+  it("takes other elements with the same ids, their values are its value", () => {
+    const { group, a, b } = make({ a: 1, b: true });
+    const a2 = form_number_input({ id: "a", value: 5 });
+    const b2 = form_switch({ id: "b", value: false });
+    const label = form_text({ text: "Label" });
+    group.set({ elements: [label, a2, b2] });
+    expect([...group.children]).toEqual([label, a2, b2]);
+    expect(group.elements).toEqual([label, a2, b2]);
+    expect(group.value_elements).toEqual({ a: a2, b: b2 });
+    expect(group.get_value.unwrap()).toEqual({ a: 5, b: false });
+    expect(a.parentElement).toBeNull();
+    expect(b.parentElement).toBeNull();
+  });
+
+  it("leaves the elements it keeps in place, only new ones are put in", async () => {
+    const { group, a, b } = make({ a: 1, b: true });
+    const a2 = form_stepper({ id: "a", value: 2 });
+    const removed: Node[] = [];
+    const observer = new MutationObserver((records) => {
+      for (const record of records) removed.push(...record.removedNodes);
+    });
+    observer.observe(group, { childList: true });
+    const label = form_text({ text: "Label" });
+    group.set({ elements: [label, a, b] });
+    group.set({ elements: [label, a2, b] });
+    await wait();
+    observer.disconnect();
+    expect([...group.children]).toEqual([label, a2, b]);
+    expect(removed).toEqual([a]);
+  });
+
+  it("moves a kept element when the order changes", () => {
+    const { group, a, b } = make();
+    group.set({ elements: [b, a] });
+    expect([...group.children]).toEqual([b, a]);
+  });
+
+  it("gives a value given with the elements to the new elements", () => {
+    const { group } = make({ a: 1, b: true });
+    const a2 = form_stepper({ id: "a" });
+    const b2 = form_switch({ id: "b" });
+    group.set({ elements: [a2, b2], value: { a: 7, b: false } });
+    expect(a2.buffer).toBe(7);
+    expect(b2.buffer).toBe(false);
+  });
+
+  it("follows elements given as a state", () => {
+    const a = form_stepper({ id: "a", value: 1 });
+    const a2 = form_stepper({ id: "a", value: 2 });
+    const elements = st.ok_w([a]);
+    const group = form_group({ elements });
+    document.body.appendChild(group);
+    expect(group.get_value.unwrap()).toEqual({ a: 1 });
+    elements.set_ok([a2]);
+    expect([...group.children]).toEqual([a2]);
+    expect(group.get_value.unwrap()).toEqual({ a: 2 });
+  });
+
+  it("does not tell its change listener about an element it no longer has", async () => {
+    const change = vi.fn();
+    const a = form_stepper({ id: "a", value: 1 });
+    const b = form_switch({ id: "b", value: false });
+    const group = form_group({ elements: [a, b], change });
+    document.body.appendChild(group);
+    const b2 = form_switch({ id: "b", value: false });
+    group.set({ elements: [a, b2] });
+    b.click();
+    await wait();
+    expect(change).not.toHaveBeenCalled();
+    b2.click();
+    await wait();
+    expect(change).toHaveBeenCalledWith({ a: 1, b: true });
+  });
+
+  it("keeps its fault icon after the elements", () => {
+    const value = st.err_w<{ a: number }>(
+      new NiceError(Symbol("Broken"), "broken"),
+    );
+    const a = form_stepper({ id: "a" });
+    const group = form_group({ elements: [a] }).set({ value });
+    document.body.appendChild(group);
+    const icon = group.lastElementChild;
+    expect(icon).not.toBe(a);
+    const a2 = form_stepper({ id: "a" });
+    const label = form_text({ text: "Label" });
+    group.set({ elements: [a2, label] });
+    expect([...group.children]).toEqual([a2, label, icon]);
   });
 });
 
@@ -302,5 +387,36 @@ export function group_types() {
   expectTypeOf(with_lamp.get_value).toEqualTypeOf<
     ResultNice<{ a: number }>
   >();
+
+  //Elements given again need the same ids and value types, other elements and labels are free
+  group.set({
+    elements: [
+      form_text({ text: "Label" }),
+      form_number_input({ id: "a" }),
+      form_switch({ id: "b" }),
+    ],
+  });
+  // @ts-expect-error b is missing
+  group.set({ elements: [form_stepper({ id: "a" })] });
+  group.set({
+    // @ts-expect-error c is not in the value
+    elements: [form_stepper({ id: "a" }), form_switch({ id: "b" }), form_switch({ id: "c" })],
+  });
+  // @ts-expect-error a is a number
+  group.set({ elements: [form_switch({ id: "a" }), form_switch({ id: "b" })] });
+  //Also as a state
+  group.set({
+    elements: st.ok_w<[FormStepper<"a">, FormSwitch<"b">]>([
+      form_stepper({ id: "a" }),
+      form_switch({ id: "b" }),
+    ]),
+  });
+  //The value elements are typed by their value, as another element with the same value can take the place
+  expectTypeOf(group.value_elements.a).toEqualTypeOf<FormValueWrite<number, "a">>();
+
+  //A group built from data has no typed value, so it takes any elements
+  const built: FormElement[] = [];
+  const from_data = form_group({ elements: built });
+  from_data.set({ elements: [form_switch({ id: "x" })] as FormElement[] });
   return ok(undefined);
 }

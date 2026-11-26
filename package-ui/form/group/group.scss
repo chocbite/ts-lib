@@ -1,7 +1,8 @@
 @use "../base";
 @use "./group_base";
 
-form-group {
+form-group,
+form-grouparray {
   @include base.base;
   @include group_base.base;
 

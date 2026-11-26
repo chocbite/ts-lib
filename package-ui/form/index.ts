@@ -30,6 +30,12 @@ import {
   type FormGroupOptions,
 } from "./group/group";
 import {
+  form_group_array,
+  FormGroupArray,
+  type FormGroupArrayCreateOptions,
+  type FormGroupArrayOptions,
+} from "./group/group_array";
+import {
   form_group_collapser,
   FormGroupCollapser,
   type FormGroupCollapserOptions,
@@ -135,6 +141,7 @@ export const form = {
 
   //Group
   group: form_group,
+  group_array: form_group_array,
   group_collapser: form_group_collapser,
 
   //Special
@@ -185,6 +192,9 @@ export type {
   FormDropDownMultiCreateOptions,
   FormDropDownMultiOptions,
   FormGroup,
+  FormGroupArray,
+  FormGroupArrayCreateOptions,
+  FormGroupArrayOptions,
   FormGroupCollapser,
   FormGroupCollapserOptions,
   FormGroupCreateOptions,

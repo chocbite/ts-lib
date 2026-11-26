@@ -4,7 +4,7 @@ import {
   material_play_arrow_rounded,
   material_stop_rounded,
 } from "@chocbite/ts-lib-ui/icons";
-import { array_from_length } from "@chocbite/ts-lib/common";
+import { array_from_length, IPAddress } from "@chocbite/ts-lib/common";
 import type { NiceError, Result } from "@chocbite/ts-lib/result";
 import state from "@chocbite/ts-lib/state";
 import { box, controls, row, section } from "../../../helpers";
@@ -336,4 +336,109 @@ const content = (name: string) => [
     "Access none": () => access.set_ok("n"),
   });
   b.appendChild(group);
+}
+
+//Elements given again
+{
+  const sec = section(
+    "Elements given again",
+    "The buttons give the group other elements with the same ids and value types, a stepper or slider for speed, a dropdown or toggle buttons for mode. The switch is the same element in both, it stays in place and keeps its value, the others are new with every press and start from their own values. Large, with value gives the value to the new elements. Change something and print, the value is that of the elements shown",
+  );
+  const modes = [
+    { value: "auto", text: "Auto" },
+    { value: "manual", text: "Manual" },
+  ];
+  const on = form.switch({ id: "on", value: true });
+  const compact = () =>
+    [
+      form.text({ text: "Compact" }),
+      form.stepper({ id: "speed", min: 0, max: 100, unit: "%", value: 20 }),
+      form.dropdown({ id: "mode", selections: modes, value: "auto" }),
+      on,
+    ] as const;
+  const large = () =>
+    [
+      form.text({ text: "Large, with more room" }),
+      form.slider({ id: "speed", min: 0, max: 100, unit: "%", value: 80 }),
+      form.toggle_button({ id: "mode", selections: modes, value: "manual" }),
+      on,
+    ] as const;
+  const group = form.group({ border: "inset", elements: [...compact()] });
+  const r = spaced_row(sec);
+  const b = box(r, "group", { width: "24rem" });
+  const out = output(sec);
+  controls(b, {
+    Compact: () => group.set({ elements: [...compact()] }),
+    Large: () => group.set({ elements: [...large()] }),
+    "Large, with value": () =>
+      group.set({
+        elements: [...large()],
+        value: { speed: 50, mode: "auto", on: false },
+      }),
+    "Print value": () => {
+      const value = group.get_value;
+      out.textContent = value.ok
+        ? JSON.stringify(value.value, null, 1)
+        : "error, " + value.error.toString();
+    },
+  });
+  b.appendChild(group);
+}
+
+//Array group
+{
+  const sec = section(
+    "Array group",
+    "Its value is the values of its items in order. Add and Remove put in and take out items, the items already there are not moved, so what was typed in them stays. An address left empty makes the value an error naming its index, partial leaves it out. Below, an array group of groups, its value is an array of objects",
+  );
+  const items = state.ok_w([form.ip(), form.ip()]);
+  const addresses = form.group_array({ elements: items, border: "inset" });
+  const changes = document.createElement("div");
+  changes.textContent = "change: -";
+  addresses.set({
+    change: (values) =>
+      (changes.textContent =
+        "change: [" + values.map((ip) => ip.to_string()).join(", ") + "]"),
+  });
+  const r = spaced_row(sec);
+  const b = box(r, "addresses", { width: "24rem" });
+  const out = output(sec);
+  //Addresses as text, an IPAddress holds a bigint, which JSON can not hold
+  const print = (r: Result<unknown, NiceError>) =>
+    (out.textContent = r.ok
+      ? JSON.stringify(
+          r.value,
+          (_key, value: unknown) =>
+            value instanceof IPAddress ? value.to_string() : value,
+          1,
+        )
+      : "error, " + r.error.toString());
+  controls(b, {
+    Add: () => items.set_ok([...items.ok(), form.ip()]),
+    "Add first": () => items.set_ok([form.ip(), ...items.ok()]),
+    "Remove last": () => items.set_ok(items.ok().slice(0, -1)),
+    "Print value": () => print(addresses.get_value),
+    "Print partial": () => print(addresses.value_partial),
+  });
+  b.appendChild(addresses);
+  b.appendChild(changes);
+
+  const pump = (name: string, speed: number) =>
+    form.group({
+      border: "line",
+      elements: [
+        form.text({ text: name }),
+        form.stepper({ id: "speed", min: 0, max: 100, unit: "%", value: speed }),
+        form.switch({ id: "on", value: speed > 0 }),
+      ],
+    });
+  const pumps = form.group_array({
+    column: "12rem",
+    elements: [pump("Pump 1", 20), pump("Pump 2", 0), pump("Pump 3", 60)],
+  });
+  const p = box(spaced_row(sec), "pumps", { width: "40rem" });
+  controls(p, {
+    "Print value": () => print(pumps.get_value),
+  });
+  p.appendChild(pumps);
 }
