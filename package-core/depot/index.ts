@@ -1,15 +1,13 @@
+export type { DepotAlias } from "./alias";
 export { depot, depot as default } from "./depot";
+export type { DepotEntry } from "./entry";
+export type { DepotGroup } from "./group";
+export type { DepotChild, DepotIcon, DepotNode } from "./node";
 export type {
-  DepotAlias,
-  DepotChild,
-  DepotEntry,
-  DepotGroup,
-  DepotIcon,
-  DepotNode,
   DepotSource,
   DepotSourceBase,
   DepotSourceChild,
   DepotSourceEntry,
   DepotSourceGroup,
-  DepotType,
-} from "./depot";
+} from "./source";
+export type { DepotType } from "./type";
