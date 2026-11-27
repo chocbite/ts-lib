@@ -2,9 +2,11 @@ import depot, {
   type DepotEntry,
   type DepotGroup,
 } from "@chocbite/ts-lib/depot";
+import list from "#list";
 import state from "@chocbite/ts-lib/state";
+import { depot_selector_open } from "../selector";
 import { type DepotStateKind, state_kind } from "./kind";
-import { depot_select_values } from "./selector";
+import { DepotValueField } from "./value";
 
 export interface DepotStateSelectOptions {
   /**Group of the states type to select from, all states when undefined*/
@@ -38,19 +40,28 @@ export function depot_select_state(
         ? [options.kind]
         : options.kind;
   const { writable, filter } = options;
-  return depot_select_values(from, {
-    mode: options.mode,
-    selected: options.selected,
-    title: options.title,
-    filter: (entry) => {
-      //An entry of the states type holds the state, or a constant that is never writable
-      const value = entry.value;
-      if (writable && !(state.is.state(value) && value.writable)) return false;
-      if (kinds) {
-        const kind = state_kind(state.as_state(value));
-        if (!kind || !kinds.includes(kind)) return false;
-      }
-      return !filter || filter(entry);
+  return depot_selector_open(
+    from,
+    {
+      mode: options.mode,
+      selected: options.selected,
+      title: options.title,
+      filter: (entry) => {
+        //An entry of the states type holds the state, or a constant that is never writable
+        const value = entry.value;
+        if (writable && !(state.is.state(value) && value.writable))
+          return false;
+        if (kinds) {
+          const kind = state_kind(state.as_state(value));
+          if (!kind || !kinds.includes(kind)) return false;
+        }
+        return !filter || filter(entry);
+      },
     },
-  });
+    list.column({
+      title: "Value",
+      field_gen: () => new DepotValueField(),
+      field_apply: (field, child) => (field.child = child),
+    }),
+  );
 }

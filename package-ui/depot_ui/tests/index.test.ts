@@ -42,6 +42,16 @@ const setup = () => {
 
 const tick = () => new Promise<void>((r) => queueMicrotask(r));
 
+/**Types the text in the search bar of the selector, enter searches without the delay of the list*/
+const search = (text: string) => {
+  const input = document.querySelector<HTMLInputElement>("depot-selector input")!;
+  input.value = text;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+  );
+};
+
 describe("tree", () => {
   it("shows groups with entries below them and the entries", () => {
     const { type, shapes, rect, circle, other } = setup();
@@ -57,19 +67,6 @@ describe("tree", () => {
     expect(tree.rows(shapes).ok()).toEqual([rect]);
     const only_other = new DepotTree(type, (e) => e === other);
     expect(only_other.rows().ok()).toEqual([other]);
-  });
-
-  it("searches names and paths without case", () => {
-    const { type, shapes, rect, circle } = setup();
-    const tree = new DepotTree(type);
-    tree.search = "RECT";
-    expect(tree.searching).toBe(true);
-    expect(tree.rows().ok()).toEqual([shapes]);
-    expect(tree.rows(shapes).ok()).toEqual([rect]);
-    tree.search = "shapes";
-    expect(tree.rows(shapes).ok()).toEqual([rect, circle]);
-    tree.search = " ";
-    expect(tree.searching).toBe(false);
   });
 
   it("follows the depot after the burst of changes", async () => {
@@ -119,7 +116,8 @@ describe("select", () => {
       (b) => b.textContent === text,
     ) as HTMLElement;
   const rows = () =>
-    [...panel().querySelectorAll("list-row")].map(
+    //Rows the search hides stay in the list
+    [...panel().querySelectorAll("list-row:not(.search-hidden)")].map(
       (r) => r.querySelector("list-keyfield")!.textContent,
     );
   const press = (el: HTMLElement) => el.click();
@@ -145,7 +143,7 @@ describe("select", () => {
   it("gives nothing when closed with Escape or by the panel", async () => {
     const { type, rect } = setup();
     const escaped = depot_ui.select(type, { selected: [rect] });
-    document.activeElement!.dispatchEvent(
+    panel().dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
     );
     expect(await escaped).toEqual([]);
@@ -163,24 +161,21 @@ describe("select", () => {
       input.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
       );
-    input.value = "circ";
-    input.dispatchEvent(new Event("input", { bubbles: true }));
+    search("circ");
     expect(rows()).toEqual(["Shapes", "Circle"]);
     escape();
-    await tick();
     expect(input.value).toBe("");
-    //Every entry is back, the group opened by the search stays open
-    expect(rows()).toEqual(["Shapes", "Rectangle", "Circle", "Other"]);
+    //Every entry is back, the group the search opened closes again
+    expect(rows()).toEqual(["Shapes", "Other"]);
     escape();
     expect(await result).toEqual([]);
   });
 
-  it("is a modal panel with a close button, the search focused", () => {
+  it("is a modal panel with a close button", () => {
     const { type } = setup();
     void depot_ui.select(type);
     expect(selector_panel().classList.contains("modal")).toBe(true);
     expect(selector_panel().querySelector(".close-button")).not.toBeNull();
-    expect(document.activeElement).toBe(panel().querySelector("input"));
   });
 
   it("only shows entries passing the filter", () => {
@@ -189,13 +184,33 @@ describe("select", () => {
     expect(rows()).toEqual(["Other"]);
   });
 
-  it("opens groups while searching", async () => {
+  it("opens groups with matches below them while searching", () => {
     const { type } = setup();
     void depot_ui.select(type);
-    const input = panel().querySelector("input")!;
-    input.value = "circ";
-    input.dispatchEvent(new Event("input", { bubbles: true }));
+    search("circ");
     expect(rows()).toEqual(["Shapes", "Circle"]);
+  });
+
+  it("searches names, descriptions and paths without case", () => {
+    const { type } = setup();
+    void depot_ui.select(type);
+    search("ROUND");
+    expect(rows()).toEqual(["Shapes", "Circle"]);
+    search("shapes/re");
+    expect(rows()).toEqual(["Shapes", "Rectangle"]);
+    //The paths of the entries have the name of the group
+    search("shapes");
+    expect(rows()).toEqual(["Shapes", "Rectangle", "Circle"]);
+    search("nothing");
+    expect(rows()).toEqual([]);
+  });
+
+  it("finds a group by its name when nothing below it matches", () => {
+    const { type } = setup();
+    type.group("p", "Pumps", "").add("a", "Alpha", "", 1);
+    void depot_ui.select(type);
+    search("pumps");
+    expect(rows()).toEqual(["Pumps"]);
   });
 
   it("can select states of the states type by a filter", async () => {
@@ -224,16 +239,13 @@ describe("select_state", () => {
       (b) => b.textContent === text,
     ) as HTMLElement;
   const rows = () =>
-    [...panel().querySelectorAll("list-row")].map(
+    //Rows the search hides stay in the list
+    [...panel().querySelectorAll("list-row:not(.search-hidden)")].map(
       (r) => r.querySelector("list-keyfield")!.textContent,
     );
   const values = () =>
     [...panel().querySelectorAll("depot-value")].map((v) => v.textContent);
-  const input = (text: string) => {
-    const el = panel().querySelector("input")!;
-    el.value = text;
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-  };
+  const input = search;
 
   const setup = () => {
     const machine = depot.states.group("machine", "Machine", "");

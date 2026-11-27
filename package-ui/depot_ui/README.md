@@ -26,7 +26,7 @@ Options:
 - `selected`: entries selected when the selector opens.
 - `title`: shown at the top, the name of the group when undefined.
 
-Groups can not be selected, only entries. The search box filters while typing on names and paths without case, and opens the groups while a search is set. The selector follows the depot while it is open, entries registered or removed show right away.
+Groups can not be selected, only entries. The search bar is the one of `list`, see its Search section: it searches once typing pauses, or at once on Enter. Entries match by their name, description or path, without case. A group with a match below it opens for the search and closes again when the search no longer finds it, a group whose own name or description matches with nothing below it shows closed. Escape clears the search, and with nothing to clear cancels. The selector follows the depot while it is open, entries registered or removed show right away.
 
 ## `depot_ui.select_state(options?)`
 
@@ -47,4 +47,24 @@ The value column uses the unit and decimals of a number helper and the names of 
 
 ## `DepotTree`
 
-The filtered view the selector is built on, for building other selectors. `new DepotTree(group, filter?)` gives `rows(group?)`, a state of the shown children of a group, made for the rows and sub rows of a `list` container. Set `search` to filter by text, and call `dispose()` when done to drop the subscriptions to the depot. Changes in the depot are applied once after a burst of changes, in a microtask.
+The filtered view the selector is built on, for building other selectors. `new DepotTree(group, filter?)` gives `rows(group?)`, a state of the shown children of a group, made for the rows and sub rows of a `list` container. `search(child, query)` is the answer of the row of a child to the search of the list, give it as the `search` row option so the list search works as in the selector. Call `dispose()` when done to drop the subscriptions to the depot. Changes in the depot are applied once after a burst of changes, in a microtask.
+
+```ts
+const tree = new DepotTree(group);
+list.container(
+  {
+    transform: (child) =>
+      ok({
+        key_field: { text: child.name },
+        openable: child.kind !== "entry",
+        sub_rows: child.kind === "entry" ? undefined : () => tree.rows(child),
+        search: (query) => tree.search(child, query),
+        values: { description: child.description },
+      }),
+    sub_rows: true,
+  },
+  { columns, rows: tree.rows(), search_bar: true },
+);
+```
+
+The answer can highlight the key field and a column named `description`, so name the column of the descriptions that.

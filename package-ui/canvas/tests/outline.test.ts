@@ -219,6 +219,10 @@ describe("Outline", () => {
     const input = panel.querySelector("input")!;
     input.value = "Box";
     input.dispatchEvent(new Event("input", { bubbles: true }));
+    //Enter searches without the delay of the list
+    input.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
     [...panel.querySelectorAll<HTMLElement>("list-row")]
       .find((r) => r.querySelector("list-keyfield")!.textContent === "Box")!
       .querySelector<HTMLElement>("list-keyfield")!

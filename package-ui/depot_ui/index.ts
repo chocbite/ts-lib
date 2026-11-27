@@ -1,5 +1,5 @@
 import { depot_select } from "./selector";
-import { depot_select_state } from "./state";
+import { depot_select_state } from "./state/selector";
 
 export const depot_ui = {
   /**Opens a selector for the entries of a type or group, the promise gives the selected entries, none when cancelled*/
@@ -9,7 +9,7 @@ export const depot_ui = {
 };
 export default depot_ui;
 
-export type { DepotStateKind } from "./kind";
 export type { DepotSelectOptions } from "./selector";
-export type { DepotStateSelectOptions } from "./state";
-export { DepotTree } from "./tree";
+export type { DepotStateKind } from "./state/kind";
+export type { DepotStateSelectOptions } from "./state/selector";
+export { DepotTree, type DepotSearchResult } from "./tree";

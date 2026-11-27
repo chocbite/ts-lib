@@ -11,7 +11,6 @@ import { ok, some } from "@chocbite/ts-lib/result";
 import state, { type StateOrValROS } from "@chocbite/ts-lib/state";
 import "./selector.scss";
 import { DepotTree } from "./tree";
-import { DepotValueField } from "./value";
 
 export interface DepotSelectOptions<T> {
   /**Single selects one entry, multi any number, single when undefined*/
@@ -25,19 +24,22 @@ export interface DepotSelectOptions<T> {
   title?: string;
 }
 
-/**Configuration of a selector, given once by depot_select, outside the element pattern as it never changes*/
+type ListColumnOf<V> = ReturnType<typeof list.column<V, any>>;
+
+/**A column a selector shows after the description, given the child of each row, like the live value of a state*/
+export type DepotSelectorColumn = ListColumnOf<DepotChild<unknown>>;
+
+/**Configuration of a selector, given once when it opens, outside the element pattern as it never changes*/
 interface SelectorConfig {
   from: DepotGroup<unknown>;
   options: DepotSelectOptions<unknown>;
-  /**Show a column with the live value of the content of entries*/
-  values: boolean;
+  value?: DepotSelectorColumn;
 }
 
 interface SelectorValues {
   description: StateOrValROS<string>;
   value?: DepotChild<unknown>;
 }
-type ListColumnOf<V> = ReturnType<typeof list.column<V, any>>;
 
 /**Content of the modal panel of a selector, built by depot_select*/
 class DepotSelector extends ContentBase {
@@ -48,7 +50,6 @@ class DepotSelector extends ContentBase {
     return "depot";
   }
 
-  #search = this.appendChild(form.text_input({ placeholder: "Search" }));
   #buttons = this.appendChild(document.createElement("div"));
   #tree?: DepotTree<unknown>;
   #selection = state.ok_w<DepotChild<unknown>[]>([]);
@@ -74,16 +75,6 @@ class DepotSelector extends ContentBase {
     const mode = options.mode ?? "single";
     const tree = (this.#tree = new DepotTree(config.from, options.filter));
     this.#selection.set_ok([...(options.selected ?? [])]);
-    //Filters while typing, the input itself only gives its value on change
-    this.#search.oninput = (e) => {
-      if (e.target instanceof HTMLInputElement) tree.search = e.target.value;
-    };
-    //Escape with typed text reverts the input without an input event, the next Escape closes the selector
-    this.#search.addEventListener("keydown", (e) => {
-      const input = e.target;
-      if (e.key === "Escape" && input instanceof HTMLInputElement)
-        queueMicrotask(() => (tree.search = input.value));
-    });
 
     const columns: {
       [K in keyof SelectorValues]: ListColumnOf<NonNullable<SelectorValues[K]>>;
@@ -101,13 +92,7 @@ class DepotSelector extends ContentBase {
         },
       }),
     };
-    if (config.values)
-      columns.value = list.column({
-        title: "Value",
-        field_gen: () => new DepotValueField(),
-        field_apply: (field, child: DepotChild<unknown>) =>
-          (field.child = child),
-      });
+    if (config.value) columns.value = config.value;
     const rows = list.container(
       {
         transform: (child) =>
@@ -115,15 +100,21 @@ class DepotSelector extends ContentBase {
             key_field: { icon: child.icon, text: child.name },
             values: { description: child.description, value: child },
             openable: child.kind !== "entry",
-            opened: tree.searching,
             sub_rows:
               child.kind === "entry" ? undefined : () => tree.rows(child),
             selectable: child.kind === "entry",
+            search: (query) => tree.search(child, query),
           }),
         sub_rows: true,
         selection: { mode },
       },
-      { columns, rows: tree.rows(), selected: this.#selection },
+      {
+        columns,
+        rows: tree.rows(),
+        selected: this.#selection,
+        //Escape in the bar clears the text, and with nothing to clear closes the selector
+        search_bar: true,
+      },
     );
     //A double click on an entry in single mode picks it right away
     if (mode === "single")
@@ -132,11 +123,6 @@ class DepotSelector extends ContentBase {
       };
     this.insertBefore(rows, this.#buttons);
     return new Promise((resolve) => (this.#resolve = resolve));
-  }
-
-  /**Focuses the search, for when the panel has opened*/
-  focus_search(): void {
-    this.#search.focus();
   }
 
   #finish(picked: boolean): void {
@@ -157,11 +143,12 @@ class DepotSelector extends ContentBase {
 }
 define_element(DepotSelector);
 
-/**Opens a selector in a modal panel, the promise gives the selected entries, none when cancelled*/
-function open_selector<T>(
+/**Opens a selector in a modal panel, the promise gives the selected entries, none when cancelled
+ * For the selectors of depot_ui, value is a column after the description, like the live values of states*/
+export function depot_selector_open<T>(
   from: DepotGroup<T>,
   options: DepotSelectOptions<T>,
-  values: boolean,
+  value?: DepotSelectorColumn,
 ): Promise<DepotEntry<T>[]> {
   const selector = DepotSelector.create({
     title: options.title ?? from.name,
@@ -174,10 +161,9 @@ function open_selector<T>(
   const result = selector.build({
     from: from as DepotGroup<unknown>,
     options: options as DepotSelectOptions<unknown>,
-    values,
+    value,
   }) as Promise<DepotEntry<T>[]>;
   comp.panel(selector, { modal: true, width: 40, height: 32 });
-  selector.focus_search();
   return result;
 }
 
@@ -187,13 +173,5 @@ export function depot_select<T>(
   from: DepotGroup<T>,
   options: DepotSelectOptions<T> = {},
 ): Promise<DepotEntry<T>[]> {
-  return open_selector(from, options, false);
-}
-
-/**Opens the selector with a column of the live values, for the states type*/
-export function depot_select_values<T>(
-  from: DepotGroup<T>,
-  options: DepotSelectOptions<T>,
-): Promise<DepotEntry<T>[]> {
-  return open_selector(from, options, true);
+  return depot_selector_open(from, options);
 }
