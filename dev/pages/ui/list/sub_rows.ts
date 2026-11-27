@@ -160,7 +160,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
 {
   const sec = section(
     "Open all and close all",
-    "The buttons in the key column header open and close all rows, right click the header for the same in a menu. While a row is open every row menu has close all, the headerless list has only that and the buttons under it, which call open_all and close_all like app code. The endless list has three sub rows in every row, open all stops after 1000 rows with a warning at the header and opening again continues, upper levels first",
+    "The buttons in the key column header open and close all rows. Right click the header, a row or the space below the rows for open all, and close all while a row is open, in the menu of the list, the headerless list has only that and the buttons under it, which call open_all and close_all like app code. The endless list has three sub rows in every row, open all stops after 1000 rows with a warning at the header and opening again continues, upper levels first",
   );
   interface TreeNode {
     name: string;

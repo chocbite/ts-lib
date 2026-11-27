@@ -93,7 +93,7 @@ list.container(
 
 ## Opening and closing all rows
 
-With sub rows the key column header has an open all and a close all button, also in its context menu. While a row is open, every row menu has "Close all", so lists without a header can close all too. `container.open_all()` and `container.close_all()` do the same for buttons of the app.
+With sub rows the key column header has an open all and a close all button. The [menu of the list](#the-menu-of-the-list) has "Open all", and "Close all" while a row is open, also on every row, so lists without a header can open and close all too. `container.open_all()` and `container.close_all()` do the same for buttons of the app.
 
 Open all opens level by level, so the upper levels are open first. It stops after opening 1000 rows and warns at the key column header, opening all again continues. That keeps a mistake that makes the sub rows recursive from freezing the app. Rows whose sub rows come from a state that delivers later open with what they have.
 
@@ -104,6 +104,16 @@ Close all closes every open row, sub rows included, so every writable `opened` s
 Columns without a `fixed_width` get a handle at the right of their header, a double click on it resets the column. The first resize gives every auto width column the width it has, so only the dragged column changes. The key field column of sub rows never gets smaller than its widest key field needs for the indent, the opener, the icon and 4rem of the text, so it grows when deeper sub rows open. Text that does not fit wraps. A list without value columns has its key column fill the list until it is resized.
 
 A `headless` list has no handles, so `init_width` does not apply and columns without a `fixed_width` get an automatic width.
+
+## The menu of the list
+
+A list with sub rows, multi mode selection or `search_menu` has a context menu of its own, a group of lines each:
+
+1. With sub rows, "Open all", and "Close all" while a row is open.
+2. In multi mode, "Select all" and "Deselect all".
+3. With `search_menu`, the lines of the search, see [The search menu](#the-search-menu).
+
+It opens for a right click on any part of the list without a menu of its own: the headers, the search bar and the cells of the column search, their text inputs included, the space below the rows, and a sub row without a menu, like an invalid one. Rows put their own lines in front of it, see [Row menu](#row-menu). A list with none of these still takes the right clicks on it, the menu has no lines then and nothing opens, so the menu of the browser never opens on a list.
 
 ## Selection
 
@@ -129,7 +139,7 @@ selected.write([1, 4]); // selects the rows with these keys
 
 Options:
 
-- `mode`: `"single"` (radio buttons, none with sub rows) or `"multi"` (checkboxes). In multi mode the header checkbox selects all rows or clears, and shows whether some or all rows are selected. Right click (or long press) on it opens a menu with "Select all" and "Deselect all". In single mode the header cell is empty.
+- `mode`: `"single"` (radio buttons, none with sub rows) or `"multi"` (checkboxes). In multi mode the header checkbox selects all rows or clears, and shows whether some or all rows are selected, and the [menu of the list](#the-menu-of-the-list) has "Select all" and "Deselect all". In single mode the header cell is empty.
 - `key`: the identity of the data of a row. Defaults to the data itself. Give a key whenever the data can be equal between rows, like primitives, or is replaced by new objects on updates. Keys must be unique among all rows, sub rows included.
 
 A row with `selectable: false` in its row options, or an invalid row, can not be selected. Its radio button or checkbox cell is empty, and trying to select it shows "Not selectable" at the row, an error of kind `list.errors.NOT_SELECTABLE`.
@@ -171,14 +181,16 @@ The keyboard works in the key field (lists with sub rows), or else in the radio 
 
 The list adds lines in front of the row's own `context_menu`, each group with a divider after it:
 
-1. "Open" or "Close" for a row that can be opened, in lists with sub rows, with or without selection. Not for a row with a read only `opened` state.
-2. "Select" or "Deselect" for a selectable row, and in multi mode "Select all" and "Deselect all".
+1. In lists with sub rows, "Open" or "Close" for a row that can be opened, not for a row with a read only `opened` state, then "Open all", and "Close all" while a row is open.
+2. "Select" or "Deselect" for a selectable row, then in multi mode "Select all" and "Deselect all".
 3. With `search_menu`, the lines of the search, see [The search menu](#the-search-menu).
 4. The row's own lines.
 
+Groups 1 to 3 without the lines of the row are the [menu of the list](#the-menu-of-the-list), so every row has them.
+
 Nothing has to be done for it, `context_menu` stays a menu or a function giving an option of a menu.
 
-The menu is combined with `ctm.combine` of the context menu module when it opens, so it shows the open state and the selection at that moment (also for an `openable` state), and rows that are never right clicked cost nothing. A right click never changes the selection by itself, so the row line says "Select" or "Deselect" by the state of the row. A row with nothing to open or select, in a list without `search_menu`, uses its own menu as it is, and has no menu without one.
+The menu is combined with `ctm.combine` of the context menu module when it opens, so it shows the open state and the selection at that moment (also for an `openable` state), and rows that are never right clicked cost nothing. A right click never changes the selection by itself, so the row line says "Select" or "Deselect" by the state of the row. A row with nothing to select, in a list without a menu of its own, uses its own menu as it is, and has no menu without one.
 
 ## Search
 
@@ -361,7 +373,7 @@ search: (query) =>
 
 ### The search menu
 
-With `search_menu: true` in the configuration the menus of the rows, of the headers and of the list outside them get the lines of the search:
+With `search_menu: true` in the configuration the [menu of the list](#the-menu-of-the-list) and the menus of the rows get the lines of the search:
 
 - "Search columns" or "Hide column search", unless `column_search` is a read only state. Search columns needs a column with a type. Hiding also clears the filter, so no filter that can not be seen stays.
 - "Advanced search…", while there is a column with a type and the filter is not a read only state, see below.
@@ -375,7 +387,7 @@ It shows the filter as a tree of groups. A group has a header with its mode, "Al
 
 A condition is a row: a dropdown of the columns with a type, a dropdown of the operators of the type, the value, and a button that removes the row. The operators are those of the cells, written with words, `>= at least`, with "between" and "not between" for numbers. The value is a text input for text and numbers, two for a range, yes or no for a bool, and the choices of an enum to pick several from. A row without a value is left out, and a group left empty with it. A condition of a column without a type or not in the list is shown as it is, it is kept, and its button removes it. Clear all removes everything.
 
-It edits a copy: Apply, or enter in a value, writes the filter and closes, Cancel, escape and the close button close without changing it. It is a modal panel of `composition` in the document of the list, and gives the focus back to where it was when it closes. A read only filter state does not open it.
+It edits a copy: Apply, or enter in a value, writes the filter and closes, Cancel, escape and the close button close without changing it. It is a modal panel of `composition` in the document of the list, and gives the focus back to where it was when it closes. The panel fits the dialog until the user sizes it, then only the conditions scroll and the buttons stay at its bottom. A read only filter state does not open it.
 
 ## Reorder
 

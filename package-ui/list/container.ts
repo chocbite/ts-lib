@@ -180,45 +180,18 @@ class HeaderRow<
         button("close", () => root.close_all()),
         button("open", () => root.open_all()),
       ];
-      ctm.attach(
-        key,
-        ctm.combine(
-          ctm.menu([
-            ctm.line({ text: "Open all", on_click: () => root.open_all() }),
-            ctm.line({ text: "Close all", on_click: () => root.close_all() }),
-          ]),
-          () => root.search_lines(),
-        ),
-      );
       key.sizable(true, key_sizer);
     }
     if (root.reorder) this.#drag_header = new ListDragField();
     const selection = root.selection;
     if (selection?.column) this.#check_header = new ListCheckField();
+    //The headers have the menu of the list, from the container
     if (selection?.multi) {
       const check = this.#check_header!;
       check.onclick = () => {
         if (selection.amount_selected > 0) selection.clear();
         else selection.select_all();
       };
-      ctm.attach(
-        check,
-        ctm.combine(
-          ctm.menu([
-            ctm.line({
-              text: "Select all",
-              on_click: () => selection.select_all(),
-              shortcut: "Ctrl+A",
-            }),
-            ctm.line({
-              text: "Deselect all",
-              on_click: () => selection.clear(),
-              shortcut: "Esc",
-            }),
-          ]),
-          () => root.search_lines(),
-        ),
-      );
       selection.on_change = () => {
         const selected = selection.amount_selected;
         check.classList.toggle("some", selected > 0);
@@ -227,11 +200,7 @@ class HeaderRow<
           selected > 0 && selected === selection.amount_selectable,
         );
       };
-    } else if (this.#check_header && root.search_menu)
-      ctm.attach(
-        this.#check_header,
-        ctm.combine(() => root.search_lines()),
-      );
+    }
   }
 }
 define_element(HeaderRow);
@@ -366,11 +335,13 @@ class Container<
       observer: config.observer,
       search_hold: (func) => this.#search_hold(func),
       search_queue: (row) => this.#search_queue(row),
-      search_menu: Boolean(config.search_menu),
+      has_menu: false,
+      open_all_lines: () => this.#open_all_lines(),
+      select_all_lines: () => this.#select_all_lines(),
       search_lines: () => this.#search_lines(),
+      menu: () => this.#menu(),
       open_all: () => this.open_all(),
       close_all: () => this.close_all(),
-      any_open: () => this.#open_rows().length > 0,
     };
     this.#parent = {
       depth: -1,
@@ -413,12 +384,13 @@ class Container<
 
     this.#box.appendChild(this.#child_box);
     if (!config.headless) this.#make_header(true);
-    //Right clicks on the list outside the rows and headers, which have menus of their own
-    if (this.#search_menu)
-      ctm.attach(
-        this,
-        ctm.combine(() => this.#search_lines()),
-      );
+    //Every right click on the list that nothing in it has a menu for, on the headers, the search bar and its cells and outside the rows, gets the menu of the list
+    //Rows put their own lines in front of it, a list without lines still takes the right click, so the browser menu never opens on a list
+    this.#root.has_menu =
+      Boolean(config.sub_rows) ||
+      Boolean(this.#selection?.multi) ||
+      this.#search_menu;
+    ctm.attach(this, this.#menu);
     if (config.sub_rows) this.#box.classList.add("sub-rows");
     //Without a selected input the selection is kept in a state of the list, under the key of the input so one given later replaces it
     const selection = this.#selection;
@@ -525,11 +497,6 @@ class Container<
           column.init_width = width;
           this.#update_column_widths();
         });
-        if (this.#search_menu)
-          ctm.attach(
-            header,
-            ctm.combine(() => this.#search_lines()),
-          );
         return header;
       },
     ));
@@ -785,6 +752,44 @@ class Container<
   /**Whether the user can change an input with the state, not for a read only state, undefined for a value the list keeps */
   #changeable(target: { readonly writable: boolean } | undefined): boolean {
     return target === undefined || target.writable;
+  }
+
+  /**The menu of the list, open all, select all and the search, a group each */
+  #menu = ctm.combine(
+    () => this.#open_all_lines(),
+    () => this.#select_all_lines(),
+    () => this.#search_lines(),
+  );
+
+  /**Lines of the menus of the list to open all rows, and close them while one is open, with sub rows */
+  #open_all_lines(): ContextMenuLines {
+    if (!this.#root.sub_rows) return [];
+    const lines: ContextMenuLines = [
+      ctm.line({ text: "Open all", on_click: () => this.open_all() }),
+    ];
+    if (this.#open_rows().length > 0)
+      lines.push(
+        ctm.line({ text: "Close all", on_click: () => this.close_all() }),
+      );
+    return lines;
+  }
+
+  /**Lines of the menus of the list to select and deselect all rows, in multi mode */
+  #select_all_lines(): ContextMenuLines {
+    const selection = this.#selection;
+    if (!selection?.multi) return [];
+    return [
+      ctm.line({
+        text: "Select all",
+        on_click: () => selection.select_all(),
+        shortcut: "Ctrl+A",
+      }),
+      ctm.line({
+        text: "Deselect all",
+        on_click: () => selection.clear(),
+        shortcut: "Esc",
+      }),
+    ];
   }
 
   /**Lines of the menus of the list to show or hide the column search and to clear the search */

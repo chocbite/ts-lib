@@ -1,5 +1,5 @@
 import type { Base, BaseIntersectObserver } from "#base";
-import type { ContextMenuLines } from "#context_menu";
+import type { ContextMenu, ContextMenuLines } from "#context_menu";
 import type { SVGFunc } from "#svg";
 import { type Option, type Result } from "@chocbite/ts-lib/result";
 import type { State, StateOrVal } from "@chocbite/ts-lib/state";
@@ -135,16 +135,21 @@ export interface ListRoot<
   search_hold<F>(func: () => F): F;
   /**Opens a row the search found something below, once the running hold ends or right away without one, breadth first and a limited amount at a time */
   search_queue(row: ListRow<R, T, A, S>): void;
-  /**Whether the menus of the list have the search lines */
-  readonly search_menu: boolean;
+  /**Whether the list has lines of its own for its menus, with sub rows, in multi mode or with search_menu
+   * Set once the list is built, without them the menu of the list has no lines and opens nothing */
+  has_menu: boolean;
+  /**Open all, and close all while a row is open, with sub rows */
+  open_all_lines(): ContextMenuLines;
+  /**Select all and deselect all in multi mode */
+  select_all_lines(): ContextMenuLines;
   /**Lines of the menus of the list to search the columns and clear the search, empty without search_menu */
   search_lines(): ContextMenuLines;
+  /**The menu of the list, its lines in groups, for right clicks on the list where nothing has a menu of its own, none without lines */
+  menu(): Option<ContextMenu>;
   /**Opens every openable row, a limited amount of rows at a time */
   open_all(): void;
   /**Closes every open row */
   close_all(): void;
-  /**Whether any row is open */
-  any_open(): boolean;
 }
 
 export interface ListRowParent<A extends ListType<any>> {

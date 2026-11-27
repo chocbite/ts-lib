@@ -366,8 +366,6 @@ export class ListSearchBar extends Base {
     this.#input.placeholder = "Search";
     this.#input.spellcheck = false;
     this.#input.autocomplete = "off";
-    //The menu of the browser for the text, not that of the list
-    this.#input.oncontextmenu = (e) => e.stopPropagation();
     this.appendChild(this.#input);
     const clear = this.appendChild(document.createElement("span"));
     clear.className = "clear";

@@ -668,7 +668,7 @@ export function list_advanced_search(
     )
       previous.focus({ preventScroll: true });
   });
-  comp.panel_container(owner).panel(content, { modal: true, sizeable: false });
+  comp.panel_container(owner).panel(content, { modal: true });
   if (started) started.focus_value();
   else content.focus();
 }

@@ -870,16 +870,48 @@ describe("List selection in the row menu", () => {
     expect(ids(container)).toEqual([2]);
   });
 
-  it("unselectable rows show only the own lines, or no menu without them", () => {
+  it("unselectable rows show the lines of the list and the own lines, without select or deselect", () => {
     const container = create([
       { ...item(1), menu_fn: true, selectable: false },
       { ...item(2), selectable: false },
     ]);
     right_click(cell(rows_of(container)[0]));
+    expect(texts()).toEqual(["Select allCtrl+A", "Deselect allEsc", "Own"]);
+    choose("Own");
+    right_click(cell(rows_of(container)[1]));
+    expect(texts()).toEqual(["Select allCtrl+A", "Deselect allEsc"]);
+    choose("Deselect all");
+  });
+
+  it("unselectable rows in single mode show only the own lines, or no menu without them", () => {
+    const container = create(
+      [
+        { ...item(1), menu_fn: true, selectable: false },
+        { ...item(2), selectable: false },
+      ],
+      { mode: "single" },
+    );
+    right_click(cell(rows_of(container)[0]));
     expect(texts()).toEqual(["Own"]);
     choose("Own");
     right_click(cell(rows_of(container)[1]));
     expect(options()).toEqual([]);
+  });
+
+  it("has select all and deselect all on the headers and outside the rows in multi mode", () => {
+    const container = create([item(1), item(2)]);
+    const title = container.querySelector<HTMLElement>(
+      "list-headerrow > list-headerfield",
+    )!;
+    for (const target of [title, container]) {
+      right_click(target);
+      expect(texts()).toEqual(["Select allCtrl+A", "Deselect allEsc"]);
+      choose("Select all");
+      expect(ids(container)).toEqual([1, 2]);
+      right_click(target);
+      choose("Deselect all");
+      expect(ids(container)).toEqual([]);
+    }
   });
 
   it("selectable rows without an own menu get a menu with the select lines", () => {
@@ -913,16 +945,16 @@ describe("List selection in the row menu", () => {
     );
     const row = rows_of(container)[0];
     right_click(cell(row));
-    expect(texts()).toEqual(["Open", "Select", "Line"]);
+    expect(texts()).toEqual(["Open", "Open all", "Select", "Line"]);
     choose("Open");
     expect(row.open).toBe(true);
     right_click(cell(row));
     expect(texts()[0]).toBe("Close");
     choose("Close");
     expect(row.open).toBe(false);
-    //A row that can not be opened has no open line
+    //A row that can not be opened has no open line, open all is of the list
     right_click(cell(rows_of(container)[1]));
-    expect(texts()).toEqual(["Select"]);
+    expect(texts()).toEqual(["Open all", "Select"]);
     choose("Select");
 
     const plain = list.container(
@@ -942,15 +974,17 @@ describe("List selection in the row menu", () => {
     );
     document.body.append(plain);
     right_click(cell(rows_of(plain)[0]));
-    expect(texts()).toEqual(["Open"]);
+    expect(texts()).toEqual(["Open", "Open all"]);
     choose("Open");
     expect(rows_of(plain).length).toBe(3);
-    //Not openable and nothing else gives only close all while a row is open
+    //Not openable and nothing else gives only the lines of the list, close all while a row is open
     right_click(cell(rows_of(plain)[2]));
-    expect(texts()).toEqual(["Close all"]);
+    expect(texts()).toEqual(["Open all", "Close all"]);
     choose("Close all");
     right_click(cell(rows_of(plain)[1]));
-    expect(options()).toEqual([]);
+    expect(texts()).toEqual(["Open all"]);
+    choose("Open all");
+    expect(rows_of(plain).length).toBe(3);
   });
 
   it("follows an openable state", () => {
@@ -973,10 +1007,10 @@ describe("List selection in the row menu", () => {
     document.body.append(container);
     const row = rows_of(container)[0];
     right_click(cell(row));
-    expect(options()).toEqual([]);
+    expect(texts()).toEqual(["Open all"]);
     openable.set_ok(true);
     right_click(cell(row));
-    expect(texts()).toEqual(["Open"]);
+    expect(texts()).toEqual(["Open", "Open all"]);
     choose("Open");
     expect(row.open).toBe(true);
   });

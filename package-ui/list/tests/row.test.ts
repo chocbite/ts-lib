@@ -565,10 +565,10 @@ describe("ListRow opened state", () => {
     ]);
     const row = find(container, "a");
     right_click(row);
-    expect(texts()).toEqual([]);
+    expect(texts()).toEqual(["Open all"]);
     opened.set_ok(true);
     right_click(row);
-    expect(texts()).toEqual(["Close all"]);
+    expect(texts()).toEqual(["Open all", "Close all"]);
   });
 
   it("follows the state of new data and lets go of the old one", () => {

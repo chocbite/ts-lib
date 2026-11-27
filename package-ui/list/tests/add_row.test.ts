@@ -4,7 +4,7 @@ import { AccessTypes } from "#base";
 import { ListAddRow, type ListAddRowOptions } from "../add_row";
 import { ListKeyField } from "../key_field";
 import type { ListRoot, ListRowParent } from "../types";
-import { ok, NiceError } from "@chocbite/ts-lib/result";
+import { none, ok, NiceError } from "@chocbite/ts-lib/result";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);
@@ -23,11 +23,13 @@ function root(sub_rows: boolean): ListRoot<number, Values, number[], boolean> {
     transform: () => ok({ values: {} }),
     search_hold: (func) => func(),
     search_queue() {},
-    search_menu: false,
+    has_menu: false,
+    open_all_lines: () => [],
+    select_all_lines: () => [],
     search_lines: () => [],
+    menu: () => none(),
     open_all() {},
     close_all() {},
-    any_open: () => false,
   };
 }
 

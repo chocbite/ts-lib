@@ -169,8 +169,6 @@ abstract class ListSearchTyped extends ListSearchCell {
         if (split(input.value).value !== "") return;
         input.setSelectionRange(input.value.length, input.value.length);
       });
-    //The menu of the browser for the text, not that of the list
-    input.oncontextmenu = (e) => e.stopPropagation();
     this.prepend(input);
   }
 

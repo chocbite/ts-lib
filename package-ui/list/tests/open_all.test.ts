@@ -1,5 +1,5 @@
 import { theme_init } from "#theme";
-import { ok } from "@chocbite/ts-lib/result";
+import { err, ok } from "@chocbite/ts-lib/result";
 import { state, type State } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it } from "vitest";
 import list from "..";
@@ -93,36 +93,67 @@ describe("List open all and close all", () => {
     expect(names(container)).toEqual(["a", "d"]);
   });
 
-  it("has open all and close all in the menu of the key header", () => {
+  it("has open all, and close all while a row is open, in the menu of the key header", () => {
     const container = make(tree());
     right_click(key_header(container));
-    expect(texts()).toEqual(["Open all", "Close all"]);
+    expect(texts()).toEqual(["Open all"]);
     choose("Open all");
     expect(names(container)).toEqual(["a", "b", "c", "d"]);
     right_click(key_header(container));
+    expect(texts()).toEqual(["Open all", "Close all"]);
     choose("Close all");
     expect(names(container)).toEqual(["a", "d"]);
   });
 
-  it("has close all in the menu of every row while a row is open, also without a header", () => {
+  it("has open all, and close all while a row is open, in the menu of every row, also without a header", () => {
     const container = make(tree(), true);
     const [a, d] = rows_of(container);
     //Nothing open, nothing to close
     right_click(d.anchor as HTMLElement);
-    expect(texts()).toEqual([]);
+    expect(texts()).toEqual(["Open all"]);
     right_click(a.anchor as HTMLElement);
-    expect(texts()).toEqual(["Open"]);
+    expect(texts()).toEqual(["Open", "Open all"]);
     choose("Open");
     //A row that can not be opened gets it too
     right_click(d.anchor as HTMLElement);
-    expect(texts()).toEqual(["Close all"]);
+    expect(texts()).toEqual(["Open all", "Close all"]);
     right_click(a.anchor as HTMLElement);
-    expect(texts()).toEqual(["Close", "Close all"]);
+    expect(texts()).toEqual(["Close", "Open all", "Close all"]);
     const b = rows_of(container)[1];
     right_click(b.anchor as HTMLElement);
-    expect(texts()).toEqual(["Open", "Close all"]);
+    expect(texts()).toEqual(["Open", "Open all", "Close all"]);
     choose("Close all");
     expect(names(container)).toEqual(["a", "d"]);
+  });
+
+  it("shows the menu of the list outside the rows and on an invalid sub row, which has no menu of its own", () => {
+    const container = list.container(
+      {
+        transform: (data: Node) =>
+          data.name === "bad"
+            ? err("Bad row")
+            : ok({
+                openable: Boolean(data.sub),
+                sub_rows: () => data.sub ?? [],
+                values: { name: data.name },
+              }),
+        sub_rows: true,
+      },
+      {
+        columns: { name: list.column_string("Name") },
+        rows: [node("a", [node("bad"), node("b")])],
+      },
+    );
+    document.body.append(container);
+    right_click(container);
+    expect(texts()).toEqual(["Open all"]);
+    choose("Open all");
+    const bad = rows_of(container)[1];
+    expect(bad.textContent).toContain("Bad row");
+    right_click(bad);
+    expect(texts()).toEqual(["Open all", "Close all"]);
+    choose("Close all");
+    expect(names(container)).toEqual(["a"]);
   });
 
   it("stops after 1000 rows with a warning, opening again continues, the upper levels first", () => {

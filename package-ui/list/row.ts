@@ -411,28 +411,30 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     //Refreshed sub rows were searched when they got their data
     if (!refreshed && this.#rows_mode !== rows_mode) this.#search_sub_rows();
 
-    //Setup context menu, blocked for right clicks bubbling up from sub rows
+    //Setup context menu, the lines of the row and the list in front of its own menu
     ctm.detach(this);
     this.#sub_row_menu = false;
-    //With sub rows a row gets open, close and close all lines, a selectable row select lines and with search_menu the search lines, in front of its own menu
+    //Open or close with the open all lines, select or deselect with the select all lines, then the search lines
     //Openable can be a state and rows open and close, the lines are made when the menu opens
+    const root = this.#root;
     const menu =
-      this.#root.sub_rows ||
-      this.selection_key !== undefined ||
-      this.#root.search_menu
+      root.has_menu || this.selection_key !== undefined
         ? ctm.combine(
-            () => this.#open_lines(),
-            () => this.#selection_lines(),
-            () => this.#root.search_lines(),
+            () => [...this.#open_lines(), ...root.open_all_lines()],
+            () => [...this.#selection_lines(), ...root.select_all_lines()],
+            () => root.search_lines(),
             row_options.context_menu,
           )
         : row_options.context_menu;
-    if (menu)
-      ctm.attach(this, menu, () => {
+    if (menu) {
+      const own = typeof menu === "function" ? menu : () => some(menu);
+      //A right click on a sub row without a menu of its own, like an invalid one, comes up through the box of the sub rows, it gets the menu of the list
+      ctm.attach(this, () => {
         const from_sub_row = this.#sub_row_menu;
         this.#sub_row_menu = false;
-        return from_sub_row;
+        return from_sub_row ? root.menu() : own();
       });
+    }
   }
 
   /**Replaces the fields with the text and removes everything else the row options gave */
@@ -756,31 +758,24 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     this.classList.toggle("selectable", key !== undefined);
   }
 
-  /**Context menu lines to open or close the sub rows of an openable row, and to close all rows while one is open
-   * Close all is on every row, so a list without header can close all
+  /**Context menu line to open or close the sub rows of an openable row, open all and close all of the list come after it
    * A row with a read only opened state has no open or close line, the user can not change it */
   #open_lines(): ContextMenuLines {
-    const lines: ContextMenuLines = [];
-    if (this.openable && this.#user_opens)
-      lines.push(
-        this.open
-          ? ctm.line({ text: "Close", on_click: () => (this.open = false) })
-          : ctm.line({ text: "Open", on_click: () => (this.open = true) }),
-      );
-    if (this.#root.any_open())
-      lines.push(
-        ctm.line({ text: "Close all", on_click: () => this.#root.close_all() }),
-      );
-    return lines;
+    if (!this.openable || !this.#user_opens) return [];
+    return [
+      this.open
+        ? ctm.line({ text: "Close", on_click: () => (this.open = false) })
+        : ctm.line({ text: "Open", on_click: () => (this.open = true) }),
+    ];
   }
 
-  /**Context menu lines to select or deselect the row, and in multi mode all rows
+  /**Context menu line to select or deselect the row, select all and deselect all of the list come after it
    * Empty when the row can not be selected */
   #selection_lines(): ContextMenuLines {
     const selection = this.#root.selection;
     const key = this.selection_key;
     if (!selection || key === undefined) return [];
-    const lines: ContextMenuLines = [
+    return [
       selection.is_selected(key)
         ? ctm.line({
             text: "Deselect",
@@ -788,20 +783,6 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
           })
         : ctm.line({ text: "Select", on_click: () => selection.select(key) }),
     ];
-    if (selection.multi)
-      lines.push(
-        ctm.line({
-          text: "Select all",
-          on_click: () => selection.select_all(),
-          shortcut: "Ctrl+A",
-        }),
-        ctm.line({
-          text: "Deselect all",
-          on_click: () => selection.clear(),
-          shortcut: "Esc",
-        }),
-      );
-    return lines;
   }
 
   //      __  __  ______      _______ _   _  _____

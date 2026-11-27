@@ -469,6 +469,36 @@ describe("List advanced search", () => {
     const panel = dialog()!.closest("composition-panel")!;
     expect(panel.ownerDocument).toBe(container.ownerDocument);
   });
+
+  it("opens in a panel the user can size, the buttons stay at its bottom", () => {
+    const container = people_list(people(), {
+      filter: {
+        conditions: [
+          { column: "age", type: "number", op: ">", value: 40 },
+          { column: "name", type: "string", op: "contains", value: "a" },
+          { column: "name", type: "string", op: "ends", value: "n" },
+        ],
+      },
+    });
+    open_from_menu(container);
+    const panel = dialog()!.closest<HTMLElement>("composition-panel")!;
+    expect(panel.classList.contains("size-x")).toBe(true);
+    expect(panel.classList.contains("size-y")).toBe(true);
+    const buttons = dialog()!.querySelector<HTMLElement>(":scope > .buttons")!;
+    //Taller than the content, the buttons are at the bottom instead of under the conditions
+    panel.style.height = "40rem";
+    const bottom = () => dialog()!.getBoundingClientRect().bottom;
+    expect(bottom() - buttons.getBoundingClientRect().bottom).toBeLessThan(10);
+    //Lower than the content, only the conditions scroll, the buttons stay in view
+    panel.style.height = "9rem";
+    const root = dialog()!.querySelector<HTMLElement>(
+      ":scope > list-advancedgroup",
+    )!;
+    expect(root.scrollHeight).toBeGreaterThan(root.clientHeight);
+    expect(buttons.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      panel.getBoundingClientRect().bottom,
+    );
+  });
 });
 
 //       _____ _____   ____  _    _ _____   _____

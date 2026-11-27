@@ -133,6 +133,7 @@ function people_list(
     filter?: StateOrVal<ListFilter>;
     column_search?: StateOrVal<boolean>;
     search?: StateOrVal<string>;
+    search_bar?: boolean;
   } = {},
   config: { headless?: boolean; search_menu?: boolean; delay?: number } = {},
 ) {
@@ -600,6 +601,27 @@ describe("List search menu", () => {
     expect(column_search.get().value).toBe(false);
   });
 
+  it("shows the menu of the list on the search bar and the cells, their inputs too", () => {
+    const container = people_list(people(), {
+      search: "a",
+      search_bar: true,
+      column_search: true,
+    });
+    const bar = container.querySelector<HTMLElement>("list-searchbar input")!;
+    const lines = ["Hide column search", "Advanced search…", "Clear search"];
+    for (const target of [
+      bar,
+      cell(container, 0).querySelector("input")!,
+      cell(container, 1).querySelector("input")!,
+      cell(container, 4),
+    ]) {
+      right_click(target);
+      expect(texts()).toEqual(lines);
+    }
+    choose("Clear search");
+    expect(shown(container)).toEqual(ALL);
+  });
+
   it("clears the filter when the column search is hidden from the menu", () => {
     const filter = state.ok_w<ListFilter>({
       conditions: [{ column: "age", type: "number", op: "=", value: 45 }],
@@ -625,9 +647,19 @@ describe("List search menu", () => {
       { search: "a" },
       { search_menu: false },
     );
-    //No menu at all, a row without one of its own has none
+    //A row without one of its own has none, the list takes the right click without lines, so the browser menu does not open
     expect(ctm.has(row_named(container, "Ann"))).toBe(false);
-    expect(ctm.has(container)).toBe(false);
+    for (const target of [row_named(container, "Ann"), container]) {
+      //A menu of the test before can still be open, no menu opens over it
+      const before = options();
+      const event = new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+      });
+      target.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+      expect(options()).toEqual(before);
+    }
   });
 });
 

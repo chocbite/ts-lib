@@ -1,21 +1,27 @@
 @use "../form/base" as form;
 
 //The dialog of the advanced search, the root group of the filter and the buttons
-//The panel shows content as a block at least as big as the panel, so the padding is inside and the parts are spaced with margins
-list-advancedsearch {
+//Same specificity as the content rule of the panel box, which comes first, so the dialog fills the panel as a column
+//The panel fits the dialog until the user sizes it, then only the conditions scroll and the buttons stay at the bottom
+composition-panel > div:nth-child(3) > list-advancedsearch {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
   box-sizing: border-box;
+  height: 100%;
   padding: 0.5rem;
 
-  > * + * {
-    margin-top: 0.5rem;
-  }
-
-  //The root group, spaced from the buttons by the margin above them
+  //The root group, its padding keeps the focus rings at its edges inside what it scrolls
   > list-advancedgroup {
-    margin-bottom: 0;
+    flex-grow: 1;
+    min-height: 0;
+    overflow-y: auto;
+    margin: -0.2rem;
+    padding: 0.2rem;
   }
 
   > .buttons {
+    flex-shrink: 0;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
