@@ -1,19 +1,24 @@
-import { define_element } from "#base";
+import { CREATE, define_element, input_key, type InputOptions } from "#base";
 import type { Result } from "@chocbite/ts-lib/result";
 import { rem_to_px } from "#theme";
-import state, { type StateArrayRead } from "@chocbite/ts-lib/state";
-import { clamp, write } from "../shared";
-import type { LayoutNode, LayoutSplit } from "./tree";
+import state, {
+  type StateArrayRead,
+  type StateOrValRES,
+  type StateRES,
+} from "@chocbite/ts-lib/state";
+import { clamp } from "../shared";
+import type { LayoutDirection, LayoutNode } from "./tree";
 import {
   as_any_state,
+  Change,
   collect,
-  type Collected,
+  own,
   SIZER_REACH,
   SIZER_TOUCH,
   value_or,
+  writable,
 } from "./common";
-import { NodeElement } from "./node";
-import { element_of } from "./layout";
+import { type LayoutNodeOptions, NodeElement } from "./node";
 import "./split.scss";
 
 //       _____ _____  _      _____ _______
@@ -22,41 +27,48 @@ import "./split.scss";
 //      \___ \|  ___/| |      | |    | |
 //      ____) | |    | |____ _| |_   | |
 //     |_____/|_|    |______|_____|  |_|
+/**Inputs of a split*/
+const SPLIT = {
+  /**Splits and tab groups in the split, in order, the user adds and removes them by dragging tabs,
+   * a state that does not write synchronously is read only to the layout, the user then can not add or remove children*/
+  children: input_key<StateOrValRES<LayoutNode[]>>(),
+};
+/**Inputs of a split given at creation*/
+const SPLIT_CREATE = {
+  /**Direction of the children, row when not given, never changes*/
+  direction: input_key<LayoutDirection>(),
+};
+export type LayoutSplitOptions = LayoutNodeOptions & InputOptions<typeof SPLIT>;
+export type LayoutSplitCreateOptions = LayoutSplitOptions &
+  InputOptions<typeof SPLIT_CREATE>;
+
 /**Children side by side or above each other, with a sizer between each two*/
-export class SplitElement extends NodeElement {
+class LayoutSplit extends NodeElement {
   static element_name() {
     return "layoutsplit";
   }
 
-  declare readonly node: LayoutSplit;
+  #direction: LayoutDirection = "row";
   /**Elements of the children, in order, the DOM has a sizer between each two*/
   #children: NodeElement[] = [];
   /**Child holding the group the user worked in last, its title is shown*/
   #focused?: NodeElement;
 
   /**Closable when every child is*/
-  readonly closable: Collected<boolean>;
+  readonly closable = collect(
+    (children) =>
+      children.length > 0 && children.every((c) => value_or(c, false)),
+  );
   /**Along the direction the children and the sizers between them add up, across the biggest child*/
-  readonly min_width: Collected<number>;
-  readonly min_height: Collected<number>;
+  readonly min_width = collect((children) =>
+    this.#min(children, this.#direction === "row"),
+  );
+  readonly min_height = collect((children) =>
+    this.#min(children, this.#direction === "column"),
+  );
 
-  constructor(node: LayoutSplit) {
-    super(node);
-    this.closable = collect(
-      ([, ...children]) =>
-        children.length > 0 && children.every((c) => value_or(c, false)),
-      node.children,
-    );
-    this.min_width = collect(
-      ([, ...children]) => this.#min(children, node.direction === "row"),
-      node.children,
-    );
-    this.min_height = collect(
-      ([, ...children]) => this.#min(children, node.direction === "column"),
-      node.children,
-    );
-    this.classList.add(node.direction);
-    this.attach_state(node.children, (children) => this.#apply(children.value));
+  constructor() {
+    super();
     this.addEventListener("focusin", (e) => {
       const child = this.#children.find((c) => c.contains(e.target as Node));
       if (child && child !== this.#focused) {
@@ -64,6 +76,43 @@ export class SplitElement extends NodeElement {
         this.#follow();
       }
     });
+  }
+
+  [CREATE](options: LayoutSplitCreateOptions): void {
+    super[CREATE](options);
+    if (options.direction) this.#direction = options.direction;
+    this.classList.add(this.#direction);
+    if (options.children === undefined) this.set({ children: [] });
+  }
+
+  set(options: LayoutSplitOptions): this {
+    super.set(options);
+    this.set_input(SPLIT.children, own(options.children), (children) =>
+      this.#apply(children.ok ? children.value : []),
+    );
+    return this;
+  }
+
+  /**Direction of the children, given at creation, internal to this module*/
+  direction(): LayoutDirection {
+    return this.#direction;
+  }
+  /**The children state, internal to this module*/
+  children_state(): StateRES<LayoutNode[]> {
+    return this.input_state(SPLIT.children)!;
+  }
+  /**The children as the state gives them, internal to this module*/
+  nodes(): readonly LayoutNode[] {
+    return value_or(this.children_state().get(), []);
+  }
+
+  /**Saved as its direction and the states of its inputs, see to_json and the viewer of the state module*/
+  [state.v.OVERRIDE_KEY]() {
+    return {
+      direction: this.#direction,
+      size: this.size_state(),
+      children: this.children_state(),
+    };
   }
 
   #min(children: Result<any, unknown>[], along: boolean): number {
@@ -79,10 +128,9 @@ export class SplitElement extends NodeElement {
   /**Collects from the children again, and shows the title of the focused child, or of the first*/
   #follow(): void {
     const children = this.#children;
-    const items = this.node.children;
-    this.closable.set_states(items, ...children.map((c) => c.closable));
-    this.min_width.set_states(items, ...children.map((c) => c.min_width));
-    this.min_height.set_states(items, ...children.map((c) => c.min_height));
+    this.closable.set_states(...children.map((c) => c.closable));
+    this.min_width.set_states(...children.map((c) => c.min_width));
+    this.min_height.set_states(...children.map((c) => c.min_height));
     if (this.#focused && !children.includes(this.#focused))
       this.#focused = undefined;
     const shown = this.#focused ?? children[0];
@@ -114,28 +162,24 @@ export class SplitElement extends NodeElement {
             change.from_index + change.items.length,
           );
           this.#remove(change.from_index, change.items.length);
-          this.#insert(
-            change.to_index,
-            moved.map((e) => e.node),
-          );
+          this.#insert(change.to_index, moved);
         }
       }
     }
     this.#follow();
   }
 
-  #insert(index: number, nodes: readonly LayoutNode[]): void {
-    const elements = nodes.map(element_of);
+  #insert(index: number, nodes: readonly NodeElement[]): void {
     const ref = this.#children[index] ?? null;
-    for (const element of elements) this.insertBefore(element, ref);
-    this.#children.splice(index, 0, ...elements);
+    for (const node of nodes) this.insertBefore(node, ref);
+    this.#children.splice(index, 0, ...nodes);
     this.#fix_sizers();
   }
 
   #remove(index: number, count: number): void {
-    for (const element of this.#children.splice(index, count))
-      //An element already moved elsewhere by the same change stays there
-      if (element.parentElement === this) element.remove();
+    for (const node of this.#children.splice(index, count))
+      //A node already moved elsewhere by the same change stays there
+      if (node.parentElement === this) node.remove();
     this.#fix_sizers();
   }
 
@@ -168,11 +212,11 @@ export class SplitElement extends NodeElement {
   /**Starts moving a sizer of the split, the two children beside it share their space, never below their
    * smallest size, the sizes are written when it ends, undefined when either size is read only*/
   sizer_drag(sizer: Element): SizerDrag | undefined {
-    const a = sizer.previousElementSibling;
-    const b = sizer.nextElementSibling;
-    if (!(a instanceof NodeElement) || !(b instanceof NodeElement)) return;
-    if (!a.node.size.writable || !b.node.size.writable) return;
-    const row = this.node.direction === "row";
+    const a = node_of(sizer.previousElementSibling);
+    const b = node_of(sizer.nextElementSibling);
+    if (!a || !b) return;
+    if (!writable(a.size_state()) || !writable(b.size_state())) return;
+    const row = this.#direction === "row";
     const length = (n: NodeElement) => {
       const rect = n.getBoundingClientRect();
       return row ? rect.width : rect.height;
@@ -183,8 +227,8 @@ export class SplitElement extends NodeElement {
       rem_to_px(row ? n.shown_min_width : n.shown_min_height);
     const min_a = min(a);
     const min_b = min(b);
-    const grow = a.node.size.ok() + b.node.size.ok();
-    let grow_a = a.node.size.ok();
+    const grow = a.size() + b.size();
+    let grow_a = a.size();
     return {
       row,
       move: (moved) => {
@@ -194,20 +238,38 @@ export class SplitElement extends NodeElement {
         a.style.flexGrow = String(grow_a);
         b.style.flexGrow = String(grow - grow_a);
       },
-      end: () => {
-        write(a.node.size, grow_a);
-        write(b.node.size, grow - grow_a);
+      end: (change) => {
+        change.write(a.size_state(), grow_a);
+        change.write(b.size_state(), grow - grow_a);
       },
     };
   }
 }
-define_element(SplitElement);
+define_element(LayoutSplit);
+
+export type { LayoutSplit };
+
+/**Creates a split, its children side by side or above each other, the direction never changes*/
+export function layout_split(
+  options: LayoutSplitCreateOptions = {},
+): LayoutSplit {
+  return LayoutSplit.create(options);
+}
+
+/**Whether the node is a split*/
+export const is_split = (node: LayoutNode): node is LayoutSplit =>
+  node instanceof LayoutSplit;
+
+/**The element when it is a node of a layout*/
+const node_of = (element: Element | null): NodeElement | undefined =>
+  element instanceof NodeElement ? element : undefined;
 
 /**One sizer being moved, moved is in px from where the pointer was pressed, along the direction of its split*/
 interface SizerDrag {
   readonly row: boolean;
   move(moved: number): void;
-  end(): void;
+  /**Writes the sizes where it ended*/
+  end(change: Change): void;
 }
 
 /**Whether the sizer is between children side by side, so it moves sideways*/
@@ -283,8 +345,7 @@ function sizer_press(e: PointerEvent, sizer: HTMLElement): void {
   const moving: HTMLElement[] = [];
   for (const s of sizers) {
     const split = s.parentElement;
-    const drag =
-      split instanceof SplitElement ? split.sizer_drag(s) : undefined;
+    const drag = split instanceof LayoutSplit ? split.sizer_drag(s) : undefined;
     if (!drag) continue;
     drags.push(drag);
     moving.push(s);
@@ -306,6 +367,8 @@ function sizer_press(e: PointerEvent, sizer: HTMLElement): void {
     for (const s of moving) s.classList.remove("active");
     sizer.onpointermove = (ev) => sizer_hover(sizer, ev);
     sizer.onpointerup = sizer.onpointercancel = null;
-    for (const drag of drags) drag.end();
+    //The sizers moved together are one change, the sizes all change or none do
+    const change = new Change();
+    for (const drag of drags) drag.end(change);
   };
 }

@@ -12,3 +12,4 @@ export const prompts = {
 
 export type { PromptButton } from "./buttons";
 export type { PromptFormSubmit, PromptFormValues } from "./form";
+export type { PromptOptions } from "./shared";

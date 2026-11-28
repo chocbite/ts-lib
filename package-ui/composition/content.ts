@@ -10,7 +10,7 @@ import {
 import ctm, { type ContextMenuGroup } from "#context_menu";
 import { state_ui, type StateUISize } from "#state_ui";
 import type { SVGFunc } from "#svg";
-import type { StateOrVal } from "@chocbite/ts-lib/state";
+import state, { type StateOrVal } from "@chocbite/ts-lib/state";
 import "./content.scss";
 import "./shared";
 
@@ -44,12 +44,19 @@ export const CONTENT_CLOSED = Symbol("content_closed");
 
 /**The container showing the content, set by containers that move content between them, internal to this module*/
 export const CONTENT_HOST = Symbol("content_host");
-/**Called on the host by content_close, the host closes the content, internal to this module*/
+/**Id a content is saved as, set by the application manager, internal to this module*/
+export const CONTENT_ID = Symbol("content_id");
+/**Called on the host by content_close, internal to this module*/
+export const HOST_CAN_CLOSE = Symbol("host_can_close");
 export const HOST_CLOSE_CONTENT = Symbol("host_close_content");
 /**A container showing content that knows it by reference, like a layout, the content may not be in the document,
  * like an inactive tab, so it can not reach its container with an event*/
 export interface ContentHost {
-  [HOST_CLOSE_CONTENT](content: ContentBase): void;
+  /**Whether the host lets the content close, asked before the content is asked and again when it agrees*/
+  [HOST_CAN_CLOSE](content: ContentBase): boolean;
+  /**Closes the content, gives whether it did, undefined when the host no longer shows it,
+   * the content then closes like content without a host*/
+  [HOST_CLOSE_CONTENT](content: ContentBase): boolean | undefined;
 }
 
 /**The context menu of content as it is right now, for ctm.combine, internal to this module*/
@@ -78,8 +85,12 @@ export abstract class ContentBase extends Base {
   #min_height: InputOf<typeof CONTENT_CREATE.min_height> = 0;
   #context_menu: ContextMenuGroup = undefined;
   #on_close: (() => void)[] = [];
+  /**The close waiting for the answer of content_closing*/
+  #closing?: Promise<boolean>;
   /**Container showing the content, when it is one that knows it by reference*/
   [CONTENT_HOST]?: ContentHost;
+  /**Id the content is saved as, given by the application manager*/
+  [CONTENT_ID]?: readonly string[];
 
   constructor() {
     super();
@@ -143,12 +154,44 @@ export abstract class ContentBase extends Base {
     return new Promise<void>((resolve) => this.#on_close.push(resolve));
   }
 
-  /**Closes the content, its container closes with it*/
-  content_close(): void {
+  /**Asked before the content closes, false or a promise of false keeps it open, like to ask about unsaved changes
+   * Library users override it, it is not asked when its container does not let it close*/
+  protected content_closing(): boolean | PromiseLike<boolean> {
+    return true;
+  }
+
+  /**Closes the content when it agrees, see content_closing, its container closes with it
+   * Gives whether it closed, a close while one waits for the answer gives the same*/
+  content_close(): Promise<boolean> {
+    if (this.#closing) return this.#closing;
     const host = this[CONTENT_HOST];
-    if (host) return host[HOST_CLOSE_CONTENT](this);
+    if (host && !host[HOST_CAN_CLOSE](this)) return Promise.resolve(false);
+    const answer = this.content_closing();
+    //A plain answer closes at once, so the container is gone before anything else runs
+    if (typeof answer === "boolean")
+      return Promise.resolve(answer && this.#close());
+    return (this.#closing = Promise.resolve(answer)
+      .then((agreed) => agreed && this.#close())
+      .finally(() => (this.#closing = undefined)));
+  }
+
+  #close(): boolean {
+    const host = this[CONTENT_HOST];
+    if (host) {
+      //The host may have changed while the content was asked
+      if (!host[HOST_CAN_CLOSE](this)) return false;
+      const closed = host[HOST_CLOSE_CONTENT](this);
+      if (closed !== undefined) return closed;
+    }
     this[CONTENT_CLOSED]();
     this.dispatchEvent(new CustomEvent("content_closed", { bubbles: true }));
+    return true;
+  }
+
+  /**Saved as the id the application manager gave it, null without one, instead of the states in its fields,
+   * see to_json and the viewer of the state module*/
+  [state.v.OVERRIDE_KEY](): readonly string[] | null {
+    return this[CONTENT_ID] ?? null;
   }
 
   /**Resolves the waiting content_on_close promises, called by the container that closes the content*/

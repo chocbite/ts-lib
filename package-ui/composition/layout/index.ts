@@ -1,6 +1,4 @@
 export {
-  layout_split,
-  layout_tabs,
   LayoutSide,
   OWNER_CAN_EMPTY,
   OWNER_CAN_POPOUT,
@@ -10,8 +8,14 @@ export {
   type LayoutNode,
   type LayoutOpenOptions,
   type LayoutOwner,
-  type LayoutSplit,
-  type LayoutTabs,
   type LayoutTabsSide,
 } from "./tree";
+export type { LayoutNodeOptions } from "./node";
+export {
+  layout_split,
+  type LayoutSplit,
+  type LayoutSplitCreateOptions,
+  type LayoutSplitOptions,
+} from "./split";
+export { layout_tabs, type LayoutTabs, type LayoutTabsOptions } from "./tabs";
 export { layout, Layout, type LayoutOptions } from "./layout";

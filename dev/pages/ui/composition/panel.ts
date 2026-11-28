@@ -223,3 +223,71 @@ const close_all = () => {
     "Close all": close_all,
   });
 }
+
+//     __          _______ _   _ _____   ______          _______
+//     \ \        / /_   _| \ | |  __ \ / __ \ \        / / ____|
+//      \ \  /\  / /  | | |  \| | |  | | |  | \ \  /\  / / (___
+//       \ \/  \/ /   | | | . ` | |  | | |  | |\ \/  \/ / \___ \
+//        \  /\  /   _| |_| |\  | |__| | |__| | \  /\  /  ____) |
+//         \/  \/   |_____|_| \_|_____/ \____/   \/  \/  |_____/
+{
+  const sec = section(
+    "Windows",
+    "Right click the title bar of any panel and Open in window, the content moves into a browser window of its own, titled after it, with the theme of the page. Close the window and the content comes back in the panel, with the size of the window and where the window was, where the browser tells where windows are (not on Wayland, the panel then stays where it was). " +
+      "The bound panel writes its window state, the buttons write it. The layout panel has tabs to try in the window, open two, put one in a window and drag tabs between them with the mouse. Reloading the page closes the windows. A popup blocker lets a button or menu click open one window",
+  );
+  const windowed = state.ok_w(false);
+  const x = state.ok_w(4);
+  const y = state.ok_w(4);
+  const width = state.ok_w(24);
+  const height = state.ok_w(12);
+  const info = sec.appendChild(document.createElement("div"));
+  const show_info = () =>
+    (info.textContent = `Bound panel ${windowed.ok() ? "in a window" : "in the page"}, at ${x.ok().toFixed(1)}, ${y.ok().toFixed(1)}, ${width.ok().toFixed(1)} x ${height.ok().toFixed(1)} rem`);
+  for (const s of [x, y, width, height]) s.sub(show_info);
+  windowed.sub(show_info, true);
+  let bound: Panel | undefined;
+  controls(sec, {
+    Bound: () => {
+      if (!bound?.isConnected)
+        bound = show("Bound", "Writes its window state, place and size", {
+          window: windowed,
+          x,
+          y,
+          width,
+          height,
+        });
+    },
+    "Bound to window": () => windowed.set_ok(true),
+    "Bound back": () => windowed.set_ok(false),
+    "Starts in a window": () =>
+      show("Starts in a window", "Opened in a window by its initial value", {
+        window: true,
+        width: 20,
+        height: 10,
+      }),
+    "Never in a window": () =>
+      show("Never in a window", "A read only false, no Open in window line", {
+        window: state.ok(false),
+        width: 20,
+      }),
+    "Layout panel": () => {
+      const tab = (title: string) => {
+        const c = comp.content({ title, closable: true });
+        c.style.padding = "1rem";
+        c.textContent = `${title}, drag the tabs, split them, pop one out`;
+        return c;
+      };
+      const made = comp.panel(
+        comp.layout({
+          root: comp.layout_tabs({
+            content: [tab("One"), tab("Two"), tab("Three")],
+          }),
+        }),
+        { width: 30, height: 16 },
+      );
+      open.push(made);
+    },
+    "Close all": close_all,
+  });
+}

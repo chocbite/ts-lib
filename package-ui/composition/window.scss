@@ -1,0 +1,19 @@
+//Fills the page of a browser window with its content, like the content box of a panel
+composition-window {
+  position: fixed;
+  inset: 0;
+  overflow: auto;
+  background-color: var(--composition-colors-background);
+  touch-action: none;
+
+  .anim-all & {
+    transition: background-color ease-in-out var(--animation-speed);
+  }
+
+  > * {
+    outline: none;
+    display: block;
+    min-width: 100%;
+    min-height: 100%;
+  }
+}

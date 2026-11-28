@@ -3,7 +3,7 @@ import { px_to_rem } from "#theme";
 import { none, type NiceError } from "@chocbite/ts-lib/result";
 import st from "@chocbite/ts-lib/state";
 import "./faults.scss";
-import { open_prompt } from "./shared";
+import { open_prompt, type PromptOptions } from "./shared";
 
 /**The faults by kind, in the order the kinds first appear, each message once.
  * An outage gives every input the same error, and a fetch parser gives each missing member its own message of one kind*/
@@ -83,12 +83,10 @@ const fault_elements = (fault: NiceError, depth: number): FormElement[] => {
 /**Opens a prompt listing the faults of an element, the problems behind its fault icon
  * Built from form elements, so it follows the theme. Each fault shows its nice text and message, an error with an Error also its stack and causes, formatted when opened
  * Faults of one kind are grouped under its nice text, each message once. Resolves when the prompt is closed*/
-export async function prompt_faults(faults: readonly NiceError[]): Promise<void> {
-  //60% of the page, but never wider than the page on small screens
-  const width = Math.min(
-    Math.max(px_to_rem(window.innerWidth * 0.6), 20),
-    px_to_rem(window.innerWidth * 0.95),
-  );
+export async function prompt_faults(faults: readonly NiceError[], options?: PromptOptions): Promise<void> {
+  //60% of the page of the owner, but never wider than the page on small screens
+  const page = (options?.owner?.ownerDocument.defaultView ?? window).innerWidth;
+  const width = Math.min(Math.max(px_to_rem(page * 0.6), 20), px_to_rem(page * 0.95));
   await open_prompt<never>(
     "Problems",
     (close) => {
@@ -108,5 +106,6 @@ export async function prompt_faults(faults: readonly NiceError[]): Promise<void>
       return { element };
     },
     width,
+    options,
   );
 }

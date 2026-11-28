@@ -3,7 +3,7 @@ import { material_save_rounded } from "#icons";
 import { px_to_rem, SCALE, theme_init } from "#theme";
 import state from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { panel_container } from "../container";
+import { panel_container, panel_layer } from "../container";
 import { content, type ContentCreateOptions } from "../content";
 import {
   TITLEBAR_HEIGHT,
@@ -12,6 +12,7 @@ import {
   type PanelOptions,
 } from "../panel";
 import { CompAnchor } from "../shared";
+import { guarded } from "./guarded";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);
@@ -70,7 +71,9 @@ describe("Panel content", () => {
   });
 
   it("shows the title of the content, initial, as a state and its error", () => {
-    expect(title_of(panel_with({ title: "Initial" })).textContent).toBe("Initial");
+    expect(title_of(panel_with({ title: "Initial" })).textContent).toBe(
+      "Initial",
+    );
     const title = state.from_w("a");
     const panel = panel_with({ title });
     expect(title_of(panel).textContent).toBe("a");
@@ -111,6 +114,13 @@ describe("Panel closing", () => {
     panel.content.content_close();
     expect(panel.isConnected).toBe(false);
   });
+
+  it("stays open when its content refuses to close", async () => {
+    const panel = panel_container().panel(guarded(false));
+    panels.push(panel);
+    expect(await panel.content.content_close()).toBe(false);
+    expect(panel.isConnected).toBe(true);
+  });
 });
 
 describe("Panel layers", () => {
@@ -131,6 +141,26 @@ describe("Panel layers", () => {
       Number((box as HTMLElement).style.zIndex),
     );
     expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it("gives the layer state of the panel a node is in", () => {
+    const layer = state.ok_w(2);
+    const panel = panel_with({}, { layer });
+    const inner = panel.content.appendChild(document.createElement("div"));
+    const text = inner.appendChild(document.createTextNode("text"));
+    expect(panel_layer(panel)).toBe(layer);
+    expect(panel_layer(inner)).toBe(layer);
+    expect(panel_layer(text)).toBe(layer);
+  });
+
+  it("gives the layer value of the panel a node is in, the one set again, and 0 outside a panel", () => {
+    const panel = panel_with({}, { layer: 2 });
+    expect(panel_layer(panel.content)).toBe(2);
+    panel.set({ layer: 5 });
+    expect(panel_layer(panel.content)).toBe(5);
+    expect(panel_layer(panel_with())).toBe(0);
+    expect(panel_layer(document.body)).toBe(0);
+    expect(panel_layer(panel_container())).toBe(0);
   });
 
   it("comes above the other panels of its layer when focused", () => {
@@ -200,12 +230,16 @@ describe("Panel position", () => {
     container.style.width = "10rem";
     try {
       //Resize observations come after the next layout
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
       //Half the panel is kept inside the container
       expect(left_of(panel)).toBeCloseTo(8);
     } finally {
       container.style.width = "";
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
     }
   });
 
@@ -388,6 +422,16 @@ describe("Panel hiding", () => {
     const panel = panel_with({}, { auto_close: true });
     press_outside();
     expect(panel.isConnected).toBe(false);
+  });
+
+  it("auto_close asks the content, and stays open when it refuses", async () => {
+    const c = guarded(false);
+    const panel = panel_container().panel(c, { auto_close: true });
+    panels.push(panel);
+    press_outside();
+    await Promise.resolve();
+    expect(c.asked).toBe(1);
+    expect(panel.isConnected).toBe(true);
   });
 });
 

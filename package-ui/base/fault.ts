@@ -1,5 +1,6 @@
 import { GREY, ORANGE } from "@chocbite/ts-lib/colors";
 import type { NiceError } from "@chocbite/ts-lib/result";
+import { DOCUMENT_HANDLER } from "#document";
 import { theme_init_variable_root } from "#theme";
 import "./fault.scss";
 
@@ -49,24 +50,26 @@ const icon_of = (event: Event): Element | undefined => {
   return target instanceof Element ? (target.closest("base-fault") ?? undefined) : undefined;
 };
 
-//One listener for every icon, in the capture phase so the element under the icon never gets the event
+//One listener for every icon in each document, in the capture phase so the element under the icon never gets the event
 const swallow = (event: Event) => {
   if (!icon_of(event)) return;
   event.stopPropagation();
   event.preventDefault();
 };
-document.addEventListener("pointerdown", swallow, { capture: true });
-document.addEventListener("mousedown", swallow, { capture: true });
-document.addEventListener(
-  "click",
-  (event) => {
-    const icon = icon_of(event);
-    if (!icon) return;
-    event.stopPropagation();
-    event.preventDefault();
-    const faults = faults_of.get(icon)?.();
-    //Loaded when clicked, prompts builds on elements that extend Base, so base can not import it while loading
-    if (faults?.length) void import("#prompts").then(({ prompts }) => prompts.faults(faults));
-  },
-  { capture: true },
-);
+const click = (event: Event) => {
+  const icon = icon_of(event);
+  if (!icon) return;
+  event.stopPropagation();
+  event.preventDefault();
+  const faults = faults_of.get(icon)?.();
+  //Loaded when clicked, prompts builds on elements that extend Base, so base can not import it while loading.
+  //The prompt opens in the document of the icon, like a browser window of the page
+  if (faults?.length) void import("#prompts").then(({ prompts }) => prompts.faults(faults, { owner: icon }));
+};
+const listen = (doc: Document) => {
+  doc.addEventListener("pointerdown", swallow, { capture: true });
+  doc.addEventListener("mousedown", swallow, { capture: true });
+  doc.addEventListener("click", click, { capture: true });
+};
+DOCUMENT_HANDLER.for_documents(listen);
+DOCUMENT_HANDLER.events.on("added", (e) => listen(e.data));

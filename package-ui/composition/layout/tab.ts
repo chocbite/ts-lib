@@ -21,21 +21,22 @@ import {
   CONTENT_HOST,
   ContentBase,
   type ContentHost,
+  HOST_CAN_CLOSE,
   HOST_CLOSE_CONTENT,
 } from "../content";
-import { write } from "../shared";
-import { LayoutSide, type LayoutTabsSide, OWNER_CAN_POPOUT } from "./tree";
-import { DRAG_DISTANCE } from "./common";
+import { LayoutSide, type LayoutTabsSide } from "./tree";
+import { DRAG_DISTANCE, value_or, writable, write_if } from "./common";
 import {
   can_leave,
+  can_popout,
   can_split,
   type DropTarget,
   move_content,
   popout,
   take_out,
 } from "./actions";
-import { TabsElement } from "./tabs";
-import { find_target, show_indicator } from "./drag";
+import { is_tabs, type LayoutTabs } from "./tabs";
+import { drag_end, drag_start, find_target, show_indicator } from "./drag";
 import "./tab.scss";
 
 //      _______       ____
@@ -62,22 +63,32 @@ export function tab_of(content: ContentBase): LayoutTab {
   return tab;
 }
 
+/**The group and layout showing the content, nothing when the app took it out of the layout by writing its states*/
+function shown_in(content: ContentBase) {
+  const group = TABS.get(content)?.group_element();
+  const layout = group?.layout();
+  return group && layout && group.contents().includes(content)
+    ? { group, layout }
+    : undefined;
+}
+
 /**Closes content shown by a layout, it is taken out of its group*/
 const LAYOUT_HOST: ContentHost = {
-  [HOST_CLOSE_CONTENT](content: ContentBase): void {
-    const group = TABS.get(content)?.group_element();
-    const layout = group?.layout();
-    const shown = !!group && !!layout && group.node.tabs.ok().includes(content);
+  [HOST_CAN_CLOSE](content: ContentBase): boolean {
+    const shown = shown_in(content);
     //Closing takes the tab out of its group, so it follows the same rule as dragging it out
-    if (shown && !can_leave(layout, group.node)) return;
+    return !shown || can_leave(shown.layout, shown.group);
+  },
+  [HOST_CLOSE_CONTENT](content: ContentBase): boolean | undefined {
+    const shown = shown_in(content);
+    if (shown && !take_out(shown.layout, shown.group, content)) return false;
     TABS.delete(content);
     content[CONTENT_HOST] = undefined;
-    //Content the app took out of the layout by writing its states is not the layout's,
-    //it closes like any content, with the container showing it
-    if (!shown) return content.content_close();
-    take_out(layout, group.node, content);
+    //Content the app took out of the layout is not the layout's, it closes like any content, with the container showing it
+    if (!shown) return undefined;
     content.remove();
     content[CONTENT_CLOSED]();
+    return true;
   },
 };
 
@@ -129,6 +140,8 @@ export class LayoutTab extends Base {
       this.content.content_close();
     };
     this.onpointerdown = (e) => this.#press(e);
+    this.ondragstart = (e) => drag_start(this, e);
+    this.ondragend = () => drag_end();
     this.onkeydown = (e) => this.#key(e);
     ctm.attach(
       this,
@@ -160,9 +173,9 @@ export class LayoutTab extends Base {
   }
 
   /**Element of the group the tab is in*/
-  group_element(): TabsElement | undefined {
+  group_element(): LayoutTabs | undefined {
     const group = this.parentElement?.parentElement;
-    return group instanceof TabsElement ? group : undefined;
+    return is_tabs(group) ? group : undefined;
   }
 
   set_selected(selected: boolean): void {
@@ -192,9 +205,10 @@ export class LayoutTab extends Base {
     //A tab alone in a layout is not popped out, it would leave an empty layout, a panel with one tab is moved instead
     if (
       group &&
-      layout?.owner?.[OWNER_CAN_POPOUT]() &&
-      can_leave(layout, group.node) &&
-      !(layout.root_node() === group.node && group.node.tabs.ok().length === 1)
+      layout &&
+      can_popout(layout) &&
+      can_leave(layout, group) &&
+      !(layout.root_node() === group && group.contents().length === 1)
     )
       lines.push(
         ctm.line({
@@ -206,12 +220,12 @@ export class LayoutTab extends Base {
     if (
       group &&
       layout &&
-      group.node.tabs.writable &&
-      group.node.tabs.ok().length > 1 &&
-      can_split(layout, group.node)
+      writable(group.content_state()) &&
+      group.contents().length > 1 &&
+      can_split(layout, group)
     ) {
       const split = (side: LayoutSide) => () =>
-        move_content(this.content, { layout, node: group.node, side });
+        move_content(this.content, { layout, node: group, side });
       lines.push(
         ctm.line({
           text: "Split right",
@@ -225,8 +239,8 @@ export class LayoutTab extends Base {
         }),
       );
     }
-    const side = group?.node.side;
-    if (side?.writable)
+    const side = group?.side_state();
+    if (writable(side))
       lines.push(
         ctm.sub({
           text: "Tabs at",
@@ -234,29 +248,31 @@ export class LayoutTab extends Base {
             TAB_SIDES.map(([value, text]) =>
               ctm.line({
                 text,
-                checked: side.ok() === value,
-                on_click: () => write(side, value),
+                checked: value_or(side.get(), "top") === value,
+                on_click: () => side.write_sync(value),
               }),
             ),
           ),
         }),
       );
-    const compact = group?.node.compact;
-    if (compact?.writable)
+    const compact = group?.compact_state();
+    if (writable(compact)) {
+      const on = value_or(compact.get(), false);
       lines.push(
         ctm.line({
           text: "Compact tabs",
-          checked: compact.ok(),
-          on_click: () => write(compact, !compact.ok()),
+          checked: on,
+          on_click: () => compact.write_sync(!on),
         }),
       );
+    }
     return lines;
   }
 
   #key(e: KeyboardEvent): void {
     const group = this.group_element();
     if (!group) return;
-    const tabs = group.node.tabs.ok();
+    const tabs = group.contents();
     const index = tabs.indexOf(this.content);
     let next: ContentBase | undefined;
     if (e.key === "ArrowLeft") next = tabs[index - 1] ?? tabs.at(-1);
@@ -271,11 +287,12 @@ export class LayoutTab extends Base {
     e.preventDefault();
     e.stopPropagation();
     if (!next) return;
-    write(group.node.active, next);
+    write_if(group.active_state(), next);
     TABS.get(next)?.focus();
   }
 
-  /**Shows the tab, a middle press closes it, and moving the pointer far enough drags it*/
+  /**Shows the tab, a middle press closes it, and moving the pointer far enough drags it,
+   * the mouse with the drag and drop of the browser, see drag_start, so it reaches other windows, touch and pens with pointer events*/
   #press(e: PointerEvent): void {
     const group = this.group_element();
     if (!group) return;
@@ -285,9 +302,11 @@ export class LayoutTab extends Base {
       return;
     }
     if (e.button !== 0) return;
-    write(group.node.active, this.content);
-    //A read only tabs state locks the tabs in the group
-    if (!group.node.tabs.writable) return;
+    write_if(group.active_state(), this.content);
+    //A read only content state locks the tabs in the group
+    const movable = writable(group.content_state());
+    this.draggable = movable && e.pointerType === "mouse";
+    if (!movable || this.draggable) return;
     const doc = this.ownerDocument;
     let target: DropTarget | undefined;
     this.setPointerCapture(e.pointerId);

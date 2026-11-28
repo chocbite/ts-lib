@@ -17,6 +17,7 @@ import {
   type ContentOptions,
 } from "./content";
 import type { Panel } from "./panel";
+import { WINDOW_REOPEN } from "./settings";
 import { get_element_anchor_position, type CompAnchor } from "./shared";
 
 /**Inputs of the customization*/
@@ -31,7 +32,8 @@ export type CustomizationOptions = ContentOptions &
 export type CustomizationCreateOptions = ContentCreateOptions &
   CustomizationOptions;
 
-/**Content with the settings of the library, theme, scale, input mode and animations, and settings of the app*/
+/**Content with the settings of the library, theme, scale, input mode, animations and where windows open after a refresh,
+ * and settings of the app*/
 class Customization extends ContentBase {
   static element_name() {
     return "customization";
@@ -62,6 +64,8 @@ class Customization extends ContentBase {
                 form.toggle_button().set({ value: ANIMATION_LEVEL }),
                 form.text({ text: "Animation Speed" }),
                 form.slider({ live: true }).set({ value: ANIMATION_SPEED }),
+                form.text({ text: "Windows After a Refresh" }),
+                form.toggle_button().set({ value: WINDOW_REOPEN }),
                 this.#advanced,
               ],
             }),

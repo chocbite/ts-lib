@@ -2,6 +2,7 @@ import { NiceError } from "@chocbite/ts-lib/result";
 import state, { type StateOrVal } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Base, define_element, input_key, type BaseOptions, type InputOptions } from "..";
+import { DOCUMENT_HANDLER } from "#document";
 
 const BOX = {
   label: input_key<StateOrVal<string>>(),
@@ -191,6 +192,42 @@ describe("Fault prompt", () => {
     expect(text).toContain("Connection failed");
     expect(text).toContain("Invalid data from server");
     expect(clicked).not.toHaveBeenCalled();
+  });
+
+  describe("in another document, like a browser window of the page", () => {
+    /**An element with a fault in a registered document*/
+    const elsewhere = () => {
+      const frame = document.body.appendChild(document.createElement("iframe"));
+      const doc = frame.contentDocument!;
+      DOCUMENT_HANDLER.register_document(doc, true);
+      const label = state.from_w("a");
+      const element = doc.body.appendChild(FaultBox.create({ label }));
+      label.set_err(new NiceError(OFFLINE, "Failed to fetch"));
+      return { doc, element };
+    };
+    afterEach(() => {
+      for (const doc of DOCUMENT_HANDLER.documents)
+        if (doc !== document) {
+          for (const panel of doc.querySelectorAll("composition-panel")) (panel as HTMLElement & { close(): void }).close();
+          DOCUMENT_HANDLER.deregister_document(doc);
+        }
+    });
+
+    it("opens the faults prompt in the document of the icon", async () => {
+      const { doc, element } = elsewhere();
+      icon_of(element)!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await vi.waitFor(() => expect(doc.querySelector("composition-panel")).not.toBeNull());
+      expect(doc.querySelector("composition-panel")!.textContent).toContain("Connection failed");
+      expect(document.querySelector("composition-panel")).toBeNull();
+    });
+
+    it("keeps a pointer down on the icon from the element", () => {
+      const { element } = elsewhere();
+      const pressed = vi.fn();
+      element.addEventListener("pointerdown", pressed);
+      icon_of(element)!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+      expect(pressed).not.toHaveBeenCalled();
+    });
   });
 
   it("keeps a pointer down on the icon from the element, so pressing it does not act on the element", () => {

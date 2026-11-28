@@ -1,7 +1,9 @@
+import { define_element } from "@chocbite/ts-lib-ui/base";
 import ctm from "@chocbite/ts-lib-ui/context_menu";
 import {
   CompAnchor,
   comp,
+  ContentBase,
   type ContentCreateOptions,
   type Panel,
 } from "@chocbite/ts-lib-ui/composition";
@@ -11,6 +13,7 @@ import {
   material_settings_rounded,
 } from "@chocbite/ts-lib-ui/icons";
 import type { SVGFunc } from "@chocbite/ts-lib-ui/svg";
+import { prompts } from "@chocbite/ts-lib-ui/prompts";
 import { px_to_rem } from "@chocbite/ts-lib-ui/theme";
 import state from "@chocbite/ts-lib/state";
 import { controls, section, demo_error } from "../../../helpers";
@@ -179,6 +182,77 @@ const close_all = () => {
         }),
       );
     },
+    "Close all": close_all,
+  });
+}
+
+//                _____ _  _______ _   _  _____
+//         /\    / ____| |/ /_   _| \ | |/ ____|
+//        /  \  | (___ | ' /  | | |  \| | |  __
+//       / /\ \  \___ \|  <   | | | . ` | | |_ |
+//      / ____ \ ____) | . \ _| |_| |\  | |__| |
+//     /_/    \_\_____/|_|\_\_____|_| \_|\_____|
+/**Content that asks before closing while it has unsaved changes*/
+class Draft extends ContentBase {
+  static element_name() {
+    return "draft";
+  }
+  static element_name_space() {
+    return "dev";
+  }
+  #unsaved = this.appendChild(document.createElement("input"));
+  constructor() {
+    super();
+    this.style.cssText = "display:block;padding:1rem";
+    this.#unsaved.type = "checkbox";
+    this.#unsaved.checked = true;
+    const label = this.appendChild(document.createElement("label"));
+    label.textContent = " Unsaved changes";
+    label.prepend(this.#unsaved);
+  }
+  protected async content_closing(): Promise<boolean> {
+    if (!this.#unsaved.checked) return true;
+    const answer = await prompts.buttons(
+      `${String(this.content_title)} has unsaved changes`,
+      [
+        { text: "Discard", value: true },
+        { text: "Keep open", value: false },
+      ],
+      { owner: this },
+    );
+    return answer.some && answer.value;
+  }
+}
+define_element(Draft);
+{
+  const sec = section(
+    "Asking before closing",
+    "Content overrides content_closing to ask before it closes. Close a draft with the cross or by pressing outside the auto close one: with unsaved changes ticked it asks, Keep open or Escape keeps it, untick it and it closes at once. " +
+      "Pressing the cross again while it asks does not ask twice. The layout of two drafts asks each, closes the ones that agree, and the panel stays while one is kept",
+  );
+  const draft = (title: string) => Draft.create({ title, closable: true });
+  const place = (c: ContentBase, auto_close = false) =>
+    open.push(
+      comp.panel(c, {
+        x: px_to_rem(document.documentElement.clientWidth) - 2,
+        y: 2,
+        anchor: CompAnchor.TOP_RIGHT,
+        width: 22,
+        height: 12,
+        auto_close,
+      }),
+    );
+  controls(sec, {
+    Draft: () => place(draft("Draft")),
+    "Auto close draft": () => place(draft("Auto close draft"), true),
+    "Layout of two drafts": () =>
+      place(
+        comp.layout({
+          root: comp.layout_tabs({
+            content: [draft("First"), draft("Second")],
+          }),
+        }),
+      ),
     "Close all": close_all,
   });
 }

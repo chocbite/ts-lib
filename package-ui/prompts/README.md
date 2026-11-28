@@ -6,6 +6,16 @@ Modal prompts that ask the user something and give the answer as a promise. A pr
 import { prompts } from "@chocbite/ts-lib-ui/prompts";
 ```
 
+Every prompt takes `PromptOptions` as its last argument, the form prompt with its own options:
+
+- **`owner`**: the element the prompt is asked from. The prompt opens in its document, like a browser window the element is in, and the focus goes back there. Without it the prompt opens in the main document.
+- **`layer`**: the layer of the panel of the prompt, see the panels of `composition`, 999 by default, above other panels.
+
+```ts
+//Asked by a content, which can be in a browser window of the page
+const answer = await prompts.buttons("Discard changes?", buttons, { owner: this });
+```
+
 ## Buttons
 
 ```ts
@@ -67,6 +77,6 @@ await prompts.form(
 await prompts.faults(element.faults);
 ```
 
-Lists problems, the `NiceError`s from `@chocbite/ts-lib/result`. It is what the fault icon of an element opens, see the fault icon in [PATTERN.md](../PATTERN.md#the-fault-icon), so an app rarely calls it itself. Problems are grouped by kind: the nice text once, with each distinct message of that kind under it. An outage that fails every input shows up once, and several missing members of a fetch parser show one heading with every member named. A message with an `Error` also gets a Details collapser with the stack and the stacks of its causes, formatted only when opened. The errors an error is made of, its `errors`, are shown nested under it in a group with a line, grouped by kind again, folded behind a Sub error details collapser until opened. It is built from form elements, so it follows the theme like the other prompts. The text can be selected, to copy it into a bug report.
+Lists problems, the `NiceError`s from `@chocbite/ts-lib/result`. It is what the fault icon of an element opens, see the fault icon in [PATTERN.md](../PATTERN.md#the-fault-icon), so an app rarely calls it itself. The icon is its owner, so it opens in the window of the element. Problems are grouped by kind: the nice text once, with each distinct message of that kind under it. An outage that fails every input shows up once, and several missing members of a fetch parser show one heading with every member named. A message with an `Error` also gets a Details collapser with the stack and the stacks of its causes, formatted only when opened. The errors an error is made of, its `errors`, are shown nested under it in a group with a line, grouped by kind again, folded behind a Sub error details collapser until opened. It is built from form elements, so it follows the theme like the other prompts. The text can be selected, to copy it into a bug report.
 
-The prompt is 60% of the width of the page, at least 20rem and never wider than the page. Only the list scrolls, so the Close button stays in view however many problems there are. Resolves when it is closed.
+The prompt is 60% of the width of the page of its owner, at least 20rem and never wider than the page. Only the list scrolls, so the Close button stays in view however many problems there are. Resolves when it is closed.

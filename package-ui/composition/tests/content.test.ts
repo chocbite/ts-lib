@@ -9,6 +9,7 @@ import {
   ContentBase,
   type ContentCreateOptions,
 } from "../content";
+import { guarded, later } from "./guarded";
 
 const attach = <T extends HTMLElement>(element: T): T =>
   document.body.appendChild(element);
@@ -81,9 +82,15 @@ describe("Content context menu", () => {
   });
 
   it("opens its own menu, and set replaces it", () => {
-    const c = attach(content({ context_menu: [ctm.line({ text: "First", on_click: () => {} })] }));
+    const c = attach(
+      content({
+        context_menu: [ctm.line({ text: "First", on_click: () => {} })],
+      }),
+    );
     expect(open_menu(c).textContent).toContain("First");
-    c.set({ context_menu: () => [ctm.line({ text: "Second", on_click: () => {} })] });
+    c.set({
+      context_menu: () => [ctm.line({ text: "Second", on_click: () => {} })],
+    });
     expect(open_menu(c).textContent).toContain("Second");
   });
 });
@@ -98,6 +105,49 @@ describe("Content closing", () => {
     await closed;
     expect(listener).toHaveBeenCalledTimes(1);
     document.body.removeEventListener("content_closed", listener);
+  });
+
+  it("content_close gives true when the content closed", async () => {
+    expect(await attach(content()).content_close()).toBe(true);
+  });
+
+  it("stays open when the content refuses to close", async () => {
+    const c = attach(guarded(false));
+    let closed = false;
+    void c.content_on_close().then(() => (closed = true));
+    const listener = vi.fn();
+    document.body.addEventListener("content_closed", listener);
+    expect(await c.content_close()).toBe(false);
+    await Promise.resolve();
+    expect(c.asked).toBe(1);
+    expect(closed).toBe(false);
+    expect(listener).not.toHaveBeenCalled();
+    document.body.removeEventListener("content_closed", listener);
+  });
+
+  it("closes once the promise the content answers with gives true, and is asked once while waiting", async () => {
+    const answer = later<boolean>();
+    const c = attach(guarded(answer.promise));
+    const listener = vi.fn();
+    document.body.addEventListener("content_closed", listener);
+    const first = c.content_close();
+    const second = c.content_close();
+    await Promise.resolve();
+    expect(listener).not.toHaveBeenCalled();
+    answer.resolve(true);
+    expect(await first).toBe(true);
+    expect(await second).toBe(true);
+    expect(c.asked).toBe(1);
+    expect(listener).toHaveBeenCalledTimes(1);
+    document.body.removeEventListener("content_closed", listener);
+  });
+
+  it("is asked again on the next close after refusing", async () => {
+    const c = attach(guarded(false));
+    await c.content_close();
+    c.answer = true;
+    expect(await c.content_close()).toBe(true);
+    expect(c.asked).toBe(2);
   });
 });
 
@@ -141,7 +191,9 @@ describe("Content size", () => {
     element.style.cssText = "display:block;width:140px;height:60px";
     const { width, height } = element.content_size();
     width.sub(() => {});
-    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
 
     expect(width.ok()).toBe(140);
     expect(height.ok()).toBe(60);

@@ -2,15 +2,18 @@ import { Base, define_element, input_key } from "#base";
 import { DOCUMENT_HANDLER } from "#document";
 import { state_ui } from "#state_ui";
 import { px_to_rem, SCALE } from "#theme";
-import type { StateOrValROS } from "@chocbite/ts-lib/state";
+import type { StateOrVal, StateOrValROS } from "@chocbite/ts-lib/state";
 import type { ContentBase } from "./content";
 import "./container.scss";
 import {
+  HOST_ADOPT,
   HOST_LAYER,
   HOST_RAISE,
   HOST_REMOVE,
   Panel,
   PANEL_ADDED,
+  PANEL_LAYER,
+  PANEL_MOVE,
   PANEL_PLACE,
   type PanelHost,
   type PanelOptions,
@@ -102,13 +105,24 @@ class PanelContainer extends Base implements PanelHost {
     this.#panels.delete(panel);
     if (this.#active === panel) this.#active = undefined;
   }
+
+  [HOST_ADOPT](from: Document, dx: number, dy: number): void {
+    const other = CONTAINERS.get(from);
+    if (!other || other === this) return;
+    for (const panel of other.#panels) {
+      this.#panels.add(panel);
+      panel[PANEL_MOVE](this, dx, dy);
+    }
+  }
 }
 define_element(PanelContainer);
 
 export type { PanelContainer };
 
 const CONTAINERS = new WeakMap<Document, PanelContainer>();
+//The panels of a document that goes away, like a window that closed, go to the main document, so none of them closes
 DOCUMENT_HANDLER.events.on("removed", (e) => {
+  panel_container()[HOST_ADOPT](e.data, 0, 0);
   CONTAINERS.get(e.data)?.remove();
   CONTAINERS.delete(e.data);
 });
@@ -132,4 +146,12 @@ export function panel_container(
  * Use panel_container(element).panel for another document*/
 export function panel(content: ContentBase, options: PanelOptions = {}): Panel {
   return panel_container().panel(content, options);
+}
+
+/**Layer of the panel the node is in, the nearest one around it, the state the panel was given or its value, 0 when it is not in a panel
+ * A panel opened from the node with that layer comes above the panel the node is in, and follows it to another layer*/
+export function panel_layer(node: Node): StateOrVal<number> {
+  for (let at: Node | null = node; at; at = at.parentNode)
+    if (at instanceof Panel) return at[PANEL_LAYER]();
+  return 0;
 }

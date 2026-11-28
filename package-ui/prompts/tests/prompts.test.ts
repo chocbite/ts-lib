@@ -4,6 +4,7 @@ import state from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { prompts, type PromptFormValues } from "..";
+import { DOCUMENT_HANDLER } from "#document";
 
 /**The prompt open now*/
 const current = () => {
@@ -337,5 +338,54 @@ describe("Prompt focus", () => {
     button("Yes").click();
     await result;
     expect(document.activeElement).toBe(document.body);
+  });
+});
+
+describe("Prompt place", () => {
+  const layer_of = (panel: Element) =>
+    (panel.parentElement as HTMLElement).style.zIndex;
+
+  it("opens in layer 999 when no layer is given, above other panels", () => {
+    void prompts.buttons("A", [{ text: "Yes", value: 1 }]);
+    expect(layer_of(current())).toBe("999");
+  });
+
+  it("opens in the layer given, also for a form", () => {
+    void prompts.buttons("A", [{ text: "Yes", value: 1 }], { layer: 4 });
+    expect(layer_of(current())).toBe("4");
+    current().close();
+    void prompts.form(
+      "F",
+      [form.text_input({ id: "a" })],
+      { text: "Ok" },
+      {
+        layer: 7,
+      },
+    );
+    expect(layer_of(current())).toBe("7");
+  });
+
+  it("opens in the document of the owner, like a browser window, and gives the focus back there", async () => {
+    const frame = document.body.appendChild(document.createElement("iframe"));
+    const doc = frame.contentDocument!;
+    DOCUMENT_HANDLER.register_document(doc, true);
+    try {
+      const input = doc.body.appendChild(doc.createElement("input"));
+      input.focus();
+      const answer = prompts.buttons("Q", [{ text: "Yes", value: 1 }], {
+        owner: input,
+      });
+      const panel = doc.querySelector("composition-panel")!;
+      expect(panel).not.toBeNull();
+      expect(document.querySelector("composition-panel")).toBeNull();
+      [...panel.querySelectorAll<HTMLElement>("*")]
+        .find((e) => e.tagName === "FORM-BUTTON" && e.textContent === "Yes")!
+        .click();
+      expect(await answer).toEqual(some(1));
+      expect(doc.activeElement).toBe(input);
+    } finally {
+      DOCUMENT_HANDLER.deregister_document(doc);
+      frame.remove();
+    }
   });
 });

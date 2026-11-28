@@ -8,8 +8,9 @@ import {
   type BaseOptions,
 } from "#base";
 import ctm from "#context_menu";
+import { material_new_window_rounded } from "#icons";
 import type { SVGFunc } from "#svg";
-import { px_to_rem } from "#theme";
+import { px_to_rem, rem_to_px } from "#theme";
 import type { StateOrVal, StateOrValROS } from "@chocbite/ts-lib/state";
 import {
   CONTENT_CLOSED,
@@ -19,6 +20,18 @@ import {
 } from "./content";
 import "./panel.scss";
 import { anchor_fraction, clamp, CompAnchor } from "./shared";
+import {
+  content_window,
+  type ContentWindow,
+  open_on_interaction,
+  page_on_screen,
+  user_active,
+  WINDOW_CLOSED,
+  WINDOW_CONTENT_CLOSED,
+  WINDOW_LEAVING,
+  type WindowHost,
+  type WindowPlace,
+} from "./window";
 
 /**Inputs of the panel*/
 const PANEL = {
@@ -44,12 +57,17 @@ const PANEL = {
   hidden: input_key<StateOrValROS<boolean>>(),
   /**Hides the panel when the user presses outside it*/
   auto_hide: input_key<StateOrVal<boolean>>(),
-  /**Closes the panel when the user presses outside it*/
+  /**Closes the panel when the user presses outside it, when its content agrees, see content_close*/
   auto_close: input_key<StateOrVal<boolean>>(),
   /**Darkens the page behind the panel and keeps the focus in it*/
   modal: input_key<StateOrVal<boolean>>(),
   /**Whether the title bar is shown, true by default*/
   titlebar: input_key<StateOrVal<boolean>>(),
+  /**Whether the content is shown in a browser window of its own instead of in the panel, the user opens it from the menu of the title bar,
+   * closing the window puts the content back in the panel, where the window was
+   * An initial value is where it starts, a writable state is written when the user opens or closes the window, a read only state keeps it,
+   * when the browser blocks the window, as it does without a click or key press of the user, the panel stays and writes false*/
+  window: input_key<StateOrValROS<boolean>>(),
 };
 export type PanelOptions = BaseOptions & InputOptions<typeof PANEL>;
 
@@ -84,9 +102,12 @@ document.documentElement.style.setProperty(
 //Internal to this module, between the panel and its container
 export const PANEL_ADDED = Symbol("panel_added");
 export const PANEL_PLACE = Symbol("panel_place");
+export const PANEL_LAYER = Symbol("panel_layer");
+export const PANEL_MOVE = Symbol("panel_move");
 export const HOST_LAYER = Symbol("host_layer");
 export const HOST_RAISE = Symbol("host_raise");
 export const HOST_REMOVE = Symbol("host_remove");
+export const HOST_ADOPT = Symbol("host_adopt");
 
 /**The container of a panel, as the panel sees it*/
 export interface PanelHost {
@@ -96,21 +117,27 @@ export interface PanelHost {
   [HOST_LAYER](panel: Panel, layer: number): void;
   /**Puts the panel above the others in its layer*/
   [HOST_RAISE](panel: Panel): void;
-  /**Forgets the panel, it is closed*/
+  /**Forgets the panel, it is closed or shown by another container*/
   [HOST_REMOVE](panel: Panel): void;
+  /**Takes the panels of the container of the document, moved by dx and dy in rem*/
+  [HOST_ADOPT](from: Document, dx: number, dy: number): void;
 }
 
-/**Values of the inputs the user can change by moving, sizing or hiding the panel*/
+/**Size in rem of the page of a window opened for a panel that is not shown, like a hidden one*/
+const WINDOW_SIZE = { width: 40, height: 25 };
+
+/**Values of the inputs the user can change by moving, sizing, hiding or opening the panel in a window*/
 interface ChangeableValues {
   x?: number;
   y?: number;
   width?: number;
   height?: number;
   hidden: boolean;
+  window: boolean;
 }
 type Changeable = keyof ChangeableValues;
 
-class Panel extends Base {
+class Panel extends Base implements WindowHost {
   static element_name() {
     return "panel";
   }
@@ -118,7 +145,7 @@ class Panel extends Base {
     return "composition";
   }
 
-  readonly #host: PanelHost;
+  #host: PanelHost;
   readonly #content: ContentBase;
   /**Whether the container shows the panel, until then it is not in the document and can not be placed*/
   #shown = false;
@@ -142,12 +169,18 @@ class Panel extends Base {
   #min_width = 0;
   #min_height = 0;
   /**Values of the changeable inputs, the panel owns them until they are given*/
-  #values: ChangeableValues = { hidden: false };
+  #values: ChangeableValues = { hidden: false, window: false };
+  /**Browser window showing the content, while it is open*/
+  #window?: ContentWindow;
+  /**Stops waiting for a click or key press to open the window, while the panel waits hidden for one*/
+  #waiting?: () => void;
+  /**Height of the title bar in rem when the window opened, the panel is not shown while it is open*/
+  #titlebar_height = 0;
   #moving = false;
   #on_close: (() => void)[] = [];
 
   /**@param content what the panel shows
-   * @param host the container showing the panel*/
+   * @param host the container showing the panel, until another one takes it*/
   constructor(content: ContentBase, host: PanelHost) {
     super();
     this.#content = content;
@@ -167,7 +200,10 @@ class Panel extends Base {
     this.#title.classList.add("title");
     ctm.attach(
       this.#titlebar,
-      ctm.combine(() => content_context_lines(this.#content)),
+      ctm.combine(
+        () => content_context_lines(this.#content),
+        () => this.#window_lines(),
+      ),
       () => this.#moving,
     );
     this.#titlebar.onpointerdown = (e) => this.#move_start(e);
@@ -261,6 +297,10 @@ class Panel extends Base {
     this.set_input(PANEL.titlebar, options.titlebar, (titlebar) =>
       this.classList.toggle("no-titlebar", !(titlebar.ok && titlebar.value)),
     );
+    this.set_input(PANEL.window, options.window, (windowed) => {
+      this.#values.window = windowed.value;
+      this.#show_window();
+    });
     return this;
   }
 
@@ -274,8 +314,10 @@ class Panel extends Base {
     return new Promise<void>((resolve) => this.#on_close.push(resolve));
   }
 
-  /**Closes the panel and its content*/
+  /**Closes the panel and its content without asking the content, content_close asks it*/
   close(): void {
+    this.#stop_waiting();
+    this.#close_window();
     this.ownerDocument.removeEventListener("pointerdown", this.#outside, {
       capture: true,
     });
@@ -297,11 +339,37 @@ class Panel extends Base {
       passive: true,
     });
     this.#place();
+    this.#show_window();
   }
 
   /**Called by the container when its size changes, the panel is kept inside it*/
   [PANEL_PLACE](): void {
     this.#place();
+  }
+
+  /**Called by the container taking the panel from another container, the panel moves into its document,
+   * its position moved by dx and dy in rem*/
+  [PANEL_MOVE](host: PanelHost, dx: number, dy: number): void {
+    this.ownerDocument.removeEventListener("pointerdown", this.#outside, {
+      capture: true,
+    });
+    this.#host[HOST_REMOVE](this);
+    this.#host = host;
+    host[HOST_LAYER](this, this.#layer);
+    this.#raise();
+    this.ownerDocument.addEventListener("pointerdown", this.#outside, {
+      capture: true,
+      passive: true,
+    });
+    const { x, y } = this.#values;
+    if (x !== undefined && this.#can_change("x")) this.#change("x", x + dx);
+    if (y !== undefined && this.#can_change("y")) this.#change("y", y + dy);
+    this.#place();
+  }
+
+  /**The layer input of the panel, the state it was given or its value, see panel_layer*/
+  [PANEL_LAYER](): StateOrVal<number> {
+    return this.input_state(PANEL.layer) ?? this.#layer;
   }
 
   //       _____ _    _          _   _  _____ ______
@@ -334,14 +402,16 @@ class Panel extends Base {
       if (name === "x" || name === "y") this.#place();
       else if (name === "width") this.#show_width();
       else if (name === "height") this.#show_height();
-      else this.#show_hidden();
+      else if (name === "hidden") this.#show_hidden();
+      else this.#show_window();
     }
   }
 
   #outside = (e: Event) => {
-    if (this.#values.hidden) return;
+    if (this.#values.hidden || this.#window || this.#waiting) return;
     if (this.contains(e.target as Node) && e.target !== this) return;
-    if (this.#auto_close) this.close();
+    //Through the content, which can refuse, like to ask about unsaved changes
+    if (this.#auto_close) void this.#content.content_close();
     else if (this.#auto_hide) this.#change("hidden", true);
   };
 
@@ -356,7 +426,8 @@ class Panel extends Base {
    * Without a position the panel is centered. The position is clamped for showing, so part of the panel stays
    * inside the container, the inputs keep their values*/
   #place(): void {
-    if (!this.#shown || this.#values.hidden) return;
+    if (!this.#shown || this.#values.hidden || this.#window || this.#waiting)
+      return;
     const [ax, ay] = anchor_fraction(this.#anchor);
     const { x, y } = this.#values;
     if (x !== undefined || y !== undefined) {
@@ -553,6 +624,144 @@ class Panel extends Base {
     };
   }
 
+  //     __          _______ _   _ _____   ______          __
+  //     \ \        / /_   _| \ | |  __ \ / __ \ \        / /
+  //      \ \  /\  / /  | | |  \| | |  | | |  | \ \  /\  / /
+  //       \ \/  \/ /   | | | . ` | |  | | |  | |\ \/  \/ /
+  //        \  /\  /   _| |_| |\  | |__| | |__| | \  /\  /
+  //         \/  \/   |_____|_| \_|_____/ \____/   \/  \/
+  #window_lines() {
+    if (this.#window || !this.#can_change("window")) return [];
+    return [
+      ctm.line({
+        text: "Open in window",
+        icon: material_new_window_rounded,
+        on_click: () => this.#change("window", true),
+      }),
+    ];
+  }
+
+  /**Opens or closes the window to match the window input, opened once the panel is shown
+   * Without a click or key press of the user the browser blocks the window, the panel then waits hidden for the next one,
+   * blocked during one the browser does not let the page open windows, the panel stays and writes false
+   * The panel fires window_opened when the window opened*/
+  #show_window(): void {
+    if (this.#values.window && !this.#window && !this.#waiting && this.#shown) {
+      this.#titlebar_height = px_to_rem(
+        this.#titlebar.getBoundingClientRect().height,
+      );
+      const opened = content_window(this.#content, this.#window_place(), this);
+      if (!opened) {
+        if (user_active()) return this.#change("window", false);
+        this.classList.add("windowed");
+        this.#place_backdrop();
+        this.#waiting = open_on_interaction(() => {
+          this.#waiting = undefined;
+          this.classList.remove("windowed");
+          this.#place_backdrop();
+          this.#show_window();
+          this.#place();
+        });
+        return;
+      }
+      this.#window = opened;
+      this.classList.add("windowed");
+      this.#place_backdrop();
+      this.dispatchEvent(new Event("window_opened"));
+    } else if (!this.#values.window) {
+      this.#stop_waiting();
+      this.#close_window();
+    }
+  }
+
+  /**Stops waiting for a click or key press to open the window, the panel is shown again*/
+  #stop_waiting(): void {
+    if (!this.#waiting) return;
+    this.#waiting();
+    this.#waiting = undefined;
+    this.classList.remove("windowed");
+    this.#place_backdrop();
+    this.#place();
+  }
+
+  /**Closes the window, its content and the panels in it come back first*/
+  #close_window(): void {
+    const open = this.#window;
+    if (!open) return;
+    this.#window = undefined;
+    this.#back(open, open.place());
+    open.close();
+  }
+
+  /**Where the window goes on the screen, its frame where the panel is and its page the size of the content box*/
+  #window_place(): WindowPlace {
+    const rect = this.getBoundingClientRect();
+    const box = this.#content_box.getBoundingClientRect();
+    const view = this.ownerDocument.defaultView;
+    const page = view ? page_on_screen(view) : undefined;
+    const shown = box.width > 0 && box.height > 0;
+    return {
+      left: page && shown ? page.left + rect.left : undefined,
+      top: page && shown ? page.top + rect.top : undefined,
+      width: shown ? box.width : rem_to_px(WINDOW_SIZE.width),
+      height: shown ? box.height : rem_to_px(WINDOW_SIZE.height),
+    };
+  }
+
+  /**Takes back what is in the window, the content into the panel, which gets the size and place of the window,
+   * and the panels opened in the window into the container of the panel, where they were over the content*/
+  #back(open: ContentWindow, place: WindowPlace): void {
+    this.#content_box.appendChild(this.#content);
+    this.classList.remove("windowed");
+    this.#place_backdrop();
+    this.#take_place(place);
+    this.#place();
+    const box = this.#content_box.getBoundingClientRect();
+    this.#host[HOST_ADOPT](
+      open.document,
+      px_to_rem(box.left),
+      px_to_rem(box.top),
+    );
+  }
+
+  /**Gives the panel the size of the window and puts it where the window is,
+   * where the user can change them and the browser tells where the window is*/
+  #take_place(place: WindowPlace): void {
+    if (this.#sizeable && this.#can_change("width"))
+      this.#change("width", px_to_rem(place.width));
+    if (this.#sizeable && this.#can_change("height"))
+      this.#change("height", px_to_rem(place.height) + this.#titlebar_height);
+    const view = this.ownerDocument.defaultView;
+    if (!view || place.left === undefined || place.top === undefined) return;
+    const page = page_on_screen(view);
+    const [ax, ay] = anchor_fraction(this.#anchor);
+    const width = this.#values.width ?? px_to_rem(place.width);
+    const height =
+      this.#values.height ?? px_to_rem(place.height) + this.#titlebar_height;
+    const corner = this.#clamp_corner(
+      px_to_rem(place.left - page.left),
+      px_to_rem(place.top - page.top),
+      width,
+    );
+    if (this.#can_change("x")) this.#change("x", corner.left + width * ax);
+    if (this.#can_change("y")) this.#change("y", corner.top + height * ay);
+  }
+
+  [WINDOW_CLOSED](place: WindowPlace): void {
+    const open = this.#window;
+    this.#window = undefined;
+    if (open) this.#back(open, place);
+    this.#change("window", false);
+  }
+
+  [WINDOW_LEAVING](place: WindowPlace): void {
+    this.#take_place(place);
+  }
+
+  [WINDOW_CONTENT_CLOSED](): void {
+    this.close();
+  }
+
   //               _____ _____ ______  _____ _____  ____  _____  _____ ______  _____
   //         /\   / ____/ ____|  ____|/ ____/ ____|/ __ \|  __ \|_   _|  ____|/ ____|
   //        /  \ | |   | |    | |__  | (___| (___ | |  | | |__) | | | | |__  | (___
@@ -625,7 +834,7 @@ class Panel extends Base {
     if (!this.#shown) return backdrop.remove();
     if (backdrop.nextSibling !== this) this.before(backdrop);
     backdrop.style.zIndex = this.style.zIndex;
-    backdrop.hidden = this.#values.hidden;
+    backdrop.hidden = this.#values.hidden || !!this.#window || !!this.#waiting;
   }
 
   #set_modal(modal: boolean): void {

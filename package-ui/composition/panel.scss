@@ -26,7 +26,8 @@ composition-panel {
   max-height: 100%;
   border-radius: $radius;
 
-  &.hidden {
+  &.hidden,
+  &.windowed {
     display: none;
   }
 

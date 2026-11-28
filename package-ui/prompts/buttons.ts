@@ -1,7 +1,7 @@
 import form from "#form";
 import type { SVGFunc } from "#svg";
 import { some, type Option } from "@chocbite/ts-lib/result";
-import { open_prompt } from "./shared";
+import { open_prompt, type PromptOptions } from "./shared";
 
 export interface PromptButton<T> {
   /**Text of the button*/
@@ -18,26 +18,32 @@ export interface PromptButton<T> {
 export function prompt_buttons<T>(
   text: string,
   buttons: PromptButton<T>[],
+  options?: PromptOptions,
 ): Promise<Option<T>> {
-  return open_prompt<T>(text, (close) => ({
-    element: form.group({
-      elements: [
-        form.spacer({ space: 0.5 }),
-        form.group({
-          embed: true,
-          column: "10rem",
-          elements: buttons.map((button) =>
-            form.button({
-              text: button.text,
-              icon: button.icon,
-              on_click: () => {
-                close(some(button.value));
-                button.click?.();
-              },
-            }),
-          ),
-        }),
-      ],
+  return open_prompt<T>(
+    text,
+    (close) => ({
+      element: form.group({
+        elements: [
+          form.spacer({ space: 0.5 }),
+          form.group({
+            embed: true,
+            column: "10rem",
+            elements: buttons.map((button) =>
+              form.button({
+                text: button.text,
+                icon: button.icon,
+                on_click: () => {
+                  close(some(button.value));
+                  button.click?.();
+                },
+              }),
+            ),
+          }),
+        ],
+      }),
     }),
-  }));
+    undefined,
+    options,
+  );
 }

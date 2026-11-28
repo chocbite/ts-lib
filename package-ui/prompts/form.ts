@@ -6,9 +6,9 @@ import form, {
   type FormGroup,
 } from "#form";
 import { none, ok, some, type Option } from "@chocbite/ts-lib/result";
-import { open_prompt } from "./shared";
+import { open_prompt, type PromptOptions } from "./shared";
 
-interface PromptFormOptions {
+interface PromptFormOptions extends PromptOptions {
   /**Columns for form, true is everything in one columns, just a number will make repeating columns of minimum that rem width, an array will make exactly that many colums with specified rem widths */
   form_column?: true | string | string[];
   /**Rows for form, true is everything in one row, just a number will make repeating rows of minimum that rem height, an array will make exactly that many rows with specified rem heights */
@@ -132,5 +132,6 @@ export function prompt_form<
       };
     },
     20,
+    options,
   );
 }

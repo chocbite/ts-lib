@@ -121,14 +121,19 @@ const panel = comp.panel(report, { x, y, width: 30 });
 | `modal`      | Darkens the page behind the panel and keeps the focus in it.                                                                                                 |
 | `titlebar`   | Whether the title bar is shown, true by default. Without it the panel can not be moved by the user.                                                          |
 | `layer`      | Panels in a higher layer are always above those in a lower one. Within a layer the panel the user worked in last is at the front.                            |
+| `window`     | Whether the content is shown in a browser window of its own instead of the panel, see below.                                                                 |
 
-`x`, `y`, `width`, `height` and `hidden` are changed by the user, by moving, sizing and auto hiding the panel. An initial value is where the panel starts, and the panel keeps the user's changes itself. A writable state is written by the panel. A read only state can not be changed, so `x: state.ok(4)` moves only up and down. A panel without a position starts centered.
+`x`, `y`, `width`, `height`, `hidden` and `window` are changed by the user, by moving, sizing, auto hiding the panel and opening it in a window. An initial value is where the panel starts, and the panel keeps the user's changes itself. A writable state is written by the panel. A read only state can not be changed, so `x: state.ok(4)` moves only up and down. A panel without a position starts centered.
 
 The position is kept as given, the panel only shows it clamped so its title bar stays on the page. When the window gets smaller and then bigger again, or the scale changes, the panel goes back to where it was.
+
+The user opens any panel in a browser window with **Open in window** in the menu of its title bar. The content moves into the window, which is titled after it and has the theme and styles of the page, and the panel leaves the page. When the user closes the window the content comes back in the panel, with the size of the window and where the window was, where the browser tells where windows are (not on Wayland). Panels opened in the window, like prompts, move into the page with it, over the content where they were, none of them closes. The same happens to the panels of any document that is deregistered from `DOCUMENT_HANDLER`. Writing `window` opens and closes it from the app. Browsers open a window only on a click or key press of the user, one window each, unless the site may open popups. A window blocked without one waits, the panel hidden, and opens on the next click or key press in the page, waiting windows open one each in the order they waited. A window blocked during a click means the browser does not let the page open windows, the panel stays in the page and writes `false`. The windows close with the page, their contents live in it, without writing `window`, so a saved `true` can open them again.
 
 - **`panel.close()`** closes the panel and its content, **`panel.on_close()`** resolves when it is closed.
 - **`panel.content`** is the content it shows.
 - **`comp.panel_container().active_panel`** is the panel the user worked in last.
+- **`WINDOW_REOPEN`** is the setting of the user, also in the advanced part of the customization panel, of where the application manager opens browser windows after a refresh, `WindowReopen.Windows` as windows, the default, each waiting for a click or key press unless the page may open popups, or `WindowReopen.Main` as panels of the main window.
+- **`comp.panel_layer(element)`** is the layer of the panel the element is in, the state the panel was given or its value, 0 when it is not in a panel. A panel opened from the element with it comes above the panel it came from, and follows it to another layer.
 
 ## Customization
 
