@@ -270,7 +270,7 @@ export class ListRowGroup<
     if (!this.#placed) return;
     const was = new Map<ListRow<R, T, A, S>, number>();
     for (let i = 0; i < this.#shown.length; i++) was.set(this.#shown[i], i);
-    const focus = this.#root.sort_focus;
+    const focus = this.#root.focus_rows;
     const keep = list_rising(
       order.map((row) => was.get(row) ?? -1),
       focus.size ? order.findIndex((row) => focus.has(row)) : -1,

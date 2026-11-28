@@ -22,6 +22,7 @@ import { list_align_apply } from "./field";
 import { ListRowGroup } from "./group";
 import { ListRow } from "./row";
 import {
+  list_filter_columns,
   list_filter_prune,
   list_is_group,
   list_search_query,
@@ -58,10 +59,11 @@ import type {
 
 /**Most rows open all or the search opens at a time, a mistake making the sub rows recursive would otherwise never end */
 const OPEN_LIMIT = 1000;
-/**Milliseconds from placing the rows with changed values until the next frame above which placing them counts as slow, about three frames */
-const SORT_SLOW_FRAME = 50;
-/**After a slow placing the rows are placed again once this many times its time has passed, so placing them takes at most about a quarter of the time */
-const SORT_SLOW_WAIT = 4;
+/**Milliseconds from applying the changed values of rows until the next frame above which it counts as slow, about three frames
+ * Moving or hiding rows restyles every row of the list, on a list of thousands of rows that takes several frames */
+const LIVE_SLOW_FRAME = 50;
+/**After a slow frame the changed values are applied again once this many times its time has passed, so they take at most about a quarter of the time */
+const LIVE_SLOW_WAIT = 4;
 
 class HeaderField extends Base {
   static element_name() {
@@ -391,18 +393,18 @@ class Container<
   #search_cells = new Map<string, ListSearchCell>();
   /**Columns of the sort input, also those the list leaves out */
   #sort: ListSort = [];
-  /**The row with the focus and the rows it is below, see sort_focus of the root */
-  readonly #sort_focus = new Set<ListRow<R, T, A, S>>();
-  /**Whether a pointer is pressed on the list, no row moves for changed values until it is let go */
-  #sort_pressed = false;
-  /**Rows with values they are not placed with yet, placed at a frame unless held */
-  readonly #sort_dirty = new Set<ListRow<R, T, A, S>>();
-  /**The frame placing the rows waits for, 0 for none */
-  #sort_frame = 0;
-  /**The timeout placing the rows waits for after a slow placing, 0 for none */
-  #sort_wait = 0;
-  /**Time before which the rows are not placed again, after a slow placing */
-  #sort_next_at = 0;
+  /**The row with the focus and the rows it is below, see focus_rows of the root */
+  readonly #live_focus = new Set<ListRow<R, T, A, S>>();
+  /**Whether a pointer is pressed on the list, no row moves or disappears for changed values until it is let go */
+  #live_pressed = false;
+  /**Rows with values they are not sorted or searched by yet, applied at a frame unless held, see live_changed of the root */
+  readonly #live_dirty = new Set<ListRow<R, T, A, S>>();
+  /**The frame applying the changed values waits for, 0 for none */
+  #live_frame = 0;
+  /**The timeout applying the changed values waits for after a slow frame, 0 for none */
+  #live_wait = 0;
+  /**Time before which changed values are not applied again, after a slow frame */
+  #live_next_at = 0;
 
   /**Builds the list from its configuration, the inputs come with set */
   constructor(config: ListContainerConfig<T, R, S, K>) {
@@ -422,12 +424,12 @@ class Container<
       menu: () => this.#menu(),
       open_all: () => this.open_all(),
       close_all: () => this.close_all(),
-      sort_focus: this.#sort_focus,
-      sort_held: (row) =>
-        row.isConnected && (this.#sort_pressed || this.#sort_focus.has(row)),
-      sort_changed: (row) => {
-        this.#sort_dirty.add(row);
-        this.#sort_schedule();
+      focus_rows: this.#live_focus,
+      held: (row) =>
+        row.isConnected && (this.#live_pressed || this.#live_focus.has(row)),
+      live_changed: (row) => {
+        this.#live_dirty.add(row);
+        this.#live_schedule();
       },
     };
     this.#child_box = document.createElement("div");
@@ -488,10 +490,10 @@ class Container<
       Boolean(this.#selection?.multi) ||
       this.#search_menu;
     ctm.attach(this, this.#menu);
-    //Rows keep their places while the user works with them, see sort_held of the root
-    this.addEventListener("focusin", (e) => this.#sort_focus_update(e.target));
-    this.addEventListener("focusout", () => this.#sort_focus_update(null));
-    this.addEventListener("pointerdown", () => this.#sort_press(), true);
+    //Rows keep how they are sorted and searched while the user works with them, see held of the root
+    this.addEventListener("focusin", (e) => this.#live_focus_update(e.target));
+    this.addEventListener("focusout", () => this.#live_focus_update(null));
+    this.addEventListener("pointerdown", () => this.#live_press(), true);
     if (config.sub_rows) this.#box.classList.add("sub-rows");
     //Without a selected input the selection is kept in a state of the list, under the key of the input so one given later replaces it
     const selection = this.#selection;
@@ -820,6 +822,9 @@ class Container<
     if (done === this.#search_done) return;
     this.#search_done = done;
     this.#root.search = query;
+    //Without text only the columns of the conditions are read, so only their states are followed
+    this.#root.search_reads =
+      query && !query.text ? list_filter_columns(query.filter) : undefined;
     const apply = () => {
       for (const row of this.#top_rows()) row.search_apply();
       this.#group.last_update();
@@ -1148,6 +1153,89 @@ class Container<
     }
   }
 
+  //      _      _______      ________
+  //     | |    |_   _\ \    / /  ____|
+  //     | |      | |  \ \  / /| |__
+  //     | |      | |   \ \/ / |  __|
+  //     | |____ _| |_   \  /  | |____
+  //     |______|_____|   \/   |______|
+
+  /**Keeps the row with the focus and the rows it is below in place, see focus_rows of the root, the rows held before are applied at the next frame */
+  #live_focus_update(target: EventTarget | null) {
+    this.#live_focus.clear();
+    //The row of the list, not of a list in a cell of it
+    let row = target instanceof Element ? target.closest("list-row") : null;
+    while (row && row.parentElement !== this.#child_box)
+      row = row.parentElement?.closest("list-row") ?? null;
+    for (
+      let held = row as ListRow<R, T, A, S> | null | undefined;
+      held;
+      held = held.parent_row
+    )
+      this.#live_focus.add(held);
+    if (this.#live_dirty.size) this.#live_schedule();
+  }
+
+  /**Holds the rows until the pointer pressed on the list is let go anywhere */
+  #live_press() {
+    if (this.#live_pressed) return;
+    this.#live_pressed = true;
+    const release = () => {
+      window.removeEventListener("pointerup", release, true);
+      window.removeEventListener("pointercancel", release, true);
+      this.#live_pressed = false;
+      if (this.#live_dirty.size) this.#live_schedule();
+    };
+    window.addEventListener("pointerup", release, true);
+    window.addEventListener("pointercancel", release, true);
+  }
+
+  /**Applies the changed values of the rows at the next frame, or once the wait after a slow frame has passed */
+  #live_schedule() {
+    if (this.#live_frame || this.#live_wait || this.#live_pressed) return;
+    const wait = this.#live_next_at - performance.now();
+    if (wait > 0)
+      this.#live_wait = window.setTimeout(() => {
+        this.#live_wait = 0;
+        this.#live_schedule();
+      }, wait);
+    else
+      this.#live_frame = requestAnimationFrame(() => {
+        this.#live_frame = 0;
+        this.#live_flush();
+      });
+  }
+
+  /**Places the rows with values they are not sorted by yet and has the rows whose states the search read answer again, a held row waits until it is let go
+   * When that is slow, the next time waits LIVE_SLOW_WAIT times as long, so a big list on slow hardware still reacts to the user */
+  #live_flush() {
+    if (this.#live_pressed) return;
+    const start = performance.now();
+    const sorted = new Set<ListRowGroup<R, T, A, S>>();
+    const searched = new Set<ListRowGroup<R, T, A, S>>();
+    const settle = () => {
+      for (const row of this.#live_dirty) {
+        if (this.#root.held(row)) continue;
+        this.#live_dirty.delete(row);
+        if (row.sort_settle()) sorted.add(row.parent_group);
+        if (row.search_settle()) searched.add(row.parent_group);
+      }
+    };
+    this.#search_hold(() =>
+      this.#selection ? this.#selection.batch(settle) : settle(),
+    );
+    for (const group of sorted) group.sort_order();
+    for (const group of searched) if (!sorted.has(group)) group.last_update();
+    if (searched.size) this.#search_empty_update();
+    if (!sorted.size && !searched.size) return;
+    //The next frame starts once this one is drawn, so the time until then is what the changes cost
+    requestAnimationFrame(() => {
+      const took = performance.now() - start;
+      this.#live_next_at =
+        took > LIVE_SLOW_FRAME ? start + took * LIVE_SLOW_WAIT : 0;
+    });
+  }
+
   //       _____  ____  _____ _______
   //      / ____|/ __ \|  __ \__   __|
   //     | (___ | |  | | |__) | | |
@@ -1186,82 +1274,8 @@ class Container<
     this.#root.sort = columns.length ? columns : undefined;
     this.#box.classList.toggle("sorted", columns.length > 0);
     //A list that did not sort and still does not has nothing to do, every row reads its values for the new sort
-    if (before || columns.length) {
-      this.#sort_dirty.clear();
-      this.#group.sort_update();
-    }
+    if (before || columns.length) this.#group.sort_update();
     this.#sort_headers();
-  }
-
-  /**Keeps the row with the focus and the rows it is below in place, see sort_focus of the root, the rows held before are placed at the next frame */
-  #sort_focus_update(target: EventTarget | null) {
-    this.#sort_focus.clear();
-    //The row of the list, not of a list in a cell of it
-    let row = target instanceof Element ? target.closest("list-row") : null;
-    while (row && row.parentElement !== this.#child_box)
-      row = row.parentElement?.closest("list-row") ?? null;
-    for (
-      let held = row as ListRow<R, T, A, S> | null | undefined;
-      held;
-      held = held.parent_row
-    )
-      this.#sort_focus.add(held);
-    if (this.#sort_dirty.size) this.#sort_schedule();
-  }
-
-  /**Holds the rows in place until the pointer pressed on the list is let go anywhere */
-  #sort_press() {
-    if (this.#sort_pressed) return;
-    this.#sort_pressed = true;
-    const release = () => {
-      window.removeEventListener("pointerup", release, true);
-      window.removeEventListener("pointercancel", release, true);
-      this.#sort_pressed = false;
-      if (this.#sort_dirty.size) this.#sort_schedule();
-    };
-    window.addEventListener("pointerup", release, true);
-    window.addEventListener("pointercancel", release, true);
-  }
-
-  /**Places the rows with changed values at the next frame, or once the wait after a slow placing has passed */
-  #sort_schedule() {
-    if (this.#sort_frame || this.#sort_wait || this.#sort_pressed) return;
-    const wait = this.#sort_next_at - performance.now();
-    if (wait > 0)
-      this.#sort_wait = window.setTimeout(() => {
-        this.#sort_wait = 0;
-        this.#sort_schedule();
-      }, wait);
-    else
-      this.#sort_frame = requestAnimationFrame(() => {
-        this.#sort_frame = 0;
-        this.#sort_flush();
-      });
-  }
-
-  /**Places the rows with values they are not placed with yet, a held row waits until it is let go
-   * When placing them is slow, the next placing waits SORT_SLOW_WAIT times as long, so a big list on slow hardware still reacts to the user */
-  #sort_flush() {
-    if (this.#sort_pressed) return;
-    if (!this.#root.sort) {
-      this.#sort_dirty.clear();
-      return;
-    }
-    const start = performance.now();
-    const groups = new Set<ListRowGroup<R, T, A, S>>();
-    for (const row of this.#sort_dirty) {
-      if (this.#root.sort_held(row)) continue;
-      this.#sort_dirty.delete(row);
-      if (row.sort_settle()) groups.add(row.sort_group);
-    }
-    for (const group of groups) group.sort_order();
-    if (!groups.size) return;
-    //The next frame starts once this one is drawn, so the time until then is what placing the rows cost
-    requestAnimationFrame(() => {
-      const took = performance.now() - start;
-      this.#sort_next_at =
-        took > SORT_SLOW_FRAME ? start + took * SORT_SLOW_WAIT : 0;
-    });
   }
 
   /**Shows in the titles which columns sort, and lets the user sort by a column that can be sorted, unless the sort is a read only state */

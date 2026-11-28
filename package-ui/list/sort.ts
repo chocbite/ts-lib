@@ -6,7 +6,7 @@ import {
   icon_sort_z_a_rounded,
 } from "#icons";
 import type { SVGFunc } from "#svg";
-import { list_search_plain_value, type ListSearchValue } from "./search";
+import { list_search_read } from "./search";
 import type { ListColumnOptions } from "./types";
 
 /**Which way a column sorts, ascending is A to Z and 1 to 9 */
@@ -65,9 +65,7 @@ export function list_sort_value(
   value: unknown,
 ): ListSortValue {
   if (column?.sort_value) return value as ListSortValue;
-  const read: ListSearchValue = column?.search_value
-    ? (value as ListSearchValue)
-    : list_search_plain_value(value);
+  const read = list_search_read(column, value);
   if (typeof read === "object" && read !== null)
     return column?.type === "number" ? read.value : read.text;
   if (

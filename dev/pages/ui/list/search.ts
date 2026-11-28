@@ -5,7 +5,7 @@ import list, {
   type ListSearchResult,
 } from "@chocbite/ts-lib-ui/list";
 import { array_from_length } from "@chocbite/ts-lib/common";
-import { ok } from "@chocbite/ts-lib/result";
+import { ok, some } from "@chocbite/ts-lib/result";
 import state, { type StateOrVal } from "@chocbite/ts-lib/state";
 import { box, code, controls, row, section } from "../../../helpers";
 //The page shows its own code under each section
@@ -487,4 +487,92 @@ function folder_list(
   });
   //#endregion
   code(sec, source, "many_rows", "people_list", "folder_list");
+}
+
+//      _      _______      ________
+//     | |    |_   _\ \    / /  ____|
+//     | |      | |  \ \  / /| |__
+//     | |      | |   \ \/ / |  __|
+//     | |____ _| |_   \  /  | |____
+//     |______|_____|   \/   |______|
+{
+  const sec = section(
+    "Live values",
+    "The loads are states, the search follows them. The filter starts with load >= 50 in the column search, start the ticking: three loads change twice a second, a row whose load drops below 50 disappears at the next frame and one that rises above shows. Type 9 in the search bar, the rows with a 9 in their load show with it highlighted, while the loads change. Click in a note and type: the row stays shown while it has the focus, even when its load drops, and disappears once you leave it if it no longer matches. Press and hold anywhere on the list: nothing appears or disappears until you let go",
+  );
+  //#region live_values
+  interface Machine {
+    id: number;
+    name: string;
+    /**Changes while the list shows it, the search follows it */
+    load: ReturnType<typeof state.ok_w<number>>;
+  }
+  const machines = array_from_length(12, (i): Machine => ({
+    id: i,
+    name: `Machine ${i + 1}`,
+    load: state.ok_w((i * 37) % 100),
+  }));
+  const filter = state.ok_w<ListFilter>({
+    conditions: [{ column: "load", type: "number", op: ">=", value: 50 }],
+  });
+  box(sec, "loads as states, search bar and column search", {
+    width: "30rem",
+    height: "18rem",
+    display: "grid",
+  }).appendChild(
+    list.container(
+      {
+        transform: (m: Machine) =>
+          ok({ values: { name: m.name, load: m.load, note: m } }),
+        search_menu: true,
+      },
+      {
+        columns: {
+          name: list.column_string("Name", { align: "left" }),
+          load: list.column({
+            title: "Load %",
+            type: "number",
+            align: "right",
+            field_gen: () => list.number_field(),
+            //The field shows the state and the search reads it, both follow it
+            field_apply: (field, load: Machine["load"]) =>
+              field.attach_state_to_prop("number", load, () => some(NaN)),
+          }),
+          //An object the search does not read, so only the name and load are searched
+          note: list.column({
+            title: "Note, type here",
+            field_gen: () => list.node_field(document.createElement("input")),
+            field_apply: (field, m: Machine) =>
+              (field.node.placeholder = `Note ${m.id + 1}`),
+          }),
+        },
+        rows: machines,
+        search_bar: true,
+        column_search: true,
+        filter,
+      },
+    ),
+  );
+  let tick = 0;
+  /**Changes three loads, the same machines each time the page loads */
+  const change = () => {
+    for (let i = 0; i < 3; i++) {
+      const n = tick * 3 + i;
+      machines[(n * 7) % machines.length].load.set_ok((n * 37 + tick) % 100);
+    }
+    tick++;
+  };
+  let timer = 0;
+  controls(sec, {
+    "Start ticking": () => {
+      if (!timer) timer = window.setInterval(change, 500);
+    },
+    "Stop ticking": () => {
+      clearInterval(timer);
+      timer = 0;
+    },
+    "Tick once": change,
+  });
+  //#endregion
+  code(sec, source, "live_values");
 }

@@ -1,6 +1,7 @@
 import { Base, define_element } from "#base";
 import { state } from "@chocbite/ts-lib/state";
 import "./search.scss";
+import type { ListColumnOptions } from "./types";
 
 /**A row that matches, with the cells the text was found in, which the list highlights
  * @template K the keys of the columns */
@@ -337,6 +338,29 @@ export function list_search_plain(value: unknown): ListSearchValue {
   if (!state.is.state(value)) return list_search_plain_value(value);
   const result = value.rsync ? value.get?.() : undefined;
   return result?.ok ? list_search_plain_value(result.value) : undefined;
+}
+
+/**The value the search reads from what it reads of a column, its search_value or else the value, or from the value of the state that is
+ * A search_value as it is, else a string, number or boolean as it is and nothing for anything else */
+export function list_search_read(
+  column: ListColumnOptions<any, Base> | undefined,
+  value: unknown,
+): ListSearchValue {
+  return column?.search_value
+    ? (value as ListSearchValue)
+    : list_search_plain_value(value);
+}
+
+/**The columns the conditions of the filter are on */
+export function list_filter_columns(filter: ListFilter): Set<string> {
+  const columns = new Set<string>();
+  const add = (items: readonly ListFilterItem[]) => {
+    for (const item of items)
+      if (list_is_group(item)) add(item.conditions);
+      else columns.add(item.column);
+  };
+  add(filter.conditions);
+  return columns;
 }
 
 //      ____          _____

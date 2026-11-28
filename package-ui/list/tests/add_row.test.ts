@@ -30,9 +30,9 @@ function root(sub_rows: boolean): ListRoot<number, Values, number[], boolean> {
     menu: () => none(),
     open_all() {},
     close_all() {},
-    sort_focus: new Set(),
-    sort_held: () => false,
-    sort_changed() {},
+    focus_rows: new Set(),
+    held: () => false,
+    live_changed() {},
   };
 }
 

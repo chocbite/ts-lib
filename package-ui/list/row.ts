@@ -17,7 +17,8 @@ import { list_align_apply, list_cell } from "./field";
 import { ListKeyField, type ListKeyFieldOptions } from "./key_field";
 import "./row.scss";
 import {
-  list_search_plain,
+  list_search_plain_value,
+  list_search_read,
   type ListSearchMode,
   type ListSearchQuery,
   type ListSearchResult,
@@ -136,6 +137,10 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   #marked = false;
   /**Hidden by the search, by its own answer or as its parent is hidden */
   #hidden = false;
+  /**Subscribers to the states the answer of the row read, while the search reads them */
+  #search_subs?: StateSub<any>[];
+  /**Whether a state the answer of the row read changed, or its data while it was held, it answers again at a frame, see search_settle */
+  #search_stale = false;
   /**Opened by the search, closed again when the search no longer opens it */
   #search_opened = false;
   #state_sub?: StateInferSub<State<R[]>>;
@@ -367,7 +372,9 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     this.#selectable = row_options.selectable ?? true;
     //Before the sub rows are refreshed, they are searched by how the search applies to them now
     const rows_mode = this.#rows_mode;
-    this.#search_find();
+    //A held row keeps its answer until it is let go, so it does not disappear under the user
+    if (this.#root.search && this.#root.held(this)) this.#search_changed();
+    else this.#search_find();
     this.#selection_update();
     if (this.#key_field) this.#key_field.options = row_options.key_field;
     this.#sub_rows = row_options.sub_rows;
@@ -584,6 +591,11 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
 
   /**Gets the answer of the row to the search and hides or shows it */
   #search_find() {
+    this.#search_stale = false;
+    if (this.#search_subs) {
+      for (const sub of this.#search_subs) this.detach_state(sub);
+      this.#search_subs = undefined;
+    }
     const mode = this.#search_mode;
     const query = this.#root.search;
     this.#found =
@@ -611,17 +623,24 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     if (this.#key_field) this.#key_field.found = Boolean(found?.key);
   }
 
-  /**The answer of the search row option, or else the values and the key field text that have the text */
+  /**The answer of the search row option, or else the values and the key field text that have the text
+   * Without an answer of its own the row follows the states it read, while the search reads them, and answers again when one changes */
   #search_answer(query: ListSearchQuery): ListSearchResult<T> {
     if (this.#invalid) return "none";
     if (this.#search) return this.#search(query);
+    const reads = this.#root.search_reads;
     const values: Partial<Record<keyof T, ListSearchValue>> = {};
     for (const key of this.#root.columns_visible) {
+      if (reads && !reads.has(key)) continue;
       const column = this.#root.columns.get(key)!;
+      //Inline for plain values, as every cell of every row is read at every search
       const raw = this.#values[key];
-      const value = column.search_value
-        ? column.search_value(raw)
-        : list_search_plain(raw);
+      const source = column.search_value ? column.search_value(raw) : raw;
+      const value = state.is.state(source)
+        ? this.#search_follow(column, source)
+        : column.search_value
+          ? (source as ListSearchValue)
+          : list_search_plain_value(source);
       //An enum value is shown by its name, which the search text matches
       values[key] =
         column.type === "enum" &&
@@ -630,10 +649,51 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
           ? { value, text: column.choices[value]?.name ?? String(value) }
           : value;
     }
-    const key = list_search_plain(this.#key_text);
+    const text = this.#key_text;
+    const key =
+      reads || text === undefined
+        ? undefined
+        : state.is.state(text)
+          ? this.#search_follow(undefined, text)
+          : text;
     return (
       query.match(values, typeof key === "string" ? key : undefined) ?? "none"
     );
+  }
+
+  /**The value of a state the search reads of a column, or of the key field without a column, the row follows the state and answers again when its value changes */
+  #search_follow(
+    column: ListColumnOptions<any, Base> | undefined,
+    source: State<unknown>,
+  ): ListSearchValue {
+    const read = (result: StateResult<unknown> | undefined) =>
+      result?.ok ? list_search_read(column, result.value) : undefined;
+    let seen = read(source.rsync ? source.get?.() : undefined);
+    //A state gives its value right away when the row is in the row box, so only a value other than the one read is a change
+    (this.#search_subs ??= []).push(
+      this.attach_state(source, (result) => {
+        const value = read(result);
+        if (Object.is(value, seen)) return;
+        seen = value;
+        this.#search_changed();
+      }),
+    );
+    return seen;
+  }
+
+  /**A state the answer of the row read changed, or its data while it was held, the list has it answer again at a frame */
+  #search_changed() {
+    if (this.#search_stale) return;
+    this.#search_stale = true;
+    this.#root.live_changed(this);
+  }
+
+  /**Answers the search again after a state the answer read changed, true when that showed or hid the row */
+  search_settle(): boolean {
+    if (!this.#search_stale) return false;
+    const hidden = this.#hidden;
+    this.search_apply();
+    return hidden !== this.#hidden;
   }
 
   /**Opens the row through the root when the search found something below it, or closes a row the search opened once it no longer does */
@@ -684,8 +744,8 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     this.#group?.sort_update();
   }
 
-  /**The rows the row is placed among, the group of its parent */
-  get sort_group(): ListRowGroup<R, T, A, S> {
+  /**The rows the row is among, the group of its parent */
+  get parent_group(): ListRowGroup<R, T, A, S> {
     return this.#parent.group as ListRowGroup<R, T, A, S>;
   }
 
@@ -723,11 +783,11 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
         const now = source.rsync ? source.get?.() : undefined;
         return now?.ok ? list_sort_value(sorted.column, now.value) : undefined;
       });
-    if (!sort_changed && sort && this.#root.sort_held(this)) {
+    if (!sort_changed && sort && this.#root.held(this)) {
       this.#sort_next = list_sort_same(values, this.sort_values)
         ? undefined
         : values;
-      if (this.#sort_next) this.#root.sort_changed(this);
+      if (this.#sort_next) this.#root.live_changed(this);
     } else {
       this.sort_values = values;
       this.#sort_next = undefined;
@@ -753,7 +813,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     const next = [...latest];
     next[index] = value;
     this.#sort_next = next;
-    this.#root.sort_changed(this);
+    this.#root.live_changed(this);
   }
 
   //      _____   ______          _______

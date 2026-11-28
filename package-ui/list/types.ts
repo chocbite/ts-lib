@@ -67,9 +67,10 @@ export interface ListColumnOptions<V, C extends Base> {
   /**Applies the value to the field */
   field_apply(field: C, value: V): void;
   /**The value of the column the search of the list looks at, for values it can not read itself, like an object a node field shows
-   * Without it a string, number or boolean is used as it is, a sync state of one by its value, and anything else is left out
-   * Strings and numbers are matched as text, return undefined to leave the column out of the search */
-  search_value?(value: V): ListSearchValue;
+   * Without it a string, number or boolean is used as it is, a state of one by its value, and anything else is left out
+   * Strings and numbers are matched as text, return undefined to leave the column out of the search
+   * Return a state to search its value while it changes, the row is searched again at the next frame, an error of the state is no value */
+  search_value?(value: V): StateOrVal<ListSearchValue>;
   /**Whether the user can sort the rows by the column, true by default for a column with a type or a sort_value, see the sort input of the list */
   sortable?: boolean;
   /**The value of the column the list sorts by, for values it can not read itself or should not sort by what it shows, like a level shown by its name sorted by its rank
@@ -142,13 +143,15 @@ export interface ListRoot<
   search?: ListSearchQuery;
   /**The columns the rows are sorted by, undefined while the list does not sort, the rows are then in the order of the data */
   sort?: readonly ListSortColumn<keyof T>[];
+  /**The columns the search reads while it has no text, those of its conditions, undefined while it has text, it then reads every column and the key field text */
+  search_reads?: ReadonlySet<PropertyKey>;
   /**The row with the focus and the rows it is below, they keep their place in the row box while rows move around them, so the focus stays */
-  readonly sort_focus: ReadonlySet<ListRow<R, T, A, S>>;
-  /**Whether a placed row keeps the values it is sorted by when they change, while a pointer is pressed on the list or the focus is in it or below it
-   * Its new values wait until it is let go, so the row does not move away under the user, see sort_changed */
-  sort_held(row: ListRow<R, T, A, S>): boolean;
-  /**Tells the list the row has values it is not placed with yet, from a state it follows or held, the list places it once a frame when it is not held */
-  sort_changed(row: ListRow<R, T, A, S>): void;
+  readonly focus_rows: ReadonlySet<ListRow<R, T, A, S>>;
+  /**Whether a row in the row box keeps how it is sorted and searched when its values change, while a pointer is pressed on the list or the focus is in it or below it
+   * The changes wait until it is let go, so the row does not move away or disappear under the user, see live_changed */
+  held(row: ListRow<R, T, A, S>): boolean;
+  /**Tells the list the row has values it is not sorted or searched by yet, from a state it follows or while held, the list applies them once a frame when it is not held */
+  live_changed(row: ListRow<R, T, A, S>): void;
   /**Runs the function with the rows the search opens waiting, they open breadth first once the outermost hold ends, see search_queue */
   search_hold<F>(func: () => F): F;
   /**Opens a row the search found something below, once the running hold ends or right away without one, breadth first and a limited amount at a time */

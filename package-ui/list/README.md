@@ -227,7 +227,7 @@ Each row answers with its `search` row option, a function of the query that give
 
 A row that matches is shown as it is, its sub rows are not filtered when it is open.
 
-A row without the option matches when the text is in one of its values or in its key field text, which are highlighted, and the search never opens it. Strings and numbers are matched as text, a sync state by its value, and anything else only through the `search_value(value)` option of its column, which gives a string or number for it, like the name of an object a node field shows. The value of an enum column with `choices` is matched by the name of its choice.
+A row without the option matches when the text is in one of its values or in its key field text, which are highlighted, and the search never opens it. Strings and numbers are matched as text, a state by its value, and anything else only through the `search_value(value)` option of its column, which gives a string or number for it, or a state of one, like the name of an object a node field shows. States are followed while the list searches, see [Live values](#live-values). The value of an enum column with `choices` is matched by the name of its choice.
 
 A value can also be given as `{ value, text }`, a value shown as a text: the search text matches the text and conditions check the value, the way an enum value is shown by its name.
 
@@ -259,7 +259,24 @@ list.container(
 
 An answer can also give the columns itself, `{ columns: ["name"], key: true }`. A row opened for what is below it highlights nothing.
 
-The rows answer again when the text or their data changes, not when a value state changes.
+### Live values
+
+A row without a `search` option follows the states it reads while the list searches, and answers again at the next frame when one changes, so it shows or hides and its highlights move:
+
+- a value given as a state, in a column without `search_value`, by the value of the state;
+- a state returned by `search_value`;
+- the text of the key field given as a state, while the search has text.
+
+While the search has no text, a row reads only the columns of the conditions, so it follows only their states. An error of a state, or an async state without a value yet, is no value. The list stops following the states once the search ends.
+
+A row with a `search` option answers again when the text or its data changes, the list can not see what the answer reads.
+
+Rows do not disappear or show up under the user, the same way as sorted rows do not move, see [Live sorting](#live-sorting):
+
+- **The row with the focus** keeps its answer, so it stays shown while the user types in it, until the focus leaves it. A change of its data waits too.
+- **While a pointer is pressed** anywhere on the list, no row shows or hides until it is let go.
+
+A changed search applies to every row at once. The changes of states are applied once a frame, together with the sort, with the same wait after a slow frame.
 
 ### Rows the search opens
 
@@ -449,12 +466,12 @@ list.column({
 });
 ```
 
-### Live values
+### Live sorting
 
 A row follows the states it sorts by while the list sorts by them, and moves to its new place at the next frame:
 
-- a value given as a state, in a column without `search_value`, by the value of the state;
-- a state returned by `sort_value`, for values that are not states themselves or should sort by something else;
+- a value given as a state, in a column without `sort_value` or `search_value`, by the value of the state;
+- a state returned by `sort_value`, for values that are not states themselves or should sort by something else, or else by `search_value`;
 - the text of the key field given as a state.
 
 An error of a state, or an async state without a value yet, sorts as empty. Plain values are read when the data or the sort changes, so a list without states follows nothing. The list stops following a state once it no longer sorts by its column.
