@@ -33,6 +33,15 @@ list-dragfield {
       content: "\e945";
     }
   }
+
+  //While the list sorts, the sort decides the order, the dimmed handles show the rows can be moved once it stops
+  .sorted list-row.movable > div > & {
+    cursor: default;
+
+    &::before {
+      opacity: 0.3;
+    }
+  }
 }
 
 //Rows being dragged are dimmed where they are until the move comes back from the state

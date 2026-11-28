@@ -2,10 +2,14 @@ import list from "@chocbite/ts-lib-ui/list";
 import { array_from_length } from "@chocbite/ts-lib/common";
 import { ok } from "@chocbite/ts-lib/result";
 import state from "@chocbite/ts-lib/state";
-import { box, controls, row, section } from "../../../helpers";
+import { box, code, controls, row, section } from "../../../helpers";
+//The page shows its own code under each section
+import source from "./basics.ts?raw";
 
+//#region words
 const WORDS = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf"];
 const word = (i: number) => WORDS[i % WORDS.length];
+//#endregion
 
 //      ____           _____ _____ _____
 //     |  _ \   /\    / ____|_   _/ ____|
@@ -18,6 +22,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
     "Basic",
     "Header, resizable columns and hover of rows, selection has its own sections below",
   );
+  //#region basic
   const rows = state.ok_w(array_from_length(10, (i) => i));
   controls(sec, {
     "10 rows": () => rows.set_ok(array_from_length(10, (i) => i)),
@@ -52,6 +57,8 @@ const word = (i: number) => WORDS[i % WORDS.length];
       },
     ),
   );
+  //#endregion
+  code(sec, source, "basic", "words");
 }
 
 //      _____ _____ ____________  _____
@@ -65,6 +72,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
     "Sizes",
     "The same headless list in different widths, does the text and padding fit",
   );
+  //#region sizes
   const sizes = row(sec);
   const rows = state.ok_w(array_from_length(5, (i) => i));
   for (const width of ["8rem", "16rem", "32rem"])
@@ -78,6 +86,8 @@ const word = (i: number) => WORDS[i % WORDS.length];
         { columns: { name: list.column_string("Name") }, rows },
       ),
     );
+  //#endregion
+  code(sec, source, "sizes", "words");
 }
 
 //      _      ____  _   _  _____
@@ -91,6 +101,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
     "Long text",
     "Long titles and values in narrow columns, how do they clip",
   );
+  //#region long_text
   sec.appendChild(
     list.container(
       {
@@ -119,6 +130,8 @@ const word = (i: number) => WORDS[i % WORDS.length];
       },
     ),
   );
+  //#endregion
+  code(sec, source, "long_text", "words");
 }
 
 //         _      _____ _____ _   _
@@ -132,6 +145,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
     "Alignment",
     "The align option of a column moves its title and fields, center is the default. Text, number and node fields follow it, form fields do not. In the narrow list long values wrap, the lines should follow the alignment too",
   );
+  //#region alignment
   sec.appendChild(
     list.container(
       {
@@ -188,6 +202,8 @@ const word = (i: number) => WORDS[i % WORDS.length];
       },
     ),
   );
+  //#endregion
+  code(sec, source, "alignment", "words");
 }
 
 //       ____  _____  _____  ______ _____
@@ -201,6 +217,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
     "Column order",
     "Declared A, B, C with order 3, 1, unset, shown as B, C, A (unset uses its position). The buttons replace the columns, existing rows must follow",
   );
+  //#region column_order
   const text_column = (title: string, order?: number) =>
     list.column({
       title,
@@ -251,6 +268,8 @@ const word = (i: number) => WORDS[i % WORDS.length];
       }),
   });
   sec.appendChild(container);
+  //#endregion
+  code(sec, source, "column_order");
 }
 
 //     __  __          _   ___     __
@@ -264,6 +283,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
     "Many rows",
     "Press the button for 10000 rows in a 20rem high box, how does scrolling feel",
   );
+  //#region many_rows
   const rows = state.ok_w<number[]>([]);
   controls(sec, {
     "10000 rows": () => rows.set_ok(array_from_length(10000, (i) => i)),
@@ -287,4 +307,6 @@ const word = (i: number) => WORDS[i % WORDS.length];
       },
     ),
   );
+  //#endregion
+  code(sec, source, "many_rows", "words");
 }

@@ -46,5 +46,11 @@ export type {
   ListSearchValue,
   ListSearchValues,
 } from "./search";
+export type {
+  ListSort,
+  ListSortDirection,
+  ListSortKey,
+  ListSortValue,
+} from "./sort";
 
 export default list;

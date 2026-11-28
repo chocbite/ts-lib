@@ -74,7 +74,12 @@ list-keyfield {
     margin-right: var(--list-key-indent-space);
     height: 100%;
     position: relative;
-    border-right: 1px solid;
+    border-right: 1px solid var(--list-colors-border-column);
+
+    //The tree line of the depth ended above, the row at that depth is the last of its parent
+    &.end {
+      border-right-color: transparent;
+    }
   }
 
   //A locked row can not be opened or closed by the user, so it has no arrow, the tree lines of the opener show instead
@@ -107,19 +112,10 @@ list-keyfield {
       top: 0;
       border-right: 1px solid var(--list-colors-border-column);
 
+      //The last of a parent, the last row the search shows or an error, unless an add row follows, which always is
       list-addrow > &,
-      div:not(.addrow) > list-rowserror > &,
-      list-row:not(.addrow) > list-rowserror > &,
-      list-row:not(.addrow)
-        > span
-        > list-row:nth-last-child(1 of :not(.search-hidden))
-        > div
-        > &,
-      div:not(.addrow)
-        > div
-        > list-row:nth-last-child(1 of :not(.search-hidden))
-        > div
-        > & {
+      list-rowserror.last > &,
+      list-row.last > div > & {
         height: 50%;
       }
     }

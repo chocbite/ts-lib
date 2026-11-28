@@ -97,10 +97,11 @@ class ContextMenuSub extends LabelLine {
     this.#is_open = true;
   }
 
-  /**Closes menu by calling parent*/
-  close() {
+  /**Closes menu by calling parent
+   * @param refocus whether the line takes the focus from the closed menu*/
+  close(refocus = true) {
     if (!this.#is_open) return;
-    this.focus();
+    if (refocus) this.focus();
     (this.parentElement as ContextMenu | null)?.submenu_opened(undefined);
     this.#menu?.remove();
     this.#is_open = false;
@@ -112,10 +113,11 @@ class ContextMenuSub extends LabelLine {
     this.close();
   }
 
-  /**Closes the context menu up the tree to the root*/
-  close_up() {
-    this.close();
-    (this.parentElement as ContextMenu | null)?.close_up();
+  /**Closes the context menu up the tree to the root
+   * @param refocus whether the focus goes back to the element from before the menu, false when the focus moved to another element*/
+  close_up(refocus = true) {
+    this.close(refocus);
+    (this.parentElement as ContextMenu | null)?.close_up(refocus);
   }
 }
 define_element(ContextMenuSub);

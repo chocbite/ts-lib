@@ -50,3 +50,47 @@ export function controls(
 
 /**An error for showing on a page, with its own kind, the nice text is what elements show, the message the details*/
 export const demo_error = (nice: string, message: string = nice) => new NiceError(Symbol(nice), message);
+
+/**Adds a folded block with parts of the source of the page, so the code of what a section shows is next to it
+ * A part is the lines between `//#region name` and `//#endregion`, regions inside it are shown without their marker lines
+ * @param source the source of the page, imported with ?raw, like `import source from "./sort.ts?raw"`
+ * @param regions names of the parts, shown one after the other, like the code of the section and then the helpers it calls*/
+export function code(
+  parent: HTMLElement,
+  source: string,
+  ...regions: string[]
+): HTMLElement {
+  const details = parent.appendChild(document.createElement("details"));
+  details.className = "dev-code";
+  details.appendChild(document.createElement("summary")).textContent = "Code";
+  details.appendChild(document.createElement("pre")).textContent = regions
+    .map((name) => region(source, name))
+    .join("\n\n");
+  return details;
+}
+
+/**The lines of a region of the source, without the indent they share */
+function region(source: string, name: string): string {
+  const lines = source.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim() === `//#region ${name}`);
+  if (start < 0)
+    throw new Error(`No //#region ${name} in the source of the page`);
+  const found: string[] = [];
+  let depth = 1;
+  for (const line of lines.slice(start + 1)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("//#region")) depth++;
+    else if (trimmed.startsWith("//#endregion")) depth--;
+    else found.push(line);
+    if (depth === 0) break;
+  }
+  const indent = Math.min(
+    ...found
+      .filter((line) => line.trim())
+      .map((line) => line.length - line.trimStart().length),
+  );
+  return found
+    .map((line) => line.slice(indent))
+    .join("\n")
+    .trim();
+}

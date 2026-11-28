@@ -587,8 +587,13 @@ describe("List search menu", () => {
     ]);
     choose("Search columns");
     expect(column_search.get().value).toBe(true);
-    right_click(header_cells(container)[0]);
+    //The title has the lines sorting by its column in front
+    right_click(
+      header_cells(container)[0].querySelector(":scope > div > span")!,
+    );
     expect(texts()).toEqual([
+      "Sort A to Z",
+      "Sort Z to A",
       "Hide column search",
       "Advanced search…",
       "Clear search",

@@ -27,6 +27,7 @@ Inputs:
 - `selected`: the keys of the selected rows, with the selection configuration, see [Selection](#selection).
 - `search` and `search_bar`: the text the rows are searched for, and a search bar above the list, see [Search](#search).
 - `filter` and `column_search`: conditions on the values of the columns, and the cells under the titles that edit them, see [Column search](#column-search).
+- `sort`: the columns the rows are sorted by, see [Sort](#sort).
 - `access`, like every element.
 
 ```ts
@@ -113,7 +114,7 @@ A list with sub rows, multi mode selection or `search_menu` has a context menu o
 2. In multi mode, "Select all" and "Deselect all".
 3. With `search_menu`, the lines of the search, see [The search menu](#the-search-menu).
 
-It opens for a right click on any part of the list without a menu of its own: the headers, the search bar and the cells of the column search, their text inputs included, the space below the rows, and a sub row without a menu, like an invalid one. Rows put their own lines in front of it, see [Row menu](#row-menu). A list with none of these still takes the right clicks on it, the menu has no lines then and nothing opens, so the menu of the browser never opens on a list.
+It opens for a right click on any part of the list without a menu of its own: the headers, the titles with the lines of the sort in front, see [Sort](#sort), the search bar and the cells of the column search, their text inputs included, the space below the rows, a sub row without a menu, like an invalid one, and the add rows and error rows of sub rows. Rows put their own lines in front of it, see [Row menu](#row-menu). A list with none of these still takes the right clicks on it, the menu has no lines then and nothing opens, so the menu of the browser never opens on a list.
 
 ## Selection
 
@@ -271,7 +272,7 @@ The rows answer again when the text or their data changes, not when a value stat
 - Hidden rows leave the selection like rows that are closed away, their keys stay in the state and show as selected again when the search clears. Select all selects only the rows that are shown.
 - The arrow keys and open all skip them, and alt with the arrow keys moves a row past them.
 - Invalid rows are hidden while searching, and "No matches" shows while nothing matches.
-- The rows that are shown keep alternating their backgrounds.
+- The rows that are shown keep alternating their backgrounds, see [Look](#look).
 
 ### Column search
 
@@ -389,6 +390,103 @@ A condition is a row: a dropdown of the columns with a type, a dropdown of the o
 
 It edits a copy: Apply, or enter in a value, writes the filter and closes, Cancel, escape and the close button close without changing it. It is a modal panel of `composition` in the document of the list, and gives the focus back to where it was when it closes. The panel fits the dialog until the user sizes it, then only the conditions scroll and the buttons stay at its bottom. A read only filter state does not open it.
 
+## Sort
+
+The `sort` input is the columns the rows are sorted by, an input the user changes, like the search:
+
+- **A fixed value** is where the sort starts, the titles change it.
+- **A writable state** is written when the user sorts, so the app can store it.
+- **A read only state** is only followed, the titles do not sort and their menus have no sort lines.
+- **Not given**, the rows start in the order of the data.
+
+It is plain JSON. The first column sorts the rows, each next one sorts the rows the ones before it find equal, and rows every column finds equal keep the order of the data, in both directions. An empty array shows the rows in the order of the data. Columns the list does not have or can not sort by are left out, and a column given again counts once:
+
+```ts
+const sort = state.ok_w<ListSort>([
+  { column: "city", direction: "asc" },
+  { column: "age", direction: "desc" },
+]);
+list.container(config, { columns, rows: users, sort });
+```
+
+The user sorts with the titles:
+
+- **A click on a title** sorts by its column alone, A to Z. A click on the title of the column the list sorts by alone turns it to Z to A, the next shows the order of the data again.
+- **A shift click** adds the column after the columns that sort, a shift click on a column that sorts turns it, and after Z to A leaves it out.
+- **The menu of a title** has "Sort A to Z" and "Sort Z to A", "Then sort A to Z" and "Then sort Z to A" while another column sorts, which put the column last, and "Clear sort" while the list sorts. A number column says 1 to 9 and 9 to 1. The lines come in front of the [menu of the list](#the-menu-of-the-list).
+- **The icon after a title** shows the direction, `icon_sort_a_z_rounded` and `icon_sort_z_a_rounded`, or the digits of `icon_sort_1_9_rounded` and `icon_sort_9_1_rounded` for a number column. While several columns sort, it shows the place of the column, 1, 2 and so on.
+
+A headless list has no titles, the app sorts it with the input.
+
+### The key field
+
+In a list with sub rows the key field sorts by its text, as a string, with the column name `#key`. A key of a column can not start with `#` without quotes, so it is no column. The header of the key column sorts like a title, the open all and close all buttons in it do not sort. In a list without sub rows, which has no key field, `#key` is left out.
+
+```ts
+const sort = state.ok_w<ListSort>([
+  { column: "#key", direction: "asc" },
+  { column: "size", direction: "desc" },
+]);
+```
+
+### What it sorts by
+
+A column can be sorted when it has a `type` or a `sort_value`, `sortable` on the column overrides that. A row sorts by the `sort_value(value)` of the column, else by its `search_value(value)`, else by the value as the search reads it, see [What matches](#what-matches):
+
+- Strings in the order of the language, with the numbers in them by number, so `item 2` comes before `item 10`. Case only decides between strings that are otherwise the same.
+- Numbers by number, and false before true.
+- An enum value by the name of its choice, so the choices sort alphabetically.
+- A value shown as a text, `{ value, text }`, by its text, as that is what the user sees, and in a number column by its value, so `"1.5 kW"` sorts by `1500`.
+- An empty value, `undefined`, `null`, `NaN` or `""`, comes before every other value, so first A to Z and last Z to A. An invalid row has no values, it sorts as empty.
+
+```ts
+list.column({
+  title: "Level",
+  field_gen: () => list.text_field(),
+  field_apply: (field, level: Level) => (field.text = level.name),
+  //Sorted by its rank, not by its name
+  sort_value: (level) => level.rank,
+});
+```
+
+### Live values
+
+A row follows the states it sorts by while the list sorts by them, and moves to its new place at the next frame:
+
+- a value given as a state, in a column without `search_value`, by the value of the state;
+- a state returned by `sort_value`, for values that are not states themselves or should sort by something else;
+- the text of the key field given as a state.
+
+An error of a state, or an async state without a value yet, sorts as empty. Plain values are read when the data or the sort changes, so a list without states follows nothing. The list stops following a state once it no longer sorts by its column.
+
+```ts
+list.column({
+  title: "Load",
+  type: "number",
+  field_gen: () => list.number_field(),
+  //The field shows the state, the list sorts by it, both follow it
+  field_apply: (field, load: State<number>) =>
+    field.attach_state_to_prop("number", load, () => some(NaN)),
+});
+```
+
+The rows do not move away under the user:
+
+- **The row with the focus**, like a row with an input the user types in, stays where it was sorted and keeps its old values in the sort, the other rows still move past it. It moves once the focus leaves it. The rows it is below stay too.
+- **While a pointer is pressed** anywhere on the list, no row moves, so a click or a long press lands on the row it started on. The rows move once it is let go.
+
+A change of the data of such a row waits the same way. A changed sort applies to every row at once.
+
+Changed rows are placed once a frame, together. Placing rows makes the browser restyle every row of the list, on a list of thousands of rows that takes several frames. When placing took longer than about three frames, the list waits four times as long before it places rows again, so it uses at most about a quarter of the time and the page keeps reacting. With 5000 rows and 500 changes a second it places the rows about twice a second on a desktop computer, a slower computer places them less often.
+
+### Sorted rows
+
+- Sub rows are sorted inside their row by the same columns, a row moves with its sub rows.
+- The arrow keys, shift click selection, open all and the tree lines follow the order shown. The rows alternate their backgrounds in the order shown, see [Look](#look).
+- A row added to or changed in an array state goes to its place, the other rows stay where they are.
+- Rows can not be moved while the list sorts, as the sort decides their order. Their handles are dimmed, see [Reorder](#reorder).
+- A row with the focus in it, or in a row below it, is never taken out of the row box when the rows move, the other rows move around it, so it keeps the focus.
+
 ## Reorder
 
 The `reorder` option adds a column of drag handles in front of the rows, before the selection column. Rows are moved by dragging their handle, or with alt and arrow up or down in the key field or selection cell.
@@ -409,6 +507,7 @@ list.container(
 ```
 
 - Only rows in a writable array state can be moved, they show a handle. Rows of a plain array or a read only state have an empty handle cell.
+- While the list sorts, the handles are dimmed and nothing moves rows, the sort decides the order, see [Sort](#sort).
 - Like the selection, the list only writes the moves to the rows states, the rows move when the states give the change back. A rejected write leaves the rows where they are and shows the reason at the row, like the form elements do.
 - A drop goes before or after a row, or into an openable row as its last sub rows. Dropping after an open row puts the rows first in its sub rows. Hovering into a closed row opens it after a moment, and a drop into it opens it. Below the last row drops at the end. Escape cancels a drag.
 - Inside one parent a move is one `move` write. Moving to another parent or list first inserts into the target and then removes from the source, so a failed write can leave a row in both places but never loses it. If the app removes rows itself when they are added somewhere else, `no_remove: true` on the list the rows are dragged from makes it only insert.
@@ -419,4 +518,4 @@ list.container(
 
 ## Look
 
-Selected rows get the `selected` class and the theme variables `list.colors.background.row_selected` and `row_selected_hover`. The cells the search found its text in are covered by `list.colors.background.found`, see through so the background of the row shows under it. The radio buttons, checkboxes and drag handles are glyphs of the bundled Material icon font, colored by `list.colors.icon.check` and `list.colors.icon.drag`. The drop line, the box around a row dropped into and the focus use `list.colors.focus.normal`. Dragged rows are dimmed until the move comes back from the state.
+The rows alternate their backgrounds, `list.colors.background.row_odd` and `row_even`, over every row shown in the order shown, sub rows included, so a parent and its first sub row never look alike. Selected rows get the `selected` class and the theme variables `list.colors.background.row_selected` and `row_selected_hover`. The cells the search found its text in are covered by `list.colors.background.found`, see through so the background of the row shows under it. The radio buttons, checkboxes and drag handles are glyphs of the bundled Material icon font, colored by `list.colors.icon.check` and `list.colors.icon.drag`. The drop line, the box around a row dropped into and the focus use `list.colors.focus.normal`. Dragged rows are dimmed until the move comes back from the state.

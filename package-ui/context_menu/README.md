@@ -194,6 +194,11 @@ ctm.summon(menu, { element: button });
 ctm.summon(menu, { element: button, dont_cover: true });
 ```
 
+An open menu has the focus. It closes when the focus leaves it, a line is chosen, or escape is pressed:
+
+- Escape, a chosen line, or the focus leaving to no element gives the focus back to the element that had it before the menu opened.
+- The focus moved to another element, like a click into an input beside the menu or a `focus()` from code, stays on that element.
+
 ---
 
 ### `ctm.default(lines | false | undefined)`

@@ -51,10 +51,12 @@ export class Container extends Base {
     return menu;
   }
 
-  /**Closes open context menu */
-  close_up() {
+  /**Closes open context menu
+   * @param refocus whether the focus goes back to the element from before the menu, false when the focus moved to another element*/
+  close_up(refocus = true) {
     if (this.#replacing) return;
-    if (this.#active_element_buffer) {
+    if (!refocus) this.#active_element_buffer = undefined;
+    else if (this.#active_element_buffer) {
       this.#active_element_buffer.focus();
       if (
         (this.ownerDocument.activeElement as any) !==

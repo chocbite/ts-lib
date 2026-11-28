@@ -26,7 +26,11 @@ export class ListKeyField<A extends ListType<any>> extends Base {
   #icon?: SVGSVGElement;
   #tail?: HTMLElement;
 
-  constructor(parent: ListRowParent<A>) {
+  /**Indent of each depth above the row, its border is the tree line of that depth */
+  #indents: HTMLDivElement[];
+
+  /**@param lines whether the tree line of each depth above the row runs on past it, see line*/
+  constructor(parent: ListRowParent<A>, lines: readonly boolean[] = []) {
     super();
     this.tabIndex = 0;
     //Places the line down to the sub rows of an open row
@@ -45,14 +49,12 @@ export class ListKeyField<A extends ListType<any>> extends Base {
     const opener_box = document.createElement("span");
     opener_box.className = "opener";
     this.#opener = opener_box.appendChild(document.createElement("div"));
-    this.replaceChildren(
-      ...array_from_length(parent.depth, (i) => {
-        const div = document.createElement("div");
-        div.style.borderColor = "var(--i-" + i + ")";
-        return div;
-      }),
-      opener_box,
-    );
+    this.#indents = array_from_length(parent.depth, (i) => {
+      const div = document.createElement("div");
+      if (!lines[i]) div.className = "end";
+      return div;
+    });
+    this.replaceChildren(...this.#indents, opener_box);
 
     this.#opener.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -77,6 +79,11 @@ export class ListKeyField<A extends ListType<any>> extends Base {
     if (!value) return;
     this.#icon = value();
     this.insertBefore(this.#icon, this.#text_box ?? this.#tail ?? null);
+  }
+
+  /**Shows or hides the tree line of a depth above the row, it runs on past the row while the row at that depth has rows after it*/
+  line(depth: number, shown: boolean) {
+    this.#indents[depth]?.classList.toggle("end", !shown);
   }
 
   /**Element filling the rest of the key field, the button of an add row or the text of an error

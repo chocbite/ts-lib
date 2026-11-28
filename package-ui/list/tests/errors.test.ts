@@ -5,6 +5,7 @@ import list from "..";
 import type { ListType } from "../types";
 import type { ListTextField } from "../field";
 import { ListRow } from "../row";
+import { in_block } from "./rows";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);
@@ -18,8 +19,12 @@ const text_column = (title: string, field_gen: () => ListTextField) =>
     field_apply: (field, value: string) => (field.text = value),
   });
 
+/**The error text of the list, or of a row, its own or that of its sub rows after it */
 const error_of = (element: Element) =>
-  element.querySelector("list-error")?.textContent;
+  (element instanceof ListRow
+    ? in_block(element, "list-error")
+    : element.querySelector("list-error")
+  )?.textContent;
 
 const key_field_of = (row: Element) =>
   row.querySelector<HTMLElement>(":scope > div > list-keyfield")!;
@@ -212,14 +217,14 @@ describe("List invalid rows", () => {
     const { container, row } = sub_list([1], () => [10, 11], invalid);
     row(1).open = true;
     expect(row(1).amount_rows()).toBe(2);
-    expect(row(1).querySelector("list-addrow")).not.toBeNull();
+    expect(in_block(row(1), "list-addrow")).not.toBeNull();
 
     invalid.set(1, "Bad row");
     container.set({ rows: [1] });
     expect(row(1).open).toBe(false);
     expect(row(1).amount_rows()).toBe(0);
     expect(row(1).openable).toBe(false);
-    expect(row(1).querySelector("list-addrow")).toBeNull();
+    expect(in_block(row(1), "list-addrow")).toBeNull();
   });
 
   it("can be opened again after recovering", () => {
@@ -274,9 +279,7 @@ describe("List sub row state error", () => {
 
   it("continues the tree lines with a key field one level deeper", async () => {
     const { row } = await failing();
-    const key_field = row(1).querySelector(
-      ":scope > list-rowserror > list-keyfield",
-    )!;
+    const key_field = in_block(row(1), "list-rowserror > list-keyfield")!;
     expect(key_field.querySelectorAll(":scope > div").length).toBe(
       row(1).depth + 1,
     );

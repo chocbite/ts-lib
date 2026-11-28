@@ -324,7 +324,8 @@ export function list_search_query(
     : undefined;
 }
 
-const plain = (value: unknown): ListSearchValue =>
+/**The value the search reads from a value that is no state, a string, number or boolean as it is, nothing for anything else */
+export const list_search_plain_value = (value: unknown): ListSearchValue =>
   typeof value === "string" ||
   typeof value === "number" ||
   typeof value === "boolean"
@@ -333,9 +334,9 @@ const plain = (value: unknown): ListSearchValue =>
 
 /**The value the search reads from a value of a row, a string, number or boolean as it is, the value of a sync state of one, nothing for anything else */
 export function list_search_plain(value: unknown): ListSearchValue {
-  if (!state.is.state(value)) return plain(value);
+  if (!state.is.state(value)) return list_search_plain_value(value);
   const result = value.rsync ? value.get?.() : undefined;
-  return result?.ok ? plain(result.value) : undefined;
+  return result?.ok ? list_search_plain_value(result.value) : undefined;
 }
 
 //      ____          _____

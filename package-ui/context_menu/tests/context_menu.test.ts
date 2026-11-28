@@ -592,6 +592,45 @@ describe("Context menu options", () => {
     expect(menu.isConnected).toBe(false);
   });
 
+  it("focus moved to an element outside the menu stays there", () => {
+    const before = document.body.appendChild(document.createElement("button"));
+    const other = document.body.appendChild(document.createElement("input"));
+    before.focus();
+    const { menu, lines } = three();
+    ctm.summon(menu);
+    lines[0].focus();
+    other.focus();
+    expect(menu.isConnected).toBe(false);
+    expect(document.activeElement).toBe(other);
+  });
+
+  it("focus moved from an open submenu to an element outside stays there", () => {
+    const before = document.body.appendChild(document.createElement("button"));
+    const other = document.body.appendChild(document.createElement("input"));
+    before.focus();
+    const { menu: sub_menu, lines } = three();
+    const sub = ctm.sub({ text: "More", menu: sub_menu });
+    const menu = ctm.menu([sub]);
+    ctm.summon(menu);
+    (sub as unknown as HTMLElement).click();
+    lines[1].focus();
+    other.focus();
+    expect(menu.isConnected).toBe(false);
+    expect(sub_menu.isConnected).toBe(false);
+    expect(document.activeElement).toBe(other);
+  });
+
+  it("focus leaving the menu to no element goes back to the element from before the menu", () => {
+    const before = document.body.appendChild(document.createElement("button"));
+    before.focus();
+    const { menu, lines } = three();
+    ctm.summon(menu);
+    lines[0].focus();
+    lines[0].blur();
+    expect(menu.isConnected).toBe(false);
+    expect(document.activeElement).toBe(before);
+  });
+
   it("focus moving between lines keeps the menu open", () => {
     const { menu, lines } = three();
     ctm.summon(menu);

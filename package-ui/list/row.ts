@@ -7,8 +7,9 @@ import {
   type State,
   type StateInferSub,
   type StateOrVal,
+  type StateResult,
+  type StateSub,
 } from "@chocbite/ts-lib/state";
-import state_ui from "#state_ui";
 import { ListAddRow, type ListAddRowOptions } from "./add_row";
 import type { ListDragField } from "./drag";
 import { list_rows_error_update, ListError, type ListRowsError } from "./error";
@@ -23,10 +24,13 @@ import {
   type ListSearchValue,
 } from "./search";
 import { ListCheckField, type ListSelection } from "./selection";
+import { list_rows_shown, ListRowGroup } from "./group";
+import { list_sort_source, list_sort_value, type ListSortValue } from "./sort";
 import type {
+  ListColumnOptions,
   ListParentRows,
   ListRoot,
-  ListRowParent,
+  ListRowsParent,
   ListRowTransformer,
   ListType,
 } from "./types";
@@ -37,6 +41,17 @@ const not_selectable = () =>
   new NiceError(list_errors.NOT_SELECTABLE, "This row cannot be selected");
 
 export type ListSubRows<R> = () => StateOrVal<R[]>;
+
+/**The sub rows of a row without a group, shared so rows without sub rows make nothing */
+const NO_ROWS: readonly never[] = Object.freeze([]);
+/**Whether two lists of sort values are the same */
+const list_sort_same = (
+  a: readonly ListSortValue[],
+  b: readonly ListSortValue[],
+) => a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
+
+/**The sort values of a row while the list does not sort */
+const NO_VALUES: readonly never[] = Object.freeze([]);
 
 /**Key of the subscription of the opened state of a row */
 const OPENED = Symbol("opened");
@@ -63,7 +78,7 @@ export interface ListRowOptions<R, T extends {}, S extends boolean> {
 
 export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   extends Base
-  implements ListRowParent<A>
+  implements ListRowsParent<A>
 {
   static element_name() {
     return "row";
@@ -72,9 +87,13 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     return "list";
   }
   #root: ListRoot<R, T, A, S>;
-  #parent: ListRowParent<A>;
+  #parent: ListRowsParent<A>;
   #sub_rows?: ListSubRows<R>;
   readonly depth: number;
+  /**The sub rows, in the row box after the row, made once the row first has sub rows, see group */
+  #group?: ListRowGroup<R, T, A, S>;
+  /**Whether the row is the last its parent shows, its tree line ends in it */
+  #last = false;
   #key_field?: ListKeyField<A>;
   /**Drag handle cell, only with reorder */
   #drag?: ListDragField;
@@ -86,7 +105,6 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   /**Key of the row in the selection, undefined when the row can not be selected */
   selection_key?: unknown;
   #field_box: HTMLDivElement;
-  #child_box: HTMLSpanElement;
   #add_row?: ListAddRow<R, T, A, S>;
   #add_row_options?: ListAddRowOptions;
   /**Fields of the visible columns, the values are applied to them */
@@ -120,30 +138,30 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   #hidden = false;
   /**Opened by the search, closed again when the search no longer opens it */
   #search_opened = false;
-  #sub_row_menu = false;
   #state_sub?: StateInferSub<State<R[]>>;
   state!: ListParentRows<A>;
+  /**Values of the row by the columns of the sort of the list, the values it is placed with, empty while the list does not sort
+   * Read when the data or the sort changes and when a state the row follows for them changes, see sort_settle */
+  sort_values: readonly ListSortValue[] = NO_VALUES;
+  /**Values the row is not placed with yet, from a state it follows or held while it changed, the list places it with them at a frame, see sort_settle */
+  #sort_next?: readonly ListSortValue[];
+  /**Subscribers to the states the values of the row are read from, while the list sorts by them */
+  #sort_subs?: StateSub<any>[];
 
-  constructor(root: ListRoot<R, T, A, S>, parent: ListRowParent<A>, data: R) {
+  /**The row holds only its cells, its sub rows, error and add row follow it in the row box of the list, see ListRowGroup */
+  constructor(root: ListRoot<R, T, A, S>, parent: ListRowsParent<A>, data: R) {
     super();
     this.#root = root;
     this.#parent = parent;
     this.depth = parent.depth + 1;
-    this.style.setProperty("--i-" + this.depth, "var(--c)");
     if (this.#root.sub_rows) {
-      this.#key_field = new ListKeyField(this);
+      this.#key_field = new ListKeyField(this, parent.lines);
       if (this.#root.observer)
         this.#key_field.attach_to_intersect_observer(this.#root.observer);
     }
     this.#field_box = this.appendChild(document.createElement("div"));
-    this.#child_box = this.appendChild(document.createElement("span"));
     if (this.#root.reorder) this.#drag = this.#root.reorder.handle(this);
     if (this.#root.selection) this.#selection_setup(this.#root.selection);
-    //A right click on a sub row without its own menu reaches the child box before this row
-    if (this.#root.sub_rows)
-      this.#child_box.oncontextmenu = () => {
-        this.#sub_row_menu = true;
-      };
     this.#generate_fields();
     this.#show_cells(this.#cells);
 
@@ -192,8 +210,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     }
     this.#add_row?.columns_changed();
     this.#error?.columns_changed();
-    for (let i = 0; i < this.#child_box.childElementCount; i++)
-      (this.#child_box.children[i] as ListRow<R, T, A, S>).columns_changed();
+    for (const row of this.#children) row.columns_changed();
   }
 
   /**The error text of an invalid row after the tree lines, in the key field only without value columns, see place_after of the key field*/
@@ -244,26 +261,18 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     }
   }
 
-  /**The next or previous row of the same parent the search does not hide */
+  /**The next or previous row of the same parent in the order shown that the search does not hide */
   adjacent_shown(direction: 1 | -1): ListRow<R, T, A, S> | undefined {
-    const step = (element: Element) =>
-      direction > 0
-        ? element.nextElementSibling
-        : element.previousElementSibling;
-    let sibling = step(this);
-    while (sibling instanceof ListRow && sibling.#hidden)
-      sibling = step(sibling);
-    return sibling instanceof ListRow ? sibling : undefined;
+    const rows = this.#parent.group.shown;
+    return list_rows_shown(rows, rows.indexOf(this) + direction, direction);
   }
 
-  /**The first or last sub row the search does not hide */
+  /**The first or last sub row in the order shown that the search does not hide */
   #shown_sub_row(first: boolean): ListRow<R, T, A, S> | undefined {
-    let row = first
-      ? this.#child_box.firstElementChild
-      : this.#child_box.lastElementChild;
-    while (row instanceof ListRow && row.#hidden)
-      row = first ? row.nextElementSibling : row.previousElementSibling;
-    return row instanceof ListRow ? row : undefined;
+    const rows = this.#group?.shown ?? NO_ROWS;
+    return first
+      ? list_rows_shown(rows, 0, 1)
+      : list_rows_shown(rows, rows.length - 1, -1);
   }
 
   /**Focuses the cell used for keyboard navigation, the key field or else the checkbox */
@@ -354,6 +363,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     this.#values = row_options.values;
     this.#search = row_options.search;
     this.#key_text = row_options.key_field?.text;
+    this.#sort_values_update(false);
     this.#selectable = row_options.selectable ?? true;
     //Before the sub rows are refreshed, they are searched by how the search applies to them now
     const rows_mode = this.#rows_mode;
@@ -412,8 +422,8 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     if (!refreshed && this.#rows_mode !== rows_mode) this.#search_sub_rows();
 
     //Setup context menu, the lines of the row and the list in front of its own menu
+    //Its sub rows, add row and error are not in the row, a right click on one without a menu of its own reaches the list
     ctm.detach(this);
-    this.#sub_row_menu = false;
     //Open or close with the open all lines, select or deselect with the select all lines, then the search lines
     //Openable can be a state and rows open and close, the lines are made when the menu opens
     const root = this.#root;
@@ -426,15 +436,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
             row_options.context_menu,
           )
         : row_options.context_menu;
-    if (menu) {
-      const own = typeof menu === "function" ? menu : () => some(menu);
-      //A right click on a sub row without a menu of its own, like an invalid one, comes up through the box of the sub rows, it gets the menu of the list
-      ctm.attach(this, () => {
-        const from_sub_row = this.#sub_row_menu;
-        this.#sub_row_menu = false;
-        return from_sub_row ? root.menu() : own();
-      });
-    }
+    if (menu) ctm.attach(this, menu);
   }
 
   /**Replaces the fields with the text and removes everything else the row options gave */
@@ -450,12 +452,12 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     this.detach_state_from_prop("openable");
     this.openable = false;
     ctm.detach(this);
-    this.#sub_row_menu = false;
     if (!this.#invalid) {
       this.#invalid = new ListError();
       this.#show_invalid();
     }
     this.#invalid.text = text;
+    this.#sort_values_update(false);
     //Invalid rows are hidden while searching
     this.#search_find();
     this.#selection_update();
@@ -468,14 +470,31 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     this.#add_row_options = options;
     this.#add_row?.remove();
     this.#add_row = options
-      ? this.appendChild(
-          ListAddRow.create<
-            ListAddRow<R, T, A, S>,
-            [ListRoot<R, T, A, S>, ListRowParent<A>]
-          >(options, this.#root, this),
-        )
+      ? ListAddRow.create<
+          ListAddRow<R, T, A, S>,
+          [ListRoot<R, T, A, S>, ListRowsParent<A>]
+        >(options, this.#root, this)
       : undefined;
+    //Last in the block of the row, after the sub rows and the error
+    if (this.#add_row && this.parentElement)
+      (this.#error ?? this.#group?.end() ?? this).after(this.#add_row);
     this.classList.toggle("addrow", Boolean(options));
+    //With an add row below them none of the sub rows is the last
+    if (this.#group) this.#group.tail = Boolean(options);
+    this.#tail_update();
+  }
+
+  /**Shows the add row while the row is open, the error and add row are not in the row, so they are hidden with it while the search hides it
+   * An error without an add row after it is the last, its tree line ends in it*/
+  #tail_update() {
+    if (this.#add_row) {
+      this.#add_row.classList.toggle("closed", !this.open);
+      this.#add_row.classList.toggle("search-hidden", this.#hidden);
+    }
+    if (this.#error) {
+      this.#error.classList.toggle("search-hidden", this.#hidden);
+      this.#error.classList.toggle("last", !this.#add_row);
+    }
   }
 
   //       ____  _____  ______ _   _ _____ _   _  _____
@@ -523,7 +542,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   /**Shows or removes the sub rows, without writing the opened state */
   #show_open(open: boolean) {
     if (!this.openable) return;
-    if (open && this.#child_box.childElementCount === 0) {
+    if (open && this.#children.length === 0) {
       const rows = this.#drop_rows ?? this.#sub_rows?.();
       this.#drop_rows = undefined;
       if (rows) this.rows = rows;
@@ -574,6 +593,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     if (hidden === this.#hidden) return;
     this.#hidden = hidden;
     this.classList.toggle("search-hidden", hidden);
+    this.#tail_update();
     this.#selection_update();
   }
 
@@ -646,8 +666,94 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   }
 
   #search_sub_rows() {
-    for (let row = this.first_sub_row; row; row = row.next_row)
-      row.search_apply();
+    //In the order shown, so the rows the search opens open from the top
+    for (const row of this.#group?.shown ?? NO_ROWS) row.search_apply();
+    this.#group?.last_update();
+  }
+
+  //       _____  ____  _____ _______
+  //      / ____|/ __ \|  __ \__   __|
+  //     | (___ | |  | | |__) | | |
+  //      \___ \| |  | |  _  /  | |
+  //      ____) | |__| | | \ \  | |
+  //     |_____/ \____/|_|  \_\ |_|
+
+  /**Reads the values of the row for a changed sort of the list, and sorts its sub rows by it */
+  sort_update() {
+    this.#sort_values_update(true);
+    this.#group?.sort_update();
+  }
+
+  /**The rows the row is placed among, the group of its parent */
+  get sort_group(): ListRowGroup<R, T, A, S> {
+    return this.#parent.group as ListRowGroup<R, T, A, S>;
+  }
+
+  /**Takes the values the row is not placed with yet as the values it is placed with, the list then places it, true when they sort differently */
+  sort_settle(): boolean {
+    const next = this.#sort_next;
+    if (!next) return false;
+    this.#sort_next = undefined;
+    const changed = !list_sort_same(next, this.sort_values);
+    this.sort_values = next;
+    return changed;
+  }
+
+  /**Reads the values of the row by the columns of the sort, the text of the key field for the key field, an invalid row has none, so it sorts as a row without values
+   * The row follows the states it reads values from while the list sorts by them, a held row keeps the values it is placed with until it is let go
+   * @param sort_changed whether the sort of the list changed, the values the row is placed with are then for other columns, so it is never held */
+  #sort_values_update(sort_changed: boolean) {
+    if (this.#sort_subs) {
+      for (const sub of this.#sort_subs) this.detach_state(sub);
+      this.#sort_subs = undefined;
+    }
+    const sort = this.#root.sort;
+    let values: readonly ListSortValue[] = NO_VALUES;
+    let follow: [number, State<unknown>][] | undefined;
+    if (sort && this.#invalid) values = sort.map(() => undefined);
+    else if (sort)
+      values = sort.map((sorted, i) => {
+        const source = list_sort_source(
+          sorted.column,
+          sorted.column ? this.#values[sorted.key] : this.#key_text,
+        );
+        if (!state.is.state(source))
+          return list_sort_value(sorted.column, source);
+        (follow ??= []).push([i, source]);
+        const now = source.rsync ? source.get?.() : undefined;
+        return now?.ok ? list_sort_value(sorted.column, now.value) : undefined;
+      });
+    if (!sort_changed && sort && this.#root.sort_held(this)) {
+      this.#sort_next = list_sort_same(values, this.sort_values)
+        ? undefined
+        : values;
+      if (this.#sort_next) this.#root.sort_changed(this);
+    } else {
+      this.sort_values = values;
+      this.#sort_next = undefined;
+    }
+    //Subscribed after the values are set, a state gives its value right away when the row is in the row box
+    if (follow)
+      this.#sort_subs = follow.map(([index, source]) =>
+        this.attach_state(source, (result) =>
+          this.#sort_live(index, sort![index].column, result),
+        ),
+      );
+  }
+
+  /**A state the row reads a value of the sort from changed, the list places the row with it at a frame */
+  #sort_live(
+    index: number,
+    column: ListColumnOptions<any, Base> | undefined,
+    result: StateResult<unknown>,
+  ) {
+    const value = result.ok ? list_sort_value(column, result.value) : undefined;
+    const latest = this.#sort_next ?? this.sort_values;
+    if (Object.is(latest[index], value)) return;
+    const next = [...latest];
+    next[index] = value;
+    this.#sort_next = next;
+    this.#root.sort_changed(this);
   }
 
   //      _____   ______          _______
@@ -657,18 +763,74 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   //     | | \ \| |__| | \  /\  /  ____) |
   //     |_|  \_\\____/   \/  \/  |_____/
 
+  /**Index of the row in the rows of its parent */
   get index(): number {
-    return Array.prototype.indexOf.call(this.parentElement!.children, this);
+    return this.#siblings.indexOf(this);
+  }
+
+  /**The rows of the parent of the row, it included */
+  get #siblings(): readonly ListRow<R, T, A, S>[] {
+    return this.#parent.group.rows;
+  }
+
+  /**The sub rows, in the order of the data */
+  get #children(): readonly ListRow<R, T, A, S>[] {
+    return this.#group?.rows ?? NO_ROWS;
+  }
+
+  /**The sub rows, made the first time, so a row that never has sub rows has none, which is most rows of most lists */
+  get group(): ListRowGroup<R, T, A, S> {
+    if (!this.#group) {
+      this.#group = new ListRowGroup<R, T, A, S>(
+        this.#root,
+        (data) => new ListRow<R, T, A, S>(this.#root, this, data),
+        { after: this },
+      );
+      this.#group.tail = Boolean(this.#add_row);
+    }
+    return this.#group;
   }
 
   amount_rows(rec: boolean = false): number {
-    let count = this.#child_box.childElementCount;
-    if (rec)
-      for (let i = 0; i < this.#child_box.childElementCount; i++)
-        count += (
-          this.#child_box.children[i] as ListRow<R, T, A, S>
-        ).amount_rows(true);
+    let count = this.#children.length;
+    if (rec) for (const row of this.#children) count += row.amount_rows(true);
     return count;
+  }
+
+  /**Whether the row is the last its parent shows, set by the rows of the parent, its tree line ends in it and the lines below it no longer run on */
+  set last(last: boolean) {
+    if (last === this.#last) return;
+    this.#last = last;
+    this.classList.toggle("last", last);
+    if (this.#root.sub_rows) this.#lines_below(this.depth, !last);
+  }
+
+  /**The lines above the row and its own, which runs on past its sub rows unless it is the last */
+  get lines(): readonly boolean[] {
+    return [...this.#parent.lines, !this.#last];
+  }
+
+  /**Shows or hides the tree line of a depth in everything below the row, it does not inherit, as the sub rows are not in the row */
+  #lines_below(depth: number, shown: boolean) {
+    for (const row of this.#children) {
+      row.#key_field?.line(depth, shown);
+      row.#lines_below(depth, shown);
+    }
+    this.#error?.line(depth, shown);
+    this.#add_row?.line(depth, shown);
+  }
+
+  /**Puts the row with what follows it, its sub rows, error and add row, into the node in the order they are shown, which takes them out of the row box */
+  block_nodes(into: DocumentFragment) {
+    into.append(this);
+    this.#group?.nodes(into);
+    if (this.#error) into.append(this.#error);
+    if (this.#add_row) into.append(this.#add_row);
+  }
+
+  /**The last node of the row and what follows it */
+  block_end(): ChildNode {
+    return this.#add_row ?? this.#error ?? this.#group?.end() ?? this;
   }
 
   set rows(rows: ListType<R>) {
@@ -685,14 +847,19 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
 
   #update_rows(rows: readonly R[], error?: string) {
     this.#error = list_rows_error_update(
-      this.#child_box,
+      //After the sub rows and before the add row, a row that is not in the row box yet brings it along
+      (element) => {
+        if (this.parentElement) (this.#group?.end() ?? this).after(element);
+      },
       this.#error,
       error,
       this.#root,
       this,
     );
     this.classList.toggle("open", rows.length > 0 || error !== undefined);
-    list_rows_apply(this.#root, this, this.#child_box, rows);
+    //A row that never had sub rows has nothing to remove
+    if (rows.length || this.#group) this.group.apply(rows);
+    this.#tail_update();
   }
 
   //       _____ ______ _      ______ _____ _______ _____ ____  _   _
@@ -812,18 +979,27 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
   }
 
   get next_row(): ListRow<R, T, A, S> | undefined {
-    const next = this.nextElementSibling;
-    return next instanceof ListRow ? next : undefined;
+    const rows = this.#siblings;
+    return rows[rows.indexOf(this) + 1];
   }
 
   get first_sub_row(): ListRow<R, T, A, S> | undefined {
-    const first = this.#child_box.firstElementChild;
-    return first instanceof ListRow ? first : undefined;
+    return this.#children[0];
   }
 
-  /**Whether the row has a handle and its parent rows can be written */
+  /**The sub rows in the order shown */
+  get sub_rows_list(): readonly ListRow<R, T, A, S>[] {
+    return this.#group?.shown ?? NO_ROWS;
+  }
+
+  /**The rows of the parent the row is in, the rows of the parent row or the top rows of the list */
+  get sibling_rows(): readonly ListRow<R, T, A, S>[] {
+    return this.#siblings;
+  }
+
+  /**Whether the row has a handle and its parent rows can be written, never while the list sorts, as the sort decides the order */
   get movable(): boolean {
-    return this.classList.contains("movable");
+    return this.classList.contains("movable") && !this.#root.sort;
   }
 
   /**Whether rows can be dropped into the row, it must be openable with sub rows in a writable state */
@@ -872,32 +1048,7 @@ export class ListRow<R, T extends {}, A extends ListType<R>, S extends boolean>
     if (this.selection_key !== undefined)
       selection.unregister(this.selection_key, this);
     this.selection_key = undefined;
-    for (let i = 0; i < this.#child_box.childElementCount; i++)
-      (this.#child_box.children[i] as ListRow<R, T, A, S>).selection_leave();
+    for (const row of this.#children) row.selection_leave();
   }
 }
 define_element(ListRow);
-
-/**Applies rows to a row box, removed rows leave the selection, which updates once after all changes
- * Rows the search opens wait until all rows are applied, so the search opens breadth first instead of deep into the first row */
-export function list_rows_apply<
-  R,
-  T extends {},
-  A extends ListType<R>,
-  S extends boolean,
->(
-  root: ListRoot<R, T, A, S>,
-  parent: ListRowParent<A>,
-  box: HTMLElement,
-  rows: readonly R[],
-) {
-  const apply = () =>
-    state_ui.a.apply(box, rows, {
-      create: (row) => new ListRow<R, T, A, S>(root, parent, row),
-      update: (element, row) => (element.data = row),
-      destroy: (element) => element.selection_leave(),
-    });
-  root.search_hold(() =>
-    root.selection ? root.selection.batch(apply) : apply(),
-  );
-}

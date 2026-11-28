@@ -5,6 +5,7 @@ import type {
   ListParentRows,
   ListRoot,
   ListRowParent,
+  ListRowsParent,
   ListType,
 } from "./types";
 
@@ -36,20 +37,25 @@ export class ListRowsError<A extends ListType<any>>
   }
 
   #text = new ListError();
-  #parent: ListRowParent<A>;
+  #parent: ListRowsParent<A>;
   #root: ListRoot<any, any, any, any>;
   #key_field?: ListKeyField<A>;
   readonly depth: number;
 
-  constructor(root: ListRoot<any, any, any, any>, parent: ListRowParent<A>) {
+  constructor(root: ListRoot<any, any, any, any>, parent: ListRowsParent<A>) {
     super();
     this.#parent = parent;
     this.#root = root;
     this.depth = parent.depth + 1;
     if (root.sub_rows) {
-      this.#key_field = this.appendChild(new ListKeyField(this));
+      this.#key_field = this.appendChild(new ListKeyField(this, parent.lines));
       this.columns_changed();
     } else this.appendChild(this.#text);
+  }
+
+  /**Shows or hides the tree line of a depth above the error, see line of the key field*/
+  line(depth: number, shown: boolean) {
+    this.#key_field?.line(depth, shown);
   }
 
   /**With sub rows the text goes after the tree lines, in the key field only without value columns*/
@@ -79,14 +85,15 @@ export class ListRowsError<A extends ListType<any>>
 }
 define_element(ListRowsError);
 
-/**Shows the text in an error element directly after the row box, removes the element when there is no text
+/**Shows the text in an error element, removes the element when there is no text
+ * @param place puts a new error element where it goes, after the rows of the parent
  * @returns the element to give next time, undefined when there is no text*/
 export function list_rows_error_update<A extends ListType<any>>(
-  row_box: Element,
+  place: (error: ListRowsError<A>) => void,
   current: ListRowsError<A> | undefined,
   text: string | undefined,
   root: ListRoot<any, any, any, any>,
-  parent: ListRowParent<A>,
+  parent: ListRowsParent<A>,
 ): ListRowsError<A> | undefined {
   if (text === undefined) {
     current?.remove();
@@ -94,8 +101,7 @@ export function list_rows_error_update<A extends ListType<any>>(
   }
   if (!current) {
     current = new ListRowsError(root, parent);
-    //Not in the row box, everything in there is a row
-    row_box.after(current);
+    place(current);
   }
   current.text = text;
   return current;

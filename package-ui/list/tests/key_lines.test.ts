@@ -1,9 +1,11 @@
 import { theme_init } from "#theme";
 import { ok, NiceError } from "@chocbite/ts-lib/result";
-import { state } from "@chocbite/ts-lib/state";
+import { state, type State } from "@chocbite/ts-lib/state";
 import { afterEach, describe, expect, it } from "vitest";
 import list from "..";
 import { ListKeyField, type ListKeyFieldOptions } from "../key_field";
+import type { ListRow } from "../row";
+import { ListAddRow } from "../add_row";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);
@@ -222,5 +224,159 @@ describe("List key field lines of an error instead of rows", () => {
     expect(error_line(errored(false, false))).toBeCloseTo(0.5, 1);
     document.body.replaceChildren();
     expect(error_line(errored(false, true))).toBeCloseTo(0.5, 1);
+  });
+});
+
+describe("List rows across levels", () => {
+  interface Node {
+    name: string;
+    sub?: Node[];
+    add?: boolean;
+  }
+  /**A tree with every row open, the add row options of a node add a row below its sub rows */
+  function open_tree(
+    rows: Node[] | State<Node[]>,
+    options: { add_row?: boolean; search?: string } = {},
+  ) {
+    const container = list.container(
+      {
+        transform: (node: Node) =>
+          ok({
+            openable: Boolean(node.sub),
+            opened: true,
+            sub_rows: () => node.sub ?? [],
+            add_row: node.add ? { text: "Add", on_add: () => {} } : undefined,
+            key_field: { text: node.name },
+            values: { name: node.name },
+          }),
+        sub_rows: true,
+        search_delay: 0,
+      },
+      {
+        columns: { name: list.column_string("Name") },
+        rows,
+        add_row: options.add_row ? { text: "Add", on_add: () => {} } : null,
+        search: options.search,
+      },
+    );
+    document.body.append(container);
+    return container;
+  }
+  const row_named = (container: HTMLElement, name: string) =>
+    [
+      ...container.querySelectorAll<ListRow<any, any, any, any>>("list-row"),
+    ].find((row) => row.label === name)!;
+  /**Whether the indent line of the level shows in the key field of the row, it is transparent where the line ended above */
+  const indent_line = (container: HTMLElement, name: string, level: number) => {
+    const key = row_named(container, name).querySelector("list-keyfield")!;
+    const indent = [...key.children].filter((e) => e.tagName === "DIV")[level];
+    return getComputedStyle(indent).borderRightColor !== "rgba(0, 0, 0, 0)";
+  };
+  const name_cell_background = (container: HTMLElement, name: string) =>
+    getComputedStyle(
+      row_named(container, name).querySelector(":scope > div > :last-child")!,
+    ).backgroundColor;
+
+  it("alternates the backgrounds over the rows in the order they are shown, sub rows included", () => {
+    const container = open_tree([
+      {
+        name: "a",
+        sub: [{ name: "a1" }, { name: "a2", sub: [{ name: "a21" }] }],
+      },
+      { name: "b" },
+    ]);
+    const order = ["a", "a1", "a2", "a21", "b"];
+    expect(
+      [...container.querySelectorAll<ListRow<any, any, any, any>>("list-row")]
+        .filter((row) => row.anchor?.checkVisibility())
+        .map((row) => row.label),
+    ).toEqual(order);
+    for (let i = 1; i < order.length; i++)
+      expect(name_cell_background(container, order[i])).not.toBe(
+        name_cell_background(container, order[i - 1]),
+      );
+  });
+
+  it("runs the line of a level on past the sub rows of a row with rows after it, and ends it below the last", () => {
+    const container = open_tree([
+      { name: "a", sub: [{ name: "a1", sub: [{ name: "a11" }] }] },
+      { name: "b", sub: [{ name: "b1", sub: [{ name: "b11" }] }] },
+    ]);
+    expect(indent_line(container, "a11", 0)).toBe(true);
+    expect(indent_line(container, "a11", 1)).toBe(false);
+    expect(indent_line(container, "b11", 0)).toBe(false);
+    expect(indent_line(container, "b11", 1)).toBe(false);
+  });
+
+  it("runs the line on to the add row below the last row", () => {
+    const container = open_tree(
+      [{ name: "a", add: true, sub: [{ name: "a1", sub: [{ name: "a11" }] }] }],
+      { add_row: true },
+    );
+    expect(indent_line(container, "a11", 0)).toBe(true);
+    expect(indent_line(container, "a11", 1)).toBe(true);
+  });
+
+  it("ends the line below a row that becomes the last when the rows after it are removed", () => {
+    const rows = state.ok_w<Node[]>([
+      { name: "a", sub: [{ name: "a1" }] },
+      { name: "b" },
+    ]);
+    const container = open_tree(rows);
+    expect(indent_line(container, "a1", 0)).toBe(true);
+    rows.array.pop();
+    expect(indent_line(container, "a1", 0)).toBe(false);
+    rows.array.push({ name: "c" });
+    expect(indent_line(container, "a1", 0)).toBe(true);
+  });
+
+  it("ends the line below the last row the search shows", () => {
+    const container = open_tree(
+      [{ name: "ax", sub: [{ name: "ax1" }] }, { name: "b" }],
+      { search: "x" },
+    );
+    expect(indent_line(container, "ax1", 0)).toBe(false);
+  });
+
+  it("keeps the sub rows, error and add row after their row when rows are moved, added and removed", () => {
+    const rows = state.ok_w<Node[]>([
+      { name: "a", add: true, sub: [{ name: "a1" }, { name: "a2" }] },
+      { name: "b" },
+    ]);
+    const container = open_tree(rows);
+    /**The rows and add rows in the row box, in order */
+    const order = () =>
+      [
+        ...container.querySelectorAll<HTMLElement>(
+          ":scope > div > div > list-row, :scope > div > div > list-addrow",
+        ),
+      ].map((element) =>
+        element instanceof ListAddRow
+          ? "add"
+          : (element as ListRow<any, any, any, any>).label,
+      );
+    expect(order()).toEqual(["a", "a1", "a2", "add", "b"]);
+    rows.array.move(0, 1);
+    expect(order()).toEqual(["b", "a", "a1", "a2", "add"]);
+    rows.array.unshift({ name: "c", sub: [{ name: "c1" }] });
+    expect(order()).toEqual(["c", "c1", "b", "a", "a1", "a2", "add"]);
+    rows.array.splice(1, 1, { name: "d" });
+    expect(order()).toEqual(["c", "c1", "d", "a", "a1", "a2", "add"]);
+    rows.array.shift();
+    expect(order()).toEqual(["d", "a", "a1", "a2", "add"]);
+    rows.set_ok([{ name: "e" }]);
+    expect(order()).toEqual(["e"]);
+  });
+
+  it("hides the add row of a row the search hides, with the row", () => {
+    const container = open_tree(
+      [{ name: "a", add: true, sub: [{ name: "a1" }] }, { name: "bx" }],
+      { search: "x" },
+    );
+    expect(
+      [...container.querySelectorAll<HTMLElement>("list-addrow span.add")].map(
+        (add) => add.checkVisibility(),
+      ),
+    ).toEqual([false]);
   });
 });

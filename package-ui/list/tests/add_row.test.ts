@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AccessTypes } from "#base";
 import { ListAddRow, type ListAddRowOptions } from "../add_row";
 import { ListKeyField } from "../key_field";
-import type { ListRoot, ListRowParent } from "../types";
+import type { ListRoot, ListRowsParent } from "../types";
 import { none, ok, NiceError } from "@chocbite/ts-lib/result";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
@@ -30,11 +30,22 @@ function root(sub_rows: boolean): ListRoot<number, Values, number[], boolean> {
     menu: () => none(),
     open_all() {},
     close_all() {},
+    sort_focus: new Set(),
+    sort_held: () => false,
+    sort_changed() {},
   };
 }
 
-function parent(depth: number): ListRowParent<number[]> {
-  return { depth, open: false, select_adjacent() {}, state: [] };
+function parent(depth: number): ListRowsParent<number[]> {
+  return {
+    depth,
+    open: false,
+    select_adjacent() {},
+    state: [],
+    lines: [],
+    //The add row never reads the rows of its parent
+    group: undefined as never,
+  };
 }
 
 function add_row(
@@ -44,7 +55,7 @@ function add_row(
 ) {
   const row = ListAddRow.create<
     ListAddRow<number, Values, number[], boolean>,
-    [ListRoot<number, Values, number[], boolean>, ListRowParent<number[]>]
+    [ListRoot<number, Values, number[], boolean>, ListRowsParent<number[]>]
   >(options, root(sub_rows), parent(depth));
   document.body.append(row);
   return row;

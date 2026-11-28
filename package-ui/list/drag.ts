@@ -11,6 +11,8 @@ export interface ListMovableRow extends HTMLElement {
   readonly reorder: object | undefined;
   readonly parent_rows: unknown;
   readonly parent_row: ListMovableRow | undefined;
+  /**The rows of the parent the row is in, it included, the same array for every row of the parent */
+  readonly sibling_rows: readonly ListMovableRow[];
   readonly next_row: ListMovableRow | undefined;
   readonly first_sub_row: ListMovableRow | undefined;
   readonly movable: boolean;
@@ -245,13 +247,15 @@ export class ListReorder<R> {
     let row = element?.closest<AnyRow>("list-row") ?? undefined;
     let mode: ListDropPlace["mode"];
     if (!row) {
-      //Below the last row of a list drops after it
+      //Below the last row of a list drops after it, the last row in the row box can be a sub row of it
       const list = element?.closest<HTMLElement>("list-container");
-      const last = list?.querySelector<AnyRow>(
-        ":scope > div > div > list-row:last-child",
+      const bottom = list?.querySelector<AnyRow>(
+        ":scope > div > div > list-row:last-of-type",
       );
-      if (!last?.anchor || y < last.anchor.getBoundingClientRect().bottom)
+      if (!bottom?.anchor || y < bottom.anchor.getBoundingClientRect().bottom)
         return undefined;
+      let last = bottom;
+      while (last.parent_row) last = last.parent_row;
       row = last;
       mode = "after";
     } else {
@@ -353,17 +357,19 @@ export class ListReorder<R> {
         : place.mode === "after"
           ? place.row.next_row
           : undefined;
-    const target_box =
-      place.mode === "into" ? undefined : place.row.parentElement;
+    const target_siblings =
+      place.mode === "into" ? undefined : place.row.sibling_rows;
     const target_rows = into ? into.drop_rows() : place.row.parent_rows;
     if (!writable(target_rows)) return;
     for (const chunk of this.#chunks(rows)) {
       const first = chunk[0];
-      const source_box = first.parentElement;
-      const same = into ? first.parent_row === into : source_box === target_box;
+      const siblings = first.sibling_rows;
+      const same = into
+        ? first.parent_row === into
+        : siblings === target_siblings;
       if (same) {
         const from = first.index;
-        const end = before ? before.index : source_box!.childElementCount;
+        const end = before ? before.index : siblings.length;
         const to = from < end ? end - chunk.length : end;
         if (from === to) continue;
         const result = await target_rows.write(
@@ -406,7 +412,7 @@ export class ListReorder<R> {
       const last = chunks[chunks.length - 1]?.at(-1);
       if (
         last &&
-        last.parentElement === row.parentElement &&
+        last.sibling_rows === row.sibling_rows &&
         last.next_row === row
       )
         chunks[chunks.length - 1].push(row);

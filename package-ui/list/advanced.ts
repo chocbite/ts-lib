@@ -459,6 +459,13 @@ class ListAdvancedGroup extends FormValueWrite<ListFilterItem, undefined> {
     this.attach_state(this.#collapsed, (collapsed) =>
       this.#show_collapsed(collapsed.value),
     );
+    //Every change of the items shows or hides the text of an empty group and opens the group to show what changed
+    //A plain sub, as it is told only of changes, so a group that comes back into the document stays collapsed as the user left it,
+    //and the group owns the state, so the sub lives as long as the group
+    this.#items.sub((items) => {
+      this.#none.hidden = items.value.length > 0;
+      this.#collapsed.set_ok(false);
+    });
   }
 
   /**The value is the group of the items that have one, always a value, an empty group is no condition */
@@ -482,7 +489,7 @@ class ListAdvancedGroup extends FormValueWrite<ListFilterItem, undefined> {
   /**Shows the filter in the root group */
   start(filter: ListFilter) {
     this.#mode.set_ok(filter.mode ?? "all");
-    this.#set_items(filter.conditions.map((item) => this.#make(item)));
+    this.#items.set_ok(filter.conditions.map((item) => this.#make(item)));
   }
 
   /**Given with set({ value }), a group the group shows */
@@ -491,7 +498,7 @@ class ListAdvancedGroup extends FormValueWrite<ListFilterItem, undefined> {
   }
 
   protected clear_value() {
-    this.#set_items([]);
+    this.#items.set_ok([]);
   }
 
   protected state_related() {}
@@ -506,15 +513,7 @@ class ListAdvancedGroup extends FormValueWrite<ListFilterItem, undefined> {
         );
   }
 
-  #remove = (item: Item) =>
-    this.#set_items(this.#items.get().value.filter((one) => one !== item));
-
-  #set_items(items: Item[]) {
-    this.#items.set_ok(items);
-    this.#none.hidden = items.length > 0;
-    //Opened to show what changed
-    this.#collapsed.set_ok(false);
-  }
+  #remove = (item: Item) => this.#items.array.delete(item);
 
   /**Adds a condition, of the column or the first one with a type, without a value yet */
   add_condition(column?: string): ListAdvancedCondition {
@@ -524,20 +523,20 @@ class ListAdvancedGroup extends FormValueWrite<ListFilterItem, undefined> {
       this.#remove,
     );
     condition.start(column);
-    this.#set_items([...this.#items.get().value, condition]);
+    this.#items.array.push(condition);
     return condition;
   }
 
   /**Adds a group of all, with a condition to start with */
   #add_group() {
     const group = ListAdvancedGroup.create({}, this.#columns, this.#remove);
-    this.#set_items([...this.#items.get().value, group]);
+    this.#items.array.push(group);
     group.add_condition().focus_value();
   }
 
   /**Removes every item */
   clear_all() {
-    this.#set_items([]);
+    this.#items.set_ok([]);
   }
 
   /**Shows a summary of the items on the button of the collapser while it has them collapsed */

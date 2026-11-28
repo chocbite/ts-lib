@@ -18,6 +18,22 @@ A page is any file in `pages/`, for example `pages/ui/theme.ts` shows up as `the
 
 `helpers.ts` has plain DOM helpers for laying out a page: `section`, `row`, `box` and `controls`. Show variations side by side, that is where differences are easiest to judge.
 
+`code` adds a folded block with the code of a section, so it does not have to be found in the page. The page marks the code with `//#region name` and `//#endregion` lines and imports its own source with `?raw`, so the block always shows the code that runs:
+
+```ts
+import source from "./sort.ts?raw";
+
+{
+  const sec = section("Sort by the titles");
+  //#region titles
+  const sort = state.ok_w<ListSort>([]);
+  box(sec, "writable sort state").appendChild(people_list(rows, { sort }));
+  //#endregion
+  //The code of the section, then the helper it calls, marked outside the block
+  code(sec, source, "titles", "people_list");
+}
+```
+
 The frame calls `theme_init`, so pages must not.
 
 `npm run typecheck:dev` typechecks the shell and pages, it is not part of `npm run typecheck`.

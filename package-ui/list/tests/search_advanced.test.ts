@@ -682,6 +682,69 @@ describe("List advanced search groups", () => {
     expect(button.textContent).toBe("Collapse");
   });
 
+  it("opens a collapsed group when something is added to it, and names an empty group in it", async () => {
+    await ANIMATION_LEVEL.write(AnimationLevels.None);
+    const container = people_list(people(), {
+      filter: {
+        conditions: [
+          {
+            type: "group",
+            mode: "any",
+            conditions: [{ column: "age", type: "number", op: ">", value: 40 }],
+          },
+        ],
+      },
+    });
+    open_from_menu(container);
+    const nested = groups()[1];
+    const none = nested.querySelector<HTMLElement>(":scope > .none")!;
+    const button = nested.querySelector<HTMLElement>(
+      ":scope > form-group-collapser > span",
+    )!;
+    const array = nested.querySelector<HTMLElement>(
+      ":scope > form-group-collapser > form-grouparray",
+    )!;
+    expect(none.hidden).toBe(true);
+    button.click();
+    expect(array.checkVisibility()).toBe(false);
+    group_button(nested, "Add condition").click();
+    expect(array.checkVisibility()).toBe(true);
+    expect(items(nested).length).toBe(2);
+    for (const item of items(nested)) remove(item as HTMLElement);
+    expect(items(nested).length).toBe(0);
+    expect(none.hidden).toBe(false);
+    group_button(nested, "Add group").click();
+    expect(none.hidden).toBe(true);
+  });
+
+  it("keeps a group collapsed by the user when it comes back into the document", async () => {
+    await ANIMATION_LEVEL.write(AnimationLevels.None);
+    const container = people_list(people(), {
+      filter: {
+        conditions: [
+          {
+            type: "group",
+            mode: "any",
+            conditions: [{ column: "age", type: "number", op: ">", value: 40 }],
+          },
+        ],
+      },
+    });
+    open_from_menu(container);
+    const nested = groups()[1];
+    const array = nested.querySelector<HTMLElement>(
+      ":scope > form-group-collapser > form-grouparray",
+    )!;
+    nested
+      .querySelector<HTMLElement>(":scope > form-group-collapser > span")!
+      .click();
+    const parent = nested.parentElement!;
+    const next = nested.nextSibling;
+    nested.remove();
+    parent.insertBefore(nested, next);
+    expect(array.checkVisibility()).toBe(false);
+  });
+
   it("keeps a condition on one line when collapsing a group makes the dialog narrower", async () => {
     //The dialog is as wide as its content, wide enough for the rows when it fits on the page
     const [width, height] = [window.innerWidth, window.innerHeight];

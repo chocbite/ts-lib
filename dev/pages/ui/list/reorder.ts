@@ -1,7 +1,16 @@
 import list from "@chocbite/ts-lib-ui/list";
 import { err, ok, type Option } from "@chocbite/ts-lib/result";
 import state, { type StateROSW } from "@chocbite/ts-lib/state";
-import { box, controls, row, section, demo_error } from "../../../helpers";
+import {
+  box,
+  code,
+  controls,
+  demo_error,
+  row,
+  section,
+} from "../../../helpers";
+//The page shows its own code under each section
+import source from "./reorder.ts?raw";
 
 //      _____  ______ ____  _____  _____  ______ _____
 //     |  __ \|  ____/ __ \|  __ \|  __ \|  ____|  __ \
@@ -10,6 +19,7 @@ import { box, controls, row, section, demo_error } from "../../../helpers";
 //     | | \ \| |___| |__| | | \ \| |__| | |____| | \ \
 //     |_|  \_\______\____/|_|  \_\_____/|______|_|  \_\
 
+//#region drag_list
 interface DragNode {
   name: string;
   /**Folders have children, files do not */
@@ -86,12 +96,14 @@ function drag_list(
     },
   );
 }
+//#endregion
 
 {
   const sec = section(
     "Reorder",
     "Drag the grip in front of a row. A line shows where it goes, the middle of a folder drops into it, hovering into a closed folder opens it after a moment. Escape cancels. Alt+arrow up/down moves the focused row. Pictures only takes .png files. The text under the list is the state, the list only writes moves to it. Check touch mode, the grip should drag and the rest of the list should still scroll",
   );
+  //#region reorder
   const r = row(sec);
   const rows = drag_tree();
   const b = box(r, "folders", {
@@ -102,6 +114,8 @@ function drag_list(
   b.appendChild(drag_list(rows));
   drag_show(box(r, "state"), rows);
   controls(sec, { Reset: () => location.reload() });
+  //#endregion
+  code(sec, source, "reorder", "drag_list");
 }
 
 {
@@ -109,6 +123,7 @@ function drag_list(
     "Reorder selected rows",
     "Select rows with the checkboxes, then drag one of them: all selected rows move together and keep their order, rows next to each other move with one write. Dragging a row that is not selected moves only that row",
   );
+  //#region reorder_selected_rows
   const r = row(sec);
   const rows = drag_tree();
   const b = box(r, "multi", {
@@ -118,6 +133,8 @@ function drag_list(
   });
   b.appendChild(drag_list(rows, { multi: true }));
   drag_show(box(r, "state"), rows);
+  //#endregion
+  code(sec, source, "reorder_selected_rows", "drag_list");
 }
 
 {
@@ -125,6 +142,7 @@ function drag_list(
     "Reorder between lists",
     "The first two lists are in one drag group and give rows to each other. The third list is not in the group, nothing goes in or out of it. The fourth list has a plain array, so it has no grips",
   );
+  //#region reorder_between_lists
   const r = row(sec);
   const group = list.drag_group<DragNode>();
   const left = drag_tree();
@@ -152,6 +170,8 @@ function drag_list(
     height: "16rem",
     display: "grid",
   }).appendChild(drag_list([drag_file("fixed.txt"), drag_file("rows.txt")]));
+  //#endregion
+  code(sec, source, "reorder_between_lists", "drag_list");
 }
 
 {
@@ -159,6 +179,7 @@ function drag_list(
     "Reorder between lists, the app removes",
     "Like an app that takes a row out of one list itself when it is added to the other. The lists have no_remove, so they only insert and the app removes, a row moved between the top levels is gone from the first list once. Without no_remove both would remove and a second row would disappear",
   );
+  //#region reorder_between_lists_the_app_removes
   const r = row(sec);
   const group = list.drag_group<DragNode>();
   const left = state.ok_w([
@@ -189,6 +210,8 @@ function drag_list(
   }).appendChild(drag_list(right, { group, no_remove: true }));
   drag_show(box(r, "left state"), left);
   drag_show(box(r, "right state"), right);
+  //#endregion
+  code(sec, source, "reorder_between_lists_the_app_removes", "drag_list");
 }
 
 {
@@ -196,9 +219,12 @@ function drag_list(
     "Reorder rejected",
     "The rows state rejects every write, a drag shows the reason at the row and nothing moves. The same goes for alt+arrow",
   );
+  //#region reorder_rejected
   const rows = state.rosw<DragNode[]>(
     ok([drag_file("one.txt"), drag_file("two.txt"), drag_file("three.txt")]),
     () => Promise.resolve(err(demo_error("Rejected", "This list is locked"))),
   );
   box(sec, "locked", { width: "16rem" }).appendChild(drag_list(rows));
+  //#endregion
+  code(sec, source, "reorder_rejected", "drag_list");
 }

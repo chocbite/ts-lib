@@ -901,11 +901,16 @@ describe("List selection in the row menu", () => {
   it("has select all and deselect all on the headers and outside the rows in multi mode", () => {
     const container = create([item(1), item(2)]);
     const title = container.querySelector<HTMLElement>(
-      "list-headerrow > list-headerfield",
+      "list-headerrow > list-headerfield > div > span",
     )!;
     for (const target of [title, container]) {
       right_click(target);
-      expect(texts()).toEqual(["Select allCtrl+A", "Deselect allEsc"]);
+      //The title has the lines sorting by its column in front
+      expect(texts()).toEqual([
+        ...(target === title ? ["Sort A to Z", "Sort Z to A"] : []),
+        "Select allCtrl+A",
+        "Deselect allEsc",
+      ]);
       choose("Select all");
       expect(ids(container)).toEqual([1, 2]);
       right_click(target);

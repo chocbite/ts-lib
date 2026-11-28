@@ -9,6 +9,7 @@ import { ListAddRow, type ListAddRowOptions } from "../add_row";
 import { ListField } from "../field";
 import { ListKeyField } from "../key_field";
 import { ListRow } from "../row";
+import { row_block, sub_rows_of } from "./rows";
 
 /**A test error whose nice text is its message, so shown texts read as before*/
 const nice_err = (text: string) => new NiceError(Symbol(text), text);
@@ -109,10 +110,6 @@ function item_list(rows: Item[] | State<Item[]>) {
   );
   document.body.append(container);
   return { container, transform };
-}
-
-function sub_rows_of(row: AnyRow): AnyRow[] {
-  return [...row.children[1].children] as AnyRow[];
 }
 
 function name_of(row: Element): string {
@@ -744,7 +741,9 @@ describe("ListRow add row", () => {
     ]);
     const { container } = item_list(rows);
     const row = find(container, "a");
-    const add = row.lastElementChild as ListAddRow<any, any, any, any>;
+    //The add row follows the row in the row box, last after its sub rows
+    const add_of = () => row_block(row).at(-1);
+    const add = add_of() as ListAddRow<any, any, any, any>;
     expect(add).toBeInstanceOf(ListAddRow);
     expect(row.classList.contains("addrow")).toBe(true);
     expect(add.depth).toBe(1);
@@ -754,14 +753,12 @@ describe("ListRow add row", () => {
 
     //New options from the transform make a new add row, so options left out of them are gone
     rows.array.change(0, { name: "a", add_row: { text: "More", on_add } });
-    expect(row.lastElementChild).not.toBe(add);
-    expect(row.lastElementChild).toBeInstanceOf(ListAddRow);
-    expect(row.lastElementChild!.textContent).toBe("More");
+    expect(add_of()).not.toBe(add);
+    expect(add_of()).toBeInstanceOf(ListAddRow);
+    expect(add_of()!.textContent).toBe("More");
 
     rows.array.change(0, { name: "a" });
-    expect(row.querySelector(":scope > *:last-child")).not.toBeInstanceOf(
-      ListAddRow,
-    );
+    expect(add_of()).not.toBeInstanceOf(ListAddRow);
     expect(row.classList.contains("addrow")).toBe(false);
   });
 });

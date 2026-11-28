@@ -121,7 +121,8 @@ describe("Outline", () => {
       row.querySelector(`:scope > div > ${selector}`)!.textContent;
     expect(own("list-keyfield")).toBe("Main");
     expect(own("list-textfield")).toBe("Page");
-    expect(row.querySelectorAll("list-row")).toHaveLength(1);
+    //The sub rows follow the row in the row box of the list, the page row and the row of its widget
+    expect(outline.querySelectorAll("list-row")).toHaveLength(2);
     id.set_ok("Other");
     expect(own("list-keyfield")).toBe("Other");
   });

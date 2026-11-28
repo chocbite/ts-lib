@@ -11,7 +11,7 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-function key_field(depth: number) {
+function key_field(depth: number, lines?: boolean[]) {
   const open_set = vi.fn<(open: boolean) => void>();
   const select = vi.fn<(direction: string, field: Option<number>) => void>();
   let open = false;
@@ -27,7 +27,7 @@ function key_field(depth: number) {
     select_adjacent: select,
     state: [],
   };
-  const field = new ListKeyField(fake);
+  const field = new ListKeyField(fake, lines);
   document.body.append(field);
   return { field, open_set, select };
 }
@@ -43,12 +43,17 @@ function svg() {
 }
 
 describe("List key field", () => {
-  it("is focusable and indented by its depth", () => {
-    const { field } = key_field(3);
+  it("is focusable and indented by its depth, with the tree lines that run on past it", () => {
+    const { field } = key_field(3, [true, false, true]);
     expect(field.tabIndex).toBe(0);
-    const indents = [...field.children].filter((e) => e.tagName === "DIV");
-    expect(indents).toHaveLength(3);
-    expect((indents[2] as HTMLElement).style.borderColor).toBe("var(--i-2)");
+    const indents = () =>
+      [...field.children]
+        .filter((e) => e.tagName === "DIV")
+        .map((e) => !e.classList.contains("end"));
+    expect(indents()).toEqual([true, false, true]);
+    field.line(1, true);
+    field.line(2, false);
+    expect(indents()).toEqual([true, true, false]);
   });
 
   it("maps keys to the parent", () => {

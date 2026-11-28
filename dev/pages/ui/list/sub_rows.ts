@@ -8,10 +8,21 @@ import list from "@chocbite/ts-lib-ui/list";
 import { array_from_length } from "@chocbite/ts-lib/common";
 import { err, ok } from "@chocbite/ts-lib/result";
 import state, { type State, type StateROS } from "@chocbite/ts-lib/state";
-import { box, controls, row, section, demo_error } from "../../../helpers";
+import {
+  box,
+  code,
+  controls,
+  demo_error,
+  row,
+  section,
+} from "../../../helpers";
+//The page shows its own code under each section
+import source from "./sub_rows.ts?raw";
 
+//#region words
 const WORDS = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf"];
 const word = (i: number) => WORDS[i % WORDS.length];
+//#endregion
 
 //      _____ _    _ ____    _____   ______          _______
 //     / ____| |  | |  _ \  |  __ \ / __ \ \        / / ____|
@@ -22,8 +33,9 @@ const word = (i: number) => WORDS[i % WORDS.length];
 {
   const sec = section(
     "Sub rows, add row, icons and context menu",
-    "Open rows, add rows, right click a row. Every other row has an icon, every fourth has key field text, every third cannot be opened. Drag the key column header narrower so the long text of row 4 wraps, its lines should stay centered. An open row draws a line from its middle down to its sub rows, double press the handle to fit the key column again",
+    "Open rows, add rows, right click a row. Every other row has an icon, every fourth has key field text, every third cannot be opened. Drag the key column header narrower so the long text of row 4 wraps, its lines should stay centered. An open row draws a line from its middle down to its sub rows, double press the handle to fit the key column again. The rows alternate their backgrounds over every row shown, sub rows included, so a row and its first sub row never look alike. The line of a level runs on past the sub rows of a row with rows after it and ends at the last row or the add row",
   );
+  //#region sub_rows_add_row_icons_and_context_menu
   const rows = state.ok_w(array_from_length(6, (i) => i));
   sec.appendChild(
     list.container(
@@ -107,6 +119,8 @@ const word = (i: number) => WORDS[i % WORDS.length];
       },
     ),
   );
+  //#endregion
+  code(sec, source, "sub_rows_add_row_icons_and_context_menu", "words");
 }
 
 {
@@ -114,6 +128,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
     "Key field only, no value columns",
     "A list with only the key column, the names are key field text. The key column fills the box. The rows must stay under each other, the add rows and the invalid row run from the key column to the end, after the tree lines. Open Beta for its sub rows and their add row. Add rows until the error row shows instead of the rows",
   );
+  //#region key_field_only_no_value_columns
   const rows = state.from_w<string[]>(["Alpha", "Beta", "invalid", "Gamma"]);
   let count = 0;
   const names = (name: string) => [name + " 1", name + " 2"];
@@ -155,6 +170,8 @@ const word = (i: number) => WORDS[i % WORDS.length];
     );
   }
   controls(sec, { Reset: () => location.reload() });
+  //#endregion
+  code(sec, source, "key_field_only_no_value_columns");
 }
 
 {
@@ -162,6 +179,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
     "Open all and close all",
     "The buttons in the key column header open and close all rows. Right click the header, a row or the space below the rows for open all, and close all while a row is open, in the menu of the list, the headerless list has only that and the buttons under it, which call open_all and close_all like app code. The endless list has three sub rows in every row, open all stops after 1000 rows with a warning at the header and opening again continues, upper levels first",
   );
+  //#region open_all_and_close_all
   interface TreeNode {
     name: string;
     sub?: TreeNode[];
@@ -209,6 +227,8 @@ const word = (i: number) => WORDS[i % WORDS.length];
     height: "20rem",
     display: "grid",
   }).appendChild(tree_list([endless("x")], false));
+  //#endregion
+  code(sec, source, "open_all_and_close_all");
 }
 
 {
@@ -216,6 +236,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
     "Opened as a state",
     "Open some folders in both lists. Rebuild empties the rows and gives new ones, like an editor showing other data: the state list keeps its folders open, the plain list closes them. Reverse gives the rows in the other order, rows are reused by position, so in the plain list the open state stays at the position, in the state list it stays with the folder. Open, close, open all, close all and the row menu all change the state text under the list. The read only list only follows the buttons under it: its folders have no opener arrow, the tree lines show in its place and an open folder keeps its line down to the sub rows, keys and open all do nothing and its row menu has no open or close line",
   );
+  //#region opened_as_a_state
   interface Folder {
     name: string;
     sub?: Folder[];
@@ -293,6 +314,8 @@ const word = (i: number) => WORDS[i % WORDS.length];
     Reverse: () => rows.set_ok([...rows.get().value].reverse()),
     "Open Music from app": () => void writable.get("Music")!.write(true),
   });
+  //#endregion
+  code(sec, source, "opened_as_a_state");
 }
 
 //     _  __________     __  ______ _____ ______ _      _____
@@ -306,6 +329,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
     "Key field icon and text",
     "Every combination of icon and text, all rows open. The line down to the sub rows must stay behind the icon and the text, and show below them in the tall row. The state row changes its icon and text from the buttons, an error shows as the text",
   );
+  //#region key_field_icon_and_text
   interface KeyItem {
     name: string;
     icon?: boolean;
@@ -374,4 +398,6 @@ const word = (i: number) => WORDS[i % WORDS.length];
       state_text.set_ok("A much longer state text for the key field"),
     "Text: error": () => state_text.set_err(demo_error("Text failed")),
   });
+  //#endregion
+  code(sec, source, "key_field_icon_and_text");
 }

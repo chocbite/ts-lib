@@ -2,10 +2,14 @@ import list from "@chocbite/ts-lib-ui/list";
 import { array_from_length } from "@chocbite/ts-lib/common";
 import { err, ok } from "@chocbite/ts-lib/result";
 import state from "@chocbite/ts-lib/state";
-import { controls, section, demo_error } from "../../../helpers";
+import { code, controls, demo_error, section } from "../../../helpers";
+//The page shows its own code under each section
+import source from "./errors.ts?raw";
 
+//#region words
 const WORDS = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf"];
 const word = (i: number) => WORDS[i % WORDS.length];
+//#endregion
 
 //      ______ _____  _____   ____  _____   _____
 //     |  ____|  __ \|  __ \ / __ \|  __ \ / ____|
@@ -18,6 +22,7 @@ const word = (i: number) => WORDS[i % WORDS.length];
     "Errors",
     "First list: an error in the state replaces the rows with its text, the add row stays. Second and third list: invalid rows show their text instead of the fields, in the third they keep the indent and arrow keys move through them. The sub rows of row 0 can fail too",
   );
+  //#region errors
   const initial = () => array_from_length(4, (i) => i);
   const failing = state.from_w(initial());
   const invalid = state.ok_w(array_from_length(6, (i) => i));
@@ -98,4 +103,6 @@ const word = (i: number) => WORDS[i % WORDS.length];
       },
     ),
   );
+  //#endregion
+  code(sec, source, "errors", "words");
 }

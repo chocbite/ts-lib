@@ -13,6 +13,7 @@ import type {
   ListParentRows,
   ListRoot,
   ListRowParent,
+  ListRowsParent,
   ListType,
 } from "./types";
 
@@ -48,12 +49,12 @@ export class ListAddRow<
   #button = document.createElement("span");
   #text = this.#button.appendChild(document.createTextNode(""));
   #icon?: SVGSVGElement;
-  readonly #parent: ListRowParent<A>;
+  readonly #parent: ListRowsParent<A>;
   readonly #root: ListRoot<R, T, A, S>;
   #key_field?: ListKeyField<A>;
   readonly depth: number;
 
-  constructor(root: ListRoot<R, T, A, S>, parent: ListRowParent<A>) {
+  constructor(root: ListRoot<R, T, A, S>, parent: ListRowsParent<A>) {
     super();
     this.#parent = parent;
     this.#root = root;
@@ -61,9 +62,14 @@ export class ListAddRow<
     this.#button.className = "add";
     this.#button.tabIndex = 0;
     if (root.sub_rows) {
-      this.#key_field = this.appendChild(new ListKeyField(this));
+      this.#key_field = this.appendChild(new ListKeyField(this, parent.lines));
       this.columns_changed();
     } else this.appendChild(this.#button);
+  }
+
+  /**Shows or hides the tree line of a depth above the add row, see line of the key field*/
+  line(depth: number, shown: boolean) {
+    this.#key_field?.line(depth, shown);
   }
 
   /**With sub rows the button goes after the tree lines, in the key field only without value columns*/

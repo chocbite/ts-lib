@@ -40,8 +40,10 @@ class ContextMenu extends Base {
   #focus_out_handler = (e: FocusEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!e.relatedTarget || !this.contains(e.relatedTarget as Node)) {
-      this.close_up();
+    const to = e.relatedTarget as Node | null;
+    if (!to || !this.contains(to)) {
+      //Focus moved to an element outside the menu stays there, focus going to no element goes back to the element from before the menu
+      this.close_up(!to);
       this.close_down();
     }
   };
@@ -175,12 +177,15 @@ class ContextMenu extends Base {
     this.#submenu = undefined;
   }
 
-  /**Closes the context menu up the tree to the root*/
-  close_up() {
+  /**Closes the context menu up the tree to the root
+   * @param refocus whether the focus goes back to the element from before the menu, false when the focus moved to another element*/
+  close_up(refocus = true) {
     this.removeEventListener("focusout", this.#focus_out_handler, {
       capture: true,
     });
-    (this.parentElement as Container)?.close_up();
+    (this.parentElement as Container | ContextMenuSub | null)?.close_up(
+      refocus,
+    );
     this.remove();
   }
 

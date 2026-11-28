@@ -6,6 +6,7 @@ import {
   type BaseOptions,
 } from "#base";
 import ctm, { type ContextMenuLines } from "#context_menu";
+import type { SVGFunc } from "#svg";
 import { px_to_rem } from "#theme";
 import {
   state,
@@ -18,7 +19,8 @@ import { ListDragField, ListReorder, type ListReorderOptions } from "./drag";
 import "./container.scss";
 import { list_rows_error_update, type ListRowsError } from "./error";
 import { list_align_apply } from "./field";
-import { list_rows_apply, ListRow } from "./row";
+import { ListRowGroup } from "./group";
+import { ListRow } from "./row";
 import {
   list_filter_prune,
   list_is_group,
@@ -37,17 +39,29 @@ import {
   type ListSelectionOptions,
 } from "./selection";
 import "./shared";
+import {
+  LIST_SORT_KEY_FIELD,
+  list_sort_icon,
+  list_sortable,
+  type ListSort,
+  type ListSortColumn,
+  type ListSortDirection,
+} from "./sort";
 import { ListWarn } from "./warn";
 import type {
   ListColumnOptions,
   ListRoot,
-  ListRowParent,
+  ListRowsParent,
   ListRowTransformer,
   ListType,
 } from "./types.ts";
 
 /**Most rows open all or the search opens at a time, a mistake making the sub rows recursive would otherwise never end */
 const OPEN_LIMIT = 1000;
+/**Milliseconds from placing the rows with changed values until the next frame above which placing them counts as slow, about three frames */
+const SORT_SLOW_FRAME = 50;
+/**After a slow placing the rows are placed again once this many times its time has passed, so placing them takes at most about a quarter of the time */
+const SORT_SLOW_WAIT = 4;
 
 class HeaderField extends Base {
   static element_name() {
@@ -61,6 +75,8 @@ class HeaderField extends Base {
   #text = this.#box.appendChild(document.createElement("span"));
   #sizer?: HTMLDivElement;
   #search_cell?: Element;
+  /**Icon of the direction the column sorts in, with its place among the sorted columns, while it sorts */
+  #sort?: HTMLSpanElement;
 
   constructor(text?: string) {
     super();
@@ -74,6 +90,45 @@ class HeaderField extends Base {
 
   set text(value: string) {
     this.#text.textContent = value;
+  }
+
+  /**The title with the handle resizing the column, without the cell of the column search */
+  get title_box(): HTMLElement {
+    return this.#box;
+  }
+
+  /**Called at a click on the title, not on the handle resizing the column, undefined for none */
+  set on_title_click(handler: ((e: MouseEvent) => void) | undefined) {
+    this.#box.onclick = handler
+      ? (e) => {
+          if (!this.#sizer?.contains(e.target as Node)) handler(e);
+        }
+      : null;
+    //Shift click would select the text of the headers
+    this.#box.onmousedown = handler
+      ? (e) => {
+          if (e.shiftKey) e.preventDefault();
+        }
+      : null;
+  }
+
+  /**Shows the icon of the direction the column sorts in, after the title, undefined while it does not sort
+   * @param place the place of the column among the sorted columns, shown while several sort */
+  sort_show(icon: SVGFunc | undefined, place: number | undefined) {
+    if (!icon) {
+      this.#sort?.remove();
+      this.#sort = undefined;
+      return;
+    }
+    if (!this.#sort) {
+      this.#sort = document.createElement("span");
+      this.#sort.className = "sort";
+      this.#box.insertBefore(this.#sort, this.#sizer ?? null);
+    }
+    this.#sort.replaceChildren(icon());
+    if (place !== undefined)
+      this.#sort.appendChild(document.createElement("span")).textContent =
+        String(place);
   }
 
   /**Cell of the column search under the title, undefined removes it */
@@ -173,7 +228,11 @@ class HeaderRow<
       const button = (kind: string, action: () => void) => {
         const span = document.createElement("span");
         span.className = `list-${kind}-all`;
-        span.onclick = action;
+        //Not a click on the key header, which sorts
+        span.onclick = (e) => {
+          e.stopPropagation();
+          action();
+        };
         return span;
       };
       key.nodes = [
@@ -256,6 +315,9 @@ export interface ListContainerOptions<T extends {}, R, K> extends BaseOptions {
   /**Shows the cells of the column search under the titles of the columns, an input the user changes, the lines of search_menu write it
    * Without it the filter still applies, in a headless list the cells show without titles */
   column_search?: StateOrVal<boolean>;
+  /**Columns the rows are sorted by, an input the user changes like selected, the titles of the columns and their menus write it
+   * Columns the list does not have or can not sort by are left out, plain JSON so the app can store it, an empty array shows the rows in the order of the data */
+  sort?: StateOrVal<ListSort>;
 }
 
 /**Inputs of the list, loosely typed as keys can not be generic */
@@ -268,6 +330,7 @@ const CONTAINER = {
   search_bar: input_key<StateOrVal<boolean>>(),
   filter: input_key<StateOrVal<ListFilter>>(),
   column_search: input_key<StateOrVal<boolean>>(),
+  sort: input_key<StateOrVal<ListSort>>(),
 };
 
 class Container<
@@ -286,10 +349,13 @@ class Container<
 
   #root: ListRoot<R, T, A, S>;
   #selection?: ListSelection<K>;
-  #parent: ListRowParent<A>;
+  #parent: ListRowsParent<A>;
   #box = this.appendChild(document.createElement("div"));
   #header?: HeaderRow<R, T, A, S>;
+  /**The row box, every row of the list in the order shown, sub rows after their row, see ListRowGroup */
   #child_box: HTMLDivElement;
+  /**The top rows */
+  #group: ListRowGroup<R, T, A, S>;
   #error?: ListRowsError<A>;
   #add_row?: ListAddRow<R, T, A, S>;
   /**Width of the key field column in rem set by resizing, fits the key fields when undefined */
@@ -323,6 +389,20 @@ class Container<
   #header_fields: HeaderField[] = [];
   /**Cells of the column search by column key, while it is shown */
   #search_cells = new Map<string, ListSearchCell>();
+  /**Columns of the sort input, also those the list leaves out */
+  #sort: ListSort = [];
+  /**The row with the focus and the rows it is below, see sort_focus of the root */
+  readonly #sort_focus = new Set<ListRow<R, T, A, S>>();
+  /**Whether a pointer is pressed on the list, no row moves for changed values until it is let go */
+  #sort_pressed = false;
+  /**Rows with values they are not placed with yet, placed at a frame unless held */
+  readonly #sort_dirty = new Set<ListRow<R, T, A, S>>();
+  /**The frame placing the rows waits for, 0 for none */
+  #sort_frame = 0;
+  /**The timeout placing the rows waits for after a slow placing, 0 for none */
+  #sort_wait = 0;
+  /**Time before which the rows are not placed again, after a slow placing */
+  #sort_next_at = 0;
 
   /**Builds the list from its configuration, the inputs come with set */
   constructor(config: ListContainerConfig<T, R, S, K>) {
@@ -342,15 +422,32 @@ class Container<
       menu: () => this.#menu(),
       open_all: () => this.open_all(),
       close_all: () => this.close_all(),
+      sort_focus: this.#sort_focus,
+      sort_held: (row) =>
+        row.isConnected && (this.#sort_pressed || this.#sort_focus.has(row)),
+      sort_changed: (row) => {
+        this.#sort_dirty.add(row);
+        this.#sort_schedule();
+      },
     };
-    this.#parent = {
+    this.#child_box = document.createElement("div");
+    const parent: ListRowsParent<A> = {
       depth: -1,
       open: false,
       select_adjacent() {},
       state: [],
+      lines: [],
+      get group() {
+        return group;
+      },
     };
-
-    this.#child_box = document.createElement("div");
+    const group = new ListRowGroup<R, T, A, S>(
+      this.#root,
+      (data) => new ListRow<R, T, A, S>(this.#root, parent, data),
+      { start: this.#child_box },
+    );
+    this.#parent = parent;
+    this.#group = group;
     //Shows why a write of the selection or a move failed
     const warn =
       config.selection || config.reorder || config.sub_rows
@@ -391,6 +488,10 @@ class Container<
       Boolean(this.#selection?.multi) ||
       this.#search_menu;
     ctm.attach(this, this.#menu);
+    //Rows keep their places while the user works with them, see sort_held of the root
+    this.addEventListener("focusin", (e) => this.#sort_focus_update(e.target));
+    this.addEventListener("focusout", () => this.#sort_focus_update(null));
+    this.addEventListener("pointerdown", () => this.#sort_press(), true);
     if (config.sub_rows) this.#box.classList.add("sub-rows");
     //Without a selected input the selection is kept in a state of the list, under the key of the input so one given later replaces it
     const selection = this.#selection;
@@ -439,6 +540,11 @@ class Container<
     this.set_input(CONTAINER.column_search, options.column_search, (show) =>
       this.#show_column_search(show.ok && show.value),
     );
+    this.set_input(CONTAINER.sort, options.sort, (sort) =>
+      this.#sort_input(sort.ok ? sort.value : []),
+    );
+    //A read only state locks the titles
+    if (options.sort !== undefined) this.#sort_headers();
     return this;
   }
 
@@ -459,12 +565,13 @@ class Container<
     this.#header_fields_build();
     this.#update_column_widths();
 
-    for (let i = 0; i < this.#child_box.childElementCount; i++)
-      (this.#child_box.children[i] as ListRow<R, T, A, S>).columns_changed();
+    for (const row of this.#group.rows) row.columns_changed();
     this.#add_row?.columns_changed();
     this.#error?.columns_changed();
     //Conditions of columns the list no longer has, or now has, change the search
     this.#search();
+    //The same for the sort, and the values the rows sort by can change with the columns
+    this.#sort_apply();
   }
 
   /**Makes the header row, with titles, or in a headless list with only the column search */
@@ -480,6 +587,16 @@ class Container<
       ),
       this.#box.firstChild,
     );
+    //The key field has no column, it sorts by its text
+    const key = this.#header.key_header;
+    if (key) {
+      key.on_title_click = (e) =>
+        this.#sort_click(LIST_SORT_KEY_FIELD, e.shiftKey);
+      ctm.attach(
+        key.title_box,
+        ctm.combine(() => this.#sort_lines(LIST_SORT_KEY_FIELD), this.#menu),
+      );
+    }
     this.#header_fields_build();
   }
 
@@ -497,11 +614,21 @@ class Container<
           column.init_width = width;
           this.#update_column_widths();
         });
+        if (list_sortable(column))
+          header.on_title_click = (e) =>
+            this.#sort_click(String(key), e.shiftKey);
+        //The lines to sort by the column, in front of the menu of the list, a column that can not be sorted has the line clearing the sort
+        //Only on the title, the cell of the column search has the menu of the list
+        ctm.attach(
+          header.title_box,
+          ctm.combine(() => this.#sort_lines(String(key)), this.#menu),
+        );
         return header;
       },
     ));
     header_row.fields = headers;
     this.#search_cells_build();
+    this.#sort_headers();
   }
 
   /**Gives the auto width columns their current width, so resizing one column does not resize the others
@@ -523,7 +650,7 @@ class Container<
    * Stops with a warning after opening OPEN_LIMIT rows, against huge or recursive sub rows, opening all again continues */
   open_all() {
     let opened = 0;
-    let level = this.#top_rows();
+    let level: readonly ListRow<R, T, A, S>[] = this.#top_rows();
     while (level.length) {
       const next: ListRow<R, T, A, S>[] = [];
       for (const row of level) {
@@ -540,8 +667,7 @@ class Container<
           row.open = true;
           opened += row.amount_rows();
         }
-        for (let sub = row.first_sub_row; sub; sub = sub.next_row)
-          next.push(sub);
+        for (const sub of row.sub_rows_list) next.push(sub);
       }
       level = next;
     }
@@ -554,14 +680,15 @@ class Container<
     const collect = (row: ListRow<R, T, A, S>) => {
       if (!row.open) return;
       open.push(row);
-      for (let sub = row.first_sub_row; sub; sub = sub.next_row) collect(sub);
+      for (const sub of row.sub_rows_list) collect(sub);
     };
     for (const row of this.#top_rows()) collect(row);
     for (let i = open.length - 1; i >= 0; i--) open[i].open = false;
   }
 
-  #top_rows(): ListRow<R, T, A, S>[] {
-    return [...this.#child_box.children] as ListRow<R, T, A, S>[];
+  /**The top rows in the order shown */
+  #top_rows(): readonly ListRow<R, T, A, S>[] {
+    return this.#group.shown;
   }
 
   #open_rows(): ListRow<R, T, A, S>[] {
@@ -607,10 +734,13 @@ class Container<
       this.#add_row = this.#box.appendChild(
         ListAddRow.create<
           ListAddRow<R, T, A, S>,
-          [ListRoot<R, T, A, S>, ListRowParent<A>]
+          [ListRoot<R, T, A, S>, ListRowsParent<A>]
         >(options, this.#root, this.#parent),
       );
     this.#box.classList.toggle("addrow", Boolean(options));
+    //With an add row below them none of the top rows is the last
+    this.#group.tail = Boolean(options);
+    this.#error?.classList.toggle("last", !options);
   }
 
   //      _____   ______          _______
@@ -621,24 +751,22 @@ class Container<
   //     |_|  \_\\____/   \/  \/  |_____/
 
   amount_rows(rec: boolean = false): number {
-    let count = this.#child_box.childElementCount;
-    if (rec)
-      for (let i = 0; i < this.#child_box.childElementCount; i++)
-        count += (
-          this.#child_box.children[i] as ListRow<R, T, A, S>
-        ).amount_rows(true);
+    let count = this.#group.rows.length;
+    if (rec) for (const row of this.#group.rows) count += row.amount_rows(true);
     return count;
   }
 
   #update_rows(rows: readonly R[], error?: string) {
     this.#error = list_rows_error_update(
-      this.#child_box,
+      //Not in the row box, which has only the rows and what follows each
+      (element) => this.#child_box.after(element),
       this.#error,
       error,
       this.#root,
       this.#parent,
     );
-    list_rows_apply(this.#root, this.#parent, this.#child_box, rows);
+    this.#error?.classList.toggle("last", !this.#add_row);
+    this.#group.apply(rows);
     this.#search_empty_update();
   }
 
@@ -694,6 +822,7 @@ class Container<
     this.#root.search = query;
     const apply = () => {
       for (const row of this.#top_rows()) row.search_apply();
+      this.#group.last_update();
     };
     this.#search_hold(() =>
       this.#selection ? this.#selection.batch(apply) : apply(),
@@ -1017,6 +1146,232 @@ class Container<
       this.#search_empty = new ListSearchEmpty();
       this.#child_box.after(this.#search_empty);
     }
+  }
+
+  //       _____  ____  _____ _______
+  //      / ____|/ __ \|  __ \__   __|
+  //     | (___ | |  | | |__) | | |
+  //      \___ \| |  | |  _  /  | |
+  //      ____) | |__| | | \ \  | |
+  //     |_____/ \____/|_|  \_\ |_|
+
+  /**Sorts the rows by a new value of the sort input */
+  #sort_input(sort: ListSort) {
+    this.#sort = sort;
+    this.#sort_apply();
+  }
+
+  /**The column of the sort by its name, the key field for #key in a list with sub rows, undefined for a column the list does not have or can not sort by */
+  #sort_column(
+    name: string,
+    desc: boolean,
+  ): ListSortColumn<keyof T> | undefined {
+    if (name === LIST_SORT_KEY_FIELD && this.#root.sub_rows)
+      return { key: LIST_SORT_KEY_FIELD, desc };
+    const key = name as keyof T;
+    const column = this.#root.columns.get(key);
+    return column && list_sortable(column) ? { key, column, desc } : undefined;
+  }
+
+  /**Sorts the rows by the columns of the sort input the list has and can sort by, a column given again counts once */
+  #sort_apply() {
+    const columns: ListSortColumn<keyof T>[] = [];
+    for (const one of this.#sort) {
+      const column = this.#sort_column(one.column, one.direction === "desc");
+      if (!column || columns.some((sorted) => sorted.key === column.key))
+        continue;
+      columns.push(column);
+    }
+    const before = this.#root.sort;
+    this.#root.sort = columns.length ? columns : undefined;
+    this.#box.classList.toggle("sorted", columns.length > 0);
+    //A list that did not sort and still does not has nothing to do, every row reads its values for the new sort
+    if (before || columns.length) {
+      this.#sort_dirty.clear();
+      this.#group.sort_update();
+    }
+    this.#sort_headers();
+  }
+
+  /**Keeps the row with the focus and the rows it is below in place, see sort_focus of the root, the rows held before are placed at the next frame */
+  #sort_focus_update(target: EventTarget | null) {
+    this.#sort_focus.clear();
+    //The row of the list, not of a list in a cell of it
+    let row = target instanceof Element ? target.closest("list-row") : null;
+    while (row && row.parentElement !== this.#child_box)
+      row = row.parentElement?.closest("list-row") ?? null;
+    for (
+      let held = row as ListRow<R, T, A, S> | null | undefined;
+      held;
+      held = held.parent_row
+    )
+      this.#sort_focus.add(held);
+    if (this.#sort_dirty.size) this.#sort_schedule();
+  }
+
+  /**Holds the rows in place until the pointer pressed on the list is let go anywhere */
+  #sort_press() {
+    if (this.#sort_pressed) return;
+    this.#sort_pressed = true;
+    const release = () => {
+      window.removeEventListener("pointerup", release, true);
+      window.removeEventListener("pointercancel", release, true);
+      this.#sort_pressed = false;
+      if (this.#sort_dirty.size) this.#sort_schedule();
+    };
+    window.addEventListener("pointerup", release, true);
+    window.addEventListener("pointercancel", release, true);
+  }
+
+  /**Places the rows with changed values at the next frame, or once the wait after a slow placing has passed */
+  #sort_schedule() {
+    if (this.#sort_frame || this.#sort_wait || this.#sort_pressed) return;
+    const wait = this.#sort_next_at - performance.now();
+    if (wait > 0)
+      this.#sort_wait = window.setTimeout(() => {
+        this.#sort_wait = 0;
+        this.#sort_schedule();
+      }, wait);
+    else
+      this.#sort_frame = requestAnimationFrame(() => {
+        this.#sort_frame = 0;
+        this.#sort_flush();
+      });
+  }
+
+  /**Places the rows with values they are not placed with yet, a held row waits until it is let go
+   * When placing them is slow, the next placing waits SORT_SLOW_WAIT times as long, so a big list on slow hardware still reacts to the user */
+  #sort_flush() {
+    if (this.#sort_pressed) return;
+    if (!this.#root.sort) {
+      this.#sort_dirty.clear();
+      return;
+    }
+    const start = performance.now();
+    const groups = new Set<ListRowGroup<R, T, A, S>>();
+    for (const row of this.#sort_dirty) {
+      if (this.#root.sort_held(row)) continue;
+      this.#sort_dirty.delete(row);
+      if (row.sort_settle()) groups.add(row.sort_group);
+    }
+    for (const group of groups) group.sort_order();
+    if (!groups.size) return;
+    //The next frame starts once this one is drawn, so the time until then is what placing the rows cost
+    requestAnimationFrame(() => {
+      const took = performance.now() - start;
+      this.#sort_next_at =
+        took > SORT_SLOW_FRAME ? start + took * SORT_SLOW_WAIT : 0;
+    });
+  }
+
+  /**Shows in the titles which columns sort, and lets the user sort by a column that can be sorted, unless the sort is a read only state */
+  #sort_headers() {
+    const sort = this.#root.sort ?? [];
+    const changeable = this.#changeable(this.input_state(CONTAINER.sort));
+    this.#root.columns_visible.forEach((key, i) => {
+      const header = this.#header_fields[i];
+      if (!header) return;
+      const column = this.#root.columns.get(key)!;
+      const place = sort.findIndex((sorted) => sorted.key === key);
+      header.sort_show(
+        place < 0
+          ? undefined
+          : list_sort_icon(sort[place].desc, column.type === "number"),
+        place >= 0 && sort.length > 1 ? place + 1 : undefined,
+      );
+      header.classList.toggle("sortable", changeable && list_sortable(column));
+    });
+    const key = this.#header?.key_header;
+    if (!key) return;
+    const place = sort.findIndex(
+      (sorted) => sorted.key === LIST_SORT_KEY_FIELD,
+    );
+    key.sort_show(
+      place < 0 ? undefined : list_sort_icon(sort[place].desc, false),
+      place >= 0 && sort.length > 1 ? place + 1 : undefined,
+    );
+    key.classList.toggle("sortable", changeable);
+  }
+
+  /**Like any input the user changes, a writable state is written and the list follows it, without a state the list keeps the value */
+  #write_sort(sort: ListSort) {
+    const target = this.input_state(CONTAINER.sort);
+    if (!target) this.#sort_input(sort);
+    else if (target.writable) void target.write?.(sort);
+  }
+
+  /**A click on a title sorts by the column alone, A to Z, a click on the column the list sorts by alone turns it to Z to A, and then to no sort
+   * With shift the column is added after the sorted columns, or turned if it sorts, and left out after Z to A */
+  #sort_click(column: string, add: boolean) {
+    if (!this.#changeable(this.input_state(CONTAINER.sort))) return;
+    const turn = (direction: ListSortDirection) =>
+      direction === "asc" ? "desc" : undefined;
+    if (!add) {
+      const sort = this.#root.sort ?? [];
+      const alone = sort.length === 1 && String(sort[0].key) === column;
+      const next = alone ? turn(sort[0].desc ? "desc" : "asc") : "asc";
+      this.#write_sort(next ? [{ column, direction: next }] : []);
+      return;
+    }
+    const sort = this.#sort;
+    const at = sort.findIndex((one) => one.column === column);
+    if (at < 0) {
+      this.#write_sort([...sort, { column, direction: "asc" }]);
+      return;
+    }
+    const next = turn(sort[at].direction);
+    this.#write_sort(
+      next
+        ? sort.map((one, i) => (i === at ? { column, direction: next } : one))
+        : sort.filter((_, i) => i !== at),
+    );
+  }
+
+  /**Lines of the menu of the title of a column, or of the key field, to sort by the column, to sort by it after the other sorted columns, and to clear the sort
+   * None for a read only sort state, a column that can not be sorted has only the line clearing the sort */
+  #sort_lines(name: string): ContextMenuLines {
+    if (!this.#changeable(this.input_state(CONTAINER.sort))) return [];
+    const lines: ContextMenuLines = [];
+    const sort = this.#root.sort ?? [];
+    const target = this.#sort_column(name, false);
+    if (target) {
+      const numeric = target.column?.type === "number";
+      const line = (text: string, desc: boolean, sort: () => ListSort) =>
+        ctm.line({
+          text:
+            text +
+            (numeric
+              ? desc
+                ? "9 to 1"
+                : "1 to 9"
+              : desc
+                ? "Z to A"
+                : "A to Z"),
+          icon: list_sort_icon(desc, numeric),
+          on_click: () => this.#write_sort(sort()),
+        });
+      const direction = (desc: boolean): ListSortDirection =>
+        desc ? "desc" : "asc";
+      for (const desc of [false, true])
+        lines.push(
+          line("Sort ", desc, () => [
+            { column: name, direction: direction(desc) },
+          ]),
+        );
+      if (sort.some((sorted) => sorted.key !== target.key))
+        for (const desc of [false, true])
+          lines.push(
+            line("Then sort ", desc, () => [
+              ...this.#sort.filter((one) => one.column !== name),
+              { column: name, direction: direction(desc) },
+            ]),
+          );
+    }
+    if (sort.length)
+      lines.push(
+        ctm.line({ text: "Clear sort", on_click: () => this.#write_sort([]) }),
+      );
+    return lines;
   }
 
   /**A fixed value becomes a state of the list the user changes, a state is followed and written when writable */

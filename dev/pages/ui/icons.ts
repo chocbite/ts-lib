@@ -139,6 +139,35 @@ const SIZES = [12, 16, 24, 32, 48, 96];
   }
 }
 
+//       _____ _    _  _____ _______ ____  __  __
+//      / ____| |  | |/ ____|__   __/ __ \|  \/  |
+//     | |    | |  | | (___    | | | |  | | \  / |
+//     | |    | |  | |\___ \   | | | |  | | |\/| |
+//     | |____| |__| |____) |  | | | |__| | |  | |
+//      \_____|\____/|_____/   |_|  \____/|_|  |_|
+{
+  const sec = section(
+    "Custom icons",
+    "The icons drawn for ts-lib-ui, next to the material icons they are made from, sort_by_alpha for the letters, counter_1 and counter_9 for the digits and arrow_downward for the arrow. Do the strokes match in weight, are the letters and digits readable at 16px?",
+  );
+  const sizes = row(sec);
+  for (const size of SIZES) {
+    const holder = box(sizes, size + "px");
+    holder.style.display = "flex";
+    holder.style.gap = "2px";
+    for (const func of [
+      icons.icon_sort_a_z_rounded,
+      icons.icon_sort_z_a_rounded,
+      icons.icon_sort_1_9_rounded,
+      icons.icon_sort_9_1_rounded,
+      icons.material_sort_by_alpha_rounded,
+      icons.material_counter_9_rounded,
+      icons.material_arrow_downward_rounded,
+    ])
+      holder.appendChild(svg_icon(func, size));
+  }
+}
+
 //     _____  ______ _____  ______ ____  _____  __  __          _   _  _____ ______
 //    |  __ \|  ____|  __ \|  ____/ __ \|  __ \|  \/  |   /\   | \ | |/ ____|  ____|
 //    | |__) | |__  | |__) | |__ | |  | | |__) | \  / |  /  \  |  \| | |    | |__

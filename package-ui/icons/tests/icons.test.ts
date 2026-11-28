@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  icon_sort_1_9_rounded,
+  icon_sort_9_1_rounded,
+  icon_sort_a_z_rounded,
+  icon_sort_z_a_rounded,
   material_10k_rounded,
   material_dark_mode_rounded,
   material_light_mode_rounded,
@@ -80,5 +84,22 @@ describe("Material icons", () => {
     const second = material_dark_mode_rounded();
     expect(second).not.toBe(first);
     expect(second.querySelector("path")).not.toBeNull();
+  });
+});
+
+describe("Custom icons", () => {
+  it("are svg elements named after their function, the size of the material icons", () => {
+    for (const [name, func] of [
+      ["icon_sort_a_z_rounded", icon_sort_a_z_rounded],
+      ["icon_sort_z_a_rounded", icon_sort_z_a_rounded],
+      ["icon_sort_1_9_rounded", icon_sort_1_9_rounded],
+      ["icon_sort_9_1_rounded", icon_sort_9_1_rounded],
+    ] as const) {
+      const icon = func();
+      expect(icon).toBeInstanceOf(SVGSVGElement);
+      expect(icon.getAttribute("icon")).toBe(name);
+      expect(icon.getAttribute("viewBox")).toBe("0 -960 960 960");
+      expect(icon.querySelector("path")).not.toBeNull();
+    }
   });
 });

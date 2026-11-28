@@ -1,11 +1,4 @@
-//The last row the search does not hide ends the lines
-list-container
-  > div:not(.addrow)
-  > div
-  > :nth-last-child(1 of :not(.search-hidden)),
-list-row:not(.addrow) > span > :nth-last-child(1 of :not(.search-hidden)) {
-  --c: transparent;
-}
+//The row box of the list is flat, every row shown is in it in order, sub rows after their row, followed by its error and add row
 list-row {
   display: contents;
 
@@ -13,24 +6,17 @@ list-row {
   .touch & {
     --list-row-size: var(--list-size-touch_row_min);
   }
-  --c: var(--list-colors-border-column);
 
   &.search-hidden {
     display: none;
   }
 
-  //Counted over the rows the search shows, so they keep alternating
-  &:nth-child(even of :not(.search-hidden)) > div > * {
+  //Counted over the rows the search shows, sub rows included, so they keep alternating, the error and add rows between them do not count
+  &:nth-child(even of list-row:not(.search-hidden)) > div > * {
     background-color: var(--list-colors-background-row_even);
   }
-  &:nth-child(odd of :not(.search-hidden)) > div > * {
+  &:nth-child(odd of list-row:not(.search-hidden)) > div > * {
     background-color: var(--list-colors-background-row_odd);
-  }
-
-  &:nth-last-child(1 of :not(.search-hidden)) {
-    > div > div > span::before {
-      height: 50%;
-    }
   }
 
   > div {
@@ -55,15 +41,13 @@ list-row {
       }
     }
   }
-  > span {
-    display: contents;
-  }
+}
 
-  &:not(.open) {
-    > list-addrow {
-      display: none;
-    }
-  }
+//The add row of a row shows while the row is open, the error and add row of a row the search hides are hidden with it, they are not in the row
+list-addrow.closed,
+list-addrow.search-hidden,
+list-rowserror.search-hidden {
+  display: none;
 }
 
 //After the even, odd and hover backgrounds so it wins over them

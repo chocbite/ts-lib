@@ -39,6 +39,15 @@ list-container {
           text-align: right;
         }
 
+        //A title sorts the rows by its column at a click
+        &.sortable > div > span:first-child {
+          cursor: pointer;
+
+          &:hover {
+            background-color: var(--list-colors-background-row_hover);
+          }
+        }
+
         > div {
           display: flex;
           justify-content: flex-end;
@@ -61,6 +70,26 @@ list-container {
 
             &:only-child {
               padding-right: 0.4rem;
+            }
+          }
+
+          //Icon of the direction the column sorts in after the title, with the place of the column while several sort
+          > span.sort {
+            flex-grow: 0;
+            flex-shrink: 0;
+            padding-left: 0.1rem;
+            padding-right: 0.2rem;
+
+            > svg {
+              width: 1.1rem;
+              height: 1.1rem;
+              fill: currentColor;
+            }
+
+            > span {
+              align-self: flex-end;
+              font-size: 0.65rem;
+              line-height: 1.4;
             }
           }
 
@@ -125,7 +154,8 @@ list-container {
 }
 
 //Open all and close all buttons in the header of the key column, glyphs of the icon font like the opener
-list-container > div > list-headerrow > .key > div > span {
+//In the first span, the span after it is the icon of the sort
+list-container > div > list-headerrow > .key > div > span:first-child {
   justify-content: flex-start;
 
   > span {
@@ -157,6 +187,16 @@ list-container > div > list-headerrow > .key > div > span {
   > .list-close-all::before {
     content: "\e5d6";
   }
+}
+
+//Over a button only the button shows the hover color, not the header around it, which sorts
+list-container
+  > div
+  > list-headerrow
+  > .key.sortable
+  > div
+  > span:first-child:has(> span:hover) {
+  background-color: transparent;
 }
 
 //The fault icon of the list, above the sticky header cells it would be hidden under

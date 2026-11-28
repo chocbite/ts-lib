@@ -17,6 +17,17 @@ Every icon is a function `material_<name>_rounded` giving a new `<svg>` element,
 - **Unused icons are left out of your build.** Each icon is its own export marked free of side effects, so a bundler keeps only the ones you import.
 - **An icon is parsed once**, at its first use, every call after that gives a copy.
 
+## Custom icons
+
+A few icons Material Symbols has no icon for, drawn in the same style and size, so they fit wherever the material icons do. They are named `icon_<name>_rounded` and work like the material functions, but are not in the icon font.
+
+| Function                | Shows                                      |
+| ----------------------- | ------------------------------------------ |
+| `icon_sort_a_z_rounded` | A above Z with a down arrow, sorted A to Z |
+| `icon_sort_z_a_rounded` | Z above A with a down arrow, sorted Z to A |
+| `icon_sort_1_9_rounded` | 1 above 9 with a down arrow, sorted 1 to 9 |
+| `icon_sort_9_1_rounded` | 9 above 1 with a down arrow, sorted 9 to 1 |
+
 ## Icon font
 
 The same icons as a font, for places that show many icons, like the rows of a list, because a glyph costs less than an svg element. The font is part of `style.css`. Use the mixin and write the name of the icon as the content:
