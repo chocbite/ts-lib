@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { DOCUMENT_HANDLER as docs } from "../document";
 
 describe("Document", async () => {
@@ -173,5 +173,96 @@ describe("Document registration edge cases", () => {
       docs.events.off("added", listener);
       docs.deregister_document(doc);
     }
+  });
+});
+
+describe("Windows of registered documents", () => {
+  const opened: Window[] = [];
+  //Removed here, the handler would remove them a moment after the window closed, during the next test
+  afterEach(() => {
+    for (const w of opened.splice(0)) {
+      if (docs.documents.includes(w.document))
+        docs.deregister_document(w.document);
+      w.close();
+    }
+  });
+  /**A popup window with its document registered*/
+  const popup = () => {
+    const w = window.open("", "", "popup,width=300,height=200")!;
+    opened.push(w);
+    docs.register_document(w.document, true);
+    return w;
+  };
+  /**The events of the handler while the function runs, until the wait is done*/
+  const events_during = async (
+    run: () => void,
+    until: (events: string[]) => boolean,
+    old: Document,
+  ) => {
+    const events: string[] = [];
+    const added = docs.events.on("added", (e) =>
+      events.push(e.data === old ? "added old" : "added new"),
+    );
+    const replaced = docs.events.on("replaced", (e) =>
+      events.push(
+        e.data.from === old && e.data.to !== old
+          ? "replaced"
+          : "replaced wrong",
+      ),
+    );
+    const removed = docs.events.on("removed", (e) =>
+      events.push(e.data === old ? "removed old" : "removed other"),
+    );
+    try {
+      run();
+      await vi.waitFor(() => expect(until(events)).toBe(true));
+    } finally {
+      docs.events.off("added", added);
+      docs.events.off("replaced", replaced);
+      docs.events.off("removed", removed);
+    }
+    return events;
+  };
+
+  it("registers the new document of a refreshed window with the styles, tells it replaced the old one, then removes the old one", async () => {
+    const w = popup();
+    const old = w.document;
+    const events = await events_during(
+      () => w.location.reload(),
+      (e) => e.includes("removed old"),
+      old,
+    );
+    expect(events).toEqual(["added new", "replaced", "removed old"]);
+    expect(docs.documents).toContain(w.document);
+    expect(docs.documents).not.toContain(old);
+    expect(
+      w.document.head.querySelectorAll("style, link").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("removes the document of a window that closes", async () => {
+    const w = popup();
+    const old = w.document;
+    const events = await events_during(
+      () => w.close(),
+      (e) => e.includes("removed old"),
+      old,
+    );
+    expect(events).toEqual(["removed old"]);
+    expect(docs.documents).not.toContain(old);
+  });
+
+  it("leaves the window of a document the app removed itself", async () => {
+    const w = popup();
+    const old = w.document;
+    docs.deregister_document(old);
+    const events = await events_during(
+      () => w.location.reload(),
+      () => w.document !== old,
+      old,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(events).toEqual([]);
+    expect(docs.documents).not.toContain(w.document);
   });
 });

@@ -336,6 +336,20 @@ describe("Panels in a window", () => {
     expect(closed).toEqual({ inner: false, content: false });
   });
 
+  it("keeps the content and the panels in a refreshed window, nothing comes to the page", async () => {
+    const { c, made, windowed, inner, closed } = with_inner();
+    const popup = popup_of(c);
+    const old = c.ownerDocument;
+    popup.location.reload();
+    await vi.waitFor(() => expect(c.ownerDocument).not.toBe(old));
+    expect(c.ownerDocument).toBe(popup.document);
+    expect(inner.ownerDocument).toBe(popup.document);
+    expect(popup.document.title).toBe("Host");
+    expect(windowed.ok()).toBe(true);
+    expect(getComputedStyle(made).display).toBe("none");
+    expect(closed).toEqual({ inner: false, content: false });
+  });
+
   it("moves them into the page when false is written, and when the panel closes", () => {
     const first = with_inner();
     first.windowed.write_sync(false);

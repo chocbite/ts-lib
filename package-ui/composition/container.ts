@@ -120,6 +120,10 @@ define_element(PanelContainer);
 export type { PanelContainer };
 
 const CONTAINERS = new WeakMap<Document, PanelContainer>();
+//The panels of a document replaced by a new one of its window, like a refreshed window, go to the new document
+DOCUMENT_HANDLER.events.on("replaced", (e) => {
+  panel_container(e.data.to)[HOST_ADOPT](e.data.from, 0, 0);
+});
 //The panels of a document that goes away, like a window that closed, go to the main document, so none of them closes
 DOCUMENT_HANDLER.events.on("removed", (e) => {
   panel_container()[HOST_ADOPT](e.data, 0, 0);

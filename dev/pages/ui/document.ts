@@ -147,18 +147,19 @@ function documents_view(parent: HTMLElement) {
 {
   const sec = section(
     "Popup window",
-    "Opens a window, fills and registers it with copied styles, and deregisters it when it closes. The same things should work there",
+    "Opens a window, fills and registers it with copied styles. The same things should work there. The handler removes it when it closes, and when you refresh it the new page is registered in its place and filled again from the replaced event",
   );
   controls(sec, {
     "Open popup": () => {
       const popup = window.open("", "", "width=420,height=320");
       if (!popup) return;
-      const doc = popup.document;
+      let doc = popup.document;
       fill(doc, "Popup");
       DOCUMENT_HANDLER.register_document(doc, true);
-      popup.addEventListener("pagehide", () => {
-        if (DOCUMENT_HANDLER.documents.includes(doc))
-          DOCUMENT_HANDLER.deregister_document(doc);
+      DOCUMENT_HANDLER.events.on("replaced", (e) => {
+        if (e.data.from !== doc) return;
+        doc = e.data.to;
+        fill(doc, "Popup, refreshed");
       });
     },
   });

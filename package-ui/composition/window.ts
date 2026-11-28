@@ -67,7 +67,8 @@ export function user_active(): boolean {
   return navigator?.userActivation?.isActive ?? true;
 }
 
-/**Fills the page of a browser window with a content, the title and icon of the content are the title and icon of the window*/
+/**Fills the page of a browser window with a content, the title and icon of the content are the title and icon of the window
+ * The document handler tells when the window closed, or was refreshed and has a new document, which the window then fills again*/
 class ContentWindow extends Base {
   static element_name() {
     return "window";
@@ -76,10 +77,29 @@ class ContentWindow extends Base {
     return "composition";
   }
 
+  //Registered when the module loads, before the panel container listens, so a closed window takes back its panels before
+  //the container gives the rest to the main document
+  static {
+    DOCUMENT_HANDLER.events.on("replaced", (e) => {
+      for (const open of OPEN)
+        if (open.#document === e.data.from) open.#replaced(e.data.to);
+    });
+    DOCUMENT_HANDLER.events.on("removed", (e) => {
+      for (const open of [...OPEN])
+        if (open.#document === e.data) open.#closed();
+    });
+  }
+
   readonly #content: ContentBase;
   readonly #popup: Window;
   readonly #host: WindowHost;
-  #icon?: HTMLLinkElement;
+  /**The document the window shows, a new one after a refresh*/
+  #document: Document;
+  /**Where the window was when its page last went away, the browser does not tell after it closed*/
+  #place: WindowPlace;
+  #title = "";
+  #icon?: SVGFunc;
+  #icon_link?: HTMLLinkElement;
 
   /**@param content what the window shows
    * @param popup the browser window, its document registered with the document handler
@@ -89,18 +109,22 @@ class ContentWindow extends Base {
     this.#content = content;
     this.#popup = popup;
     this.#host = host;
+    this.#document = popup.document;
+    this.#place = place_of(popup);
     this.appendChild(content);
     this.addEventListener("content_closed", (e) => {
       e.stopPropagation();
       this.#host[WINDOW_CONTENT_CLOSED]();
     });
-    popup.addEventListener("pagehide", this.#closed);
+    popup.addEventListener("pagehide", this.#hidden);
     this.set_input(WINDOW_CONTENT.title, content.content_title, (title) => {
-      popup.document.title = title.ok ? title.value : "⚠ " + title.error.nice;
+      this.#title = title.ok ? title.value : "⚠ " + title.error.nice;
+      this.#show_title();
     });
-    this.set_input(WINDOW_CONTENT.icon, content.content_icon, (icon) =>
-      this.#set_icon(icon.ok ? icon.value : undefined),
-    );
+    this.set_input(WINDOW_CONTENT.icon, content.content_icon, (icon) => {
+      this.#icon = icon.ok ? icon.value : undefined;
+      this.#show_icon();
+    });
   }
 
   /**Content the window shows*/
@@ -110,7 +134,7 @@ class ContentWindow extends Base {
 
   /**Document of the window, panels opened from its content are shown in its panel container*/
   get document(): Document {
-    return this.#popup.document;
+    return this.#document;
   }
 
   /**Where the window is*/
@@ -130,33 +154,50 @@ class ContentWindow extends Base {
     this.close();
   }
 
-  /**The user closed the window, what opened it takes back what is in it before the document goes*/
-  #closed = () => {
-    this.#host[WINDOW_CLOSED](this.place());
-    this.#forget();
+  #hidden = () => {
+    this.#place = place_of(this.#popup);
   };
 
-  #forget(): void {
-    this.#popup.removeEventListener("pagehide", this.#closed);
+  /**The window was refreshed, the new document gets the content, the panels are moved by their container*/
+  #replaced(document: Document): void {
+    this.#document = document;
+    this.#icon_link = undefined;
+    document.body.appendChild(this);
+    this.#popup.addEventListener("pagehide", this.#hidden);
+    this.#show_title();
+    this.#show_icon();
+  }
+
+  /**The user closed the window, what opened it takes back what is in it before the panel container of the document goes*/
+  #closed(): void {
     OPEN.delete(this);
-    const doc = this.#popup.document;
-    if (DOCUMENT_HANDLER.documents.includes(doc))
-      DOCUMENT_HANDLER.deregister_document(doc);
+    this.#host[WINDOW_CLOSED](this.#place);
+  }
+
+  #forget(): void {
+    this.#popup.removeEventListener("pagehide", this.#hidden);
+    OPEN.delete(this);
+    if (DOCUMENT_HANDLER.documents.includes(this.#document))
+      DOCUMENT_HANDLER.deregister_document(this.#document);
+  }
+
+  #show_title(): void {
+    this.#document.title = this.#title;
   }
 
   /**The icon of the content as the icon of the window, its tab and task bar entry*/
-  #set_icon(icon?: SVGFunc): void {
-    const doc = this.#popup.document;
-    if (!icon) {
-      this.#icon?.remove();
-      this.#icon = undefined;
+  #show_icon(): void {
+    const doc = this.#document;
+    if (!this.#icon) {
+      this.#icon_link?.remove();
+      this.#icon_link = undefined;
       return;
     }
-    this.#icon ??= doc.head.appendChild(doc.createElement("link"));
-    this.#icon.rel = "icon";
-    this.#icon.href =
+    this.#icon_link ??= doc.head.appendChild(doc.createElement("link"));
+    this.#icon_link.rel = "icon";
+    this.#icon_link.href =
       "data:image/svg+xml," +
-      encodeURIComponent(new XMLSerializer().serializeToString(icon()));
+      encodeURIComponent(new XMLSerializer().serializeToString(this.#icon()));
   }
 }
 define_element(ContentWindow);
