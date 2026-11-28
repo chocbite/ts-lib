@@ -5,6 +5,10 @@ interface DocumentHandlerEvents {
   added: Document;
   /**Fired when document is removed*/
   removed: Document;
+  /**Fired while the page of the window of a document goes away, the window closes or loads a new document, which removed or
+   * replaced tells a moment later. The browser takes the event listeners off the elements left in the page once it is gone,
+   * so elements that should outlive it are taken out now, like into a fragment of the main document*/
+  leaving: Document;
   /**Fired when the window of a document loaded a new document, like when the user refreshed it,
    * after added for the new document and before removed for the old one, so what was in the old document can be moved over*/
   replaced: { from: Document; to: Document };
@@ -80,6 +84,8 @@ class DocumentHandler {
     view.addEventListener(
       "pagehide",
       () => {
+        if (!this.#documents.has(document)) return;
+        this.#events.emit("leaving", document);
         let checks = 0;
         const check = () => {
           if (!this.#documents.has(document)) return;

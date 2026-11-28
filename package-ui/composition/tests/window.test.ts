@@ -350,6 +350,38 @@ describe("Panels in a window", () => {
     expect(closed).toEqual({ inner: false, content: false });
   });
 
+  /**A button counting its clicks, put in the element*/
+  const counter = (element: Element) => {
+    const button = element.appendChild(document.createElement("button"));
+    const count = { clicks: 0 };
+    button.addEventListener("click", () => count.clicks++);
+    return { button, count };
+  };
+
+  it("keeps the event listeners of the content and the panels in a refreshed window", async () => {
+    const { c, inner } = with_inner();
+    const outer = counter(c);
+    const panel = counter(inner.content);
+    const popup = popup_of(c);
+    const old = c.ownerDocument;
+    popup.location.reload();
+    await vi.waitFor(() => expect(c.ownerDocument).not.toBe(old));
+    outer.button.click();
+    panel.button.click();
+    expect([outer.count.clicks, panel.count.clicks]).toEqual([1, 1]);
+  });
+
+  it("keeps the event listeners of the content and the panels when the window closes", async () => {
+    const { c, inner } = with_inner();
+    const outer = counter(c);
+    const panel = counter(inner.content);
+    popup_of(c).close();
+    await back(c);
+    outer.button.click();
+    panel.button.click();
+    expect([outer.count.clicks, panel.count.clicks]).toEqual([1, 1]);
+  });
+
   it("moves them into the page when false is written, and when the panel closes", () => {
     const first = with_inner();
     first.windowed.write_sync(false);

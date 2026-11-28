@@ -120,9 +120,21 @@ define_element(PanelContainer);
 export type { PanelContainer };
 
 const CONTAINERS = new WeakMap<Document, PanelContainer>();
-//The panels of a document replaced by a new one of its window, like a refreshed window, go to the new document
-DOCUMENT_HANDLER.events.on("replaced", (e) => {
-  panel_container(e.data.to)[HOST_ADOPT](e.data.from, 0, 0);
+//The container is taken out of a document whose page goes away, the browser takes the event listeners off what is left in it,
+//it goes into the new document of the window, like a refreshed window, or gives its panels to the main document when it closes
+DOCUMENT_HANDLER.events.on("leaving", (e) => {
+  const container = CONTAINERS.get(e.data);
+  if (container)
+    DOCUMENT_HANDLER.main.createDocumentFragment().append(container);
+});
+DOCUMENT_HANDLER.events.on("replaced", ({ data: { from, to } }) => {
+  const container = CONTAINERS.get(from);
+  if (!container) return;
+  const there = CONTAINERS.get(to);
+  if (there) return there[HOST_ADOPT](from, 0, 0);
+  CONTAINERS.delete(from);
+  CONTAINERS.set(to, container);
+  to.documentElement.appendChild(container);
 });
 //The panels of a document that goes away, like a window that closed, go to the main document, so none of them closes
 DOCUMENT_HANDLER.events.on("removed", (e) => {

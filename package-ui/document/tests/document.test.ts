@@ -210,6 +210,9 @@ describe("Windows of registered documents", () => {
           : "replaced wrong",
       ),
     );
+    const leaving = docs.events.on("leaving", (e) =>
+      events.push(e.data === old ? "leaving old" : "leaving other"),
+    );
     const removed = docs.events.on("removed", (e) =>
       events.push(e.data === old ? "removed old" : "removed other"),
     );
@@ -220,6 +223,7 @@ describe("Windows of registered documents", () => {
       docs.events.off("added", added);
       docs.events.off("replaced", replaced);
       docs.events.off("removed", removed);
+      docs.events.off("leaving", leaving);
     }
     return events;
   };
@@ -232,7 +236,12 @@ describe("Windows of registered documents", () => {
       (e) => e.includes("removed old"),
       old,
     );
-    expect(events).toEqual(["added new", "replaced", "removed old"]);
+    expect(events).toEqual([
+      "leaving old",
+      "added new",
+      "replaced",
+      "removed old",
+    ]);
     expect(docs.documents).toContain(w.document);
     expect(docs.documents).not.toContain(old);
     expect(
@@ -248,7 +257,7 @@ describe("Windows of registered documents", () => {
       (e) => e.includes("removed old"),
       old,
     );
-    expect(events).toEqual(["removed old"]);
+    expect(events).toEqual(["leaving old", "removed old"]);
     expect(docs.documents).not.toContain(old);
   });
 

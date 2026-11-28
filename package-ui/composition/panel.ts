@@ -149,6 +149,8 @@ class Panel extends Base implements WindowHost {
   readonly #content: ContentBase;
   /**Whether the container shows the panel, until then it is not in the document and can not be placed*/
   #shown = false;
+  /**The document listened to for presses outside the panel*/
+  #listening?: Document;
 
   #sizer = this.appendChild(document.createElement("div"));
   #titlebar = this.appendChild(document.createElement("div"));
@@ -318,9 +320,6 @@ class Panel extends Base implements WindowHost {
   close(): void {
     this.#stop_waiting();
     this.#close_window();
-    this.ownerDocument.removeEventListener("pointerdown", this.#outside, {
-      capture: true,
-    });
     if (this.#shown) this.#host[HOST_REMOVE](this);
     this.#shown = false;
     this.#backdrop?.remove();
@@ -334,12 +333,33 @@ class Panel extends Base implements WindowHost {
     this.#shown = true;
     this.#host[HOST_LAYER](this, this.#layer);
     this.#raise();
-    this.ownerDocument.addEventListener("pointerdown", this.#outside, {
+    this.#place();
+    this.#show_window();
+  }
+
+  protected connectedCallback(): void {
+    super.connectedCallback();
+    this.#listen();
+  }
+
+  protected disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#listen();
+  }
+
+  /**Listens for presses outside the panel in the document it is in while it is shown, it moves with the panel to other documents*/
+  #listen(): void {
+    const doc =
+      this.#shown && this.isConnected ? this.ownerDocument : undefined;
+    if (doc === this.#listening) return;
+    this.#listening?.removeEventListener("pointerdown", this.#outside, {
+      capture: true,
+    });
+    doc?.addEventListener("pointerdown", this.#outside, {
       capture: true,
       passive: true,
     });
-    this.#place();
-    this.#show_window();
+    this.#listening = doc;
   }
 
   /**Called by the container when its size changes, the panel is kept inside it*/
@@ -350,17 +370,10 @@ class Panel extends Base implements WindowHost {
   /**Called by the container taking the panel from another container, the panel moves into its document,
    * its position moved by dx and dy in rem*/
   [PANEL_MOVE](host: PanelHost, dx: number, dy: number): void {
-    this.ownerDocument.removeEventListener("pointerdown", this.#outside, {
-      capture: true,
-    });
     this.#host[HOST_REMOVE](this);
     this.#host = host;
     host[HOST_LAYER](this, this.#layer);
     this.#raise();
-    this.ownerDocument.addEventListener("pointerdown", this.#outside, {
-      capture: true,
-      passive: true,
-    });
     const { x, y } = this.#values;
     if (x !== undefined && this.#can_change("x")) this.#change("x", x + dx);
     if (y !== undefined && this.#can_change("y")) this.#change("y", y + dy);

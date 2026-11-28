@@ -80,6 +80,9 @@ class ContentWindow extends Base {
   //Registered when the module loads, before the panel container listens, so a closed window takes back its panels before
   //the container gives the rest to the main document
   static {
+    DOCUMENT_HANDLER.events.on("leaving", (e) => {
+      for (const open of OPEN) if (open.#document === e.data) open.#hold();
+    });
     DOCUMENT_HANDLER.events.on("replaced", (e) => {
       for (const open of OPEN)
         if (open.#document === e.data.from) open.#replaced(e.data.to);
@@ -116,7 +119,6 @@ class ContentWindow extends Base {
       e.stopPropagation();
       this.#host[WINDOW_CONTENT_CLOSED]();
     });
-    popup.addEventListener("pagehide", this.#hidden);
     this.set_input(WINDOW_CONTENT.title, content.content_title, (title) => {
       this.#title = title.ok ? title.value : "⚠ " + title.error.nice;
       this.#show_title();
@@ -154,16 +156,18 @@ class ContentWindow extends Base {
     this.close();
   }
 
-  #hidden = () => {
+  /**The page of the window goes away, the window keeps out of it with the content, the browser takes the event listeners
+   * off what is left in it, it goes into the new page of a refreshed window or the content back to what opened it*/
+  #hold(): void {
     this.#place = place_of(this.#popup);
-  };
+    DOCUMENT_HANDLER.main.createDocumentFragment().append(this);
+  }
 
   /**The window was refreshed, the new document gets the content, the panels are moved by their container*/
   #replaced(document: Document): void {
     this.#document = document;
     this.#icon_link = undefined;
     document.body.appendChild(this);
-    this.#popup.addEventListener("pagehide", this.#hidden);
     this.#show_title();
     this.#show_icon();
   }
@@ -175,7 +179,6 @@ class ContentWindow extends Base {
   }
 
   #forget(): void {
-    this.#popup.removeEventListener("pagehide", this.#hidden);
     OPEN.delete(this);
     if (DOCUMENT_HANDLER.documents.includes(this.#document))
       DOCUMENT_HANDLER.deregister_document(this.#document);
